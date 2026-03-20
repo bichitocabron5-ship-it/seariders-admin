@@ -82,16 +82,7 @@ export function buildFormalizeBody(args: {
   customerPhone: string;
   customerEmail: string;
   customerCountry: string;
-  customerAddress: string;
-  customerPostalCode: string;
-  customerBirthDate: string;
-  customerDocType: string;
-  customerDocNumber: string;
   marketingSource: string;
-  isLicense: boolean;
-  licenseSchool: string;
-  licenseType: string;
-  licenseNumber: string;
   isVoucherFormalizeFlow: boolean;
   serviceId: string;
   optionId: string;
@@ -107,22 +98,13 @@ export function buildFormalizeBody(args: {
     customerPhone: args.customerPhone.trim(),
     customerEmail: args.customerEmail.trim(),
     customerCountry: (args.customerCountry || "").trim().toUpperCase() || null,
-    customerAddress: args.customerAddress.trim(),
-    customerPostalCode: args.customerPostalCode.trim() || null,
-    customerBirthDate: args.customerBirthDate ? `${args.customerBirthDate}T12:00:00.000Z` : null,
-    customerDocType: args.customerDocType.trim(),
-    customerDocNumber: args.customerDocNumber.trim(),
     marketing: args.marketingSource.trim() || null,
-    licenseSchool: args.isLicense ? args.licenseSchool : undefined,
-    licenseType: args.isLicense ? args.licenseType : undefined,
-    licenseNumber: args.isLicense ? args.licenseNumber : undefined,
     serviceId: args.isVoucherFormalizeFlow ? undefined : args.serviceId,
     optionId: args.isVoucherFormalizeFlow ? undefined : args.optionId,
     channelId: args.channelId || null,
     quantity: args.isVoucherFormalizeFlow ? undefined : Number(args.quantity),
     pax: args.isVoucherFormalizeFlow ? undefined : Number(args.pax),
     companionsCount: Number(args.companions) || 0,
-    isLicense: Boolean(args.isLicense),
     activityDate: args.dateStr,
     time: args.timeStr?.trim() ? args.timeStr : null,
   };
