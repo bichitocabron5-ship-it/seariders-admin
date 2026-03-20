@@ -1,0 +1,1782 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id String @id @default(cuid())
+
+  fullName     String
+  username     String    @unique
+  passwordHash String
+  isActive     Boolean   @default(true)
+  employee     Employee?
+
+  email        String?
+  passportCode String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  editLocks     EditLock[]
+  shiftSessions ShiftSession[]
+  roles         UserRole[]
+
+  // cierres/cajas
+  cashClosuresClosed   CashClosure[]     @relation("CashClosureClosedBy")
+  cashClosuresVoided   CashClosure[]     @relation("CashClosureVoidedBy")
+  cashShiftsOpened     CashShift[]       @relation("CashShiftOpenedBy")
+  cashShiftsClosed     CashShift[]       @relation("CashShiftClosedBy")
+  cashClosureUsers     CashClosureUser[]
+  reviewedCashClosures CashClosure[]     @relation("CashClosureReviewedBy")
+
+  giftVouchersSold     GiftVoucher[] @relation("GiftSoldBy")
+  giftVouchersRedeemed GiftVoucher[] @relation("GiftRedeemedBy")
+  passVouchersSold     PassVoucher[] @relation("PassSoldBy")
+  passConsumes         PassConsume[] @relation("PassConsumedBy")
+  monitorRunsCreated   MonitorRun[]  @relation("MonitorRunCreatedBy")
+
+  maintenanceEventsCreated  MaintenanceEvent[]    @relation("MaintenanceEventCreatedBy")
+  sparePartMovementsCreated SparePartMovement[]   @relation("SparePartMovementCreatedBy")
+  maintenanceEventLogs      MaintenanceEventLog[] @relation("MaintenanceEventLogCreatedBy")
+  incidentsCreated          Incident[]            @relation("IncidentCreatedBy")
+
+  workLogsApproved      WorkLog[]      @relation("WorkLogApprovedBy")
+  workLogsCreated       WorkLog[]      @relation("WorkLogCreatedBy")
+  employeeRatesCreated  EmployeeRate[] @relation("EmployeeRateCreatedBy")
+  payrollEntriesCreated PayrollEntry[] @relation("PayrollEntryCreatedBy")
+  expensesCreated       Expense[]      @relation("ExpenseCreatedBy")
+}
+
+model Role {
+  id            String         @id @default(cuid())
+  name          RoleName       @unique
+  shiftSessions ShiftSession[]
+  users         UserRole[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model Employee {
+  id       String       @id @default(cuid())
+  code     String?      @unique
+  fullName String
+  phone    String?
+  email    String?
+  kind     EmployeeKind
+  jobTitle String?
+  isActive Boolean      @default(true)
+  note     String?
+
+  hireDate        DateTime?
+  terminationDate DateTime?
+
+  internshipHoursTotal Int?
+  internshipHoursUsed  Int       @default(0)
+  internshipStartDate  DateTime?
+  internshipEndDate    DateTime?
+
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  workLogs       WorkLog[]
+  rates          EmployeeRate[]
+  payrollEntries PayrollEntry[]
+  expenses       Expense[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ShiftSession {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  shift        ShiftName
+  businessDate DateTime // 00:00 del día operativo
+  startedAt    DateTime  @default(now())
+  endedAt      DateTime?
+
+  payments Payment[] @relation(name: "PaymentToShiftSession")
+
+  role   Role   @relation(fields: [roleId], references: [id])
+  roleId String
+
+  cashShiftId String?
+  cashShift   CashShift? @relation(fields: [cashShiftId], references: [id])
+
+  @@index([businessDate, shift])
+  @@index([userId, endedAt])
+  @@index([userId, startedAt])
+  @@index([cashShiftId])
+}
+
+model EditLock {
+  id         String   @id @default(cuid())
+  resource   String
+  resourceId String
+  userId     String
+  lockedAt   DateTime @default(now())
+  expiresAt  DateTime
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([resource, resourceId])
+}
+
+model Channel {
+  id                         String                  @id @default(cuid())
+  name                       String                  @unique
+  commissionPct              Float                   @default(0)
+  isActive                   Boolean                 @default(true)
+  commissionEnabled          Boolean                 @default(false)
+  commissionBps              Int                     @default(0)
+  commissionAppliesToDeposit Boolean                 @default(false)
+  commissionRules            ChannelCommissionRule[]
+
+  reservations Reservation[]
+}
+
+model ChannelCommissionRule {
+  id String @id @default(cuid())
+
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id])
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  commissionPct Int
+  isActive      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@unique([channelId, serviceId])
+  @@index([channelId])
+  @@index([serviceId])
+}
+
+model Service {
+  id               String                  @id @default(cuid())
+  code             String                  @unique // ✅ estable (ej: JETSKI_TURISTA, BANANA, GOPRO)
+  name             String
+  category         String
+  requiresPlatform Boolean                 @default(false)
+  requiresJetski   Boolean                 @default(false)
+  requiresMonitor  Boolean                 @default(false)
+  isLicense        Boolean                 @default(false)
+  isActive         Boolean                 @default(true)
+  options          ServiceOption[]
+  servicePrices    ServicePrice[]
+  discountRules    DiscountRule[]
+  reservations     Reservation[]
+  reservationItems ReservationItem[]
+  commissionRules  ChannelCommissionRule[]
+  packItems        PackItem[]
+  giftProducts     GiftProduct[]           @relation("GiftProductService")
+  passProducts     PassProduct[]           @relation("PassProductService")
+
+  // ✅ opposite del service principal del pack
+  packAsMain Pack? @relation("PackMainService")
+}
+
+model ServiceOption {
+  id                String            @id @default(cuid())
+  serviceId         String
+  code              String            @unique // ✅ estable (ej: JETSKI_TURISTA_20_2, JETSKI_60_2, JETSKI_30_2)
+  durationMinutes   Int
+  paxMax            Int
+  contractedMinutes Int
+  basePriceCents    Int
+  isActive          Boolean           @default(true)
+  service           Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  reservations      Reservation[]
+  reservationItems  ReservationItem[]
+  discountRules     DiscountRule[]
+  packItems         PackItem[]
+  giftProducts      GiftProduct[]     @relation("GiftProductOption")
+  packOptionOf      Pack?             @relation("PackOption")
+  servicePrices     ServicePrice[]
+  passProducts      PassProduct[]     @relation("PassProductOption")
+
+  @@unique([serviceId, durationMinutes, paxMax]) // opcional pero MUY útil
+  @@index([serviceId])
+}
+
+model ServicePrice {
+  id             String         @id @default(cuid())
+  serviceId      String
+  optionId       String? // ✅ NUEVO: precio por ServiceOption
+  durationMin    Int? // se mantiene (extras o legacy)
+  basePriceCents Int
+  validFrom      DateTime       @default(now())
+  validTo        DateTime?
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  service        Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  option         ServiceOption? @relation(fields: [optionId], references: [id])
+
+  reservationItems ReservationItem[]
+
+  @@index([serviceId, optionId, isActive, validFrom]) // ✅ NUEVO
+  @@index([serviceId, durationMin, isActive, validFrom]) // (si no lo tenías, ponlo)
+}
+
+model Pack {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+
+  pricePerPersonCents Int
+  minPax              Int
+  maxPax              Int?
+
+  validFrom      DateTime            @default(now())
+  validTo        DateTime?
+  allowedSources ReservationSource[]
+
+  // ✅ service principal del pack (categoría PACK)
+  serviceId String?  @unique
+  service   Service? @relation("PackMainService", fields: [serviceId], references: [id], onDelete: SetNull)
+
+  // ✅ opción principal del pack (para precio “pack” si la quieres como option)
+  packOptionId String?        @unique
+  packOption   ServiceOption? @relation("PackOption", fields: [packOptionId], references: [id], onDelete: SetNull)
+
+  items PackItem[]
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  reservations Reservation[]
+}
+
+model PackItem {
+  id        String  @id @default(cuid())
+  packId    String
+  serviceId String
+  optionId  String?
+
+  quantity Int @default(1)
+
+  pack    Pack           @relation(fields: [packId], references: [id], onDelete: Cascade)
+  service Service        @relation(fields: [serviceId], references: [id])
+  option  ServiceOption? @relation(fields: [optionId], references: [id])
+
+  @@index([packId])
+}
+
+model Reservation {
+  id                   String                @id @default(cuid())
+  source               ReservationSource
+  status               ReservationStatus     @default(WAITING)
+  activityDate         DateTime
+  scheduledTime        DateTime?
+  channelId            String?
+  marketing            String?
+  serviceId            String
+  optionId             String
+  quantity             Int                   @default(1)
+  pax                  Int                   @default(1)
+  companionsCount      Int                   @default(0)
+  basePriceCents       Int
+  manualDiscountCents  Int                   @default(0)
+  autoDiscountCents    Int                   @default(0) // ✅ NUEVO (promo automática o por código)
+  manualDiscountReason String?               @db.VarChar(200)
+  promoCode            String? // ✅ NUEVO (si quieres guardar el código aplicado)
+  totalPriceCents      Int
+  customerName         String
+  customerCountry      String
+  customerAddress      String?
+  customerPostalCode   String?               @db.VarChar(20)
+  customerBirthDate    DateTime?
+  customerDocType      String?
+  customerDocNumber    String?
+  customerPhone        String?
+  customerEmail        String?
+  isLicense            Boolean               @default(false)
+  licenseSchool        String?
+  licenseType          String?
+  licenseNumber        String?
+  arrivedStoreAt       DateTime?
+  formalizedAt         DateTime?
+  formalizedByUserId   String?
+  departureAt          DateTime?
+  arrivalAt            DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  contracts            ReservationContract[]
+  depositCents         Int                   @default(0)
+  depositHeld          Boolean               @default(false)
+  depositHeldAt        DateTime?
+  depositHeldByUserId  String?
+  depositHoldReason    String?
+  taxiboatTripId       String?
+  taxiboatAssignedAt   DateTime?
+  taxiboatTrip         TaxiboatTrip?         @relation(fields: [taxiboatTripId], references: [id])
+  payments             Payment[]
+  items                ReservationItem[]     @relation("ReservationItems")
+  channel              Channel?              @relation(fields: [channelId], references: [id])
+  option               ServiceOption         @relation(fields: [optionId], references: [id])
+  service              Service               @relation(fields: [serviceId], references: [id])
+  assignedJetskis      ReservationJetski[]
+  boothCode            String?               @unique
+  boothCreatedAt       DateTime?
+  boothCreatedByUserId String?
+  redeemedGiftVoucher  GiftVoucher?          @relation("GiftRedeemedReservation")
+  giftVoucherId        String?               @unique
+  giftVoucher          GiftVoucher?          @relation("GiftVoucherReedem", fields: [giftVoucherId], references: [id])
+ 
+  passVoucherId        String?
+  passVoucher          PassVoucher?          @relation(fields: [passVoucherId], references: [id])
+
+  // ✅ relación 1:1 con el consumo que creó ESTA reserva (cada reserva viene de 1 consume)
+  passConsume   PassConsume?
+  passConsumeId String?      @unique
+
+  // ✅ backrelation: items que han sido spliteados a ESTA reserva
+  splitFromItems ReservationItem[] @relation("ReservationItemSplit")
+
+  // pack split parent/children (esto lo tienes bien)
+  isPackParent         Boolean       @default(false)
+  parentReservationId  String?
+  parentReservation    Reservation?  @relation("ReservationParent", fields: [parentReservationId], references: [id])
+  childrenReservations Reservation[] @relation("ReservationParent")
+
+  pack                  Pack?                  @relation(fields: [packId], references: [id])
+  packId                String?
+  monitorRunAssignments MonitorRunAssignment[]
+  incidents             Incident[]
+  extraTimeEvents       ExtraTimeEvent[]
+  units                 ReservationUnit[]
+
+  @@index([activityDate, status])
+  @@index([taxiboatTripId])
+  @@index([parentReservationId])
+  @@index([packId])
+}
+
+model ReservationItem {
+  id             String  @id @default(cuid())
+  reservationId  String
+  serviceId      String
+  optionId       String? // opcional: si aplica a un ServiceOption (duración/pax)
+  servicePriceId String? // opcional: si viene de ServicePrice
+
+  quantity Int @default(1)
+  pax      Int @default(1)
+
+  // SNAPSHOT (congelado en el tiempo)
+  unitPriceCents  Int
+  totalPriceCents Int
+
+  // ✅ NUEVO
+  isPackParent Boolean @default(false)
+
+  isExtra Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  // ✅ NUEVO: link a la reserva hija creada por split
+  splitReservationId String?
+
+  // ✅ la reserva hija a la que apunta este item tras el split
+  splitReservation Reservation? @relation("ReservationItemSplit", fields: [splitReservationId], references: [id])
+  reservation      Reservation  @relation("ReservationItems", fields: [reservationId], references: [id], onDelete: Cascade)
+
+  service Service        @relation(fields: [serviceId], references: [id])
+  option  ServiceOption? @relation(fields: [optionId], references: [id])
+  price   ServicePrice?  @relation(fields: [servicePriceId], references: [id])
+
+  @@index([splitReservationId])
+  @@index([reservationId])
+  @@index([serviceId])
+}
+
+model ReservationUnit {
+  id            String      @id @default(cuid())
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  unitIndex Int // 1..N
+  status    ReservationUnitStatus @default(READY_FOR_PLATFORM)
+
+  // Asignación física (puede ser null hasta asignar)
+  jetskiId String?
+  jetski   Jetski? @relation(fields: [jetskiId], references: [id])
+
+  // (Opcional) cache conductor/contrato para firma futura
+  driverName                 String?   @db.VarChar(120)
+  driverPhone                String?   @db.VarChar(40)
+  driverEmail                String?   @db.VarChar(160)
+  driverCountry              String?   @db.VarChar(2)
+  driverAddress              String?   @db.VarChar(200)
+  driverDocType              String?   @db.VarChar(20)
+  driverDocNumber            String?   @db.VarChar(40)
+  driverBirthDate            DateTime?
+  minorAuthorizationProvided Boolean   @default(false)
+  minorNeedsAuthorization    Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments     MonitorRunAssignment[]
+  incidents       Incident[]
+  extraTimeEvents ExtraTimeEvent[]
+
+  @@unique([reservationId, unitIndex])
+  @@index([reservationId])
+  @@index([jetskiId])
+  @@index([status])
+}
+
+model ReservationContract {
+  id            String      @id @default(cuid())
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id])
+
+  unitIndex Int // 1..N (N = quantity en el item principal)
+  status    ContractStatus @default(DRAFT)
+
+  // Datos conductor/contrato (pueden ser distintos por unidad)
+  driverName      String? @db.VarChar(120)
+  driverPhone     String? @db.VarChar(40)
+  driverEmail     String? @db.VarChar(160)
+  driverCountry   String? @db.VarChar(2)
+  driverAddress   String? @db.VarChar(200)
+  driverPostalCode String? @db.VarChar(20)
+  driverDocType   String? @db.VarChar(20)
+  driverDocNumber String? @db.VarChar(40)
+
+  // Licencia (si aplica)
+  licenseSchool String? @db.VarChar(120)
+  licenseType   String? @db.VarChar(40)
+  licenseNumber String? @db.VarChar(40)
+
+  driverBirthDate            DateTime?
+  minorNeedsAuthorization    Boolean   @default(false) // cache/estado UI
+  minorAuthorizationProvided Boolean   @default(false)
+
+  // Firma digital (futuro)
+  templateCode           String?
+  templateVersion        String?
+
+  renderedHtml           String?
+  renderedPdfUrl         String?
+
+  signatureRequestId     String?
+  signatureStatusRaw     String?
+  signaturePayloadJson   Json?
+
+  signatureSignedPdfUrl  String?
+  signatureAuditJson     Json?
+
+  signedAt            DateTime?
+  signatureProvider   String?   @db.VarChar(40)
+  signatureEnvelopeId String?   @db.VarChar(120)
+  signatureUrl        String?   @db.VarChar(400)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([reservationId, unitIndex])
+  @@index([reservationId])
+  @@index([status])
+}
+
+model DiscountRule {
+  id String @id @default(cuid())
+
+  name     String
+  code     String? @unique // null = descuento automático sin código (mensual)
+  isActive Boolean @default(true)
+
+  // tipo descuento
+  kind  DiscountKind
+  value Int // PERCENT: 0..100, FIXED: cents
+
+  // alcance (todo / categoría / servicio / opción)
+  scope     DiscountScope @default(ALL)
+  category  String? // si scope = CATEGORY
+  serviceId String? // si scope = SERVICE
+  optionId  String? // si scope = OPTION
+
+  // ✅ NUEVO — segmentación por país
+  requiresCountry String? // ej "ES"
+  excludeCountry  String? // ej "ES" para "no residentes"
+  countryScope    CountryScope @default(ANY)
+
+  // condiciones temporales
+  validFrom    DateTime
+  validTo      DateTime?
+  daysOfWeek   Int[] // 1..7 (1=Lunes) vacío = todos
+  startTimeMin Int? // 0..1439, null = sin restricción
+  endTimeMin   Int? // 0..1439, null = sin restricción
+
+  // aplica a extras?
+  appliesToExtras Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service Service?       @relation(fields: [serviceId], references: [id])
+  option  ServiceOption? @relation(fields: [optionId], references: [id])
+
+  @@index([isActive, validFrom, validTo])
+  @@index([code])
+  @@index([serviceId])
+  @@index([optionId])
+  // ✅ recomendado (para filtrar por país rápido)
+  @@index([requiresCountry])
+  @@index([excludeCountry])
+  @@index([countryScope])
+}
+
+model SlotPolicy {
+  id              String @id @default(cuid())
+  intervalMinutes Int    @default(30)
+
+  // horario negocio (Madrid) — strings "HH:mm"
+  openTime  String @default("10:00")
+  closeTime String @default("19:00")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SlotLimit {
+  id       String @id @default(cuid())
+  category String
+  maxUnits Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([category])
+}
+
+model CashShift {
+  id             String        @id @default(cuid())
+  origin         PaymentOrigin
+  shift          ShiftName
+  date           DateTime // start-of-day (00:00)
+  openedAt       DateTime      @default(now())
+  openedByUserId String?
+  openedByUser   User?         @relation("CashShiftOpenedBy", fields: [openedByUserId], references: [id])
+
+  closedAt       DateTime?
+  closedByUserId String?
+  closedByUser   User?     @relation("CashShiftClosedBy", fields: [closedByUserId], references: [id])
+
+  // relación con sesiones de trabajo
+  sessions ShiftSession[]
+
+  // cierres (histórico)
+  closures CashClosure[]
+
+  @@unique([origin, shift, date])
+  @@index([origin, date])
+}
+
+model CashClosure {
+  id String @id @default(cuid())
+
+  origin       PaymentOrigin
+  shift        ShiftName
+  businessDate DateTime // día operativo (00:00)
+
+  cashShiftId String
+  cashShift   CashShift @relation(fields: [cashShiftId], references: [id], onDelete: Cascade)
+
+  // Ventana usada para calcular sistema (útil para auditoría)
+  windowFrom DateTime
+  windowTo   DateTime
+
+  computedJson Json
+  systemJson   Json
+  declaredJson Json
+  diffJson     Json
+
+  note String?
+
+  // Estado “reapertura/anulación”
+  isVoided   Boolean @default(false)
+  voidReason String? @db.VarChar(500)
+
+  // Quién cerró / quién anuló
+  closedAt       DateTime @default(now())
+  closedByUserId String
+  closedByUser   User     @relation("CashClosureClosedBy", fields: [closedByUserId], references: [id])
+
+  // ✅ Revisión (admin)
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  reviewedByUser   User?     @relation("CashClosureReviewedBy", fields: [reviewedByUserId], references: [id])
+  reviewNote       String?   @db.VarChar(500)
+
+  voidedAt       DateTime?
+  voidedByUserId String?
+  voidedByUser   User?     @relation("CashClosureVoidedBy", fields: [voidedByUserId], references: [id])
+
+  // Participantes (1–4)
+  users CashClosureUser[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([businessDate, origin, shift])
+  @@index([closedByUserId])
+  @@index([origin, shift, businessDate])
+  @@index([isVoided])
+  @@index([reviewedByUserId])
+  @@index([reviewedAt])
+}
+
+model CashClosureUser {
+  id            String @id @default(cuid())
+  cashClosureId String
+  userId        String
+
+  // Opcional: por trazabilidad (qué rol tenía esa persona en ese cierre)
+  roleNameAtClose RoleName?
+
+  cashClosure CashClosure @relation(fields: [cashClosureId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([cashClosureId, userId])
+  @@index([userId])
+  @@index([cashClosureId])
+}
+
+model GiftProduct {
+  id       String  @id @default(cuid())
+  name     String
+  isActive Boolean @default(true)
+
+  serviceId  String
+  optionId   String
+  priceCents Int
+
+  validDays Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service Service       @relation("GiftProductService", fields: [serviceId], references: [id])
+  option  ServiceOption @relation("GiftProductOption", fields: [optionId], references: [id])
+
+  vouchers GiftVoucher[]
+
+  @@index([isActive])
+  @@index([serviceId])
+  @@index([optionId])
+}
+
+model GiftVoucher {
+  id   String @id @default(cuid())
+  code String @unique // SR-1234-567
+
+  productId String
+  product   GiftProduct @relation(fields: [productId], references: [id])
+
+  origin PaymentOrigin
+  soldAt DateTime      @default(now())
+
+  buyerName  String? @db.VarChar(120)
+  buyerPhone String? @db.VarChar(40)
+
+  soldByUserId String?
+  soldByUser   User?   @relation("GiftSoldBy", fields: [soldByUserId], references: [id])
+
+  soldPaymentId String?  @unique
+  soldPayment   Payment? @relation("GiftSoldPayment", fields: [soldPaymentId], references: [id])
+
+  expiresAt DateTime?
+
+  redeemedAt       DateTime?
+  redeemedByUserId String?
+  redeemedByUser   User?     @relation("GiftRedeemedBy", fields: [redeemedByUserId], references: [id])
+
+  redeemedReservationId String?      @unique
+  redeemedReservation   Reservation? @relation("GiftRedeemedReservation", fields: [redeemedReservationId], references: [id])
+  draftReservation      Reservation? @relation("GiftVoucherReedem")
+
+  isVoided   Boolean   @default(false)
+  voidedAt   DateTime?
+  voidReason String?
+
+  @@index([origin, soldAt])
+  @@index([redeemedAt])
+  @@index([productId])
+}
+
+model PassProduct {
+  id       String  @id @default(cuid())
+  code     String  @unique // ej: "PASS_JETSKI_10H"
+  name     String
+  isActive Boolean @default(true)
+
+  serviceId    String
+  optionId     String? // opcional (si lo quieres fijar)
+  totalMinutes Int // ej: 600 = 10h
+  priceCents   Int // precio fijo (admin)
+
+  validDays Int? // opcional: caducidad relativa
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service  Service        @relation("PassProductService", fields: [serviceId], references: [id])
+  option   ServiceOption? @relation("PassProductOption", fields: [optionId], references: [id])
+  vouchers PassVoucher[]
+
+  @@index([isActive])
+  @@index([serviceId])
+  @@index([optionId])
+}
+
+model PassVoucher {
+  id   String @id @default(cuid())
+  code String @unique // ej: "PS-1234-567"
+
+  productId String
+  product   PassProduct @relation(fields: [productId], references: [id])
+
+  origin PaymentOrigin
+  soldAt DateTime      @default(now())
+
+  buyerName  String? @db.VarChar(120)
+  buyerPhone String? @db.VarChar(40)
+  buyerEmail String? @db.VarChar(160)
+
+  // ✅ PRO: datos de contrato guardados en el bono
+  customerCountry   String? @db.VarChar(2) // "ES"
+  customerAddress   String? @db.VarChar(250)
+  customerDocType   String? @db.VarChar(40) // "DNI" | "NIE" | "PASSPORT" | ...
+  customerDocNumber String? @db.VarChar(80)
+  soldByUserId      String?
+  soldByUser        User?   @relation("PassSoldBy", fields: [soldByUserId], references: [id])
+
+  soldPaymentId String?  @unique
+  soldPayment   Payment? @relation("PassSoldPayment", fields: [soldPaymentId], references: [id])
+
+  expiresAt DateTime?
+
+  minutesTotal     Int
+  minutesRemaining Int
+
+  isVoided   Boolean   @default(false)
+  voidedAt   DateTime?
+  voidReason String?
+
+  consumes     PassConsume[]
+  reservations Reservation[] // backrelation desde Reservation.passVoucherId
+
+  @@index([origin, soldAt])
+  @@index([expiresAt])
+  @@index([productId])
+}
+
+model PassConsume {
+  id        String      @id @default(cuid())
+  voucherId String
+  voucher   PassVoucher @relation(fields: [voucherId], references: [id])
+
+  consumedAt       DateTime @default(now())
+  consumedByUserId String?
+  consumedByUser   User?    @relation("PassConsumedBy", fields: [consumedByUserId], references: [id])
+
+  // cuánto se consumió en este evento
+  minutesUsed Int
+
+  // detalle operativo (qué eligió)
+  serviceId String
+  optionId  String?
+  quantity  Int     @default(1)
+  pax       Int     @default(1)
+
+  // ✅ cada consumo crea 1 reserva (draft) → 1:1
+  reservationId String?      @unique
+  reservation   Reservation? @relation(fields: [reservationId], references: [id])
+
+  @@index([voucherId, consumedAt])
+  @@index([consumedAt])
+  @@index([serviceId])
+}
+
+model TaxiboatTrip {
+  id              String             @id @default(cuid())
+  boat            TaxiboatBoat       @default(TAXIBOAT_1)
+  status          TaxiboatTripStatus @default(OPEN)
+  activityDate    DateTime
+  tripNo          Int
+  createdAt       DateTime           @default(now())
+  createdByUserId String?
+  departedAt      DateTime?
+  note            String?
+
+  reservations Reservation[]
+
+  @@unique([activityDate, boat, tripNo])
+  @@index([createdAt])
+  @@index([boat, status])
+}
+
+model Payment {
+  id              String           @id @default(cuid())
+  reservationId   String?
+  origin          PaymentOrigin
+  method          PaymentMethod
+  amountCents     Int
+  isDeposit       Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  createdByUserId String?
+  direction       PaymentDirection @default(IN)
+  reservation     Reservation?     @relation(fields: [reservationId], references: [id])
+
+  // ✅ NUEVO: el pago pertenece a una sesión/turno
+  shiftSessionId  String?
+  shiftSession    ShiftSession? @relation(fields: [shiftSessionId], references: [id], name: "PaymentToShiftSession")
+  giftVoucherSold GiftVoucher?  @relation("GiftSoldPayment")
+  passSoldVoucher PassVoucher?  @relation("PassSoldPayment")
+
+  @@index([origin, createdAt])
+  @@index([shiftSessionId])
+}
+
+model Monitor {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  maxCapacity Int          @default(4)
+  isActive    Boolean      @default(true)
+  runs        MonitorRun[]
+}
+
+model MonitorRun {
+  id   String         @id @default(cuid())
+  kind MonitorRunKind @default(JETSKI)
+
+  monitorId       String
+  monitor         Monitor   @relation(fields: [monitorId], references: [id])
+  monitorJetskiId String?
+  monitorJetski   Jetski?   @relation("MonitorRunMonitorJetski", fields: [monitorJetskiId], references: [id])
+  monitorAssetId  String?
+  monitorAsset    Asset?    @relation("MonitorRunMonitorAsset", fields: [monitorAssetId], references: [id])
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+  isActive        Boolean   @default(true)
+
+  status          MonitorRunStatus @default(READY)
+  activityDate    DateTime // 00:00 del día operativo (Madrid)
+  closedAt        DateTime?
+  note            String?          @db.VarChar(500)
+  createdByUserId String?
+  createdByUser   User?            @relation("MonitorRunCreatedBy", fields: [createdByUserId], references: [id])
+
+  assignments     MonitorRunAssignment[]
+  incidents       Incident[]
+  extraTimeEvents ExtraTimeEvent[]
+
+  @@index([activityDate, status])
+  @@index([monitorId, status])
+  @@index([monitorJetskiId, status])
+  @@index([monitorAssetId, status])
+}
+
+model MonitorRunAssignment {
+  id String @id @default(cuid())
+
+  runId String
+  run   MonitorRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  // unidades (jetski)
+  reservationUnitId String?
+  reservationUnit   ReservationUnit? @relation(fields: [reservationUnitId], references: [id], onDelete: SetNull)
+
+  // JETSKI (solo cuando kind=JETSKI)
+  jetskiId String?
+  jetski   Jetski? @relation(fields: [jetskiId], references: [id], onDelete: SetNull)
+
+  // NAUTICA/otros (boat, towable, parasailing, flyboard, jetcar…)
+  assetId String?
+  asset   Asset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  durationMinutesSnapshot Int
+  status                  RunAssignmentStatus @default(QUEUED)
+
+  startedAt     DateTime?
+  expectedEndAt DateTime?
+  endedAt       DateTime?
+  createdAt     DateTime  @default(now())
+
+  incidents       Incident[]
+  extraTimeEvents ExtraTimeEvent[]
+
+  // Unicidades: no repetir recurso en el mismo run
+  @@unique([runId, jetskiId])
+  @@unique([runId, assetId])
+  @@index([runId, status])
+  @@index([reservationId])
+  @@index([reservationUnitId])
+  @@index([jetskiId])
+  @@index([assetId])
+}
+
+model Jetski {
+  id                         String                    @id @default(cuid())
+  number                     Int                       @unique
+  plate                      String?
+  chassisNumber              String?
+  model                      String?
+  year                       Int?
+  owner                      String?
+  maxPax                     Int?
+  status                     JetskiStatus              @default(OPERATIONAL)
+  currentHours               Float?
+  lastServiceHours           Float?
+  serviceIntervalHours       Float                     @default(85)
+  serviceWarnHours           Float                     @default(70)
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  assignments                ReservationJetski[]
+  monitorRunAssignments      MonitorRunAssignment[]
+  extraTimeEvents            ExtraTimeEvent[]
+  reservationUnits           ReservationUnit[]
+  monitorRunsAsMonitorJetski MonitorRun[]              @relation("MonitorRunMonitorJetski")
+  maintenanceEvents          MaintenanceEvent[]        @relation("MaintenanceEventJetski")
+  operabilityStatus          PlatformOperabilityStatus @default(OPERATIONAL)
+  incidents                  Incident[]                @relation("IncidentJetski")
+}
+
+model ReservationJetski {
+  reservationId String
+  jetskiId      String
+  jetski        Jetski      @relation(fields: [jetskiId], references: [id])
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@id([reservationId, jetskiId])
+  @@index([jetskiId])
+}
+
+model ExtraTimeEvent {
+  id String @id @default(cuid())
+
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  runId String
+  run   MonitorRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  assignmentId String
+  assignment   MonitorRunAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  jetskiId String
+  jetski   Jetski @relation(fields: [jetskiId], references: [id])
+
+  // ✅ NUEVO (si vas a aplicarlo por unidad)
+  reservationUnitId String?
+  reservationUnit   ReservationUnit? @relation(fields: [reservationUnitId], references: [id], onDelete: SetNull)
+
+  serviceCode  String
+  extraMinutes Int
+  status       ExtraTimeStatus @default(PENDING)
+
+  createdByUserId String
+  createdAt       DateTime @default(now())
+
+  @@index([reservationId])
+  @@index([runId])
+  @@index([assignmentId])
+  @@index([reservationUnitId])
+}
+
+model Asset {
+  id     String      @id @default(cuid())
+  type   AssetType
+  status AssetStatus @default(OPERATIONAL)
+
+  name                 String
+  code                 String?
+  model                String?
+  year                 Int?
+  plate                String?
+  chassisNumber        String?
+  maxPax               Int?
+  note                 String?
+  currentHours         Float?
+  lastServiceHours     Float?
+  serviceIntervalHours Float   @default(85)
+  serviceWarnHours     Float   @default(70)
+
+  isMotorized Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments               MonitorRunAssignment[]
+  monitorRunsAsMonitorAsset MonitorRun[]              @relation("MonitorRunMonitorAsset")
+  maintenanceEvents         MaintenanceEvent[]        @relation("MaintenanceEventAsset")
+  operabilityStatus         PlatformOperabilityStatus @default(OPERATIONAL)
+  incidents                 Incident[]                @relation("IncidentAsset")
+
+  @@unique([code])
+  @@index([type, status])
+  @@index([status])
+}
+
+model MaintenanceEvent {
+  id String @id @default(cuid())
+
+  entityType MaintenanceEntityType
+  type       MaintenanceEventType  @default(SERVICE)
+
+  // Polimórfico “simple”: uno de los dos
+  jetskiId String?
+  jetski   Jetski? @relation("MaintenanceEventJetski", fields: [jetskiId], references: [id], onDelete: Cascade)
+
+  assetId String?
+  asset   Asset?  @relation("MaintenanceEventAsset", fields: [assetId], references: [id], onDelete: Cascade)
+
+  // Datos del evento
+  hoursAtService Float
+  note           String?
+
+  // mantenimiento avanzado
+  severity         MaintenanceSeverity @default(MEDIUM)
+  status           MaintenanceStatus   @default(RESOLVED)
+  supplierName     String?
+  externalWorkshop Boolean             @default(false)
+
+  costCents      Int?
+  laborCostCents Int?
+  partsCostCents Int?
+
+  resolvedAt  DateTime?
+  faultCode   String?
+  reopenCount Int                   @default(0)
+  logs        MaintenanceEventLog[]
+
+  affectsOperability    Boolean                    @default(false)
+  operabilityOnOpen     PlatformOperabilityStatus?
+  operabilityOnResolved PlatformOperabilityStatus?
+  incident              Incident?                  @relation("IncidentMaintenanceEvent")
+
+  createdByUserId String?
+  createdByUser   User?   @relation("MaintenanceEventCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  expenses  Expense[]
+
+  sparePartMovements SparePartMovement[]
+
+  partUsages MaintenancePartUsage[]
+
+  @@index([entityType, createdAt])
+  @@index([jetskiId, createdAt])
+  @@index([assetId, createdAt])
+}
+
+model MaintenanceEventLog {
+  id                 String                  @id @default(cuid())
+  maintenanceEventId String
+  kind               MaintenanceEventLogKind
+  message            String
+  payloadJson        Json?
+  createdByUserId    String?
+  createdAt          DateTime                @default(now())
+
+  maintenanceEvent MaintenanceEvent @relation(fields: [maintenanceEventId], references: [id], onDelete: Cascade)
+  createdByUser    User?            @relation("MaintenanceEventLogCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([maintenanceEventId, createdAt])
+  @@index([kind, createdAt])
+}
+
+model Incident {
+  id String @id @default(cuid())
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  closedAt  DateTime?
+
+  createdByUserId String?
+  createdByUser   User?   @relation("IncidentCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  entityType MaintenanceEntityType
+
+  jetskiId String?
+  jetski   Jetski? @relation("IncidentJetski", fields: [jetskiId], references: [id], onDelete: Cascade)
+
+  assetId String?
+  asset   Asset?  @relation("IncidentAsset", fields: [assetId], references: [id], onDelete: Cascade)
+
+  reservationId String?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+
+  reservationUnitId String?
+  reservationUnit   ReservationUnit? @relation(fields: [reservationUnitId], references: [id], onDelete: SetNull)
+
+  runId String?
+  run   MonitorRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  assignmentId String?
+  assignment   MonitorRunAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+
+  type   IncidentType
+  level  IncidentLevel
+  status IncidentStatus @default(OPEN)
+
+  title       String?
+  description String?
+  notes       String? @db.VarChar(800)
+
+  isOpen Boolean @default(true)
+
+  affectsOperability Boolean                    @default(true)
+  operabilityStatus  PlatformOperabilityStatus?
+
+  retainDeposit      Boolean @default(false)
+  retainDepositCents Int?
+
+  visibleInStore     Boolean @default(true)
+  visibleInMechanics Boolean @default(true)
+  visibleInPlatform  Boolean @default(true)
+
+  maintenanceEventId String?           @unique
+  maintenanceEvent   MaintenanceEvent? @relation("IncidentMaintenanceEvent", fields: [maintenanceEventId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, createdAt])
+  @@index([reservationId])
+  @@index([reservationUnitId])
+  @@index([runId, createdAt])
+  @@index([assignmentId])
+  @@index([jetskiId, isOpen])
+  @@index([assetId, isOpen])
+  @@index([status, createdAt])
+}
+
+model FaultCodeCatalog {
+  id String @id @default(cuid())
+
+  brand               String                      @default("SEA_DOO")
+  code                String
+  system              String?
+  titleEs             String
+  descriptionEs       String?
+  likelyCausesEs      String?
+  recommendedActionEs String?
+  severityHint        String?
+  source              String?
+  verificationStatus  FaultCodeVerificationStatus @default(PENDING_VERIFY)
+  notesInternal       String?
+  isActive            Boolean                     @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brand, code])
+  @@index([code])
+  @@index([brand, system])
+  @@index([verificationStatus])
+}
+
+model SparePart {
+  id String @id @default(cuid())
+
+  sku      String? @unique
+  name     String
+  category String?
+  brand    String?
+  model    String?
+  unit     String?
+
+  stockQty    Float @default(0)
+  minStockQty Float @default(0)
+
+  costPerUnitCents Int?
+  supplierName     String?
+  note             String?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  movements         SparePartMovement[]
+  maintenanceUsages MaintenancePartUsage[]
+  expenses          Expense[]
+
+  @@index([name])
+  @@index([category])
+  @@index([isActive])
+  @@index([stockQty])
+}
+
+model SparePartMovement {
+  id String @id @default(cuid())
+
+  sparePartId String
+  sparePart   SparePart @relation(fields: [sparePartId], references: [id], onDelete: Cascade)
+
+  type SparePartMovementType
+  qty  Float
+
+  unitCostCents  Int?
+  totalCostCents Int?
+  note           String?
+
+  vendorId String?
+  vendor   ExpenseVendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  expenseId String?
+  expense   Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+
+  maintenanceEventId String?
+  maintenanceEvent   MaintenanceEvent? @relation(fields: [maintenanceEventId], references: [id], onDelete: SetNull)
+
+  createdByUserId String?
+  createdByUser   User?   @relation("SparePartMovementCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([sparePartId, createdAt])
+  @@index([type, createdAt])
+  @@index([vendorId])
+  @@index([expenseId])
+  @@index([maintenanceEventId])
+}
+
+model MaintenancePartUsage {
+  id String @id @default(cuid())
+
+  maintenanceEventId String
+  maintenanceEvent   MaintenanceEvent @relation(fields: [maintenanceEventId], references: [id], onDelete: Cascade)
+
+  sparePartId String
+  sparePart   SparePart @relation(fields: [sparePartId], references: [id], onDelete: Restrict)
+
+  qty Float
+
+  unitCostCents  Int?
+  totalCostCents Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([maintenanceEventId])
+  @@index([sparePartId])
+}
+
+model WorkLog {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  workDate DateTime
+
+  checkInAt  DateTime?
+  checkOutAt DateTime?
+
+  breakMinutes  Int  @default(0)
+  workedMinutes Int?
+
+  area   WorkArea      @default(OTHER)
+  status WorkLogStatus @default(OPEN)
+
+  note String?
+
+  approvedByUserId String?
+  approvedByUser   User?   @relation("WorkLogApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  createdByUserId String?
+  createdByUser   User?   @relation("WorkLogCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, workDate])
+  @@index([workDate, area])
+  @@index([status, workDate])
+}
+
+model EmployeeRate {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  rateType    EmployeeRateType
+  amountCents Int
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  note String?
+
+  createdByUserId String?
+  createdByUser   User?   @relation("EmployeeRateCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, effectiveFrom])
+  @@index([rateType])
+}
+
+model PayrollEntry {
+  id String @id @default(cuid())
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  status PayrollStatus @default(DRAFT)
+
+  amountCents Int
+  concept     String?
+  note        String?
+
+  paidAt DateTime?
+
+  createdByUserId String?
+  createdByUser   User?   @relation("PayrollEntryCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId, periodStart, periodEnd])
+  @@index([status, periodStart])
+}
+
+model ExpenseCategory {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  code        String? @unique
+  description String?
+  isActive    Boolean @default(true)
+
+  expenses    Expense[]
+  vendorLinks ExpenseVendorCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ExpenseVendor {
+  id            String  @id @default(cuid())
+  name          String
+  code          String? @unique
+  taxId         String?
+  email         String?
+  phone         String?
+  contactPerson String?
+  note          String?
+  isActive      Boolean @default(true)
+
+  expenses           Expense[]
+  sparePartMovements SparePartMovement[]
+  categoryLinks      ExpenseVendorCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, taxId])
+}
+
+model ExpenseVendorCategory {
+  id         String   @id @default(cuid())
+  vendorId   String
+  categoryId String
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  vendor   ExpenseVendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  category ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, categoryId])
+  @@index([vendorId])
+  @@index([categoryId])
+}
+
+model Expense {
+  id String @id @default(cuid())
+
+  expenseDate   DateTime
+  description   String
+  reference     String?
+  invoiceNumber String?
+
+  categoryId String
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  vendorId String?
+  vendor   ExpenseVendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  costCenter ExpenseCostCenter @default(GENERAL)
+
+  status        ExpenseStatus         @default(DRAFT)
+  paymentMethod ExpensePaymentMethod?
+
+  amountCents Int
+  taxCents    Int?
+  totalCents  Int?
+
+  hasInvoice       Boolean @default(false)
+  pricesIncludeTax Boolean @default(true)
+  taxRateBp        Int? // 2100=21%, 1000=10%, 400=4%, 0=0%
+
+  paidAt  DateTime?
+  dueDate DateTime?
+
+  note String?
+
+  createdByUserId String?
+  createdByUser   User?   @relation("ExpenseCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  maintenanceEventId String?
+  maintenanceEvent   MaintenanceEvent? @relation(fields: [maintenanceEventId], references: [id], onDelete: SetNull)
+
+  sparePartId        String?
+  sparePart          SparePart?          @relation(fields: [sparePartId], references: [id], onDelete: SetNull)
+  sparePartMovements SparePartMovement[]
+
+  employeeId String?
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expenseDate])
+  @@index([status])
+  @@index([costCenter])
+  @@index([categoryId])
+  @@index([vendorId])
+  @@index([maintenanceEventId])
+  @@index([sparePartId])
+  @@index([employeeId])
+}
+
+enum FaultCodeVerificationStatus {
+  VERIFIED_OFFICIAL
+  VERIFIED_COMMUNITY
+  INTERNAL_OBSERVED
+  PENDING_VERIFY
+}
+
+enum ExtraTimeStatus {
+  PENDING
+  CHARGED
+  VOIDED
+}
+
+enum MonitorRunStatus {
+  READY
+  IN_SEA
+  CLOSED
+}
+
+enum RunAssignmentStatus {
+  QUEUED // asignado a un run, pero todavía NO ha iniciado salida
+  ACTIVE // en el mar (timer corriendo)
+  FINISHED
+}
+
+enum IncidentType {
+  ACCIDENT
+  DAMAGE
+  MECHANICAL
+  OTHER
+}
+
+enum IncidentLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  LINKED
+  RESOLVED
+  CANCELED
+}
+
+enum DiscountKind {
+  PERCENT
+  FIXED
+}
+
+enum DiscountScope {
+  ALL
+  CATEGORY
+  SERVICE
+  OPTION
+}
+
+enum RoleName {
+  ADMIN
+  STORE
+  PLATFORM
+  BOOTH
+  BAR
+  MECHANIC
+  HR
+}
+
+enum EmployeeKind {
+  MONITOR
+  SKIPPER
+  SELLER
+  INTERN
+  MECHANIC
+  HR
+  SECURITY
+  ASSISTANT_MECHANIC
+  EXTRA
+  MANAGER
+}
+
+enum ShiftName {
+  MORNING
+  AFTERNOON
+  DAY
+}
+
+enum ReservationSource {
+  STORE
+  BOOTH
+  WEB
+}
+
+enum ReservationStatus {
+  SCHEDULED
+  WAITING
+  READY_FOR_PLATFORM
+  IN_SEA
+  COMPLETED
+  CANCELED
+}
+
+enum ReservationUnitStatus {
+  READY_FOR_PLATFORM
+  IN_SEA
+  WAITING
+  COMPLETED
+  CANCELED
+}
+
+enum AssetType {
+  BOAT
+  TOWBOAT
+  JETCAR
+  PARASAILING
+  FLYBOARD
+  TOWABLE
+  OTHER
+}
+
+enum JetskiStatus {
+  OPERATIONAL
+  DAMAGED
+  MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+enum AssetStatus {
+  OPERATIONAL
+  MAINTENANCE
+  DAMAGED
+  OUT_OF_SERVICE
+}
+
+enum PlatformOperabilityStatus {
+  OPERATIONAL
+  MAINTENANCE
+  DAMAGED
+  OUT_OF_SERVICE
+}
+
+enum ContractStatus {
+  DRAFT
+  READY
+  SIGNED
+  VOID
+}
+
+enum CountryScope {
+  ANY
+  ES_ONLY
+  NON_ES_ONLY
+}
+
+enum TaxiboatBoat {
+  TAXIBOAT_1
+  TAXIBOAT_2
+}
+
+enum TaxiboatTripStatus {
+  OPEN
+  DEPARTED
+  CANCELED
+}
+
+enum PaymentOrigin {
+  STORE
+  BOOTH
+  WEB
+  BAR
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BIZUM
+  TRANSFER
+  VOUCHER
+}
+
+enum PaymentDirection {
+  IN
+  OUT
+}
+
+enum MonitorRunKind {
+  JETSKI
+  NAUTICA
+}
+
+enum ServiceCategory {
+  JETSKI
+  JETCAR
+  BOAT
+  TOWABLE
+  EXTRA
+  BAR
+}
+
+enum MaintenanceEntityType {
+  JETSKI
+  ASSET
+}
+
+enum MaintenanceEventType {
+  SERVICE
+  OIL_CHANGE
+  REPAIR
+  INSPECTION
+  INCIDENT_REVIEW
+  HOUR_ADJUSTMENT
+}
+
+enum MaintenanceSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  EXTERNAL
+  CANCELED
+}
+
+enum MaintenanceEventLogKind {
+  CREATED
+  STATUS_CHANGED
+  REOPENED
+  RESOLVED
+  PARTS_UPDATED
+  COSTS_UPDATED
+  NOTE_UPDATED
+  FIELD_UPDATE
+}
+
+enum SparePartMovementType {
+  INITIAL_STOCK
+  PURCHASE
+  CONSUMPTION
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  RETURN
+}
+
+enum WorkArea {
+  PLATFORM
+  BOOTH
+  STORE
+  BAR
+  MECHANICS
+  HR
+  ADMIN
+  OTHER
+}
+
+enum WorkLogStatus {
+  OPEN
+  CLOSED
+  APPROVED
+  CANCELED
+}
+
+enum EmployeeRateType {
+  HOURLY
+  DAILY
+  MONTHLY
+  PER_SHIFT
+}
+
+enum PayrollStatus {
+  DRAFT
+  PENDING
+  PAID
+  CANCELED
+}
+
+enum ExpenseStatus {
+  DRAFT
+  PENDING
+  PAID
+  CANCELED
+}
+
+enum ExpensePaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  BIZUM
+  DIRECT_DEBIT
+  OTHER
+}
+
+enum ExpenseCostCenter {
+  GENERAL
+  STORE
+  PLATFORM
+  BOOTH
+  HR
+  MECHANICS
+  OPERATIONS
+  MARKETING
+  PORT
+}

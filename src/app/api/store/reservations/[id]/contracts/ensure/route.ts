@@ -1,0 +1,125 @@
+﻿// src/app/api/store/reservations/[id]/contracts/ensure/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
+import { getIronSession } from "iron-session";
+import { sessionOptions, AppSession } from "@/lib/session";
+import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+
+export const runtime = "nodejs";
+
+async function requireStoreOrAdmin() {
+  const cookieStore = await cookies();
+  const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
+  if (!session?.userId) return null;
+  if (session.role === "ADMIN" || session.role === "STORE") return session;
+  return null;
+}
+
+export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+  const session = await requireStoreOrAdmin();
+  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const { id } = await Promise.resolve(ctx.params);
+
+  try {
+    const out = await prisma.$transaction(async (tx) => {
+      const res = await tx.reservation.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          quantity: true,
+          isLicense: true,
+          service: { select: { category: true } },
+          items: {
+            select: {
+              quantity: true,
+              isExtra: true,
+              service: { select: { category: true, code: true } },
+            },
+          },
+          contracts: {
+            select: { id: true, unitIndex: true, status: true, createdAt: true },
+          },
+        },
+      });
+
+      if (!res) throw new Error("Reserva no existe");
+
+      const requiredUnits = computeRequiredContractUnits({
+        quantity: res.quantity ?? 0,
+        isLicense: Boolean(res.isLicense),
+        serviceCategory: res.service?.category ?? null,
+        items: (res.items ?? []).map((it) => ({
+          quantity: it.quantity ?? 0,
+          isExtra: Boolean(it.isExtra),
+          service: it.service ? { category: it.service.category ?? null, code: it.service.code ?? null } : null,
+        })),
+      });
+
+      // Si no requiere contratos, devolvemos ok (pero dejamos endpoint idempotente)
+      if (requiredUnits <= 0) {
+        return {
+          reservationId: id,
+          requiredUnits: 0,
+          readyCount: 0,
+          contracts: [] as Array<{ id: string; unitIndex: number; status: string }>,
+        };
+      }
+
+      const existingContracts = res.contracts ?? [];
+      const hasUnitOne = existingContracts.some((c) => Number(c.unitIndex) === 1);
+
+      // Compat legacy: si existe contrato principal en unitIndex 0, se reutiliza como #1.
+      if (!hasUnitOne) {
+        const legacyPrimary = existingContracts
+          .filter((c) => Number(c.unitIndex) <= 0)
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0];
+
+        if (legacyPrimary) {
+          await tx.reservationContract.update({
+            where: { id: legacyPrimary.id },
+            data: { unitIndex: 1 },
+          });
+        }
+      }
+
+      const existingRows = await tx.reservationContract.findMany({
+        where: { reservationId: id },
+        select: { unitIndex: true },
+      });
+      const existing = new Set<number>(existingRows.map((c) => Number(c.unitIndex)));
+
+      const toCreate: Array<{ reservationId: string; unitIndex: number }> = [];
+      for (let i = 1; i <= requiredUnits; i++) {
+        if (!existing.has(i)) toCreate.push({ reservationId: id, unitIndex: i });
+      }
+
+      if (toCreate.length) {
+        await tx.reservationContract.createMany({
+          data: toCreate,
+          skipDuplicates: true, // âœ… idempotente
+        });
+      }
+
+      const contracts = await tx.reservationContract.findMany({
+        where: { reservationId: id },
+        orderBy: { unitIndex: "asc" },
+        select: { id: true, unitIndex: true, status: true },
+      });
+
+      const visibleContracts = contracts.filter((c) => Number(c.unitIndex) >= 1 && Number(c.unitIndex) <= requiredUnits);
+
+      const readyCount = visibleContracts.filter(
+        (c) => c.status === "READY" || c.status === "SIGNED"
+      ).length;
+
+      return { reservationId: id, requiredUnits, readyCount, contracts: visibleContracts };
+    });
+
+    return NextResponse.json({ ok: true, ...out });
+  } catch (e: unknown) {
+    return new NextResponse(e instanceof Error ? e.message : "Error", { status: 400 });
+  }
+}
+

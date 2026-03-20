@@ -1,0 +1,524 @@
+﻿// src/app/store/calendar/page.tsx
+"use client";
+
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+
+type LiteRow = {
+  id: string;
+  status: string;
+  activityDate: string;
+  scheduledTime: string | null;
+  customerName: string;
+  formalizedAt?: string | null;
+  pendingCents?: number;
+  finalTotalCents?: number;
+  service?: { name: string; category?: string | null };
+  option?: { durationMinutes?: number | null; paxMax?: number | null };
+};
+
+type DayBucket = { count: number; rows: LiteRow[] };
+type ApiResponse = { ok: boolean; month: string; days: Record<string, DayBucket> };
+
+type RowAction = {
+  label: string;
+  href: string;
+  secondary?: { label: string; href: string };
+};
+
+const BUSINESS_TZ = "Europe/Madrid";
+
+function todayMadridYmd() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function weekdayMadrid(yyyyMmDd: string) {
+  const d = new Date(`${yyyyMmDd}T12:00:00`);
+  return new Intl.DateTimeFormat("es-ES", {
+    timeZone: BUSINESS_TZ,
+    weekday: "long",
+  }).format(d);
+}
+
+function euros(cents?: number) {
+  const v = Number(cents ?? 0);
+  return `${(v / 100).toFixed(2)} EUR`;
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function monthKey(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+}
+
+function yyyyMmDdLocal(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function addMonths(d: Date, delta: number) {
+  const x = new Date(d);
+  x.setDate(1);
+  x.setMonth(x.getMonth() + delta);
+  return x;
+}
+
+function startOfMonth(d: Date) {
+  const x = new Date(d);
+  x.setDate(1);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function startOfCalendarGrid(monthDate: Date) {
+  const first = startOfMonth(monthDate);
+  const day = first.getDay();
+  const diffToMonday = (day + 6) % 7;
+  const start = new Date(first);
+  start.setDate(first.getDate() - diffToMonday);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function isPastDateLocal(yyyyMmDd: string) {
+  return yyyyMmDd < todayMadridYmd();
+}
+
+function dayKeyFromRow(r: LiteRow) {
+  const src = r.scheduledTime ?? r.activityDate;
+  if (!src) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(src));
+}
+
+function isHistoricalRow(r: LiteRow) {
+  const k = dayKeyFromRow(r);
+  return k ? isPastDateLocal(k) : false;
+}
+
+function isPendingFormalization(r: LiteRow) {
+  return !r.formalizedAt;
+}
+
+function displayStatus(r: LiteRow) {
+  if (!isHistoricalRow(r) && isPendingFormalization(r)) return "PENDING";
+  return r.status;
+}
+
+function isTodayLocal(yyyyMmDd: string) {
+  return yyyyMmDd === todayMadridYmd();
+}
+
+function rowDayKey(r: LiteRow) {
+  const src = r.scheduledTime ?? r.activityDate;
+  if (!src) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(src));
+}
+
+function actionForRow(r: LiteRow): RowAction {
+  const dayKey = rowDayKey(r);
+  const past = dayKey ? isPastDateLocal(dayKey) : false;
+  const today = dayKey ? isTodayLocal(dayKey) : false;
+
+  if (isPendingFormalization(r)) {
+    if (today) return { label: "Formalizar", href: `/store/create?migrateFrom=${r.id}` };
+    return { label: "Editar", href: `/store/create?editFrom=${r.id}` };
+  }
+
+  if (past) return { label: "Ver", href: `/store?reservationId=${r.id}` };
+
+  return {
+    label: "Abrir",
+    href: `/store?reservationId=${r.id}`,
+    secondary: { label: "Editar", href: `/store/create?editFrom=${r.id}` },
+  };
+}
+
+function hhmm(iso?: string | null) {
+  if (!iso) return "";
+  return new Intl.DateTimeFormat("es-ES", {
+    timeZone: BUSINESS_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+}
+
+function monthTitle(d: Date) {
+  return d.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+}
+
+function statusBadgeStyle(status: string): React.CSSProperties {
+  if (status === "PENDING") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d" };
+  if (status === "CANCELED" || status === "CANCELLED") return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (status === "COMPLETED") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (status === "WAITING") return { background: "#e5e7eb", color: "#374151", border: "1px solid #d1d5db" };
+  if (status === "READY_FOR_PLATFORM") return { background: "#e0f2fe", color: "#075985", border: "1px solid #bae6fd" };
+  if (status === "IN_SEA") return { background: "#ede9fe", color: "#5b21b6", border: "1px solid #ddd6fe" };
+  return { background: "#f3f4f6", color: "#111827", border: "1px solid #e5e7eb" };
+}
+
+const shellStyle: React.CSSProperties = { padding: 24, maxWidth: 1380, margin: "0 auto", display: "grid", gap: 18 };
+const panelStyle: React.CSSProperties = { border: "1px solid #dbe4ea", borderRadius: 22, background: "#fff", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)" };
+const actionStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "10px 14px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", color: "#111827", fontWeight: 800, textDecoration: "none" };
+const heroPillStyle: React.CSSProperties = {
+  padding: "6px 12px",
+  borderRadius: 999,
+  border: "1px solid rgba(125, 211, 252, 0.35)",
+  background: "rgba(15, 23, 42, 0.24)",
+  color: "#fff",
+  fontWeight: 900,
+  fontSize: 12,
+};
+const metricCardStyle: React.CSSProperties = {
+  border: "1px solid #dbe4ea",
+  borderRadius: 18,
+  padding: 14,
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+  display: "grid",
+  gap: 4,
+};
+const metricLabelStyle: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 900,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+};
+const metricValueStyle: React.CSSProperties = {
+  fontSize: 24,
+  fontWeight: 950,
+  color: "#0f172a",
+};
+
+function RowCard({ r }: { r: LiteRow }) {
+  const a = actionForRow(r);
+  return (
+    <article style={{ padding: 14, border: "1px solid #e2e8f0", borderRadius: 16, display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ fontWeight: 900 }}>
+          {(hhmm(r.scheduledTime) || "Sin hora") + " | " + (r.customerName || "Sin nombre")}
+        </div>
+        <span style={{ fontSize: 12, padding: "4px 10px", borderRadius: 999, fontWeight: 800, ...statusBadgeStyle(displayStatus(r)) }}>
+          {displayStatus(r)}
+        </span>
+      </div>
+
+      <div style={{ fontSize: 13, color: "#475569" }}>
+        {r.service?.category ? `${r.service.category} | ` : ""}
+        {r.service?.name ?? "Servicio"}
+        {r.option?.durationMinutes ? ` | ${r.option.durationMinutes} min` : ""}
+        {r.option?.paxMax ? ` | pax ${r.option.paxMax}` : ""}
+      </div>
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 13, color: "#334155" }}>
+        {typeof r.finalTotalCents !== "undefined" ? <span>Total: <b>{euros(r.finalTotalCents)}</b></span> : null}
+        {typeof r.pendingCents !== "undefined" ? <span>Pendiente: <b>{euros(r.pendingCents)}</b></span> : null}
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <a
+          href={a.href}
+          style={{
+            ...actionStyle,
+            border: "1px solid #0f172a",
+            background: a.label === "Formalizar" ? "#0f172a" : "#fff",
+            color: a.label === "Formalizar" ? "#fff" : "#111827",
+          }}
+        >
+          {a.label}
+        </a>
+        {a.secondary ? (
+          <a href={a.secondary.href} style={actionStyle}>
+            {a.secondary.label}
+          </a>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+export default function StoreCalendarPage() {
+  const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [data, setData] = useState<ApiResponse | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string>("");
+
+  const month = useMemo(() => monthKey(monthDate), [monthDate]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await fetch(`/api/store/calendar/month?month=${month}`, { cache: "no-store" });
+      if (!r.ok) {
+        const ct = r.headers.get("content-type") || "";
+        const msg = ct.includes("application/json") ? (await r.json().catch(() => null))?.error : (await r.text()).slice(0, 200);
+        throw new Error(msg || `Error ${r.status}`);
+      }
+
+      const j = (await r.json()) as ApiResponse;
+      setData(j);
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Error cargando calendario");
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [month]);
+
+  useEffect(() => {
+    if (selectedDay && !selectedDay.startsWith(month)) setSelectedDay("");
+  }, [month, selectedDay]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const gridStart = useMemo(() => startOfCalendarGrid(monthDate), [monthDate]);
+  const cells = useMemo(() => {
+    const out: Date[] = [];
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(gridStart);
+      d.setDate(gridStart.getDate() + i);
+      out.push(d);
+    }
+    return out;
+  }, [gridStart]);
+
+  const selectedBucket: DayBucket | null = useMemo(() => {
+    if (!data?.days || !selectedDay) return null;
+    return data.days[selectedDay] ?? { count: 0, rows: [] };
+  }, [data, selectedDay]);
+
+  const selectedGroups = useMemo(() => {
+    const rows = selectedBucket?.rows ?? [];
+    const pending = rows.filter((r) => !isHistoricalRow(r) && isPendingFormalization(r));
+    const ops = rows.filter((r) => !isHistoricalRow(r) && !isPendingFormalization(r));
+    const hist = rows.filter((r) => isHistoricalRow(r));
+    return { pending, ops, hist };
+  }, [selectedBucket]);
+
+  const weekDays = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
+  const todayKey = todayMadridYmd();
+  const mode = selectedDay === todayKey ? "today" : "future";
+  const monthReservations = useMemo(
+    () => Object.values(data?.days ?? {}).reduce((acc, bucket) => acc + Number(bucket?.count ?? 0), 0),
+    [data]
+  );
+  const monthPending = useMemo(
+    () =>
+      Object.values(data?.days ?? {}).reduce(
+        (acc, bucket) => acc + (bucket?.rows ?? []).filter((r) => !isHistoricalRow(r) && isPendingFormalization(r)).length,
+        0
+      ),
+    [data]
+  );
+
+  return (
+    <div style={shellStyle}>
+      <section
+        style={{
+          ...panelStyle,
+          padding: 24,
+          display: "grid",
+          gap: 18,
+          background:
+            "radial-gradient(circle at top left, rgba(125, 211, 252, 0.22), transparent 28%), radial-gradient(circle at right bottom, rgba(15, 118, 110, 0.14), transparent 24%), linear-gradient(135deg, #0f172a 0%, #0f766e 55%, #082f49 100%)",
+          color: "#e0f2fe",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <div style={{ display: "grid", gap: 8, maxWidth: 760 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#7dd3fc" }}>Store</div>
+            <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.02, color: "#fff" }}>Calendario</h1>
+            <div style={{ color: "#bae6fd" }}>Vista mensual de reservas con acceso directo a edición, apertura y formalización.</div>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <a href="/store" style={{ ...actionStyle, background: "rgba(255,255,255,0.92)" }}>Volver a tienda</a>
+            <button onClick={load} disabled={loading} style={{ ...actionStyle, border: "1px solid rgba(255,255,255,0.24)", background: "#0f172a", color: "#fff" }}>{loading ? "Cargando..." : "Refrescar"}</button>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <span style={heroPillStyle}>Mes: {monthTitle(monthDate)}</span>
+          <span style={heroPillStyle}>Reservas: {monthReservations}</span>
+          <span style={heroPillStyle}>Pendientes: {monthPending}</span>
+          <span style={heroPillStyle}>Día seleccionado: {selectedDay || "Ninguno"}</span>
+        </div>
+      </section>
+
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+        <article style={metricCardStyle}>
+          <div style={metricLabelStyle}>Reservas del mes</div>
+          <div style={metricValueStyle}>{monthReservations}</div>
+        </article>
+        <article style={metricCardStyle}>
+          <div style={metricLabelStyle}>Pendientes</div>
+          <div style={metricValueStyle}>{monthPending}</div>
+        </article>
+        <article style={metricCardStyle}>
+          <div style={metricLabelStyle}>Operativas del día</div>
+          <div style={metricValueStyle}>{selectedGroups.ops.length}</div>
+        </article>
+        <article style={metricCardStyle}>
+          <div style={metricLabelStyle}>Históricas del día</div>
+          <div style={metricValueStyle}>{selectedGroups.hist.length}</div>
+        </article>
+      </section>
+
+      {err ? <div style={{ padding: 12, borderRadius: 14, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 700 }}>{err}</div> : null}
+
+      <section style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button onClick={() => setMonthDate((d) => addMonths(d, -1))} style={actionStyle}>Anterior</button>
+          <div style={{ fontWeight: 900, fontSize: 22, textTransform: "capitalize" }}>{monthTitle(monthDate)}</div>
+          <button onClick={() => setMonthDate((d) => addMonths(d, 1))} style={actionStyle}>Siguiente</button>
+        </div>
+        <button onClick={() => setMonthDate(startOfMonth(new Date()))} style={{ ...actionStyle, border: "1px solid #0f172a", background: "#0f172a", color: "#fff" }}>
+          Ir a hoy
+        </button>
+      </section>
+
+      <section style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(320px, 430px)", gap: 16, alignItems: "start" }}>
+        <div style={{ ...panelStyle, overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", padding: 12, gap: 8, borderBottom: "1px solid #e2e8f0", background: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)" }}>
+            {weekDays.map((d) => (
+              <div key={d} style={{ fontSize: 12, fontWeight: 900, textTransform: "uppercase", color: "#64748b" }}>{d}</div>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 8, padding: 12 }}>
+            {cells.map((d) => {
+              const key = yyyyMmDdLocal(d);
+              const inMonth = d.getMonth() === monthDate.getMonth();
+              const bucket = data?.days?.[key] ?? null;
+              const count = bucket?.count ?? 0;
+              const rows = bucket?.rows ?? [];
+              const isToday = key === yyyyMmDdLocal(new Date());
+              const isSelected = key === selectedDay;
+              const pendingCount = rows.filter((r) => !isHistoricalRow(r) && isPendingFormalization(r)).length;
+
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSelectedDay(key)}
+                  style={{
+                    minHeight: 132,
+                    padding: 10,
+                    borderRadius: 18,
+                    border: isSelected ? "2px solid #0f172a" : "1px solid #e2e8f0",
+                    background: isSelected ? "linear-gradient(180deg, #f8fafc 0%, #ecfeff 100%)" : isToday ? "#f8fafc" : "#fff",
+                    opacity: inMonth ? 1 : 0.45,
+                    cursor: "pointer",
+                    display: "grid",
+                    alignContent: "start",
+                    gap: 8,
+                    textAlign: "left",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                    <div style={{ fontWeight: 900 }}>
+                      {d.getDate()}
+                      {isToday ? <span style={{ marginLeft: 8, fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "#0f172a", color: "#fff" }}>hoy</span> : null}
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      {pendingCount > 0 ? <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 999, background: "#fef3c7", border: "1px solid #fcd34d", fontWeight: 900 }}>P {pendingCount}</span> : null}
+                      {count > 0 ? <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 999, background: "#e2e8f0", fontWeight: 900 }}>{count}</span> : null}
+                    </div>
+                  </div>
+
+                  {count === 0 ? (
+                    <div style={{ fontSize: 12, color: "#94a3b8" }}>Sin reservas</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {rows.slice(0, 3).map((r) => (
+                        <div key={r.id} style={{ fontSize: 12, color: "#334155", lineHeight: 1.25 }}>
+                          <strong>{hhmm(r.scheduledTime) || "Sin hora"}</strong>
+                          <div>{r.customerName || "Sin nombre"}</div>
+                        </div>
+                      ))}
+                      {count > 3 ? <div style={{ fontSize: 12, color: "#64748b" }}>+{count - 3} más</div> : null}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <aside style={{ ...panelStyle, overflow: "hidden" }}>
+          <div style={{ padding: 16, borderBottom: "1px solid #e2e8f0", background: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ fontWeight: 900 }}>Detalle del día</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {selectedDay ? (
+                <a href={`/store/create?date=${selectedDay}&mode=${mode}`} style={{ ...actionStyle, border: "1px solid #0f172a", background: "#0f172a", color: "#fff" }}>
+                  Crear reserva
+                </a>
+              ) : null}
+              {selectedDay ? <button onClick={() => setSelectedDay("")} style={actionStyle}>Cerrar</button> : null}
+            </div>
+          </div>
+
+          {!selectedDay ? (
+            <div style={{ padding: 16, color: "#64748b" }}>Selecciona un día del calendario para ver reservas y accesos rápidos.</div>
+          ) : (
+            <div style={{ padding: 16, display: "grid", gap: 14 }}>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 900 }}>{selectedDay}</div>
+                <div style={{ color: "#64748b", textTransform: "capitalize" }}>{weekdayMadrid(selectedDay)}</div>
+              </div>
+
+              <div style={{ fontSize: 13, color: "#475569" }}>
+                Reservas: <b>{selectedBucket?.count ?? 0}</b>
+              </div>
+
+              {!selectedBucket || selectedBucket.count === 0 ? (
+                <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", color: "#64748b" }}>No hay reservas este día.</div>
+              ) : (
+                <>
+                  <div style={{ padding: 12, borderRadius: 16, border: "1px solid #fcd34d", background: "#fffbeb", display: "grid", gap: 10 }}>
+                    <div style={{ fontWeight: 900 }}>Pendientes de formalizar ({selectedGroups.pending.length})</div>
+                    {selectedGroups.pending.length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>Sin pendientes.</div> : selectedGroups.pending.map((r) => <RowCard key={r.id} r={r} />)}
+                  </div>
+
+                  <div style={{ padding: 12, borderRadius: 16, border: "1px solid #e2e8f0", background: "#fff", display: "grid", gap: 10 }}>
+                    <div style={{ fontWeight: 900 }}>Operativa ({selectedGroups.ops.length})</div>
+                    {selectedGroups.ops.length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>Sin reservas operativas.</div> : selectedGroups.ops.map((r) => <RowCard key={r.id} r={r} />)}
+                  </div>
+
+                  <div style={{ padding: 12, borderRadius: 16, border: "1px solid #e2e8f0", background: "#f8fafc", display: "grid", gap: 10 }}>
+                    <div style={{ fontWeight: 900 }}>Histórico ({selectedGroups.hist.length})</div>
+                    {selectedGroups.hist.length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>Sin reservas históricas.</div> : selectedGroups.hist.map((r) => <RowCard key={r.id} r={r} />)}
+                  </div>
+                </>
+              )}
+
+              <div style={{ fontSize: 12, color: "#64748b" }}>
+                Este panel mantiene la navegación actual: crear, editar, abrir o formalizar según el estado de cada reserva.
+              </div>
+            </div>
+          )}
+        </aside>
+      </section>
+
+      {loading ? <div style={{ color: "#64748b" }}>Cargando mes...</div> : null}
+    </div>
+  );
+}
