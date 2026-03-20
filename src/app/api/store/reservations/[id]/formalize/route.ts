@@ -325,9 +325,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         if (!customerCountry || customerCountry.trim().length < 2) {
           throw new Error("Pais requerido para formalizar.");
         }
-        if (!customerAddress) throw new Error("Direccion requerida para formalizar.");
-        if (!customerDocType) throw new Error("Tipo de documento requerido para formalizar.");
-        if (!customerDocNumber) throw new Error("Numero de documento requerido para formalizar.");
       }
       if (!serviceId || !optionId) throw new Error("Servicio y duracion requeridos.");
       if (!Number.isFinite(quantity) || quantity < 1 || quantity > 20) throw new Error("Cantidad invalida.");
@@ -336,30 +333,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         throw new Error("Acompanantes invalido.");
       }
 
-      if (isLicense && (!licenseSchool || !licenseType || !licenseNumber)) {
-        throw new Error("Faltan datos de licencia (escuela, tipo y numero).");
-      }
-
       const data: Prisma.ReservationUncheckedUpdateInput = {
         customerName,
         customerPhone: customerPhone ?? null,
         customerEmail: customerEmail ?? null,
         customerCountry: customerCountry ? customerCountry.toUpperCase() : "ES",
-        customerAddress: customerAddress ?? null,
-        customerPostalCode: customerPostalCode ?? null,
-        customerBirthDate,
-        customerDocType: customerDocType ?? null,
-        customerDocNumber: customerDocNumber ?? null,
         marketing: marketing ?? null,
-        licenseSchool: isLicense ? licenseSchool : null,
-        licenseType: isLicense ? licenseType : null,
-        licenseNumber: isLicense ? licenseNumber : null,
         serviceId,
         optionId,
         channelId: b.channelId !== undefined ? b.channelId ?? null : current.channelId ?? null,
         quantity,
         pax,
-        isLicense,
         companionsCount,
 
         activityDate,
@@ -368,7 +352,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         formalizedAt: new Date(),
         formalizedByUserId: session.userId,
       };
-
       const updated = await tx.reservation.update({
         where: { id },
         data,
@@ -377,6 +360,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       // Paso 3: Ensure contracts aquí­ (idempotente)
       const contracts = await ensureContractsTx(tx, updated.id);
+
+      if (contracts.requiredUnits > 0 && contracts.readyCount < contracts.requiredUnits) {
+        throw new Error(
+          `Faltan contratos por completar: ${contracts.readyCount}/${contracts.requiredUnits} listos.`
+        );
+      }
 
       return { ok: true as const, id: updated.id, ...contracts };
     });
