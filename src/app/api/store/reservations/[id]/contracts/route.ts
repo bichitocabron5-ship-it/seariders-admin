@@ -43,11 +43,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       licenseType: true,
       licenseNumber: true,
 
-      // âœ… para requiredUnits real (multi-item + categorÃ­as)
       items: {
         select: {
           quantity: true,
-          isExtra: true,
+          isExtra: true, 
           service: { select: { category: true } },
         },
       },
@@ -79,6 +78,28 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           signedAt: true,
           signatureUrl: true,
           updatedAt: true,
+          renderedPdfUrl: true,
+
+          preparedJetskiId: true,
+          preparedAssetId: true,
+
+          preparedJetski: {
+            select: {
+              id: true,
+              number: true,
+              model: true,
+              plate: true,
+            },
+          },
+
+          preparedAsset: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              plate: true,
+            },
+          },
         },
       },
     },

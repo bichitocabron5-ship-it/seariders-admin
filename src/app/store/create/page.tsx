@@ -275,6 +275,11 @@ function StoreCreatePageInner() {
     [servicesMain, serviceId]
   );
 
+  useEffect(() => {
+    if (!selectedService) return;
+    setIsLicense(Boolean(selectedService.isLicense));
+  }, [selectedService]);
+
   const isPackMode = (selectedService?.category ?? "").toUpperCase() === "PACK";
   const canAddToCart = !isPackMode && !!serviceId && !!optionId && Number(quantity) > 0 && Number(pax) > 0;
   
@@ -651,8 +656,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     router.push(`/store?reservationId=${j.id}`);
   }
 
-  async function searchCustomers(term?: string) {
-    const q = (term ?? customerSearch).trim();
+  const searchCustomers = useCallback(async (term: string) => {
+    const q = term.trim();
 
     if (q.length < 2) {
       setCustomerMatches([]);
@@ -682,7 +687,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     } finally {
       setCustomerSearchBusy(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     const q = customerSearch.trim();
@@ -698,9 +703,9 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     }, 350);
 
     return () => clearTimeout(t);
-  }, [customerSearch]);
+  }, [customerSearch, searchCustomers]);
 
-  async function useCustomerProfile(reservationId: string) {
+  async function applyCustomerProfile(reservationId: string) {
     try {
       setCustomerSearchError(null);
 
@@ -1162,7 +1167,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      searchCustomers();
+                      searchCustomers(customerSearch);
                     }
                   }}
                 />
@@ -1223,7 +1228,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
                       <button
                         type="button"
-                        onClick={() => useCustomerProfile(c.reservationId)}
+                        onClick={() => applyCustomerProfile(c.reservationId)}
                         style={{
                           padding: "8px 12px",
                           borderRadius: 10,

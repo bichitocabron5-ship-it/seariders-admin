@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from "react";
 import type { CartItem, ContractDto, ContractPatch, Option, ServiceMain } from "../types";
 import { errorMessage } from "../utils/errors";
-import { renderContract, signContract } from "../services/contracts";
+import { fetchPreparedOptions, generateContractPdf, renderContract, signContract } from "../services/contracts";
 
 const panelStyle: React.CSSProperties = {
   padding: 18,
@@ -13,9 +13,79 @@ const panelStyle: React.CSSProperties = {
   background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
   boxShadow: "0 12px 30px rgba(15, 23, 42, 0.04)",
 };
+const subCardStyle: React.CSSProperties = {
+  padding: 16,
+  border: "1px solid #e2e8f0",
+  borderRadius: 18,
+  background: "rgba(255,255,255,0.82)",
+  display: "grid",
+  gap: 14,
+};
 const inputStyle: React.CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: 14, border: "1px solid #d0d9e4", background: "#fff" };
 const secondaryButtonStyle: React.CSSProperties = { padding: "10px 12px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", fontWeight: 900 };
 const primaryButtonStyle: React.CSSProperties = { padding: "10px 12px", borderRadius: 12, border: "1px solid #0f172a", background: "#0f172a", color: "#fff", fontWeight: 900 };
+const sectionEyebrowStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: 1,
+  textTransform: "uppercase",
+  color: "#64748b",
+};
+
+function contractStatusStyle(status: ContractDto["status"]): React.CSSProperties {
+  if (status === "SIGNED") {
+    return {
+      padding: "6px 10px",
+      borderRadius: 999,
+      background: "#dcfce7",
+      border: "1px solid #bbf7d0",
+      color: "#166534",
+      fontWeight: 900,
+      fontSize: 12,
+    };
+  }
+
+  if (status === "READY") {
+    return {
+      padding: "6px 10px",
+      borderRadius: 999,
+      background: "#dbeafe",
+      border: "1px solid #bfdbfe",
+      color: "#1d4ed8",
+      fontWeight: 900,
+      fontSize: 12,
+    };
+  }
+
+  if (status === "VOID") {
+    return {
+      padding: "6px 10px",
+      borderRadius: 999,
+      background: "#f3f4f6",
+      border: "1px solid #e5e7eb",
+      color: "#475569",
+      fontWeight: 900,
+      fontSize: 12,
+    };
+  }
+
+  return {
+    padding: "6px 10px",
+    borderRadius: 999,
+    background: "#fff7ed",
+    border: "1px solid #fed7aa",
+    color: "#9a3412",
+    fontWeight: 900,
+    fontSize: 12,
+  };
+}
+
+function contractsStateTone(readyCount: number, requiredUnits: number) {
+  if (requiredUnits <= 0) return { label: "No requeridos", color: "#475569", bg: "#f8fafc", border: "#e2e8f0" };
+  if (readyCount >= requiredUnits) return { label: "Operativo", color: "#166534", bg: "#ecfdf5", border: "#bbf7d0" };
+  if (readyCount > 0) return { label: "Parcial", color: "#9a3412", bg: "#fff7ed", border: "#fed7aa" };
+  return { label: "Pendiente", color: "#991b1b", bg: "#fff1f2", border: "#fecaca" };
+}
 
 function ymdFromDate(d: Date | null | undefined) {
   if (!d) return "";
@@ -41,6 +111,8 @@ function ContractCard({
   onSaved,
   onPreview,
   previewBusy,
+  onGeneratePdf,
+  pdfBusy,
 }: {
   reservationId: string;
   isLicense: boolean;
@@ -55,6 +127,8 @@ function ContractCard({
   onSaved: () => Promise<void>;
   onPreview: (contractId: string) => Promise<void>;
   previewBusy: boolean;
+  onGeneratePdf: (contractId: string) => Promise<void>;
+  pdfBusy: boolean;
 }) {
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
@@ -72,6 +146,15 @@ function ContractCard({
   const [licenseSchool, setLicenseSchool] = React.useState<string>(c.licenseSchool ?? "");
   const [licenseType, setLicenseType] = React.useState<string>(c.licenseType ?? "");
   const [licenseNumber, setLicenseNumber] = React.useState<string>(c.licenseNumber ?? "");
+  const [preparedJetskiId, setPreparedJetskiId] = useState(c.preparedJetskiId ?? "");
+  const [preparedAssetId, setPreparedAssetId] = useState(c.preparedAssetId ?? "");
+  const [preparedOptions, setPreparedOptions] = useState<{
+    jetskis: Array<{ id: string; number: number | null; model: string | null; plate: string | null }>;
+    assets: Array<{ id: string; name: string | null; type: string | null; plate: string | null }>;
+  }>({
+    jetskis: [],
+    assets: [],
+  });
 
   const age = React.useMemo(() => ageAt(birthYmd), [birthYmd]);
   const needsAuth = age != null && age >= 16 && age < 18;
@@ -81,7 +164,29 @@ function ContractCard({
   Boolean(licenseSchool?.trim()) ||
   Boolean(licenseType?.trim()) ||
   Boolean(licenseNumber?.trim());
+  const showPreparedSelector = isLicense;
 
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const data = await fetchPreparedOptions();
+        if (cancelled) return;
+        setPreparedOptions({
+          jetskis: data.jetskis ?? [],
+          assets: data.assets ?? [],
+        });
+      } catch {
+        if (cancelled) return;
+        setPreparedOptions({ jetskis: [], assets: [] });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (c.driverBirthDate) {
@@ -101,7 +206,9 @@ function ContractCard({
     setLicenseSchool(c.licenseSchool ?? "");
     setLicenseType(c.licenseType ?? "");
     setLicenseNumber(c.licenseNumber ?? "");
-  }, [c.id, c.driverAddress, c.driverBirthDate, c.driverCountry, c.driverDocNumber, c.driverDocType, c.driverEmail, c.driverName, c.driverPhone, c.driverPostalCode, c.licenseNumber, c.licenseSchool, c.licenseType, c.minorAuthorizationProvided]);
+    setPreparedJetskiId(c.preparedJetskiId ?? "");
+    setPreparedAssetId(c.preparedAssetId ?? "");
+  }, [c.id, c.driverAddress, c.driverBirthDate, c.driverCountry, c.driverDocNumber, c.driverDocType, c.driverEmail, c.driverName, c.driverPhone, c.driverPostalCode, c.licenseNumber, c.licenseSchool, c.licenseType, c.minorAuthorizationProvided, c.preparedAssetId, c.preparedJetskiId]);
 
   function buildPayload() {
     return {
@@ -118,6 +225,8 @@ function ContractCard({
       licenseSchool: licenseSchool || null,
       licenseType: licenseType || null,
       licenseNumber: licenseNumber || null,
+      preparedJetskiId: preparedJetskiId || null,
+      preparedAssetId: preparedAssetId || null,
     };
   }
 
@@ -145,114 +254,216 @@ function ContractCard({
   }
 
   return (
-    <article style={{ ...panelStyle, display: "grid", gap: 12, background: "#fdfefe" }}>
+    <article style={{ ...panelStyle, display: "grid", gap: 14, background: "#fdfefe" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#7c3aed" }}>Contrato</div>
-          <div style={{ fontWeight: 900, fontSize: 16, marginTop: 4 }}>Contrato #{c.unitIndex}</div>
-          <div style={{ fontSize: 12, color: "#64748b" }}>Estado actual: {c.status}</div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>Contrato</div>
+          <div style={{ fontWeight: 900, fontSize: 18 }}>Unidad #{c.unitIndex}</div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>
+            Preparación documental, vista previa y PDF para firma.
+          </div>
         </div>
-        <div style={{ padding: "6px 10px", borderRadius: 999, background: "#f1f5f9", fontWeight: 900 }}>{c.status}</div>
+        <div style={contractStatusStyle(c.status)}>{c.status}</div>
       </div>
 
-      <label style={{ display: "grid", gap: 6 }}>
-        <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Fecha de nacimiento *</div>
-        <input type="date" value={birthYmd} onChange={(e) => setBirthYmd(e.target.value)} style={inputStyle} />
-      </label>
+      <div style={subCardStyle}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <div style={sectionEyebrowStyle}>Validación legal</div>
+          <div style={{ fontSize: 13, color: "#64748b" }}>
+            Edad y autorización del tutor cuando aplique antes de dejar el contrato en `READY`.
+          </div>
+        </div>
 
-      {isUnder16 ? <div style={{ padding: 12, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 800 }}>Menor de 16: no permitido.</div> : null}
-
-      {needsAuth ? (
-        <label style={{ display: "flex", gap: 10, alignItems: "center", padding: 12, borderRadius: 12, border: "1px solid #fde68a", background: "#fffbeb" }}>
-          <input type="checkbox" checked={minorAuthorizationProvided} onChange={(e) => setMinorAuthorizationProvided(e.target.checked)} />
-          <div style={{ fontWeight: 800 }}>Menor de 16-17 años: requiere autorización del tutor.</div>
+        <label style={{ display: "grid", gap: 6 }}>
+          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Fecha de nacimiento *</div>
+          <input type="date" value={birthYmd} onChange={(e) => setBirthYmd(e.target.value)} style={inputStyle} />
         </label>
-      ) : null}
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <button
-          type="button"
-          onClick={() => {
-            setDriverName(customer.name);
-            setDriverPhone(customer.phone);
-            setDriverEmail(customer.email);
-            setDriverCountry(customer.country);
-            setDriverPostalCode(customer.postalCode);
-            void savePartial({
-              driverName: customer.name || null,
-              driverPhone: customer.phone || null,
-              driverEmail: customer.email || null,
-              driverCountry: customer.country || null,
-              driverPostalCode: customer.postalCode || null,
-            });
-          }}
-          style={secondaryButtonStyle}
-        >
-          Copiar datos del cliente
-        </button>
-        <div style={{ fontSize: 12, color: "#64748b" }}>Usa copiar y ajusta solo lo que cambie para cada conductor.</div>
+        {isUnder16 ? <div style={{ padding: 12, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 800 }}>Menor de 16: no permitido.</div> : null}
+
+        {needsAuth ? (
+          <label style={{ display: "flex", gap: 10, alignItems: "center", padding: 12, borderRadius: 12, border: "1px solid #fde68a", background: "#fffbeb" }}>
+            <input type="checkbox" checked={minorAuthorizationProvided} onChange={(e) => setMinorAuthorizationProvided(e.target.checked)} />
+            <div style={{ fontWeight: 800 }}>Menor de 16-17 años: requiere autorización del tutor.</div>
+          </label>
+        ) : null}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Nombre del conductor
-          <input value={driverName} onChange={(e) => setDriverName(e.target.value)} style={inputStyle} />
-        </label>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Teléfono
-          <input value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} style={inputStyle} />
-        </label>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Email
-          <input value={driverEmail} onChange={(e) => setDriverEmail(e.target.value)} style={inputStyle} placeholder="conductor@email.com" />
-        </label>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          País (ISO-2)
-          <input value={driverCountry} onChange={(e) => setDriverCountry(e.target.value.toUpperCase())} style={inputStyle} placeholder="ES" />
-        </label>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Dirección
-          <input value={driverAddress} onChange={(e) => setDriverAddress(e.target.value)} style={inputStyle} />
-        </label>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Código postal
-          <input value={driverPostalCode} onChange={(e) => setDriverPostalCode(e.target.value)} style={inputStyle} placeholder="08303" />
-        </label>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Tipo de documento
-          <select value={driverDocType} onChange={(e) => setDriverDocType(e.target.value)} style={inputStyle}>
-            <option value="">Opcional</option>
-            <option value="DNI">DNI</option>
-            <option value="NIE">NIE</option>
-            <option value="PASSPORT">Pasaporte</option>
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Número de documento
-          <input value={driverDocNumber} onChange={(e) => setDriverDocNumber(e.target.value)} style={inputStyle} />
-        </label>
+      <div style={subCardStyle}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <div style={sectionEyebrowStyle}>Conductor</div>
+          <div style={{ fontSize: 13, color: "#64748b" }}>Completa los datos del conductor real que firmará este contrato.</div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={() => {
+              setDriverName(customer.name);
+              setDriverPhone(customer.phone);
+              setDriverEmail(customer.email);
+              setDriverCountry(customer.country);
+              setDriverPostalCode(customer.postalCode);
+              void savePartial({
+                driverName: customer.name || null,
+                driverPhone: customer.phone || null,
+                driverEmail: customer.email || null,
+                driverCountry: customer.country || null,
+                driverPostalCode: customer.postalCode || null,
+              });
+            }}
+            style={secondaryButtonStyle}
+          >
+            Copiar datos del cliente
+          </button>
+          <div style={{ fontSize: 12, color: "#64748b" }}>Usa copiar y ajusta solo lo que cambie para cada conductor.</div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            Nombre del conductor
+            <input value={driverName} onChange={(e) => setDriverName(e.target.value)} style={inputStyle} />
+          </label>
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            Teléfono
+            <input value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} style={inputStyle} />
+          </label>
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            Email
+            <input value={driverEmail} onChange={(e) => setDriverEmail(e.target.value)} style={inputStyle} placeholder="conductor@email.com" />
+          </label>
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            País (ISO-2)
+            <input value={driverCountry} onChange={(e) => setDriverCountry(e.target.value.toUpperCase())} style={inputStyle} placeholder="ES" />
+          </label>
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            Dirección
+            <input value={driverAddress} onChange={(e) => setDriverAddress(e.target.value)} style={inputStyle} />
+          </label>
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            Código postal
+            <input value={driverPostalCode} onChange={(e) => setDriverPostalCode(e.target.value)} style={inputStyle} placeholder="08303" />
+          </label>
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            Tipo de documento
+            <select value={driverDocType} onChange={(e) => setDriverDocType(e.target.value)} style={inputStyle}>
+              <option value="">Opcional</option>
+              <option value="DNI">DNI</option>
+              <option value="NIE">NIE</option>
+              <option value="PASSPORT">Pasaporte</option>
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            Número de documento
+            <input value={driverDocNumber} onChange={(e) => setDriverDocNumber(e.target.value)} style={inputStyle} />
+          </label>
+        </div>
       </div>
 
       {showLicenseFields ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-            Escuela de licencia
-            <input value={licenseSchool} onChange={(e) => setLicenseSchool(e.target.value)} style={inputStyle} />
-          </label>
-          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-            Tipo de licencia
-            <input value={licenseType} onChange={(e) => setLicenseType(e.target.value)} style={inputStyle} />
-          </label>
-          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-            Número de licencia
-            <input value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} style={inputStyle} />
-          </label>
+        <div style={subCardStyle}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={sectionEyebrowStyle}>Licencia</div>
+            <div style={{ fontSize: 13, color: "#64748b" }}>
+              Completa esta parte solo cuando la actividad exige licencia náutica.
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+              Escuela de licencia
+              <input value={licenseSchool} onChange={(e) => setLicenseSchool(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+              Tipo de licencia
+              <input value={licenseType} onChange={(e) => setLicenseType(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+              Número de licencia
+              <input value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} style={inputStyle} />
+            </label>
+          </div>
+        </div>
+      ) : null}
+
+      {showPreparedSelector ? (
+        <div style={subCardStyle}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={sectionEyebrowStyle}>Recurso preparado</div>
+            <div style={{ fontSize: 13, color: "#64748b" }}>
+              Asocia la moto o asset preparado que debe quedar reflejado en el contrato.
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+            <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+              Jetski preparado
+              <select
+                value={preparedJetskiId}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setPreparedJetskiId(value);
+                  if (value) setPreparedAssetId("");
+                }}
+                style={inputStyle}
+              >
+                <option value="">Selecciona jetski...</option>
+                {preparedOptions.jetskis.map((j: {
+                  id: string;
+                  number: number | null;
+                  model: string | null;
+                  plate: string | null;
+                }) => (
+                  <option key={j.id} value={j.id}>
+                    {`Moto ${j.number ?? "?"} · ${j.model ?? "Sin modelo"}${j.plate ? ` · ${j.plate}` : ""}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+              Asset / Boat preparado
+              <select
+                value={preparedAssetId}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setPreparedAssetId(value);
+                  if (value) setPreparedJetskiId("");
+                }}
+                style={inputStyle}
+              >
+                <option value="">Selecciona asset...</option>
+                {preparedOptions.assets.map((a: {
+                  id: string;
+                  name: string | null;
+                  type: string | null;
+                  plate: string | null;
+                }) => (
+                  <option key={a.id} value={a.id}>
+                    {`${a.name ?? "Sin nombre"}${a.type ? ` · ${a.type}` : ""}${a.plate ? ` · ${a.plate}` : ""}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {(c.preparedJetski || c.preparedAsset) ? (
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              Recurso actual:
+              {" "}
+              {c.preparedJetski
+                ? `Moto ${c.preparedJetski.number ?? "?"} · ${c.preparedJetski.model ?? "Sin modelo"}${c.preparedJetski.plate ? ` · ${c.preparedJetski.plate}` : ""}`
+                : c.preparedAsset
+                  ? `${c.preparedAsset.name ?? "Sin nombre"}${c.preparedAsset.type ? ` · ${c.preparedAsset.type}` : ""}${c.preparedAsset.plate ? ` · ${c.preparedAsset.plate}` : ""}`
+                  : "—"}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       {err ? <div style={{ padding: 12, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 800 }}>{err}</div> : null}
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <button type="button" onClick={() => savePartial({ ...buildPayload() })} disabled={saving} style={secondaryButtonStyle}>
           {saving ? "Guardando..." : "Guardar"}
         </button>
@@ -267,6 +478,31 @@ function ContractCard({
         >
           {previewBusy ? "Generando..." : "Vista previa"}
         </button>
+        <button
+          type="button"
+          onClick={() => void onGeneratePdf(c.id)}
+          style={secondaryBtn}
+          disabled={pdfBusy}
+        >
+          {pdfBusy ? "Generando PDF..." : "Generar PDF"}
+        </button>
+
+        {c.renderedPdfUrl ? (
+          <a
+            href={c.renderedPdfUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              ...secondaryBtn,
+              textDecoration: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            Descargar PDF
+          </a>
+        ) : null}
       </div>
 
       {showLicenseFields ? (
@@ -305,11 +541,13 @@ export function ContractsSection({
   };
   onRefresh: () => Promise<void>;
 }) {
+  const stateTone = contractsStateTone(readyCount, requiredUnits);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewBusyId, setPreviewBusyId] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewContractId, setPreviewContractId] = useState<string | null>(null);
   const [signBusy, setSignBusy] = useState(false);
+  const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
 
   async function handlePreview(contractId: string) {
     try {
@@ -348,15 +586,64 @@ export function ContractsSection({
       setSignBusy(false);
     }
   }
+
+  async function handleGeneratePdf(contractId: string) {
+    try {
+      setPreviewError(null);
+      setPdfBusyId(contractId);
+      await generateContractPdf(contractId);
+      await onRefresh();
+    } catch (e: unknown) {
+      setPreviewError(
+        e instanceof Error ? e.message : "No se pudo generar el PDF"
+      );
+    } finally {
+      setPdfBusyId(null);
+    }
+  }
+
   return (
     <section id="contracts" style={{ ...panelStyle, display: "grid", gap: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#7c3aed" }}>Documentación</div>
           <div style={{ fontSize: 18, fontWeight: 900, marginTop: 4 }}>Contratos</div>
-          <div style={{ fontSize: 12, color: "#64748b" }}>Operativo: {readyCount}/{requiredUnits} listos. Bloquea el cobro hasta completar contratos.</div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>Preparación contractual, vista previa y soporte para firma digital.</div>
         </div>
         <button type="button" onClick={() => void onRefresh()} style={secondaryButtonStyle}>Refrescar</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+        <div style={subCardStyle}>
+          <div style={sectionEyebrowStyle}>Operativo</div>
+          <div style={{ fontSize: 26, fontWeight: 950 }}>{readyCount}/{requiredUnits}</div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>Contratos listos o firmados.</div>
+        </div>
+
+        <div style={subCardStyle}>
+          <div style={sectionEyebrowStyle}>Estado global</div>
+          <div
+            style={{
+              display: "inline-flex",
+              width: "fit-content",
+              padding: "6px 10px",
+              borderRadius: 999,
+              border: `1px solid ${stateTone.border}`,
+              background: stateTone.bg,
+              color: stateTone.color,
+              fontWeight: 900,
+            }}
+          >
+            {stateTone.label}
+          </div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>El cobro sigue bloqueado hasta completar los requeridos.</div>
+        </div>
+
+        <div style={subCardStyle}>
+          <div style={sectionEyebrowStyle}>Firma digital</div>
+          <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>Preparación activa</div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>Genera vista previa y PDF desde cada unidad antes de firmar.</div>
+        </div>
       </div>
 
       {contracts.map((c) => (
@@ -369,6 +656,8 @@ export function ContractsSection({
           onSaved={onRefresh}
           onPreview={handlePreview}
           previewBusy={previewBusyId === c.id}
+          onGeneratePdf={handleGeneratePdf}
+          pdfBusy={pdfBusyId === c.id}
         />
       ))}
 

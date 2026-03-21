@@ -1,5 +1,5 @@
 // src/app/store/create/types.ts
-export type ServiceMain = { id: string; name: string; category?: string | null; code?: string | null };
+export type ServiceMain = { id: string; name: string; category?: string | null; code?: string | null; isLicense?: boolean | null };
 
 export type Option = {
   id: string;
@@ -53,6 +53,53 @@ export type ContractDto = {
 
   signatureSignedPdfUrl?: string | null;
   signatureAuditJson?: unknown | null;
+
+  preparedJetskiId?: string | null;
+  preparedAssetId?: string | null;
+
+  preparedJetski?: {
+    id: string;
+    number?: number | null;
+    model?: string | null;
+    plate?: string | null;
+  } | null;
+
+  preparedAsset?: {
+    id: string;
+    name?: string | null;
+    type?: string | null;
+    plate?: string | null;
+  } | null;
+};
+
+export type PreparedJetskiOption = {
+  id: string;
+  number: number | null;
+  model: string | null;
+  plate: string | null;
+};
+
+export type PreparedAssetOption = {
+  id: string;
+  name: string | null;
+  type: string | null;
+  plate: string | null;
+};
+
+export type PreparedResourcesResponse = {
+  ok: true;
+  jetskis: Array<{
+    id: string;
+    number: number | null;
+    model: string | null;
+    plate: string | null;
+  }>;
+  assets: Array<{
+    id: string;
+    name: string | null;
+    type: string | null;
+    plate: string | null;
+  }>;
 };
 
 export type ContractPatch = {
@@ -70,6 +117,8 @@ export type ContractPatch = {
   licenseSchool?: string | null;
   licenseType?: string | null;
   licenseNumber?: string | null;
+  preparedJetskiId?: string | null;
+  preparedAssetId?: string | null;
 };
 
 export type AvailabilitySlot = {
@@ -135,5 +184,7 @@ export type ContractDraftState = Record<
     licenseSchool: string;
     licenseType: string;
     licenseNumber: string;
+    preparedJetskiId: string;
+    preparedAssetId: string;
   }
 >;

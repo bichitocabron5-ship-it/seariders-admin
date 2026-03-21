@@ -460,7 +460,6 @@ model ReservationContract {
   driverDocType   String? @db.VarChar(20)
   driverDocNumber String? @db.VarChar(40)
 
-  // Licencia (si aplica)
   licenseSchool String? @db.VarChar(120)
   licenseType   String? @db.VarChar(40)
   licenseNumber String? @db.VarChar(40)
@@ -469,7 +468,7 @@ model ReservationContract {
   minorNeedsAuthorization    Boolean   @default(false) // cache/estado UI
   minorAuthorizationProvided Boolean   @default(false)
 
-  // Firma digital (futuro)
+  // Firma digital
   templateCode           String?
   templateVersion        String?
 
@@ -491,9 +490,17 @@ model ReservationContract {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  preparedJetskiId String?
+  preparedJetski   Jetski? @relation("ReservationContractPreparedJetski", fields: [preparedJetskiId], references: [id], onDelete: SetNull)
+
+  preparedAssetId String?
+  preparedAsset   Asset? @relation("ReservationContractPreparedAsset", fields: [preparedAssetId], references: [id], onDelete: SetNull)
+
   @@unique([reservationId, unitIndex])
   @@index([reservationId])
   @@index([status])
+  @@index([preparedJetskiId])
+  @@index([preparedAssetId])
 }
 
 model DiscountRule {
@@ -961,6 +968,7 @@ model Jetski {
   maintenanceEvents          MaintenanceEvent[]        @relation("MaintenanceEventJetski")
   operabilityStatus          PlatformOperabilityStatus @default(OPERATIONAL)
   incidents                  Incident[]                @relation("IncidentJetski")
+  preparedContracts          ReservationContract[]     @relation("ReservationContractPreparedJetski")
 }
 
 model ReservationJetski {
@@ -1033,6 +1041,7 @@ model Asset {
   maintenanceEvents         MaintenanceEvent[]        @relation("MaintenanceEventAsset")
   operabilityStatus         PlatformOperabilityStatus @default(OPERATIONAL)
   incidents                 Incident[]                @relation("IncidentAsset")
+  preparedContracts         ReservationContract[]     @relation("ReservationContractPreparedAsset")
 
   @@unique([code])
   @@index([type, status])
