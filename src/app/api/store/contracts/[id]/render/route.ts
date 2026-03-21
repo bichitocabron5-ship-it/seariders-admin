@@ -47,7 +47,28 @@ function templateCodeForContract(args: {
   throw new Error(`No hay plantilla para ${category} / license=${args.hasLicense}`);
 }
 
-function buildContractHtml(input: any) {
+type ContractRenderReservation = {
+  activityDate: Date | string | null | undefined;
+  pax: number | null | undefined;
+};
+
+type ContractRenderDriver = {
+  driverName: string | null | undefined;
+  driverDocNumber: string | null | undefined;
+  driverAddress: string | null | undefined;
+  driverEmail: string | null | undefined;
+  driverPhone: string | null | undefined;
+  licenseType: string | null | undefined;
+  licenseNumber: string | null | undefined;
+};
+
+type ContractRenderInput = {
+  templateCode: string;
+  reservation: ContractRenderReservation;
+  contract: ContractRenderDriver;
+};
+
+function buildContractHtml(input: ContractRenderInput) {
   switch (input.templateCode) {
     case "JETSKI_NO_LICENSE":
       return buildJetskiNoLicenseHtml(input);
@@ -59,7 +80,7 @@ function buildContractHtml(input: any) {
   }
 }
 
-function buildJetskiNoLicenseHtml(input: any) {
+function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
   const { reservation, contract } = input;
 
   return `
@@ -90,7 +111,7 @@ function buildJetskiNoLicenseHtml(input: any) {
   `;
 }
 
-function buildLicensedHtml(input: any) {
+function buildLicensedHtml(input: ContractRenderInput) {
   const { reservation, contract } = input;
 
   return `

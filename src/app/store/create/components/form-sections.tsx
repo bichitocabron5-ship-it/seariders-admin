@@ -23,29 +23,6 @@ const inputStyle: React.CSSProperties = {
   background: "#fff",
 };
 
-function TextInput({
-  label,
-  value,
-  onChange,
-  placeholder,
-  required,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  required?: boolean;
-}) {
-  return (
-    <label style={{ display: "grid", gap: 6 }}>
-      <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
-        {label} {required ? <span style={{ color: "#b91c1c" }}>*</span> : null}
-      </div>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} />
-    </label>
-  );
-}
-
 export function AvailabilitySection({
   dateStr,
   onDateChange,
