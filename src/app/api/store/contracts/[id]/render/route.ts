@@ -38,209 +38,95 @@ function templateCodeForContract(args: {
   category: string | null | undefined;
   hasLicense: boolean;
 }) {
-  const { category, hasLicense } = args;
+  const category = (args.category ?? "").toUpperCase();
 
-  if (category === "JETSKI" && hasLicense) return "JETSKI_LICENSED";
-  if (category === "JETSKI") return "JETSKI_STANDARD";
-  if (category === "BOAT") return "BOAT_STANDARD";
-  return "STANDARD_ACTIVITY";
+  if (category === "JETSKI" && args.hasLicense) return "JETSKI_LICENSED";
+  if (category === "JETSKI") return "JETSKI_NO_LICENSE";
+  if (category === "BOAT" && args.hasLicense) return "BOAT_LICENSED";
+
+  throw new Error(`No hay plantilla para ${category} / license=${args.hasLicense}`);
 }
 
-function buildContractHtml(input: {
-  templateCode: string;
-  templateVersion: string;
-  reservation: {
-    id: string;
-    activityDate: Date;
-    scheduledTime: Date | null;
-    customerName: string | null;
-    serviceName: string | null;
-    quantity: number;
-    pax: number;
-    customerEmail: string | null;
-    customerPhone: string | null;
-    customerCountry: string | null;
-  };
-  contract: {
-    id: string;
-    unitIndex: number;
-    driverName: string | null;
-    driverDocType: string | null;
-    driverDocNumber: string | null;
-    driverBirthDate: Date | null;
-    driverAddress: string | null;
-    driverPostalCode: string | null;
-    driverPhone: string | null;
-    driverEmail: string | null;
-    driverCountry: string | null;
-    licenseSchool: string | null;
-    licenseType: string | null;
-    licenseNumber: string | null;
-    minorAuthorizationProvided: boolean;
-  };
-}) {
-  const { templateCode, templateVersion, reservation, contract } = input;
+function buildContractHtml(input: any) {
+  switch (input.templateCode) {
+    case "JETSKI_NO_LICENSE":
+      return buildJetskiNoLicenseHtml(input);
+    case "JETSKI_LICENSED":
+    case "BOAT_LICENSED":
+      return buildLicensedHtml(input);
+    default:
+      throw new Error(`Template no soportada: ${input.templateCode}`);
+  }
+}
+
+function buildJetskiNoLicenseHtml(input: any) {
+  const { reservation, contract } = input;
 
   return `
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <title>Contrato ${esc(contract.id)}</title>
-  <style>
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      color: #111;
-      margin: 32px;
-      line-height: 1.45;
-      font-size: 14px;
-    }
-    h1, h2, h3 { margin: 0 0 10px 0; }
-    .muted { color: #555; }
-    .box {
-      border: 1px solid #d1d5db;
-      border-radius: 10px;
-      padding: 12px;
-      margin: 12px 0;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px 16px;
-    }
-    .label {
-      font-size: 12px;
-      color: #555;
-      font-weight: bold;
-      text-transform: uppercase;
-    }
-    .value {
-      font-size: 14px;
-      margin-top: 2px;
-    }
-    .sign {
-      margin-top: 40px;
-      border-top: 1px solid #999;
-      width: 280px;
-      padding-top: 8px;
-    }
-  </style>
-</head>
-<body>
-  <h1>Contrato de actividad</h1>
-  <div class="muted">Plantilla: ${esc(templateCode)} · Versión: ${esc(templateVersion)}</div>
+  <html>
+  <body style="font-family: Arial; padding: 24px;">
 
-  <div class="box">
-    <h3>Reserva</h3>
-    <div class="grid">
-      <div>
-        <div class="label">Reserva</div>
-        <div class="value">${esc(reservation.id)}</div>
-      </div>
-      <div>
-        <div class="label">Contrato / Unidad</div>
-        <div class="value">#${esc(contract.unitIndex)}</div>
-      </div>
-      <div>
-        <div class="label">Actividad</div>
-        <div class="value">${esc(reservation.serviceName ?? "Actividad")}</div>
-      </div>
-      <div>
-        <div class="label">Fecha</div>
-        <div class="value">${esc(formatDate(reservation.scheduledTime ?? reservation.activityDate))}</div>
-      </div>
-      <div>
-        <div class="label">Cantidad</div>
-        <div class="value">${esc(reservation.quantity)}</div>
-      </div>
-      <div>
-        <div class="label">PAX</div>
-        <div class="value">${esc(reservation.pax)}</div>
-      </div>
-    </div>
-  </div>
+    <h1>ALQUILER DE MOTOS ACUÁTICAS SIN LICENCIA</h1>
 
-  <div class="box">
-    <h3>Conductor / firmante</h3>
-    <div class="grid">
-      <div>
-        <div class="label">Nombre</div>
-        <div class="value">${esc(contract.driverName)}</div>
-      </div>
-      <div>
-        <div class="label">País</div>
-        <div class="value">${esc(contract.driverCountry)}</div>
-      </div>
-      <div>
-        <div class="label">Documento</div>
-        <div class="value">${esc(contract.driverDocType)} ${esc(contract.driverDocNumber)}</div>
-      </div>
-      <div>
-        <div class="label">Fecha nacimiento</div>
-        <div class="value">${esc(formatDate(contract.driverBirthDate))}</div>
-      </div>
-      <div>
-        <div class="label">Teléfono</div>
-        <div class="value">${esc(contract.driverPhone)}</div>
-      </div>
-      <div>
-        <div class="label">Email</div>
-        <div class="value">${esc(contract.driverEmail)}</div>
-      </div>
-      <div style="grid-column: 1 / -1;">
-        <div class="label">Dirección</div>
-        <div class="value">${esc(contract.driverAddress)} ${esc(contract.driverPostalCode)}</div>
-      </div>
-    </div>
-  </div>
+    <p><b>Nombre:</b> ${esc(contract.driverName)}</p>
+    <p><b>DNI:</b> ${esc(contract.driverDocNumber)}</p>
+    <p><b>Dirección:</b> ${esc(contract.driverAddress)}</p>
+    <p><b>Fecha:</b> ${formatDate(reservation.activityDate)}</p>
 
-  ${
-    templateCode === "JETSKI_LICENSED" || contract.licenseNumber
-      ? `
-  <div class="box">
+    <p><b>Moto:</b> Se asigna en plataforma</p>
+    <p><b>Duración:</b> ${esc(reservation.pax)} pax</p>
+
+    <hr/>
+
+    <p>El cliente declara aceptar las normas de navegación y condiciones.</p>
+
+    <br/><br/>
+    <div style="border-top:1px solid #000; width:200px;">Firma</div>
+
+    <p><b>Fianza:</b> 100 €</p>
+
+  </body>
+  </html>
+  `;
+}
+
+function buildLicensedHtml(input: any) {
+  const { reservation, contract } = input;
+
+  return `
+  <html>
+  <body style="font-family: Arial; padding: 24px;">
+
+    <h1>CONTRATO DE MOTO DE AGUA / EMBARCACIÓN CON LICENCIA</h1>
+
+    <h3>Arrendatario</h3>
+    <p><b>Nombre:</b> ${esc(contract.driverName)}</p>
+    <p><b>DNI:</b> ${esc(contract.driverDocNumber)}</p>
+    <p><b>Email:</b> ${esc(contract.driverEmail)}</p>
+    <p><b>Teléfono:</b> ${esc(contract.driverPhone)}</p>
+
+    <h3>Embarcación</h3>
+    <p><b>Modelo:</b> Moto preparada</p>
+    <p><b>Matrícula:</b> _________</p>
+
+    <h3>Periodo</h3>
+    <p>${formatDate(reservation.activityDate)}</p>
+
     <h3>Licencia</h3>
-    <div class="grid">
-      <div>
-        <div class="label">Escuela</div>
-        <div class="value">${esc(contract.licenseSchool)}</div>
-      </div>
-      <div>
-        <div class="label">Tipo</div>
-        <div class="value">${esc(contract.licenseType)}</div>
-      </div>
-      <div>
-        <div class="label">Número</div>
-        <div class="value">${esc(contract.licenseNumber)}</div>
-      </div>
-    </div>
-  </div>
-  `
-      : ""
-  }
+    <p>${esc(contract.licenseType)} - ${esc(contract.licenseNumber)}</p>
 
-  ${
-    contract.minorAuthorizationProvided
-      ? `
-  <div class="box">
-    <h3>Autorización</h3>
-    <div class="value">Se declara que existe autorización válida para menor de edad.</div>
-  </div>
-  `
-      : ""
-  }
+    <hr/>
 
-  <div class="box">
-    <h3>Condiciones</h3>
-    <p>
-      El cliente declara que los datos son correctos, que conoce las normas de seguridad y
-      acepta las condiciones de uso de la actividad contratada.
-    </p>
-  </div>
+    <p>Condiciones legales del contrato según normativa vigente.</p>
 
-  <div class="sign">Firma cliente</div>
-</body>
-</html>
-`.trim();
+    <br/><br/>
+    <div style="border-top:1px solid #000; width:200px;">Firma</div>
+
+    <p><b>Fianza:</b> 500 €</p>
+
+  </body>
+  </html>
+  `;
 }
 
 export async function POST(
@@ -286,6 +172,7 @@ export async function POST(
               customerCountry: true,
               quantity: true,
               pax: true,
+              isLicense: true,
               service: {
                 select: {
                   name: true,
@@ -301,7 +188,9 @@ export async function POST(
         throw new Error("Contrato no encontrado");
       }
 
-      const hasLicense = Boolean(contract.licenseNumber?.trim());
+      const hasLicense =
+        Boolean(contract.licenseNumber?.trim()) ||
+        Boolean(contract.reservation.isLicense);
       const templateCode = templateCodeForContract({
         category: contract.reservation.service?.category ?? null,
         hasLicense,
