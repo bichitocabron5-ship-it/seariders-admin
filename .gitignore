@@ -67,3 +67,5 @@ Thumbs.db
 # KEYS / CERTS
 # =========================
 *.pem
+
+/public/generated-contracts/
