@@ -17,6 +17,7 @@ type ServiceLite = {
   name: string;
   code: string | null;
   category: string | null;
+  isLicense: boolean;
   isActive: boolean;
 };
 
@@ -87,7 +88,7 @@ export async function GET(req: Request) {
   const [servicesAll, optionsRaw, prices, channelsAll] = await Promise.all([
     prisma.service.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, code: true, category: true, isActive: true },
+      select: { id: true, name: true, code: true, category: true, isLicense: true, isActive: true },
       orderBy: [{ category: "asc" }, { name: "asc" }],
     }),
 

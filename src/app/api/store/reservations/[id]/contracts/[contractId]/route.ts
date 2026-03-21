@@ -35,6 +35,8 @@ const Body = z.object({
   // âœ… NUEVO
   driverBirthDate: z.string().datetime().optional().nullable(), // ISO string
   minorAuthorizationProvided: z.boolean().optional(),
+  preparedJetskiId: z.string().optional().nullable(),
+  preparedAssetId: z.string().optional().nullable(),
 
   licenseSchool: NullableStr,
   licenseType: NullableStr,
@@ -107,7 +109,6 @@ export async function PATCH(
 
       const data: Prisma.ReservationContractUpdateInput = {};
 
-      // merge opcional (solo cambia lo que venga)
       const driverName = norm(b.driverName);
       if (driverName !== undefined) data.driverName = driverName;
       const driverPhone = norm(b.driverPhone);
@@ -133,6 +134,22 @@ export async function PATCH(
 
       if (b.driverBirthDate !== undefined) data.driverBirthDate = b.driverBirthDate ? new Date(b.driverBirthDate) : null;
       if (b.minorAuthorizationProvided !== undefined) data.minorAuthorizationProvided = b.minorAuthorizationProvided;
+
+      if (b.preparedJetskiId !== undefined) {
+        data.preparedJetski = b.preparedJetskiId
+          ? { connect: { id: b.preparedJetskiId } }
+          : { disconnect: true };
+
+        data.preparedAsset = { disconnect: true };
+      }
+
+      if (b.preparedAssetId !== undefined) {
+        data.preparedAsset = b.preparedAssetId
+          ? { connect: { id: b.preparedAssetId } }
+          : { disconnect: true };
+
+        data.preparedJetski = { disconnect: true };
+      }
 
       if (b.status !== undefined) data.status = b.status;
 

@@ -48,22 +48,52 @@ function templateCodeForContract(args: {
 }
 
 type ContractRenderReservation = {
+  id: string;
   activityDate: Date | string | null | undefined;
+  scheduledTime: Date | string | null | undefined;
+  customerName: string | null | undefined;
+  customerEmail: string | null | undefined;
+  customerPhone: string | null | undefined;
+  customerCountry: string | null | undefined;
+  serviceName: string | null | undefined;
+  quantity: number | null | undefined;
   pax: number | null | undefined;
+  durationMinutes: number | null | undefined;
 };
 
 type ContractRenderDriver = {
+  id: string;
+  unitIndex: number;
   driverName: string | null | undefined;
+  driverDocType: string | null | undefined;
   driverDocNumber: string | null | undefined;
+  driverBirthDate: Date | string | null | undefined;
   driverAddress: string | null | undefined;
+  driverPostalCode: string | null | undefined;
   driverEmail: string | null | undefined;
   driverPhone: string | null | undefined;
+  driverCountry: string | null | undefined;
+  licenseSchool: string | null | undefined;
   licenseType: string | null | undefined;
   licenseNumber: string | null | undefined;
+  minorAuthorizationProvided: boolean | null | undefined;
+    preparedJetski?: {
+    id: string;
+    number: number | null;
+    model: string | null;
+    plate: string | null;
+  } | null;
+  preparedAsset?: {
+    id: string;
+    name: string | null;
+    type: string | null;
+    plate: string | null;
+  } | null;
 };
 
 type ContractRenderInput = {
   templateCode: string;
+  templateVersion: string;
   reservation: ContractRenderReservation;
   contract: ContractRenderDriver;
 };
@@ -114,6 +144,16 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
 function buildLicensedHtml(input: ContractRenderInput) {
   const { reservation, contract } = input;
 
+  const vehicleName = contract.preparedJetski
+    ? `${contract.preparedJetski.model ?? "Moto"}${contract.preparedJetski.number ? ` ${contract.preparedJetski.number}` : ""}`.trim()
+    : contract.preparedAsset
+      ? `${contract.preparedAsset.name ?? "Asset"}${contract.preparedAsset.type ? ` · ${contract.preparedAsset.type}` : ""}`.trim()
+      : "Recurso preparado pendiente";
+
+  const vehiclePlate = contract.preparedJetski?.plate
+    ?? contract.preparedAsset?.plate
+    ?? "Pendiente";
+  
   return `
   <html>
   <body style="font-family: Arial; padding: 24px;">
@@ -127,8 +167,8 @@ function buildLicensedHtml(input: ContractRenderInput) {
     <p><b>Teléfono:</b> ${esc(contract.driverPhone)}</p>
 
     <h3>Embarcación</h3>
-    <p><b>Modelo:</b> Moto preparada</p>
-    <p><b>Matrícula:</b> _________</p>
+    <p><b>Modelo:</b> ${esc(vehicleName)}</p>
+    <p><b>Matrícula:</b> ${esc(vehiclePlate)}</p>
 
     <h3>Periodo</h3>
     <p>${formatDate(reservation.activityDate)}</p>
@@ -182,10 +222,26 @@ export async function POST(
           licenseType: true,
           licenseNumber: true,
           minorAuthorizationProvided: true,
+          preparedJetski: {
+                select: {
+                  id: true,
+                  number: true,
+                  model: true,
+                  plate: true,
+                },
+              },
+              preparedAsset: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                  plate: true,
+                },
+              },
           reservation: {
             select: {
               id: true,
-              activityDate: true,
+              activityDate: true, 
               scheduledTime: true,
               customerName: true,
               customerEmail: true,
@@ -198,6 +254,11 @@ export async function POST(
                 select: {
                   name: true,
                   category: true,
+                },
+              },
+              option: {
+                select: {
+                  durationMinutes: true,
                 },
               },
             },
@@ -232,6 +293,7 @@ export async function POST(
           serviceName: contract.reservation.service?.name ?? null,
           quantity: contract.reservation.quantity,
           pax: contract.reservation.pax,
+          durationMinutes: contract.reservation.option?.durationMinutes ?? null,
         },
         contract: {
           id: contract.id,
@@ -249,6 +311,8 @@ export async function POST(
           licenseType: contract.licenseType,
           licenseNumber: contract.licenseNumber,
           minorAuthorizationProvided: contract.minorAuthorizationProvided,
+          preparedJetski: contract.preparedJetski ?? null,
+          preparedAsset: contract.preparedAsset ?? null,
         },
       });
 
