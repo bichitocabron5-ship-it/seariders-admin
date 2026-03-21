@@ -275,6 +275,11 @@ function StoreCreatePageInner() {
     [servicesMain, serviceId]
   );
 
+  useEffect(() => {
+    if (!selectedService) return;
+    setIsLicense(Boolean(selectedService.isLicense));
+  }, [selectedService]);
+
   const isPackMode = (selectedService?.category ?? "").toUpperCase() === "PACK";
   const canAddToCart = !isPackMode && !!serviceId && !!optionId && Number(quantity) > 0 && Number(pax) > 0;
   

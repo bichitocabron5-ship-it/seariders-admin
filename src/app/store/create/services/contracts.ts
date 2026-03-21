@@ -1,5 +1,5 @@
 // src/app/store/create/services/contracts.ts
-import type { ContractPatch, ReservationContractsResponse } from "../types";
+import type { ContractPatch, ReservationContractsResponse, PreparedResourcesResponse } from "../types";
 
 export async function ensureContracts(reservationId: string) {
   const res = await fetch(`/api/store/reservations/${reservationId}/contracts/ensure`, {
@@ -23,8 +23,8 @@ export async function fetchContracts(
   return await res.json();
 }
 
-export async function patchContract(contractId: string, input: ContractPatch) {
-  const res = await fetch(`/api/store/contracts/${contractId}`, {
+export async function patchContract(reservationId: string, contractId: string, input: ContractPatch) {
+  const res = await fetch(`/api/store/reservations/${reservationId}/contracts/${contractId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -50,6 +50,26 @@ export async function signContract(contractId: string) {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
+export async function generateContractPdf(contractId: string) {
+  const res = await fetch(`/api/store/contracts/${contractId}/pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
+export async function fetchPreparedOptions(): Promise<PreparedResourcesResponse> {
+  const res = await fetch(`/api/store/contracts/prepared-options`, {
+    cache: "no-store",
   });
 
   if (!res.ok) throw new Error(await res.text());

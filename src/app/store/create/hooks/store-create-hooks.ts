@@ -11,11 +11,7 @@ import type {
   MigrateFlags,
 } from "../types";
 import { errorMessage, isAbortError } from "../utils/errors";
-import {
-  ensureContracts as ensureContractsRequest,
-  fetchContracts,
-  patchContract,
-} from "../services/contracts";
+import { ensureContracts as ensureContractsRequest, fetchContracts, patchContract } from "../services/contracts";
 
 export function useContractsState(args: {
   isMigrateMode: boolean;
@@ -78,6 +74,8 @@ export function useContractsState(args: {
           licenseSchool: c.licenseSchool ?? "",
           licenseType: c.licenseType ?? "",
           licenseNumber: c.licenseNumber ?? "",
+          preparedJetskiId: c.preparedJetskiId ?? "",
+          preparedAssetId: c.preparedAssetId ?? "",
         };
       }
 
@@ -107,7 +105,7 @@ export function useContractsState(args: {
       const d = contractDrafts[contractId];
       if (!d) return;
 
-      await patchContract(contractId, {
+      await patchContract(reservationId, contractId, {
         driverName: d.driverName || null,
         driverPhone: d.driverPhone || null,
         driverEmail: d.driverEmail || null,
@@ -121,6 +119,8 @@ export function useContractsState(args: {
         licenseSchool: d.licenseSchool || null,
         licenseType: d.licenseType || null,
         licenseNumber: d.licenseNumber || null,
+        preparedJetskiId: d.preparedJetskiId || null,
+        preparedAssetId: d.preparedAssetId || null,
       });
 
       await loadContractsBlock(reservationId);
@@ -133,7 +133,7 @@ export function useContractsState(args: {
       const d = contractDrafts[contractId];
       if (!d) return;
 
-      await patchContract(contractId, {
+      await patchContract(reservationId, contractId, {
         driverName: d.driverName || null,
         driverPhone: d.driverPhone || null,
         driverEmail: d.driverEmail || null,
@@ -147,6 +147,8 @@ export function useContractsState(args: {
         licenseSchool: d.licenseSchool || null,
         licenseType: d.licenseType || null,
         licenseNumber: d.licenseNumber || null,
+        preparedJetskiId: d.preparedJetskiId || null,
+        preparedAssetId: d.preparedAssetId || null,
         status: "READY",
       });
 
@@ -157,7 +159,7 @@ export function useContractsState(args: {
 
   const handleDraftContract = useCallback(
     async (contractId: string, reservationId: string) => {
-      await patchContract(contractId, { status: "DRAFT" });
+      await patchContract(reservationId, contractId, { status: "DRAFT" });
       await loadContractsBlock(reservationId);
     },
     [loadContractsBlock]

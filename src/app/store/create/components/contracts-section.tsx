@@ -2,11 +2,7 @@
 "use client";
 
 import type { CSSProperties, Dispatch, SetStateAction } from "react";
-import type {
-  ContractDraftState,
-  ContractDto,
-  ContractsState,
-} from "../types";
+import type { ContractDraftState, ContractDto, ContractsState } from "../types";
 
 type ContractsSectionProps = {
   reservationId: string | null;
