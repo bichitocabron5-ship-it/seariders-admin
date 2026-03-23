@@ -78,6 +78,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           signedAt: true,
           signatureUrl: true,
           updatedAt: true,
+          renderedPdfKey: true,
           renderedPdfUrl: true,
 
           preparedJetskiId: true,

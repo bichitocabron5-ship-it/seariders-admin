@@ -4,9 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import fs from "node:fs/promises";
-import path from "node:path";
 import puppeteer from "puppeteer";
+import { buildContractPdfKey, uploadPdfToS3 } from "@/lib/s3";
 
 export const runtime = "nodejs";
 
@@ -20,6 +19,53 @@ async function requireStoreOrAdmin() {
   if (!session?.userId) return null;
   if (session.role === "ADMIN" || session.role === "STORE") return session;
   return null;
+}
+
+async function generatePdfFromHtml(html: string) {
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
+  try {
+    const page = await browser.newPage();
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const htmlWithAbsoluteLogo = html.replace(
+      /src="\/logo-seariders\.png"/g,
+      `src="${baseUrl}/logo-seariders.png"`
+    );
+
+    await page.setContent(htmlWithAbsoluteLogo, {
+      waitUntil: "networkidle0",
+    });
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      displayHeaderFooter: true,
+      margin: {
+        top: "20mm",
+        right: "12mm",
+        bottom: "20mm",
+        left: "12mm",
+      },
+      headerTemplate: `
+        <div style="width:100%; font-size:9px; padding:0 12mm; color:#222; text-align:center;">
+          UTE JETSKI CENTER- NOMAD NAUTIC · CIF: U16457343 · Tel: 608101272 · Email: seariderjetski@gmail.com · Dirección: C/ MARINA L-401 402, NUM 401 402 08330 PREMIÀ DE MAR - (BARCELONA)
+        </div>
+      `,
+      footerTemplate: `
+        <div style="width:100%; font-size:9px; padding:0 12mm; color:#444; display:flex; justify-content:flex-end;">
+          Página <span class="pageNumber"></span> / <span class="totalPages"></span>
+        </div>
+      `,
+    });
+
+    return Buffer.from(pdfBuffer);
+  } finally {
+    await browser.close();
+  }
 }
 
 export async function POST(
@@ -39,8 +85,10 @@ export async function POST(
       where: { id: contractId },
       select: {
         id: true,
+        reservationId: true,
         renderedHtml: true,
         renderedPdfUrl: true,
+        renderedPdfKey: true,
       },
     });
 
@@ -55,52 +103,38 @@ export async function POST(
       );
     }
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    const pdfBuffer = await generatePdfFromHtml(contract.renderedHtml);
+
+    const pdfKey = buildContractPdfKey({
+      reservationId: contract.reservationId,
+      contractId: contract.id,
     });
 
-    try {
-      const page = await browser.newPage();
-      await page.setContent(contract.renderedHtml, {
-        waitUntil: "networkidle0",
-      });
+    const uploaded = await uploadPdfToS3({
+      key: pdfKey,
+      body: pdfBuffer,
+      contentType: "application/pdf",
+    });
 
-      const pdfBuffer = await page.pdf({
-        format: "A4",
-        printBackground: true,
-        margin: {
-          top: "16mm",
-          right: "12mm",
-          bottom: "16mm",
-          left: "12mm",
-        },
-      });
+    const updated = await prisma.reservationContract.update({
+      where: { id: contract.id },
+      data: {
+        renderedPdfKey: uploaded.key,
+        renderedPdfUrl: uploaded.url,
+      },
+      select: {
+        id: true,
+        renderedPdfKey: true,
+        renderedPdfUrl: true,
+      },
+    });
 
-      const dir = path.join(process.cwd(), "public", "generated-contracts");
-      await fs.mkdir(dir, { recursive: true });
-
-      const filename = `contract-${contract.id}.pdf`;
-      const absolutePath = path.join(dir, filename);
-      const publicUrl = `/generated-contracts/${filename}`;
-
-      await fs.writeFile(absolutePath, pdfBuffer);
-
-      await prisma.reservationContract.update({
-        where: { id: contract.id },
-        data: {
-          renderedPdfUrl: publicUrl,
-        },
-      });
-
-      return NextResponse.json({
-        ok: true,
-        contractId: contract.id,
-        renderedPdfUrl: publicUrl,
-      });
-    } finally {
-      await browser.close();
-    }
+    return NextResponse.json({
+      ok: true,
+      contractId: updated.id,
+      renderedPdfKey: updated.renderedPdfKey,
+      renderedPdfUrl: updated.renderedPdfUrl,
+    });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Error";
     return new NextResponse(message, { status: 400 });

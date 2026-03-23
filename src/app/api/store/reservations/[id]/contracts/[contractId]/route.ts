@@ -136,19 +136,21 @@ export async function PATCH(
       if (b.minorAuthorizationProvided !== undefined) data.minorAuthorizationProvided = b.minorAuthorizationProvided;
 
       if (b.preparedJetskiId !== undefined) {
-        data.preparedJetski = b.preparedJetskiId
-          ? { connect: { id: b.preparedJetskiId } }
-          : { disconnect: true };
-
-        data.preparedAsset = { disconnect: true };
+        if (b.preparedJetskiId) {
+          data.preparedJetski = { connect: { id: b.preparedJetskiId } };
+          data.preparedAsset = { disconnect: true };
+        } else {
+          data.preparedJetski = { disconnect: true };
+        }
       }
 
       if (b.preparedAssetId !== undefined) {
-        data.preparedAsset = b.preparedAssetId
-          ? { connect: { id: b.preparedAssetId } }
-          : { disconnect: true };
-
-        data.preparedJetski = { disconnect: true };
+        if (b.preparedAssetId) {
+          data.preparedAsset = { connect: { id: b.preparedAssetId } };
+          data.preparedJetski = { disconnect: true };
+        } else {
+          data.preparedAsset = { disconnect: true };
+        }
       }
 
       if (b.status !== undefined) data.status = b.status;
