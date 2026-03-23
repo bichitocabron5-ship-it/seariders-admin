@@ -474,6 +474,7 @@ model ReservationContract {
 
   renderedHtml           String?
   renderedPdfUrl         String?
+  renderedPdfKey         String?
 
   signatureRequestId     String?
   signatureStatusRaw     String?
