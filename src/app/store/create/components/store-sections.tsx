@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from "react";
 import type { CartItem, ContractDto, ContractPatch, Option, ServiceMain } from "../types";
 import { errorMessage } from "../utils/errors";
-import { fetchPreparedOptions, generateContractPdf, renderContract, signContract } from "../services/contracts";
+import { getSignedContractDownloadUrl, fetchPreparedOptions, generateContractPdf, renderContract, signContract } from "../services/contracts";
 
 const panelStyle: React.CSSProperties = {
   padding: 18,
@@ -253,6 +253,16 @@ function ContractCard({
     await savePartial(payload);
   }
 
+  async function handlePreviewClick() {
+    await savePartial(buildPayload());
+    await onPreview(c.id);
+  }
+
+  async function handleGeneratePdfClick() {
+    await savePartial(buildPayload());
+    await onGeneratePdf(c.id);
+  }
+
   return (
     <article style={{ ...panelStyle, display: "grid", gap: 14, background: "#fdfefe" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -404,6 +414,10 @@ function ContractCard({
                   const value = e.target.value;
                   setPreparedJetskiId(value);
                   if (value) setPreparedAssetId("");
+                  void savePartial({
+                    preparedJetskiId: value || null,
+                    preparedAssetId: null,
+                  });
                 }}
                 style={inputStyle}
               >
@@ -429,6 +443,10 @@ function ContractCard({
                   const value = e.target.value;
                   setPreparedAssetId(value);
                   if (value) setPreparedJetskiId("");
+                  void savePartial({
+                    preparedAssetId: value || null,
+                    preparedJetskiId: null,
+                  });
                 }}
                 style={inputStyle}
               >
@@ -472,36 +490,38 @@ function ContractCard({
         </button>
         <button
           type="button"
-          onClick={() => void onPreview(c.id)}
+          onClick={() => void handlePreviewClick()}
           style={secondaryBtn}
-          disabled={previewBusy}
+          disabled={previewBusy || saving}
         >
           {previewBusy ? "Generando..." : "Vista previa"}
         </button>
         <button
           type="button"
-          onClick={() => void onGeneratePdf(c.id)}
+          onClick={() => void handleGeneratePdfClick()}
           style={secondaryBtn}
-          disabled={pdfBusy}
+          disabled={pdfBusy || saving}
         >
           {pdfBusy ? "Generando PDF..." : "Generar PDF"}
         </button>
 
-        {c.renderedPdfUrl ? (
-          <a
-            href={c.renderedPdfUrl}
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              ...secondaryBtn,
-              textDecoration: "none",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
+        {(c.renderedPdfUrl || c.renderedPdfKey) ? (
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                setErr(null);
+                const data = await getSignedContractDownloadUrl(c.id);
+                if (!data?.url) throw new Error("No se obtuvo URL de descarga");
+                window.open(data.url, "_blank", "noopener,noreferrer");
+              } catch (e: unknown) {
+                setErr(errorMessage(e, "No se pudo descargar el PDF"));
+              }
             }}
+            style={secondaryBtn}
           >
             Descargar PDF
-          </a>
+          </button>
         ) : null}
       </div>
 

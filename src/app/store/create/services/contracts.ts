@@ -75,3 +75,12 @@ export async function fetchPreparedOptions(): Promise<PreparedResourcesResponse>
   if (!res.ok) throw new Error(await res.text());
   return await res.json();
 }
+
+export async function getSignedContractDownloadUrl(contractId: string) {
+  const res = await fetch(`/api/store/contracts/${contractId}/download`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}

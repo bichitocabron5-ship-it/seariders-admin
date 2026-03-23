@@ -467,12 +467,16 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       !customerCountry.trim()
     ))
   );
+  const contractsReadyForFormalize =
+    !isMigrateMode || requiredUnits <= 0 || readyCount >= requiredUnits;
 
   const primaryDisabledReason =
     migrateFlags?.isHistorical
       ? "Reserva histórica: no se puede formalizar."
       : strictFormalizeBlocked
         ? "Solo puedes formalizar el mismo día."
+        : isFormalizeMode && !contractsReadyForFormalize
+          ? `Faltan contratos por completar: ${readyCount}/${requiredUnits} listos.`
         : requiredFormalizeMissing
           ? (formalizeAllRequired
               ? "Para formalizar con contrato faltan datos básicos del cliente (teléfono, email y país). Los datos legales se completan en contratos."

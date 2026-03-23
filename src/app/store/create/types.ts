@@ -45,6 +45,7 @@ export type ContractDto = {
   templateVersion?: string | null;
 
   renderedHtml?: string | null;
+  renderedPdfKey?: string | null;
   renderedPdfUrl?: string | null;
 
   signatureRequestId?: string | null;
