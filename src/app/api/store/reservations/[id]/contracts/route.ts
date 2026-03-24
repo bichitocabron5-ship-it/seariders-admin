@@ -76,7 +76,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           licenseNumber: true,
 
           signedAt: true,
-          signatureUrl: true,
+          signatureImageUrl: true,
+          signatureImageKey: true,
+          signatureSignedBy: true,
           updatedAt: true,
           renderedPdfKey: true,
           renderedPdfUrl: true,
