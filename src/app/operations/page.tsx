@@ -230,28 +230,6 @@ export default function OperationsPage() {
     load();
   }, [load]);
 
-  async function runAction(
-    reservationId: string,
-    action: "mark_ready" | "mark_in_sea",
-  ) {
-    try {
-      setError(null);
-
-      const res = await fetch(`/api/operations/reservations/${reservationId}/action`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ action }),
-      });
-
-      if (!res.ok) throw new Error(await res.text());
-      await load();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error en accion operativa");
-    }
-  }
-
   return (
     <div style={pageShell}>
       <section style={heroCard}>
@@ -412,11 +390,11 @@ export default function OperationsPage() {
             </div>
 
             <div style={boardGrid}>
-              <BoardColumn title={bucketTitle("pending")} rows={data.board.pending} styleExtra={bucketStyle("pending")} onAction={runAction} />
-              <BoardColumn title={bucketTitle("upcoming")} rows={data.board.upcoming} styleExtra={bucketStyle("upcoming")} onAction={runAction} />
-              <BoardColumn title={bucketTitle("ready")} rows={data.board.ready} styleExtra={bucketStyle("ready")} onAction={runAction} />
-              <BoardColumn title={bucketTitle("inSea")} rows={data.board.inSea} styleExtra={bucketStyle("inSea")} onAction={runAction} />
-              <BoardColumn title={bucketTitle("completed")} rows={data.board.completed} styleExtra={bucketStyle("completed")} onAction={runAction} />
+              <BoardColumn title={bucketTitle("pending")} rows={data.board.pending} styleExtra={bucketStyle("pending")} />
+              <BoardColumn title={bucketTitle("upcoming")} rows={data.board.upcoming} styleExtra={bucketStyle("upcoming")} />
+              <BoardColumn title={bucketTitle("ready")} rows={data.board.ready} styleExtra={bucketStyle("ready")} />
+              <BoardColumn title={bucketTitle("inSea")} rows={data.board.inSea} styleExtra={bucketStyle("inSea")} />
+              <BoardColumn title={bucketTitle("completed")} rows={data.board.completed} styleExtra={bucketStyle("completed")} />
             </div>
           </section>
 
@@ -436,7 +414,6 @@ export default function OperationsPage() {
                   { title: "Llegados a Store", rows: data.areas.booth.arrivedToStore },
                   { title: "Taxiboat pendiente de salida", rows: data.areas.booth.taxiboatPendingDeparture },
                 ]}
-                onAction={runAction}
               />
 
               <AreaBlock
@@ -446,7 +423,6 @@ export default function OperationsPage() {
                   { title: "Pendientes de cobro", rows: data.areas.store.pendingPayments },
                   { title: "Contratos incompletos", rows: data.areas.store.incompleteContracts },
                 ]}
-                onAction={runAction}
               />
 
               <AreaBlock
@@ -456,7 +432,6 @@ export default function OperationsPage() {
                   { title: "In Sea", rows: data.areas.platform.inSea },
                   { title: "Extras pendientes", rows: data.areas.platform.extrasPending },
                 ]}
-                onAction={runAction}
               />
             </div>
           </section>
@@ -501,12 +476,10 @@ function BoardColumn({
   title,
   rows,
   styleExtra,
-  onAction,
 }: {
   title: string;
   rows: OperationCard[];
   styleExtra?: CSSProperties;
-  onAction: (reservationId: string, action: "mark_ready" | "mark_in_sea") => Promise<void>;
 }) {
   return (
     <div style={{ ...boardColumn, ...styleExtra }}>
@@ -521,7 +494,7 @@ function BoardColumn({
       {rows.length === 0 ? (
         <div style={emptyState}>Sin elementos.</div>
       ) : (
-        rows.map((r) => <OperationItem key={r.id} row={r} onAction={onAction} />)
+        rows.map((r) => <OperationItem key={r.id} row={r} />)
       )}
     </div>
   );
@@ -529,10 +502,8 @@ function BoardColumn({
 
 function OperationItem({
   row,
-  onAction,
 }: {
   row: OperationCard;
-  onAction: (reservationId: string, action: "mark_ready" | "mark_in_sea") => Promise<void>;
 }) {
   const statusTone = row.overdueOperation || row.criticalPendingPayment || row.criticalContractsIncomplete
     ? criticalPill
@@ -593,42 +564,9 @@ function OperationItem({
       {row.notes ? <div style={{ fontSize: 12, opacity: 0.88 }}>{row.notes}</div> : null}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-        <a href={`/store/reservations/${row.id}`} style={secondaryLinkSmall}>
+        <a href={`/store/create?editFrom=${row.id}`} style={secondaryLinkSmall}>
           Abrir
         </a>
-
-        {["WAITING", "SCHEDULED"].includes(row.status ?? "") ? (
-          <button
-            type="button"
-            onClick={() => onAction(row.id, "mark_ready")}
-            disabled={!row.formalizedAt}
-            style={{
-              ...compactBtn,
-              background: !row.formalizedAt ? "#c4c9d4" : "#142033",
-              color: "#fff",
-              borderColor: !row.formalizedAt ? "#c4c9d4" : "#142033",
-              cursor: !row.formalizedAt ? "not-allowed" : "pointer",
-            }}
-            title={
-              !row.formalizedAt
-                ? "Debe estar formalizada antes de pasar a READY_FOR_PLATFORM"
-                : "Marcar como READY_FOR_PLATFORM"
-            }
-          >
-            Ready
-          </button>
-        ) : null}
-
-        {row.status === "READY_FOR_PLATFORM" ? (
-          <button
-            type="button"
-            onClick={() => onAction(row.id, "mark_in_sea")}
-            style={{ ...compactBtn, background: "#142033", color: "#fff", borderColor: "#142033" }}
-            title="Marcar como IN_SEA"
-          >
-            In Sea
-          </button>
-        ) : null}
       </div>
     </div>
   );
@@ -656,14 +594,12 @@ function Kpi({
 function AreaBlock({
   title,
   sections,
-  onAction,
 }: {
   title: string;
   sections: Array<{
     title: string;
     rows: OperationCard[];
   }>;
-  onAction: (reservationId: string, action: "mark_ready" | "mark_in_sea") => Promise<void>;
 }) {
   return (
     <div style={areaCard}>
@@ -682,7 +618,7 @@ function AreaBlock({
             <div style={emptyState}>Sin elementos.</div>
           ) : (
             section.rows.slice(0, 5).map((row) => (
-              <OperationItem key={`${section.title}-${row.id}`} row={row} onAction={onAction} />
+              <OperationItem key={`${section.title}-${row.id}`} row={row} />
             ))
           )}
         </div>

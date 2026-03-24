@@ -71,6 +71,7 @@ export function useContractsState(args: {
           driverDocNumber: c.driverDocNumber ?? "",
           driverBirthDate: c.driverBirthDate ? c.driverBirthDate.slice(0, 10) : "",
           minorAuthorizationProvided: Boolean(c.minorAuthorizationProvided),
+          imageConsentAccepted: Boolean(c.imageConsentAccepted),
           licenseSchool: c.licenseSchool ?? "",
           licenseType: c.licenseType ?? "",
           licenseNumber: c.licenseNumber ?? "",

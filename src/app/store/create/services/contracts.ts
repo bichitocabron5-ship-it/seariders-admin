@@ -85,6 +85,15 @@ export async function getSignedContractDownloadUrl(contractId: string) {
   return await res.json();
 }
 
+export async function getSignedMinorAuthorizationDownloadUrl(contractId: string) {
+  const res = await fetch(`/api/store/contracts/${contractId}/minor-authorization/download`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
 export async function saveContractSignature(args: {
   contractId: string;
   signerName: string;
@@ -97,6 +106,31 @@ export async function saveContractSignature(args: {
       signerName: args.signerName,
       imageDataUrl: args.imageDataUrl,
     }),
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
+export async function uploadMinorAuthorization(args: {
+  contractId: string;
+  file: File;
+}) {
+  const formData = new FormData();
+  formData.append("file", args.file);
+
+  const res = await fetch(`/api/store/contracts/${args.contractId}/minor-authorization`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
+export async function deleteMinorAuthorization(contractId: string) {
+  const res = await fetch(`/api/store/contracts/${contractId}/minor-authorization`, {
+    method: "DELETE",
   });
 
   if (!res.ok) throw new Error(await res.text());
