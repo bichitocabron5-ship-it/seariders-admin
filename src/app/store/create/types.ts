@@ -55,6 +55,11 @@ export type ContractDto = {
   signatureSignedPdfUrl?: string | null;
   signatureAuditJson?: unknown | null;
 
+  signedAt?: string | null;
+  signatureImageUrl?: string | null;
+  signatureImageKey?: string | null;
+  signatureSignedBy?: string | null;
+
   preparedJetskiId?: string | null;
   preparedAssetId?: string | null;
 

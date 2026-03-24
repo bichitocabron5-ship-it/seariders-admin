@@ -84,3 +84,21 @@ export async function getSignedContractDownloadUrl(contractId: string) {
   if (!res.ok) throw new Error(await res.text());
   return await res.json();
 }
+
+export async function saveContractSignature(args: {
+  contractId: string;
+  signerName: string;
+  imageDataUrl: string;
+}) {
+  const res = await fetch(`/api/store/contracts/${args.contractId}/signature`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      signerName: args.signerName,
+      imageDataUrl: args.imageDataUrl,
+    }),
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
