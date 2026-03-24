@@ -33,6 +33,9 @@ export type ContractRenderDriver = {
   licenseType: string | null | undefined;
   licenseNumber: string | null | undefined;
   minorAuthorizationProvided: boolean | null | undefined;
+  imageConsentAccepted?: boolean | null | undefined;
+  minorAuthorizationFileKey?: string | null | undefined;
+  minorAuthorizationFileName?: string | null | undefined;
   signatureImageUrl?: string | null | undefined;
   signatureSignedBy?: string | null | undefined;
   signedAt?: Date | string | null | undefined;
@@ -468,6 +471,11 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
         Declara haber comprendido las normas y acepta las condiciones del contrato.
       </p>
 
+      ${contract.imageConsentAccepted
+        ? `<p>☑ Acepto el uso de mi imagen según lo indicado.</p>`
+        : `<p>☐ Acepto el uso de mi imagen según lo indicado.</p>`
+      }
+
       <div class="grid-2" style="margin-top:10px;">
         <div class="field">
           <div class="field-label">FECHA</div>
@@ -517,7 +525,10 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
         El cliente autoriza a UTE JERSKI CENTER- NOMAD NAUTIC a utilizar las fotografías y vídeos tomados durante la actividad para su publicación en redes sociales, página web y material publicitario de la empresa. Esta autorización es gratuita y podrá ser revocada en cualquier momento mediante notificación por escrito.
       </p>
 
-      <div class="check-line">☐ Acepto el uso de mi imagen según lo indicado.</div>
+      ${contract.imageConsentAccepted
+        ? `<p>☑ Acepto el uso de mi imagen según lo indicado.</p>`
+        : `<p>☐ Acepto el uso de mi imagen según lo indicado.</p>`
+      }
     </div>
 
     <div class="footer">
@@ -966,7 +977,10 @@ function buildLicensedHtml(input: ContractRenderInput) {
       <p>
         El cliente autoriza a UTE JERSKI CENTER- NOMAD NAUTIC a utilizar las fotografías y vídeos tomados durante la actividad para su publicación en redes sociales, página web y material publicitario de la empresa. Esta autorización es gratuita y podrá ser revocada en cualquier momento mediante notificación por escrito.
       </p>
-      <p>☐ Acepto el uso de mi imagen según lo indicado.</p>
+      ${contract.imageConsentAccepted
+        ? `<p>☑ Acepto el uso de mi imagen según lo indicado.</p>`
+        : `<p>☐ Acepto el uso de mi imagen según lo indicado.</p>`
+      }
     </div>
 
     <div class="footer">${esc(legalHeader)}</div>

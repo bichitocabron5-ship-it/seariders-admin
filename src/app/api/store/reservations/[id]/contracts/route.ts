@@ -83,6 +83,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           renderedPdfKey: true,
           renderedPdfUrl: true,
 
+          imageConsentAccepted: true,
+          imageConsentAcceptedAt: true,
+          imageConsentAcceptedBy: true,
+
+          minorAuthorizationFileKey: true,
+          minorAuthorizationFileUrl: true,
+          minorAuthorizationFileName: true,
+          minorAuthorizationUploadedAt: true,
+
           preparedJetskiId: true,
           preparedAssetId: true,
 

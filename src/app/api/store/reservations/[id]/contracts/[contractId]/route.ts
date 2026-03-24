@@ -32,9 +32,10 @@ const Body = z.object({
   driverDocType: NullableStr,
   driverDocNumber: NullableStr,
 
-  // âœ… NUEVO
+  // NUEVO
   driverBirthDate: z.string().datetime().optional().nullable(), // ISO string
   minorAuthorizationProvided: z.boolean().optional(),
+  imageConsentAccepted: z.boolean().optional(),
   preparedJetskiId: z.string().optional().nullable(),
   preparedAssetId: z.string().optional().nullable(),
 
@@ -81,7 +82,7 @@ export async function PATCH(
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return new NextResponse("Body invÃ¡lido", { status: 400 });
+  if (!parsed.success) return new NextResponse("Body inválido", { status: 400 });
   const b = parsed.data;
 
   try {
@@ -92,13 +93,14 @@ export async function PATCH(
           id: true,
           reservationId: true,
           status: true,
+          driverName: true,
           reservation: { select: { id: true, isLicense: true } },
         },
       });
 
       if (!current) throw new Error("Contrato no existe");
 
-      // âœ… Seguridad / coherencia: el contrato debe pertenecer a la reserva de la URL
+      // Seguridad / coherencia: el contrato debe pertenecer a la reserva de la URL
       if (current.reservationId !== reservationId) {
         throw new Error("Contrato no pertenece a esta reserva");
       }
@@ -153,6 +155,14 @@ export async function PATCH(
         }
       }
 
+      if (b.imageConsentAccepted !== undefined) {
+        data.imageConsentAccepted = b.imageConsentAccepted;
+        data.imageConsentAcceptedAt = b.imageConsentAccepted ? new Date() : null;
+        data.imageConsentAcceptedBy = b.imageConsentAccepted
+          ? (norm(b.driverName) ?? current.driverName ?? null)
+          : null;
+      }
+      
       if (b.status !== undefined) data.status = b.status;
 
       const updated = await tx.reservationContract.update({
@@ -173,6 +183,7 @@ export async function PATCH(
           driverDocNumber: true,
           driverBirthDate: true,
           minorAuthorizationProvided: true,
+          minorAuthorizationFileKey: true,
           minorNeedsAuthorization: true,
           licenseSchool: true,
           licenseType: true,
@@ -181,7 +192,7 @@ export async function PATCH(
         },
       });
 
-      // âœ… regla PRO: si se marca READY, validamos que estÃ© completo
+      // Regla PRO: si se marca READY, validamos que está completo
       if (updated.status === ContractStatus.READY) {
         const baseOk =
           must(updated.driverName) &&
@@ -211,7 +222,7 @@ export async function PATCH(
             throw new Error("Para marcar READY faltan datos de licencia.");
           }
         }
-          // âœ… NUEVO: birthDate obligatorio para READY
+          // NUEVO: birthDate obligatorio para READY
           if (!updated.driverBirthDate) {
             await tx.reservationContract.update({ where: { id: contractId }, data: { status: ContractStatus.DRAFT } });
             throw new Error("Para marcar READY falta la fecha de nacimiento.");
@@ -229,6 +240,11 @@ export async function PATCH(
           if (rule.needsAuthorization && !updated.minorAuthorizationProvided) {
             await tx.reservationContract.update({ where: { id: contractId }, data: { status: ContractStatus.DRAFT } });
             throw new Error("Menor (16-17): falta autorizacion.");
+          }
+
+          if (rule.needsAuthorization && !updated.minorAuthorizationFileKey) {
+            await tx.reservationContract.update({ where: { id: contractId }, data: { status: ContractStatus.DRAFT } });
+            throw new Error("Para menor de edad es obligatorio adjuntar la autorización del padre/madre/tutor.");
           }
 
           // cache para UI (opcional)
