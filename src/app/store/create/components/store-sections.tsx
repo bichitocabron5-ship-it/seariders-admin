@@ -5,12 +5,15 @@ import React, { useEffect, useState } from "react";
 import type { CartItem, ContractDto, ContractPatch, Option, ServiceMain } from "../types";
 import { errorMessage } from "../utils/errors";
 import {
+  deleteMinorAuthorization,
   fetchPreparedOptions,
   generateContractPdf,
   getSignedContractDownloadUrl,
+  getSignedMinorAuthorizationDownloadUrl,
   renderContract,
   saveContractSignature,
   signContract,
+  uploadMinorAuthorization,
 } from "../services/contracts";
 import { ContractSignatureModal } from "./contract-signature-modal";
 
@@ -121,6 +124,10 @@ function ContractCard({
   previewBusy,
   onGeneratePdf,
   pdfBusy,
+  onUploadMinorAuthorization,
+  onDeleteMinorAuthorization,
+  minorUploadBusy,
+  minorDeleteBusy,
 }: {
   reservationId: string;
   isLicense: boolean;
@@ -137,6 +144,10 @@ function ContractCard({
   previewBusy: boolean;
   onGeneratePdf: (contractId: string) => Promise<void>;
   pdfBusy: boolean;
+  onUploadMinorAuthorization: (contractId: string, file: File) => Promise<void>;
+  onDeleteMinorAuthorization: (contractId: string) => Promise<void>;
+  minorUploadBusy: boolean;
+  minorDeleteBusy: boolean;
 }) {
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
@@ -151,6 +162,7 @@ function ContractCard({
   const [driverPostalCode, setDriverPostalCode] = React.useState<string>(c.driverPostalCode ?? "");
   const [driverDocType, setDriverDocType] = React.useState<string>(c.driverDocType ?? "");
   const [driverDocNumber, setDriverDocNumber] = React.useState<string>(c.driverDocNumber ?? "");
+  const [imageConsentAccepted, setImageConsentAccepted] = useState(Boolean(c.imageConsentAccepted));
   const [licenseSchool, setLicenseSchool] = React.useState<string>(c.licenseSchool ?? "");
   const [licenseType, setLicenseType] = React.useState<string>(c.licenseType ?? "");
   const [licenseNumber, setLicenseNumber] = React.useState<string>(c.licenseNumber ?? "");
@@ -216,12 +228,13 @@ function ContractCard({
     setDriverPostalCode(c.driverPostalCode ?? "");
     setDriverDocType(c.driverDocType ?? "");
     setDriverDocNumber(c.driverDocNumber ?? "");
+    setImageConsentAccepted(Boolean(c.imageConsentAccepted));
     setLicenseSchool(c.licenseSchool ?? "");
     setLicenseType(c.licenseType ?? "");
     setLicenseNumber(c.licenseNumber ?? "");
     setPreparedJetskiId(c.preparedJetskiId ?? "");
     setPreparedAssetId(c.preparedAssetId ?? "");
-  }, [c.id, c.driverAddress, c.driverBirthDate, c.driverCountry, c.driverDocNumber, c.driverDocType, c.driverEmail, c.driverName, c.driverPhone, c.driverPostalCode, c.licenseNumber, c.licenseSchool, c.licenseType, c.minorAuthorizationProvided, c.preparedAssetId, c.preparedJetskiId]);
+  }, [c.id, c.driverAddress, c.driverBirthDate, c.driverCountry, c.driverDocNumber, c.driverDocType, c.driverEmail, c.driverName, c.driverPhone, c.driverPostalCode, c.imageConsentAccepted, c.licenseNumber, c.licenseSchool, c.licenseType, c.minorAuthorizationProvided, c.preparedAssetId, c.preparedJetskiId]);
 
   function buildPayload() {
     return {
@@ -235,6 +248,7 @@ function ContractCard({
       driverDocNumber: driverDocNumber || null,
       driverBirthDate: birthYmd ? `${birthYmd}T12:00:00.000Z` : null,
       minorAuthorizationProvided,
+      imageConsentAccepted,
       licenseSchool: licenseSchool || null,
       licenseType: licenseType || null,
       licenseNumber: licenseNumber || null,
@@ -267,13 +281,31 @@ function ContractCard({
   }
 
   async function handlePreviewClick() {
-    await savePartial(buildPayload());
+    if (c.status !== "SIGNED") {
+      await savePartial(buildPayload());
+    }
     await onPreview(c.id);
   }
 
   async function handleGeneratePdfClick() {
-    await savePartial(buildPayload());
+    if (c.status !== "SIGNED") {
+      await savePartial(buildPayload());
+    }
     await onGeneratePdf(c.id);
+  }
+
+  async function handleMinorAuthorizationUploadClick(file: File) {
+    if (c.status !== "SIGNED") {
+      await savePartial(buildPayload());
+    }
+    await onUploadMinorAuthorization(c.id, file);
+  }
+
+  async function handleMinorAuthorizationDeleteClick() {
+    if (c.status !== "SIGNED") {
+      await savePartial(buildPayload());
+    }
+    await onDeleteMinorAuthorization(c.id);
   }
 
   return (
@@ -382,6 +414,139 @@ function ContractCard({
           </label>
         </div>
       </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            padding: 10,
+            borderRadius: 12,
+            border: "1px solid #e2e8f0",
+            background: "#f8fafc",
+          }}
+        >
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 700 }}>
+            <input
+              type="checkbox"
+              checked={Boolean(imageConsentAccepted)}
+              onChange={(e) => setImageConsentAccepted(e.target.checked)}
+            />
+            Acepto el uso de mi imagen según lo indicado
+          </label>
+
+          {age != null && age < 18 ? (
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                padding: 10,
+                borderRadius: 10,
+                border: "1px solid #fecaca",
+                background: "#fff7ed",
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 900, color: "#9a3412" }}>
+                Menor detectado: se requiere autorización de padre/madre/tutor
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <label
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "fit-content",
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: "1px solid #fdba74",
+                    background: minorUploadBusy ? "#ffedd5" : "#fff",
+                    color: "#9a3412",
+                    fontSize: 13,
+                    fontWeight: 900,
+                    cursor: minorUploadBusy ? "default" : "pointer",
+                  }}
+                >
+                  {minorUploadBusy
+                    ? "Subiendo..."
+                    : c.minorAuthorizationFileName
+                      ? "Reemplazar autorización"
+                      : "Adjuntar autorización"}
+                  <input
+                    type="file"
+                    accept=".pdf,image/png,image/jpeg,image/webp"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        void handleMinorAuthorizationUploadClick(file);
+                      }
+                      e.currentTarget.value = "";
+                    }}
+                    disabled={minorUploadBusy || minorDeleteBusy}
+                  />
+                </label>
+
+                {c.minorAuthorizationFileKey ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleMinorAuthorizationDeleteClick()}
+                    disabled={minorDeleteBusy || minorUploadBusy}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      border: "1px solid #fecaca",
+                      background: "#fff",
+                      color: "#991b1b",
+                      fontSize: 13,
+                      fontWeight: 900,
+                      cursor: minorDeleteBusy ? "default" : "pointer",
+                    }}
+                  >
+                    {minorDeleteBusy ? "Eliminando..." : "Eliminar autorización"}
+                  </button>
+                ) : null}
+              </div>
+
+              {c.minorAuthorizationFileName ? (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 12, color: "#475569" }}>
+                    {c.minorAuthorizationFileName}
+                  </div>
+
+                  {c.minorAuthorizationFileKey ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const data = await getSignedMinorAuthorizationDownloadUrl(c.id);
+                        if (data?.url) {
+                          window.open(data.url, "_blank", "noopener,noreferrer");
+                        }
+                      }}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "6px 10px",
+                        borderRadius: 10,
+                        border: "1px solid #cbd5e1",
+                        background: "#fff",
+                        color: "#0f172a",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Ver autorización
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
 
       {showLicenseFields ? (
         <div style={subCardStyle}>
@@ -582,6 +747,8 @@ export function ContractsSection({
   const [signBusy, setSignBusy] = useState(false);
   const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
   const [signatureContract, setSignatureContract] = useState<ContractDto | null>(null);
+  const [minorUploadBusyId, setMinorUploadBusyId] = useState<string | null>(null);
+  const [minorDeleteBusyId, setMinorDeleteBusyId] = useState<string | null>(null);
   const previewContract = previewContractId
     ? contracts.find((contract) => contract.id === previewContractId) ?? null
     : null;
@@ -656,6 +823,36 @@ export function ContractsSection({
     }
   }
   
+  async function handleMinorAuthorizationUpload(contractId: string, file: File) {
+    try {
+      setPreviewError(null);
+      setMinorUploadBusyId(contractId);
+      await uploadMinorAuthorization({ contractId, file });
+      await onRefresh();
+    } catch (e: unknown) {
+      setPreviewError(
+        e instanceof Error ? e.message : "No se pudo subir la autorización"
+      );
+    } finally {
+      setMinorUploadBusyId(null);
+    }
+  }
+
+  async function handleMinorAuthorizationDelete(contractId: string) {
+    try {
+      setPreviewError(null);
+      setMinorDeleteBusyId(contractId);
+      await deleteMinorAuthorization(contractId);
+      await onRefresh();
+    } catch (e: unknown) {
+      setPreviewError(
+        e instanceof Error ? e.message : "No se pudo eliminar la autorización"
+      );
+    } finally {
+      setMinorDeleteBusyId(null);
+    }
+  }
+
   return (
     <section id="contracts" style={{ ...panelStyle, display: "grid", gap: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
@@ -712,6 +909,10 @@ export function ContractsSection({
           previewBusy={previewBusyId === c.id}
           onGeneratePdf={handleGeneratePdf}
           pdfBusy={pdfBusyId === c.id}
+          onUploadMinorAuthorization={handleMinorAuthorizationUpload}
+          onDeleteMinorAuthorization={handleMinorAuthorizationDelete}
+          minorUploadBusy={minorUploadBusyId === c.id}
+          minorDeleteBusy={minorDeleteBusyId === c.id}
         />
       ))}
 
@@ -780,7 +981,7 @@ export function ContractsSection({
                   type="button"
                   onClick={() => void handleSignPreview()}
                   style={primaryBtn}
-                  disabled={!previewContractId || signBusy}
+                  disabled={!previewContractId || signBusy || previewContract?.status === "SIGNED"}
                 >
                   {signBusy ? "Firmando..." : "Marcar SIGNED"}
                 </button>
@@ -793,7 +994,7 @@ export function ContractsSection({
                   style={secondaryBtn}
                   disabled={!previewContract}
                 >
-                  Firmar
+                  {previewContract?.status === "SIGNED" ? "Reemplazar firma" : "Firmar"}
                 </button>
 
                 <button

@@ -480,6 +480,15 @@ model ReservationContract {
   signatureStatusRaw     String?
   signaturePayloadJson   Json?
 
+  imageConsentAccepted      Boolean   @default(false)
+  imageConsentAcceptedAt    DateTime?
+  imageConsentAcceptedBy    String?
+
+  minorAuthorizationFileKey String?
+  minorAuthorizationFileUrl String?
+  minorAuthorizationFileName String?
+  minorAuthorizationUploadedAt DateTime?
+
   signatureSignedPdfUrl  String?
   signatureAuditJson     Json?
 

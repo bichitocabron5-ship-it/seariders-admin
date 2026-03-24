@@ -86,9 +86,15 @@ export async function POST(
       select: {
         id: true,
         reservationId: true,
+        driverName: true,
         renderedHtml: true,
         renderedPdfUrl: true,
         renderedPdfKey: true,
+        reservation: {
+          select: {
+            customerName: true,
+          },
+        },
       },
     });
 
@@ -108,6 +114,7 @@ export async function POST(
     const pdfKey = buildContractPdfKey({
       reservationId: contract.reservationId,
       contractId: contract.id,
+      displayName: contract.driverName ?? contract.reservation.customerName,
     });
 
     const uploaded = await uploadPdfToS3({

@@ -54,14 +54,54 @@ export async function getSignedContractPdfUrl(key: string, expiresIn = 300) {
   return await getSignedUrl(s3, command, { expiresIn });
 }
 
+export async function getSignedPrivateFileUrl(key: string, expiresIn = 300) {
+  const bucket = requireEnv("S3_BUCKET");
+
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+  });
+
+  return await getSignedUrl(s3, command, { expiresIn });
+}
+
+function slugPart(v: string | null | undefined, fallback: string) {
+  const normalized = String(v ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return normalized || fallback;
+}
+
 export function buildContractPdfKey(args: {
   reservationId: string;
   contractId: string;
+  displayName?: string | null;
   date?: Date;
 }) {
   const d = args.date ?? new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const safeName = slugPart(args.displayName, "contract");
 
-  return `contracts/${yyyy}/${mm}/reservation_${args.reservationId}/contract_${args.contractId}.pdf`;
+  return `contracts/${yyyy}/${mm}/reservation_${args.reservationId}/contract_${safeName}_${args.contractId}.pdf`;
+}
+
+export function buildMinorAuthorizationKey(args: {
+  reservationId: string;
+  contractId: string;
+  displayName?: string | null;
+  fileName: string;
+  date?: Date;
+}) {
+  const d = args.date ?? new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const safeDisplayName = slugPart(args.displayName, "minor_authorization");
+  const safeName = args.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+  return `contracts/${yyyy}/${mm}/reservation_${args.reservationId}/minor_auth_${safeDisplayName}_${args.contractId}_${safeName}`;
 }

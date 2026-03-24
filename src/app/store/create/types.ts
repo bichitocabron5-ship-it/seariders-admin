@@ -52,6 +52,15 @@ export type ContractDto = {
   signatureStatusRaw?: string | null;
   signaturePayloadJson?: unknown | null;
 
+  imageConsentAccepted?: boolean | null;
+  imageConsentAcceptedAt?: string | null;
+  imageConsentAcceptedBy?: string | null;
+
+  minorAuthorizationFileKey?: string | null;
+  minorAuthorizationFileUrl?: string | null;
+  minorAuthorizationFileName?: string | null;
+  minorAuthorizationUploadedAt?: string | null;
+
   signatureSignedPdfUrl?: string | null;
   signatureAuditJson?: unknown | null;
 
@@ -120,6 +129,7 @@ export type ContractPatch = {
   driverDocNumber?: string | null;
   driverBirthDate?: string | null;
   minorAuthorizationProvided?: boolean;
+  imageConsentAccepted?: boolean;
   licenseSchool?: string | null;
   licenseType?: string | null;
   licenseNumber?: string | null;
@@ -187,6 +197,7 @@ export type ContractDraftState = Record<
     driverDocNumber: string;
     driverBirthDate: string;
     minorAuthorizationProvided: boolean;
+    imageConsentAccepted: boolean;
     licenseSchool: string;
     licenseType: string;
     licenseNumber: string;
