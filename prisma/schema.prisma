@@ -488,6 +488,10 @@ model ReservationContract {
   signatureEnvelopeId String?   @db.VarChar(120)
   signatureUrl        String?   @db.VarChar(400)
 
+  signatureImageUrl String?
+  signatureImageKey String?
+  signatureSignedBy String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
