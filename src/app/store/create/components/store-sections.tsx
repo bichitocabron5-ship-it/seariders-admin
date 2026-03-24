@@ -4,7 +4,15 @@
 import React, { useEffect, useState } from "react";
 import type { CartItem, ContractDto, ContractPatch, Option, ServiceMain } from "../types";
 import { errorMessage } from "../utils/errors";
-import { getSignedContractDownloadUrl, fetchPreparedOptions, generateContractPdf, renderContract, signContract } from "../services/contracts";
+import {
+  fetchPreparedOptions,
+  generateContractPdf,
+  getSignedContractDownloadUrl,
+  renderContract,
+  saveContractSignature,
+  signContract,
+} from "../services/contracts";
+import { ContractSignatureModal } from "./contract-signature-modal";
 
 const panelStyle: React.CSSProperties = {
   padding: 18,
@@ -160,11 +168,16 @@ function ContractCard({
   const needsAuth = age != null && age >= 16 && age < 18;
   const isUnder16 = age != null && age < 16;
   const showLicenseFields =
-  isLicense ||
-  Boolean(licenseSchool?.trim()) ||
-  Boolean(licenseType?.trim()) ||
-  Boolean(licenseNumber?.trim());
+    isLicense ||
+    Boolean(licenseSchool?.trim()) ||
+    Boolean(licenseType?.trim()) ||
+    Boolean(licenseNumber?.trim());
   const showPreparedSelector = isLicense;
+  const canDownloadFinalPdf =
+    c.status === "SIGNED" &&
+    Boolean(c.signedAt) &&
+    Boolean(c.signatureImageKey || c.signatureImageUrl) &&
+    Boolean(c.renderedPdfKey || c.renderedPdfUrl);
 
   useEffect(() => {
     let cancelled = false;
@@ -505,24 +518,24 @@ function ContractCard({
           {pdfBusy ? "Generando PDF..." : "Generar PDF"}
         </button>
 
-        {(c.renderedPdfUrl || c.renderedPdfKey) ? (
+        {canDownloadFinalPdf ? (
           <button
             type="button"
             onClick={async () => {
-              try {
-                setErr(null);
-                const data = await getSignedContractDownloadUrl(c.id);
-                if (!data?.url) throw new Error("No se obtuvo URL de descarga");
+              const data = await getSignedContractDownloadUrl(c.id);
+              if (data?.url) {
                 window.open(data.url, "_blank", "noopener,noreferrer");
-              } catch (e: unknown) {
-                setErr(errorMessage(e, "No se pudo descargar el PDF"));
               }
             }}
             style={secondaryBtn}
           >
-            Descargar PDF
+            Descargar PDF final
           </button>
-        ) : null}
+        ) : (
+          <div style={{ fontSize: 12, color: "#64748b" }}>
+            La descarga final se habilita cuando el contrato está firmado.
+          </div>
+        )}
       </div>
 
       {showLicenseFields ? (
@@ -568,6 +581,10 @@ export function ContractsSection({
   const [previewContractId, setPreviewContractId] = useState<string | null>(null);
   const [signBusy, setSignBusy] = useState(false);
   const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
+  const [signatureContract, setSignatureContract] = useState<ContractDto | null>(null);
+  const previewContract = previewContractId
+    ? contracts.find((contract) => contract.id === previewContractId) ?? null
+    : null;
 
   async function handlePreview(contractId: string) {
     try {
@@ -622,6 +639,23 @@ export function ContractsSection({
     }
   }
 
+  async function handleSaveSignature(args: {
+    contractId: string;
+    signerName: string;
+    imageDataUrl: string;
+  }) {
+    try {
+      setPreviewError(null);
+      await saveContractSignature(args);
+      await renderContract(args.contractId);
+      await onRefresh();
+    } catch (e: unknown) {
+      setPreviewError(
+        e instanceof Error ? e.message : "No se pudo guardar la firma"
+      );
+    }
+  }
+  
   return (
     <section id="contracts" style={{ ...panelStyle, display: "grid", gap: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
@@ -754,6 +788,17 @@ export function ContractsSection({
                 <button
                   type="button"
                   onClick={() => {
+                    if (previewContract) setSignatureContract(previewContract);
+                  }}
+                  style={secondaryBtn}
+                  disabled={!previewContract}
+                >
+                  Firmar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
                     setPreviewHtml(null);
                     setPreviewContractId(null);
                     setPreviewError(null);
@@ -777,6 +822,24 @@ export function ContractsSection({
             />
           </div>
         </div>
+      ) : null}
+
+      {signatureContract ? (
+        <ContractSignatureModal
+          defaultSignerName={
+            signatureContract.driverName ||
+            customer.name ||
+            ""
+          }
+          onClose={() => setSignatureContract(null)}
+          onSave={async ({ signerName, imageDataUrl }) => {
+            await handleSaveSignature({
+              contractId: signatureContract.id,
+              signerName,
+              imageDataUrl,
+            });
+          }}
+        />
       ) : null}
     </section>
   );
