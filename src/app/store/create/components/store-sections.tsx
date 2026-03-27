@@ -1052,6 +1052,8 @@ export function CartSection({
   cartItems,
   servicesMain,
   options,
+  assetAvailability,
+  getServiceNameById,
   onAddToCart,
   onClearCart,
   onRemoveFromCart,
@@ -1063,12 +1065,86 @@ export function CartSection({
   cartItems: CartItem[];
   servicesMain: ServiceMain[];
   options: Option[];
+  assetAvailability: Array<{
+    type: "GOPRO" | "WETSUIT" | "OTHER";
+    size: string | null;
+    available: number;
+  }>;
+  getServiceNameById: (serviceId: string) => string;
   onAddToCart: () => void;
   onClearCart: () => void;
   onRemoveFromCart: (id: string) => void;
   onUpdateCartItem: (id: string, patch: Partial<Pick<CartItem, "quantity" | "pax">>) => void;
-  onError: (message: string) => void;
+  onError: (message: string | null) => void;
 }) {
+
+  function normalizeAssetName(v: string) {
+    return String(v ?? "").trim().toUpperCase();
+  }
+
+  function isGoProName(v: string) {
+    const s = normalizeAssetName(v);
+    return s.includes("GOPRO");
+  }
+
+  function isWetsuitName(v: string) {
+    const s = normalizeAssetName(v);
+    return s.includes("NEOPRENO");
+  }
+
+  function extractWetsuitSize(v: string): string | null {
+    const s = normalizeAssetName(v);
+    const match = s.match(/\b(XXS|XS|S|M|L|XL|XXL)\b/);
+    return match?.[1] ?? null;
+  }
+
+  function getAvailableGoPro() {
+    const row = assetAvailability.find((r) => r.type === "GOPRO");
+    return row?.available ?? 0;
+  }
+
+  function getAvailableWetsuit(size: string | null) {
+    const row = assetAvailability.find(
+      (r) => r.type === "WETSUIT" && (r.size ?? null) === (size ?? null)
+    );
+    return row?.available ?? 0;
+  }
+
+  function getMaxAllowed(it: CartItem) {
+    const serviceName = getServiceNameById(it.serviceId);
+
+    if (isGoProName(serviceName)) {
+      return getAvailableGoPro();
+    }
+
+    if (isWetsuitName(serviceName)) {
+      const size = extractWetsuitSize(serviceName);
+      return getAvailableWetsuit(size);
+    }
+
+    return Number.POSITIVE_INFINITY;
+  }
+
+  function getAvailabilityLabel(it: CartItem) {
+    const serviceName = getServiceNameById(it.serviceId);
+
+    if (isGoProName(serviceName)) {
+      return `Disponibles: ${getAvailableGoPro()}`;
+    }
+
+    if (isWetsuitName(serviceName)) {
+      const size = extractWetsuitSize(serviceName);
+      return `Disponibles${size ? ` talla ${size}` : ""}: ${getAvailableWetsuit(size)}`;
+    }
+
+    return null;
+  }
+
+  function isAssetLimited(it: CartItem) {
+    const serviceName = getServiceNameById(it.serviceId);
+    return isGoProName(serviceName) || isWetsuitName(serviceName);
+  }
+  
   return (
     <section style={{ ...panelStyle, display: "grid", gap: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1104,31 +1180,168 @@ export function CartSection({
       {cartItems.length === 0 ? (
         <div style={{ fontSize: 13, color: "#64748b" }}>No hay ítems. Si no añades nada, se creará solo con el servicio seleccionado arriba.</div>
       ) : (
-        <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "grid", gap: 10 }}>
           {cartItems.map((it) => {
             const svc = servicesMain.find((s) => s.id === it.serviceId);
             const opt = options.find((o) => o.id === it.optionId);
 
+            const availabilityLabel = getAvailabilityLabel(it);
+            const maxAllowed = getMaxAllowed(it);
+            const limited = isAssetLimited(it);
+            const qty = Number(it.quantity ?? 1);
+            const soldOut = limited && Number.isFinite(maxAllowed) && maxAllowed <= 0;
+            const atMax = limited && Number.isFinite(maxAllowed) && qty >= maxAllowed;
+
             return (
-              <article key={it.id} style={{ padding: 14, border: "1px solid #e2e8f0", borderRadius: 16, display: "grid", gap: 10, background: "#fdfefe" }}>
+              <article
+                key={it.id}
+                style={{
+                  padding: 14,
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 16,
+                  display: "grid",
+                  gap: 10,
+                  background: soldOut ? "#fff7ed" : "#fdfefe",
+                }}
+              >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <div style={{ fontWeight: 900 }}>
-                    {svc?.category ? `${svc.category} | ` : ""}
-                    {svc?.name ?? it.serviceId}
-                    {opt?.durationMinutes ? ` | ${opt.durationMinutes} min` : ""}
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <div style={{ fontWeight: 900 }}>
+                      {svc?.category ? `${svc.category} | ` : ""}
+                      {svc?.name ?? it.serviceId}
+                      {opt?.durationMinutes ? ` | ${opt.durationMinutes} min` : ""}
+                    </div>
+
+                    {availabilityLabel ? (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: soldOut ? "#991b1b" : atMax ? "#c2410c" : "#475569",
+                        }}
+                      >
+                        {availabilityLabel}
+                        {soldOut ? " · COMPLETO" : atMax ? " · máximo alcanzado" : ""}
+                      </div>
+                    ) : null}
                   </div>
-                  <button type="button" onClick={() => onRemoveFromCart(it.id)} style={secondaryButtonStyle}>Quitar</button>
+
+                  <button
+                    type="button"
+                    onClick={() => onRemoveFromCart(it.id)}
+                    style={secondaryButtonStyle}
+                  >
+                    Quitar
+                  </button>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
                   <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
                     Cantidad
-                    <input type="number" min={1} value={it.quantity} onChange={(e) => onUpdateCartItem(it.id, { quantity: Math.max(1, Number(e.target.value || 1)) })} style={inputStyle} />
+
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onUpdateCartItem(it.id, {
+                            quantity: Math.max(1, qty - 1),
+                          })
+                        }
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 10,
+                          border: "1px solid #cbd5e1",
+                          background: "#fff",
+                          fontWeight: 900,
+                          cursor: "pointer",
+                        }}
+                      >
+                        -
+                      </button>
+
+                      <input
+                        type="number"
+                        min={1}
+                        value={it.quantity}
+                        onChange={(e) => {
+                          const raw = Number(e.target.value || 1);
+                          const safe = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 1;
+                          const next =
+                            limited && Number.isFinite(maxAllowed)
+                              ? Math.min(safe, Math.max(0, maxAllowed))
+                              : safe;
+
+                          if (limited && Number.isFinite(maxAllowed) && safe > maxAllowed) {
+                            onError(
+                              maxAllowed <= 0
+                                ? "No hay unidades disponibles para este extra."
+                                : `Máximo disponible: ${maxAllowed}.`
+                            );
+                          } else {
+                            onError(null);
+                          }
+
+                          onUpdateCartItem(it.id, {
+                            quantity: Math.max(1, next || 1),
+                          });
+                        }}
+                        style={{
+                          ...inputStyle,
+                          width: 90,
+                          textAlign: "center",
+                          border: soldOut ? "1px solid #fca5a5" : inputStyle.border,
+                          background: soldOut ? "#fff1f2" : "#fff",
+                        }}
+                      />
+
+                      <button
+                        type="button"
+                        disabled={Boolean(atMax || soldOut)}
+                        onClick={() => {
+                          if (limited && Number.isFinite(maxAllowed) && qty >= maxAllowed) {
+                            onError(
+                              maxAllowed <= 0
+                                ? "No hay unidades disponibles para este extra."
+                                : `Máximo disponible: ${maxAllowed}.`
+                            );
+                            return;
+                          }
+
+                          onError(null);
+                          onUpdateCartItem(it.id, {
+                            quantity: qty + 1,
+                          });
+                        }}
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 10,
+                          border: "1px solid #cbd5e1",
+                          background: atMax || soldOut ? "#f8fafc" : "#fff",
+                          color: atMax || soldOut ? "#94a3b8" : "#0f172a",
+                          fontWeight: 900,
+                          cursor: atMax || soldOut ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
                   </label>
 
                   <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
                     PAX para este ítem
-                    <input type="number" min={1} value={it.pax} onChange={(e) => onUpdateCartItem(it.id, { pax: Math.max(1, Number(e.target.value || 1)) })} style={inputStyle} />
+                    <input
+                      type="number"
+                      min={1}
+                      value={it.pax}
+                      onChange={(e) =>
+                        onUpdateCartItem(it.id, {
+                          pax: Math.max(1, Number(e.target.value || 1)),
+                        })
+                      }
+                      style={inputStyle}
+                    />
                   </label>
                 </div>
               </article>
@@ -1136,6 +1349,25 @@ export function CartSection({
           })}
         </div>
       )}
+
+      {cartItems.some((it) => {
+        const maxAllowed = getMaxAllowed(it);
+        return isAssetLimited(it) && Number.isFinite(maxAllowed) && maxAllowed <= 0;
+      }) ? (
+        <div
+          style={{
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #fecaca",
+            background: "#fff1f2",
+            color: "#991b1b",
+            fontSize: 13,
+            fontWeight: 800,
+          }}
+        >
+          Hay extras reutilizables sin disponibilidad real. Revisa cantidades o elimina esos ítems.
+        </div>
+      ) : null}
     </section>
   );
 }

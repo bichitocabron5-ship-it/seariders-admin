@@ -1,4 +1,3 @@
-﻿// src/app/api/store/reservations/remove-extra/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getIronSession } from "iron-session";
@@ -6,6 +5,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { ReservationStatus } from "@prisma/client";
+import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,10 @@ const Body = z.object({
 
 export async function POST(req: Request) {
   const cookieStore = await cookies();
-  const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
+  const session = await getIronSession<AppSession>(
+    cookieStore as unknown as never,
+    sessionOptions
+  );
 
   if (!session?.userId || !["STORE", "ADMIN"].includes(session.role as string)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -25,7 +28,7 @@ export async function POST(req: Request) {
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const { reservationId, itemId, reason } = parsed.data;
 
@@ -43,7 +46,11 @@ export async function POST(req: Request) {
         ReservationStatus.SCHEDULED,
         ReservationStatus.IN_SEA,
       ];
-      const allowedAdmin: ReservationStatus[] = [...allowedStore, ReservationStatus.COMPLETED, ReservationStatus.CANCELED];
+      const allowedAdmin: ReservationStatus[] = [
+        ...allowedStore,
+        ReservationStatus.COMPLETED,
+        ReservationStatus.CANCELED,
+      ];
 
       const allowed = session.role === "ADMIN" ? allowedAdmin : allowedStore;
 
@@ -51,13 +58,20 @@ export async function POST(req: Request) {
         throw new Error("No se pueden modificar extras en este estado");
       }
 
-      if (r.status === ReservationStatus.COMPLETED || r.status === ReservationStatus.CANCELED) {
-        if (session.role !== "ADMIN") {
-          throw new Error("Solo ADMIN puede modificar extras post-cierre");
-        }
-        if (!reason || reason.trim().length < 3) {
-          throw new Error("Indica un motivo para el ajuste post-cierre");
-        }
+      if (
+        (r.status === ReservationStatus.COMPLETED ||
+          r.status === ReservationStatus.CANCELED) &&
+        session.role !== "ADMIN"
+      ) {
+        throw new Error("Solo ADMIN puede modificar extras post-cierre");
+      }
+
+      if (
+        (r.status === ReservationStatus.COMPLETED ||
+          r.status === ReservationStatus.CANCELED) &&
+        (!reason || reason.trim().length < 3)
+      ) {
+        throw new Error("Indica un motivo para el ajuste post-cierre");
       }
 
       const item = await tx.reservationItem.findFirst({
@@ -80,6 +94,8 @@ export async function POST(req: Request) {
         select: { id: true, totalPriceCents: true },
       });
 
+      await syncStoreFulfillmentTasksForReservation(tx, reservationId);
+
       return { reservation: updated };
     });
 
@@ -89,5 +105,3 @@ export async function POST(req: Request) {
     return new NextResponse(message, { status: 400 });
   }
 }
-
-

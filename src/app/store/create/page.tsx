@@ -13,6 +13,7 @@ import { buildCreateBody, buildEditUpdateBody, buildFormalizeBody, buildItemsToS
 import { validateBeforeSubmit, validateItemsForCreate } from "./services/store-create-validation";
 import { ensureOkResponse, errorMessage, isAbortError, throwValidationError } from "./utils/errors";
 import type { CartItem, Channel, Option, PackPreview, ServiceMain, UIMode } from "./types";
+import { getAssetAvailability, type AssetAvailability } from "../services/assets";
 
 type CustomerSearchRow = {
   reservationId: string;
@@ -69,6 +70,7 @@ function StoreCreatePageInner() {
   const [timeStr, setTimeStr] = useState<string>("");
   const [availabilityTick, setAvailabilityTick] = useState(0);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [assetAvailability, setAssetAvailability] = useState<AssetAvailability[]>([]);
 
   const [servicesMain, setServicesMain] = useState<ServiceMain[]>([]);
   const [options, setOptions] = useState<Option[]>([]);
@@ -213,42 +215,47 @@ function StoreCreatePageInner() {
       setLoadingCatalog(true);
       setError(null);
 
-      try {
-        const r = await fetch("/api/pos/catalog?origin=STORE", { cache: "no-store", signal: ac.signal });
-        if (!r.ok) throw new Error(await r.text());
-        const data = await r.json();
+  try {
+    const [catalogRes, assetsData] = await Promise.all([
+      fetch("/api/pos/catalog?origin=STORE", { cache: "no-store", signal: ac.signal }),
+      getAssetAvailability(),
+    ]);
 
-        const sm = (data?.servicesMain ?? []) as ServiceMain[];
-        const op = (data?.options ?? []) as Option[];
-        const ch = (data?.channels ?? []) as Channel[];
+    if (!catalogRes.ok) throw new Error(await catalogRes.text());
+    const data = await catalogRes.json();
 
-        setServicesMain(sm);
-        setOptions(op);
-        setChannels(ch);
-        
-        setCategoriesMain(((data?.categories?.main ?? []) as string[]) ?? []);
+    const sm = (data?.servicesMain ?? []) as ServiceMain[];
+    const op = (data?.options ?? []) as Option[];
+    const ch = (data?.channels ?? []) as Channel[];
 
-        // Defaults SOLO si NO estamos migrando
-        if (!migrateReservationId) {
-          const main0 = (data.servicesMain ?? [])[0];
-          if (main0) {
-            setServiceId(main0.id);
-            const firstOpt = ((data.options ?? []) as Option[]).find((o) => o.serviceId === main0.id);
-            setOptionId(firstOpt?.id ?? "");
-          } else {
-            setServiceId("");
-            setOptionId("");
-          }
+    setServicesMain(sm);
+    setOptions(op);
+    setChannels(ch);
+    setCategoriesMain(((data?.categories?.main ?? []) as string[]) ?? []);
+    setAssetAvailability(assetsData.rows ?? []);
 
-          const ch0 = (data.channels ?? [])[0];
-          setChannelId(ch0?.id ?? "");
-        }
-      } catch (e: unknown) {
-        if (isAbortError(e)) return;
-        setError(errorMessage(e, "No se pudo cargar el catálogo"));
-      } finally {
-        setLoadingCatalog(false);
+    if (!migrateReservationId) {
+      const main0 = (data.servicesMain ?? [])[0];
+      if (main0) {
+        setServiceId(main0.id);
+        const firstOpt =
+          ((data.options ?? []) as Option[]).find((o) => o.serviceId === main0.id) ??
+          null;
+        setOptionId(firstOpt?.id ?? "");
+      } else {
+        setServiceId("");
+        setOptionId("");
       }
+
+      const ch0 = (data.channels ?? [])[0];
+      setChannelId(ch0?.id ?? "");
+    }
+  } catch (e: unknown) {
+    if (isAbortError(e)) return;
+    setError(errorMessage(e, "No se pudo cargar el catálogo"));
+  } finally {
+    setLoadingCatalog(false);
+  }
     })();
 
     return () => ac.abort();
@@ -325,6 +332,57 @@ function StoreCreatePageInner() {
     }
     return sum;
   }, [isPackMode, cartItems, optionId, quantity, optionById]);
+
+  function normalizeAssetName(v: string) {
+    return String(v ?? "").trim().toUpperCase();
+  }
+
+  function isGoProName(v: string) {
+    const s = normalizeAssetName(v);
+    return s.includes("GOPRO");
+  }
+
+  function isWetsuitName(v: string) {
+    const s = normalizeAssetName(v);
+    return s.includes("NEOPRENO");
+  }
+
+  function extractWetsuitSize(v: string): string | null {
+    const s = normalizeAssetName(v);
+    const match = s.match(/\b(XXS|XS|S|M|L|XL|XXL)\b/);
+    return match?.[1] ?? null;
+  }
+
+  function getAvailableGoPro() {
+    const row = assetAvailability.find((r) => r.type === "GOPRO");
+    return row?.available ?? 0;
+  }
+
+  function getAvailableWetsuit(size: string | null) {
+    const row = assetAvailability.find(
+      (r) => r.type === "WETSUIT" && (r.size ?? null) === (size ?? null)
+    );
+    return row?.available ?? 0;
+  }
+
+  function getServiceNameById(serviceId: string) {
+    return servicesMain.find((s) => s.id === serviceId)?.name ?? "";
+  }
+
+  function getMaxAllowedForCartItem(item: CartItem) {
+    const serviceName = getServiceNameById(item.serviceId);
+
+    if (isGoProName(serviceName)) {
+      return getAvailableGoPro();
+    }
+
+    if (isWetsuitName(serviceName)) {
+      const size = extractWetsuitSize(serviceName);
+      return getAvailableWetsuit(size);
+    }
+
+    return Number.POSITIVE_INFINITY;
+  }
 
   // Si cambia service, ajustar optionId (solo normal)
   useEffect(() => {
@@ -517,14 +575,45 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   const manualDiscountCentsRaw = Math.round(Number(manualDiscountEuros || 0) * 100);
   const manualDiscountCents = Math.max(0, Math.min(manualDiscountCentsRaw, maxManualDiscountCents));
   const shownFinalCentsWithManual = Math.max(0, shownFinalCents - manualDiscountCents);
+
   function addToCart() {
-    // Validación mínima
     if (!serviceId) throw new Error("Servicio requerido");
     if (!optionId) throw new Error("Duración requerida");
     if (Number(quantity) < 1) throw new Error("Cantidad inválida");
     if (Number(pax) < 1) throw new Error("PAX inválido");
 
-    // Evitar duplicados exactos: mismo servicio+opción => sumamos cantidad
+    const serviceName = getServiceNameById(serviceId);
+
+    if (isGoProName(serviceName)) {
+      const available = getAvailableGoPro();
+      const existingQty = cartItems
+        .filter((x) => x.serviceId === serviceId && x.optionId === optionId)
+        .reduce((sum, x) => sum + Number(x.quantity || 0), 0);
+
+      const requested = existingQty + Number(quantity);
+
+      if (requested > available) {
+        throw new Error(`Solo quedan ${available} GoPro disponibles.`);
+      }
+    }
+
+    if (isWetsuitName(serviceName)) {
+      const size = extractWetsuitSize(serviceName);
+      const available = getAvailableWetsuit(size);
+
+      const existingQty = cartItems
+        .filter((x) => x.serviceId === serviceId && x.optionId === optionId)
+        .reduce((sum, x) => sum + Number(x.quantity || 0), 0);
+
+      const requested = existingQty + Number(quantity);
+
+      if (requested > available) {
+        throw new Error(
+          `Solo quedan ${available} neoprenos${size ? ` talla ${size}` : ""} disponibles.`
+        );
+      }
+    }
+
     setCartItems((prev) => {
       const idx = prev.findIndex((x) => x.serviceId === serviceId && x.optionId === optionId);
       if (idx >= 0) {
@@ -533,18 +622,18 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         return copy;
       }
 
-      return [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          serviceId,
-          optionId,
-          quantity: Number(quantity),
-          pax: Number(pax),
-        },
-      ];
-    });
-  }
+    return [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        serviceId,
+        optionId,
+        quantity: Number(quantity),
+        pax: Number(pax),
+      },
+    ];
+  });
+}
 
   function removeFromCart(id: string) {
       setCartItems((prev) => prev.filter((x) => x.id !== id));
@@ -552,7 +641,27 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
   function updateCartItem(id: string, patch: Partial<Pick<CartItem, "quantity" | "pax">>) {
     setCartItems((prev) =>
-      prev.map((x) => (x.id === id ? { ...x, ...patch } : x))
+      prev.map((x) => {
+        if (x.id !== id) return x;
+
+        const next = { ...x, ...patch };
+        const serviceName = getServiceNameById(next.serviceId);
+
+        if (patch.quantity !== undefined) {
+          if (isGoProName(serviceName)) {
+            const available = getAvailableGoPro();
+            next.quantity = Math.max(1, Math.min(Number(next.quantity || 1), available));
+          }
+
+          if (isWetsuitName(serviceName)) {
+            const size = extractWetsuitSize(serviceName);
+            const available = getAvailableWetsuit(size);
+            next.quantity = Math.max(1, Math.min(Number(next.quantity || 1), available));
+          }
+        }
+
+        return next;
+      })
     );
   }
 
@@ -1306,6 +1415,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             cartItems={cartItems}
             servicesMain={servicesMain}
             options={options}
+            assetAvailability={assetAvailability}
+            getServiceNameById={getServiceNameById}
             onAddToCart={addToCart}
             onClearCart={clearCart}
             onRemoveFromCart={removeFromCart}

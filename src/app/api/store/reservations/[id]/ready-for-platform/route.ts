@@ -7,6 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { ReservationStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 
 export const runtime = "nodejs";
 
@@ -136,6 +137,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       // Si no es pack, terminamos aquí
       if (!parent.packId || !parent.isPackParent) {
+        await syncStoreFulfillmentTasksForReservation(tx, parent.id);
         return { ok: true, split: false, childrenCreated: 0 };
       }
 
@@ -145,6 +147,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
 
       if (pendingItems.length === 0) {
+        await syncStoreFulfillmentTasksForReservation(tx, parent.id);
         return { ok: true, split: true, already: true, childrenCreated: 0 };
       }
 
@@ -234,7 +237,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           where: { id: it.id },
           data: { splitReservationId: child.id },
         });
+
+        await syncStoreFulfillmentTasksForReservation(tx, child.id);
       }
+
+      await syncStoreFulfillmentTasksForReservation(tx, parent.id);
 
       return { ok: true, split: true, childrenCreated: createdChildrenIds.length, childrenIds: createdChildrenIds };
     });

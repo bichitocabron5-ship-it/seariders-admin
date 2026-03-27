@@ -9,6 +9,7 @@ import { ReservationStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { validateReusableAssetsAvailability } from "@/lib/store-rental-assets";
 
 export const runtime = "nodejs";
 
@@ -216,7 +217,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             select: {
               quantity: true,
               isExtra: true,
-              service: { select: { category: true } },
+              service: {
+                select: {
+                  category: true,
+                  name: true,
+                  code: true,
+                },
+              },
             },
           },
         },
@@ -236,7 +243,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         });
       }
 
-      // histÃ³ricos
+      // históricos
       if (current.status === ReservationStatus.COMPLETED || current.status === ReservationStatus.CANCELED) {
         return { ok: false as const, id, isHistorical: true };
       }
@@ -303,6 +310,44 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         });
         serviceCategory = String(svc?.category ?? "").toUpperCase();
       }
+
+      // ===== VALIDACIÓN INVENTARIO REAL (GOPRO / NEOPRENO) =====
+
+      const finalServiceId = b.serviceId ?? current.serviceId;
+      const finalQuantity = Number(b.quantity ?? current.quantity ?? 1);
+
+      let itemsToValidate: Array<{
+        quantity: number;
+        service: { name?: string | null; code?: string | null; category?: string | null } | null;
+      }> = [];
+
+      if (current.items && current.items.length > 0) {
+        itemsToValidate = current.items.map((it) => ({
+          quantity: Number(it.quantity ?? 0),
+          service: {
+            category: it.service?.category ?? null,
+            name: it.service?.name ?? null,
+            code: it.service?.code ?? null,
+          },
+        }));
+      } else if (finalServiceId) {
+        const svc = await tx.service.findUnique({
+          where: { id: finalServiceId },
+          select: { name: true, code: true, category: true },
+        });
+
+        itemsToValidate = [
+          {
+            quantity: finalQuantity,
+            service: svc,
+          },
+        ];
+      }
+
+      await validateReusableAssetsAvailability({
+        tx,
+        items: itemsToValidate,
+      });
 
       const requiredUnitsForValidation = computeRequiredContractUnits({
         quantity,
