@@ -7,6 +7,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import type { Prisma } from "@prisma/client";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 
 export const runtime = "nodejs";
 
@@ -89,6 +90,8 @@ export async function POST(req: Request) {
     if (parsed.data.status === "READY_FOR_PLATFORM") {
       await ensureUnitsTx(tx, parsed.data.id);
     }
+
+    await syncStoreFulfillmentTasksForReservation(tx, parsed.data.id);
   });
 
   return NextResponse.json({ ok: true });

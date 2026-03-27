@@ -251,6 +251,9 @@ export default function OperationsPage() {
           <a href="/admin" style={secondaryLink}>
             Admin
           </a>
+          <a href="/bar" style={secondaryLink}>
+            Bar
+          </a>
           <a href="/store" style={secondaryLink}>
             Store
           </a>
@@ -726,14 +729,6 @@ const secondaryLinkSmall: CSSProperties = {
   ...secondaryLink,
   padding: "8px 10px",
   borderRadius: 10,
-  fontSize: 12,
-};
-
-const compactBtn: CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: 10,
-  border: "1px solid #142033",
-  fontWeight: 900,
   fontSize: 12,
 };
 

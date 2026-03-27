@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { createReservationWithItems } from "@/lib/reservations/createReservationWithItems";
+import { validateReusableAssetsAvailability } from "@/lib/store-rental-assets";
 
 export const runtime = "nodejs";
 
@@ -93,6 +94,33 @@ export async function POST(req: Request) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+
+      // ===== VALIDACIÓN INVENTARIO REAL (ANTES DE CREAR) =====
+
+      const serviceIds = Array.from(new Set(items.map((i) => i.serviceIdOrCode)));
+
+      const services = await tx.service.findMany({
+        where: { id: { in: serviceIds } },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          category: true,
+        },
+      });
+
+      const serviceMap = new Map(services.map((s) => [s.id, s]));
+
+      const itemsToValidate = items.map((it) => ({
+        quantity: Number(it.quantity ?? 0),
+        service: serviceMap.get(it.serviceIdOrCode) ?? null,
+      }));
+
+      await validateReusableAssetsAvailability({
+        tx,
+        items: itemsToValidate,
+      });
+      
       return createReservationWithItems({
         tx,
         sessionUserId: session.userId,

@@ -1,7 +1,7 @@
 ﻿// src/app/booth/cash-closures/page.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Page, Card, Button, Input, Select, Alert, Stat, styles } from "@/components/ui";
 
 type Summary = {

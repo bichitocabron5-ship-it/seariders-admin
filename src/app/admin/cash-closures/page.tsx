@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import React, { useEffect, useMemo, useState } from "react";
 
 type Row = {
@@ -64,15 +65,16 @@ function netFrom(obj?: Record<string, number>) {
 }
 
 export default function AdminCashClosuresPage() {
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [comm, setComm] = useState<CommissionsSummary | null>(null);
   const [commLoading, setCommLoading] = useState(false);
 
-  const [origin, setOrigin] = useState<string>(""); // "", STORE, BOOTH, BAR
-  const [date, setDate] = useState<string>(""); // YYYY-MM-DD
-  const [includeVoided, setIncludeVoided] = useState(false);
+  const [origin, setOrigin] = useState<string>(() => searchParams.get("origin") ?? ""); // "", STORE, BOOTH, BAR
+  const [date, setDate] = useState<string>(() => searchParams.get("date") ?? ""); // YYYY-MM-DD
+  const [includeVoided, setIncludeVoided] = useState(() => searchParams.get("includeVoided") === "1");
 
   const [selectedId, setSelectedId] = useState<string>("");
 
@@ -101,6 +103,12 @@ export default function AdminCashClosuresPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setOrigin(searchParams.get("origin") ?? "");
+    setDate(searchParams.get("date") ?? "");
+    setIncludeVoided(searchParams.get("includeVoided") === "1");
+  }, [searchParams]);
 
   const selected = useMemo(() => rows.find((x) => x.id === selectedId) ?? null, [rows, selectedId]);
   const stats = useMemo(() => {

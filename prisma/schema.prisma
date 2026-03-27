@@ -27,12 +27,14 @@ model User {
   roles         UserRole[]
 
   // cierres/cajas
-  cashClosuresClosed   CashClosure[]     @relation("CashClosureClosedBy")
-  cashClosuresVoided   CashClosure[]     @relation("CashClosureVoidedBy")
-  cashShiftsOpened     CashShift[]       @relation("CashShiftOpenedBy")
-  cashShiftsClosed     CashShift[]       @relation("CashShiftClosedBy")
+  cashClosuresClosed   CashClosure[]      @relation("CashClosureClosedBy")
+  cashClosuresVoided   CashClosure[]      @relation("CashClosureVoidedBy")
+  cashShiftsOpened     CashShift[]        @relation("CashShiftOpenedBy")
+  cashShiftsClosed     CashShift[]        @relation("CashShiftClosedBy")
   cashClosureUsers     CashClosureUser[]
-  reviewedCashClosures CashClosure[]     @relation("CashClosureReviewedBy")
+  reviewedCashClosures CashClosure[]      @relation("CashClosureReviewedBy")
+  barStockMovements    BarStockMovement[] @relation("BarStockMovementUser")
+  fulfilledTasks       FulfillmentTask[]  @relation("FulfillmentDeliveredByUser")
 
   giftVouchersSold     GiftVoucher[] @relation("GiftSoldBy")
   giftVouchersRedeemed GiftVoucher[] @relation("GiftRedeemedBy")
@@ -40,16 +42,21 @@ model User {
   passConsumes         PassConsume[] @relation("PassConsumedBy")
   monitorRunsCreated   MonitorRun[]  @relation("MonitorRunCreatedBy")
 
-  maintenanceEventsCreated  MaintenanceEvent[]    @relation("MaintenanceEventCreatedBy")
-  sparePartMovementsCreated SparePartMovement[]   @relation("SparePartMovementCreatedBy")
-  maintenanceEventLogs      MaintenanceEventLog[] @relation("MaintenanceEventLogCreatedBy")
-  incidentsCreated          Incident[]            @relation("IncidentCreatedBy")
+  maintenanceEventsCreated   MaintenanceEvent[]    @relation("MaintenanceEventCreatedBy")
+  sparePartMovementsCreated  SparePartMovement[]   @relation("SparePartMovementCreatedBy")
+  maintenanceEventLogs       MaintenanceEventLog[] @relation("MaintenanceEventLogCreatedBy")
+  incidentsCreated           Incident[]            @relation("IncidentCreatedBy")
+  openedRentalAssetIncidents RentalAssetIncident[] @relation("RentalAssetIncidentOpenedByUser")
 
   workLogsApproved      WorkLog[]      @relation("WorkLogApprovedBy")
   workLogsCreated       WorkLog[]      @relation("WorkLogCreatedBy")
   employeeRatesCreated  EmployeeRate[] @relation("EmployeeRateCreatedBy")
   payrollEntriesCreated PayrollEntry[] @relation("PayrollEntryCreatedBy")
   expensesCreated       Expense[]      @relation("ExpenseCreatedBy")
+
+  returnedFulfillmentTasks  FulfillmentTask[]            @relation("FulfillmentReturnedByUser")
+  assignedFulfillmentAssets FulfillmentAssetAssignment[] @relation("FulfillmentAssignedByUser")
+  returnedFulfillmentAssets FulfillmentAssetAssignment[] @relation("FulfillmentReturnedAssetByUser")
 }
 
 model Role {
@@ -338,9 +345,9 @@ model Reservation {
   redeemedGiftVoucher  GiftVoucher?          @relation("GiftRedeemedReservation")
   giftVoucherId        String?               @unique
   giftVoucher          GiftVoucher?          @relation("GiftVoucherReedem", fields: [giftVoucherId], references: [id])
- 
-  passVoucherId        String?
-  passVoucher          PassVoucher?          @relation(fields: [passVoucherId], references: [id])
+
+  passVoucherId String?
+  passVoucher   PassVoucher? @relation(fields: [passVoucherId], references: [id])
 
   // ✅ relación 1:1 con el consumo que creó ESTA reserva (cada reserva viene de 1 consume)
   passConsume   PassConsume?
@@ -361,6 +368,7 @@ model Reservation {
   incidents             Incident[]
   extraTimeEvents       ExtraTimeEvent[]
   units                 ReservationUnit[]
+  fulfillmentTasks      FulfillmentTask[]
 
   @@index([activityDate, status])
   @@index([taxiboatTripId])
@@ -451,14 +459,14 @@ model ReservationContract {
   status    ContractStatus @default(DRAFT)
 
   // Datos conductor/contrato (pueden ser distintos por unidad)
-  driverName      String? @db.VarChar(120)
-  driverPhone     String? @db.VarChar(40)
-  driverEmail     String? @db.VarChar(160)
-  driverCountry   String? @db.VarChar(2)
-  driverAddress   String? @db.VarChar(200)
+  driverName       String? @db.VarChar(120)
+  driverPhone      String? @db.VarChar(40)
+  driverEmail      String? @db.VarChar(160)
+  driverCountry    String? @db.VarChar(2)
+  driverAddress    String? @db.VarChar(200)
   driverPostalCode String? @db.VarChar(20)
-  driverDocType   String? @db.VarChar(20)
-  driverDocNumber String? @db.VarChar(40)
+  driverDocType    String? @db.VarChar(20)
+  driverDocNumber  String? @db.VarChar(40)
 
   licenseSchool String? @db.VarChar(120)
   licenseType   String? @db.VarChar(40)
@@ -469,28 +477,28 @@ model ReservationContract {
   minorAuthorizationProvided Boolean   @default(false)
 
   // Firma digital
-  templateCode           String?
-  templateVersion        String?
+  templateCode    String?
+  templateVersion String?
 
-  renderedHtml           String?
-  renderedPdfUrl         String?
-  renderedPdfKey         String?
+  renderedHtml   String?
+  renderedPdfUrl String?
+  renderedPdfKey String?
 
-  signatureRequestId     String?
-  signatureStatusRaw     String?
-  signaturePayloadJson   Json?
+  signatureRequestId   String?
+  signatureStatusRaw   String?
+  signaturePayloadJson Json?
 
-  imageConsentAccepted      Boolean   @default(false)
-  imageConsentAcceptedAt    DateTime?
-  imageConsentAcceptedBy    String?
+  imageConsentAccepted   Boolean   @default(false)
+  imageConsentAcceptedAt DateTime?
+  imageConsentAcceptedBy String?
 
-  minorAuthorizationFileKey String?
-  minorAuthorizationFileUrl String?
-  minorAuthorizationFileName String?
+  minorAuthorizationFileKey    String?
+  minorAuthorizationFileUrl    String?
+  minorAuthorizationFileName   String?
   minorAuthorizationUploadedAt DateTime?
 
-  signatureSignedPdfUrl  String?
-  signatureAuditJson     Json?
+  signatureSignedPdfUrl String?
+  signatureAuditJson    Json?
 
   signedAt            DateTime?
   signatureProvider   String?   @db.VarChar(40)
@@ -508,7 +516,7 @@ model ReservationContract {
   preparedJetski   Jetski? @relation("ReservationContractPreparedJetski", fields: [preparedJetskiId], references: [id], onDelete: SetNull)
 
   preparedAssetId String?
-  preparedAsset   Asset? @relation("ReservationContractPreparedAsset", fields: [preparedAssetId], references: [id], onDelete: SetNull)
+  preparedAsset   Asset?  @relation("ReservationContractPreparedAsset", fields: [preparedAssetId], references: [id], onDelete: SetNull)
 
   @@unique([reservationId, unitIndex])
   @@index([reservationId])
@@ -1496,6 +1504,254 @@ model Expense {
   @@index([employeeId])
 }
 
+model BarCategory {
+  id        String  @id @default(cuid())
+  name      String  @db.VarChar(80)
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  products BarProduct[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name])
+  @@index([isActive, sortOrder])
+}
+
+model BarProduct {
+  id String @id @default(cuid())
+
+  categoryId String
+  category   BarCategory @relation(fields: [categoryId], references: [id])
+
+  name String         @db.VarChar(120)
+  type BarProductType @default(OTHER)
+  sku  String?        @db.VarChar(60)
+
+  salePriceCents Int
+  vatRate        Decimal @default(21.00) @db.Decimal(5, 2)
+
+  controlsStock Boolean @default(true)
+  currentStock  Decimal @default(0) @db.Decimal(12, 3)
+  minStock      Decimal @default(0) @db.Decimal(12, 3)
+
+  unitLabel String? @db.VarChar(30)
+  isActive  Boolean @default(true)
+
+  staffEligible   Boolean @default(false)
+  staffPriceCents Int?
+
+  stockMovements BarStockMovement[]
+  taskItems      FulfillmentTaskItem[]
+  promotions     BarPromotion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sku])
+  @@index([categoryId, isActive])
+  @@index([type, isActive])
+}
+
+model BarStockMovement {
+  id String @id @default(cuid())
+
+  productId String
+  product   BarProduct @relation(fields: [productId], references: [id])
+
+  type   StockMovementType
+  reason StockMovementReason
+
+  quantity    Decimal  @db.Decimal(12, 3)
+  stockBefore Decimal? @db.Decimal(12, 3)
+  stockAfter  Decimal? @db.Decimal(12, 3)
+
+  unitCostCents Int?
+  notes         String? @db.Text
+
+  sourceType String? @db.VarChar(40)
+  sourceId   String? @db.VarChar(120)
+
+  userId String?
+  user   User?   @relation("BarStockMovementUser", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([productId, createdAt])
+  @@index([reason, createdAt])
+  @@index([sourceType, sourceId])
+}
+
+model BarPromotion {
+  id String @id @default(cuid())
+
+  productId String
+  product   BarProduct @relation(fields: [productId], references: [id])
+
+  name String @db.VarChar(120)
+
+  type BarPromotionType
+
+  // FIXED_TOTAL_FOR_QTY
+  exactQty        Int?
+  fixedTotalCents Int?
+
+  // BUY_X_PAY_Y
+  buyQty Int?
+  payQty Int?
+
+  isActive Boolean @default(true)
+
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, isActive])
+}
+
+model FulfillmentTask {
+  id String @id @default(cuid())
+
+  reservationId String?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id])
+
+  source FulfillmentSource @default(STORE)
+  type   FulfillmentType
+  area   FulfillmentArea   @default(BAR)
+  status FulfillmentStatus @default(PENDING)
+
+  title            String  @db.VarChar(140)
+  customerNameSnap String? @db.VarChar(120)
+
+  paid            Boolean @default(false)
+  paidAmountCents Int?    @default(0)
+
+  scheduledFor      DateTime?
+  deliveredAt       DateTime?
+  deliveredByUserId String?
+  deliveredByUser   User?     @relation("FulfillmentDeliveredByUser", fields: [deliveredByUserId], references: [id])
+
+  returnedAt       DateTime?
+  returnedByUserId String?
+  returnedByUser   User?     @relation("FulfillmentReturnedByUser", fields: [returnedByUserId], references: [id])
+
+  notes String? @db.Text
+
+  items            FulfillmentTaskItem[]
+  assetAssignments FulfillmentAssetAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([reservationId])
+  @@index([area, status, scheduledFor])
+  @@index([type, status])
+}
+
+model FulfillmentTaskItem {
+  id String @id @default(cuid())
+
+  taskId String
+  task   FulfillmentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  barProductId String?
+  barProduct   BarProduct? @relation(fields: [barProductId], references: [id])
+
+  reservationItemId String?
+  kind              String  @db.VarChar(30) // BAR_PRODUCT | EXTRA
+
+  nameSnap String  @db.VarChar(140)
+  quantity Decimal @db.Decimal(12, 3)
+
+  deliveredAt DateTime?
+  returnedAt  DateTime?
+
+  assetAssignments FulfillmentAssetAssignment[]
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+  @@index([barProductId])
+  @@index([reservationItemId])
+}
+
+model RentalAsset {
+  id String @id @default(cuid())
+
+  type     RentalAssetType
+  name     String            @db.VarChar(120)
+  code     String?           @db.VarChar(60) // Ej: GOPRO-01, WET-M-03
+  size     String?           @db.VarChar(20) // Ej: XS, S, M, L, XL
+  status   RentalAssetStatus @default(AVAILABLE)
+  notes    String?           @db.Text
+  isActive Boolean           @default(true)
+
+  assignments FulfillmentAssetAssignment[]
+
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  rentalAssetIncidents RentalAssetIncident[]
+
+  @@unique([code])
+  @@index([type, status])
+  @@index([isActive, status])
+  @@index([type, size, status])
+}
+
+model RentalAssetIncident {
+  id String @id @default(cuid())
+
+  rentalAssetId String
+  rentalAsset   RentalAsset @relation(fields: [rentalAssetId], references: [id])
+
+  type RentalAssetIncidentType
+  note String?                 @db.Text
+
+  openedAt       DateTime @default(now())
+  openedByUserId String?
+  openedByUser   User?    @relation("RentalAssetIncidentOpenedByUser", fields: [openedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rentalAssetId, openedAt])
+  @@index([type, openedAt])
+}
+
+model FulfillmentAssetAssignment {
+  id String @id @default(cuid())
+
+  taskId String
+  task   FulfillmentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  taskItemId String?
+  taskItem   FulfillmentTaskItem? @relation(fields: [taskItemId], references: [id], onDelete: SetNull)
+
+  rentalAssetId String
+  rentalAsset   RentalAsset @relation(fields: [rentalAssetId], references: [id])
+
+  assignedAt       DateTime @default(now())
+  assignedByUserId String?
+  assignedByUser   User?    @relation("FulfillmentAssignedByUser", fields: [assignedByUserId], references: [id])
+
+  returnedAt       DateTime?
+  returnedByUserId String?
+  returnedByUser   User?     @relation("FulfillmentReturnedAssetByUser", fields: [returnedByUserId], references: [id])
+
+  returnOk    Boolean?
+  returnNotes String?  @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([taskItemId])
+  @@index([rentalAssetId])
+}
+
 enum FaultCodeVerificationStatus {
   VERIFIED_OFFICIAL
   VERIFIED_COMMUNITY
@@ -1802,4 +2058,81 @@ enum ExpenseCostCenter {
   OPERATIONS
   MARKETING
   PORT
+}
+
+enum BarProductType {
+  DRINK
+  FOOD
+  SNACK
+  MERCH
+  ICE
+  OTHER
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+}
+
+enum StockMovementReason {
+  PURCHASE
+  BAR_SALE
+  CATERING_DELIVERY
+  EXTRA_DELIVERY
+  MANUAL_ADJUSTMENT
+  WASTE
+  RETURN
+  OTHER
+}
+
+enum FulfillmentSource {
+  STORE
+  BAR
+  SYSTEM
+}
+
+enum FulfillmentType {
+  CATERING
+  EXTRA_DELIVERY
+}
+
+enum FulfillmentArea {
+  BAR
+  STORE
+  PLATFORM
+}
+
+enum FulfillmentStatus {
+  PENDING
+  DELIVERED
+  RETURNED
+  CANCELED
+}
+
+enum RentalAssetType {
+  GOPRO
+  WETSUIT
+  OTHER
+}
+
+enum RentalAssetStatus {
+  AVAILABLE
+  DELIVERED
+  MAINTENANCE
+  DAMAGED
+  LOST
+  INACTIVE
+}
+
+enum RentalAssetIncidentType {
+  DAMAGED
+  MAINTENANCE
+  LOST
+  OTHER
+}
+
+enum BarPromotionType {
+  FIXED_TOTAL_FOR_QTY
+  BUY_X_PAY_Y
 }

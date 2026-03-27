@@ -1,4 +1,3 @@
-﻿// src/app/api/store/reservations/add-extra/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -6,6 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { computeAutoDiscountDetail } from "@/lib/discounts";
+import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 
 export const runtime = "nodejs";
 
@@ -18,35 +18,38 @@ const Body = z.object({
 
 export async function POST(req: Request) {
   try {
-    // âœ… Auth (STORE o ADMIN)
     const cookieStore = await cookies();
-    const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
+    const session = await getIronSession<AppSession>(
+      cookieStore as unknown as never,
+      sessionOptions
+    );
     if (!session?.userId || !["STORE", "ADMIN"].includes(session.role as string)) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
     const json = await req.json().catch(() => null);
     const parsed = Body.safeParse(json);
-    if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+    if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
     const { reservationId, extraServiceId, quantity, pax } = parsed.data;
 
-    // âœ… Reserva existe (mÃ­nimo)
     const res = await prisma.reservation.findUnique({
       where: { id: reservationId },
       select: { id: true, status: true },
     });
     if (!res) return new NextResponse("Reserva no existe", { status: 404 });
 
-    // âœ… Validar que el servicio es EXTRA
     const extraSvc = await prisma.service.findUnique({
       where: { id: extraServiceId },
       select: { id: true, name: true, category: true, isActive: true },
     });
-    if (!extraSvc || !extraSvc.isActive) return new NextResponse("Extra no existe o estÃ¡ inactivo", { status: 404 });
-    if (extraSvc.category !== "EXTRA") return new NextResponse("El servicio seleccionado no es un extra", { status: 400 });
+    if (!extraSvc || !extraSvc.isActive) {
+      return new NextResponse("Extra no existe o está inactivo", { status: 404 });
+    }
+    if (extraSvc.category !== "EXTRA") {
+      return new NextResponse("El servicio seleccionado no es un extra", { status: 400 });
+    }
 
-    // âœ… Precio vigente para extra: durationMin = null (legacy)
     const now = new Date();
     const price = await prisma.servicePrice.findFirst({
       where: {
@@ -61,14 +64,15 @@ export async function POST(req: Request) {
     });
 
     if (!price) {
-      return new NextResponse(`Este extra no tiene precio vigente: ${extraSvc.name}`, { status: 400 });
+      return new NextResponse(`Este extra no tiene precio vigente: ${extraSvc.name}`, {
+        status: 400,
+      });
     }
 
     const unitPriceCents = Number(price.basePriceCents) || 0;
     const totalPriceCents = unitPriceCents * quantity;
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1) crear item extra
       await tx.reservationItem.create({
         data: {
           reservationId,
@@ -84,7 +88,6 @@ export async function POST(req: Request) {
         select: { id: true },
       });
 
-      // 2) sumas eficientes (principal vs total)
       const [mainSum, allSum] = await Promise.all([
         tx.reservationItem.aggregate({
           where: { reservationId, isExtra: false },
@@ -96,10 +99,9 @@ export async function POST(req: Request) {
         }),
       ]);
 
-      const serviceSubtotal = Number(mainSum._sum.totalPriceCents ?? 0); // SOLO principal
-      const newTotal = Number(allSum._sum.totalPriceCents ?? 0); // principal + extras
+      const serviceSubtotal = Number(mainSum._sum.totalPriceCents ?? 0);
+      const newTotal = Number(allSum._sum.totalPriceCents ?? 0);
 
-      // 3) cargar reserva (promo/manual + customerCountry + ids principal)
       const reservation = await tx.reservation.findUnique({
         where: { id: reservationId },
         select: {
@@ -112,13 +114,11 @@ export async function POST(req: Request) {
       });
       if (!reservation) throw new Error("Reserva no existe");
 
-      // 3.1) categorÃ­a del servicio principal (para auto descuento)
       const mainSvc = await tx.service.findUnique({
         where: { id: reservation.serviceId },
         select: { category: true },
       });
 
-      // 4) auto descuento SOLO sobre principal (nunca sobre extras)
       const detail = await computeAutoDiscountDetail({
         when: new Date(),
         item: {
@@ -134,22 +134,22 @@ export async function POST(req: Request) {
 
       const autoDiscountCents = Number(detail.discountCents ?? 0);
 
-      // 5) total final = (principal + extras) - manual - auto
       const finalTotal = Math.max(
         0,
         newTotal - Number(reservation.manualDiscountCents ?? 0) - autoDiscountCents
       );
 
-      // 6) persistir
       await tx.reservation.update({
         where: { id: reservationId },
         data: {
-          basePriceCents: serviceSubtotal, // âœ… comisionable = principal
+          basePriceCents: serviceSubtotal,
           autoDiscountCents,
-          totalPriceCents: finalTotal, // âœ… cliente paga (incluye extras)
+          totalPriceCents: finalTotal,
         },
         select: { id: true },
       });
+
+      await syncStoreFulfillmentTasksForReservation(tx, reservationId);
 
       return {
         serviceSubtotalCents: serviceSubtotal,
@@ -162,8 +162,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, ...result });
   } catch (e: unknown) {
     console.error("add-extra error:", e);
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Error desconocido" }, { status: 500 });
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Error desconocido" },
+      { status: 500 }
+    );
   }
 }
-
-
