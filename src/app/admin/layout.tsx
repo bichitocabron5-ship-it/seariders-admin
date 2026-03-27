@@ -110,6 +110,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             <a href="/admin/expenses" style={navLink}>
               Gastos / Contabilidad
             </a>
+            <a href="/admin/bar" style={navLink}>
+              Stock Bar
+            </a>
           </div>
         </div>
       </div>

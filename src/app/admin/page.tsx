@@ -28,6 +28,7 @@ const cards: AdminCard[] = [
   { href: "/admin/cash-closures", tag: "BOX", icon: "CA", title: "Cierres de caja", description: "Turnos, cierres y control de caja.", section: "Operativa", accent: "#ccfbf1" },
   { href: "/admin/expenses", tag: "EXP", icon: "EX", title: "Gastos", description: "Contabilidad operativa, proveedores y categorias.", section: "Operativa", accent: "#ccfbf1" },
   { href: "/admin/slots", tag: "SLT", icon: "TM", title: "Slots", description: "Disponibilidad, cupos y reglas de reserva.", section: "Operativa", accent: "#ccfbf1" },
+  { href: "/admin/bar", tag: "BAR", icon: "BA", title: "Bar", description: "Catalogo, stock y accesos al flujo operativo del punto BAR.", section: "Operativa", accent: "#ccfbf1" },
   { href: "/admin/assets", tag: "AST", icon: "NA", title: "Nautica", description: "Boats, towboat, jetcar y otros recursos.", section: "Flota", accent: "#ede9fe" },
   { href: "/admin/jetskis", tag: "JSK", icon: "JS", title: "Jetskis", description: "Flota, matricula, horas y service.", section: "Flota", accent: "#ede9fe" },
   { href: "/admin/hr", tag: "HR", icon: "HR", title: "Recursos humanos", description: "Trabajadores, perfiles y organizacion interna.", section: "Personal", accent: "#dcfce7" },
