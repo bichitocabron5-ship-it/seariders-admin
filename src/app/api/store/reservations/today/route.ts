@@ -8,6 +8,31 @@ import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 
 export const runtime = "nodejs";
 
+function computeDepositCents(params: {
+  storedDepositCents?: number | null;
+  quantity: number | null;
+  isLicense: boolean;
+  serviceCategory?: string | null;
+  items?: Array<{ quantity: number | null; isExtra: boolean; service: { category: string | null } | null }>;
+}) {
+  const stored = Number(params.storedDepositCents ?? 0);
+  if (stored > 0) return stored;
+
+  const jetskiUnitsFromItems = (params.items ?? [])
+    .filter((item) => !item.isExtra && String(item.service?.category ?? "").toUpperCase() === "JETSKI")
+    .reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+
+  const fallbackUnits =
+    jetskiUnitsFromItems > 0
+      ? jetskiUnitsFromItems
+      : String(params.serviceCategory ?? "").toUpperCase() === "JETSKI"
+        ? Math.max(0, Number(params.quantity ?? 0))
+        : 0;
+
+  if (fallbackUnits <= 0) return stored;
+  return (params.isLicense ? 50000 : 10000) * fallbackUnits;
+}
+
 export async function GET() {
   // ✅ App Router: cookies() + getIronSession(cookieStore)
   const cookieStore = await cookies();
@@ -144,6 +169,17 @@ export async function GET() {
       }, 0);
 
     const refundableDepositCents = Math.max(0, paidDepositCents);
+    const depositCents = computeDepositCents({
+      storedDepositCents: r.depositCents,
+      quantity: r.quantity,
+      isLicense: Boolean(r.isLicense),
+      serviceCategory: r.service?.category ?? null,
+      items: (r.items ?? []).map((item) => ({
+        quantity: item.quantity ?? 0,
+        isExtra: Boolean(item.isExtra),
+        service: item.service ? { category: item.service.category ?? null } : null,
+      })),
+    });
 
     // items principal + extras
     const mainItem = r.items.find((it) => !it.isExtra) ?? null;
@@ -176,7 +212,7 @@ export async function GET() {
  
     // pendientes separados (✅ servicio basado en items)
     const pendingServiceCents = Math.max(0, soldTotalCents - paidServiceCents);
-    const pendingDepositCents = Math.max(0, (r.depositCents ?? 0) - refundableDepositCents);
+    const pendingDepositCents = Math.max(0, depositCents - refundableDepositCents);
     const pendingCents = pendingServiceCents + pendingDepositCents;
 
     const requiredUnits = computeRequiredContractUnits({
@@ -262,7 +298,7 @@ export async function GET() {
       // legacy (por convivencia)
       basePriceCents: r.basePriceCents,
       totalPriceCents: r.totalPriceCents,
-      depositCents: r.depositCents,
+      depositCents,
       pvpTotalCents,
       finalTotalCents,
       autoDiscountCents: r.autoDiscountCents ?? 0,
