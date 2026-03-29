@@ -112,6 +112,7 @@ export async function GET(req: Request) {
     customerName: string | null;
     totalCents: number;
     pendingCents: number;
+    paidCents: number;
     service: { name: string; category: string | null } | null;
     option: { durationMinutes: number; paxMax: number } | null;
   };
@@ -129,6 +130,7 @@ export async function GET(req: Request) {
     const pendingServiceCents = Math.max(0, serviceDue - paid.serviceNet);
     const pendingDepositCents = Math.max(0, depositDue - paid.depositNet);
     const pendingCents = pendingServiceCents + pendingDepositCents;
+    const paidCents = Math.max(0, paid.serviceNet + paid.depositNet);
 
     const totalCents = serviceDue; // y la fianza ya la tienes en depositDue si quieres mostrarla luego
 
@@ -142,6 +144,7 @@ export async function GET(req: Request) {
       customerName: r.customerName,
       totalCents,
       pendingCents,
+      paidCents,
       service: r.service,
       option: r.option,
     });

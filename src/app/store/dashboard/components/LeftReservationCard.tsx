@@ -56,6 +56,7 @@ type LeftReservationCardProps = {
   chargeServiceSplit: (reservationId: string, maxServiceCents: number) => Promise<void>;
   btnSecondary: React.CSSProperties;
   nowMs: number;
+  cancelReservation: (reservationId: string, opts: { refund: boolean; method: PayMethod }) => Promise<void>;
 };
 
 export function LeftReservationCard(props: LeftReservationCardProps) {
@@ -80,6 +81,7 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
     chargeServiceSplit,
     btnSecondary,
     nowMs,
+    cancelReservation,
   } = props;
   const router = useRouter();
 
@@ -112,6 +114,7 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
   const isFullyPaid = pendingTotal === 0;
   const servicePaid = Math.max(0, Number(r.paidServiceCents ?? 0));
   const depositPaid = Math.min(paid, deposit);
+  const hasRefundableAmount = paid > 0;
   const requiredUnits = Number(r.contractsBadge?.requiredUnits ?? 0);
   const readyCount = Number(r.contractsBadge?.readyCount ?? 0);
   const showContracts = requiredUnits > 0 || readyCount > 0;
@@ -161,6 +164,28 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" onClick={() => router.push(`/store/create?editFrom=${r.id}`)} style={btnSecondary}>
+            Reagendar
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!hasRefundableAmount) {
+                if (!window.confirm("¿Cancelar esta reserva?")) return;
+                await cancelReservation(r.id, { refund: false, method });
+                return;
+              }
+
+              const refund = window.confirm(
+                `La reserva tiene cobros registrados. Aceptar = cancelar y devolver usando ${method}. Cancelar = seguir sin devolución.`
+              );
+              if (!refund && !window.confirm("¿Confirmas cancelar sin devolución?")) return;
+              await cancelReservation(r.id, { refund, method });
+            }}
+            style={{ ...btnSecondary, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b" }}
+          >
+            Cancelar
+          </button>
           {needsContracts ? (
             <button type="button" onClick={() => router.push(`/store/create?migrateFrom=${r.id}#contracts`)} style={btnSecondary}>
               Completar contratos

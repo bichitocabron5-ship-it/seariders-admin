@@ -11,7 +11,8 @@ type LiteRow = {
   customerName: string;
   formalizedAt?: string | null;
   pendingCents?: number;
-  finalTotalCents?: number;
+  totalCents?: number;
+  paidCents?: number;
   service?: { name: string; category?: string | null };
   option?: { durationMinutes?: number | null; paxMax?: number | null };
 };
@@ -205,8 +206,17 @@ const metricValueStyle: React.CSSProperties = {
   color: "#0f172a",
 };
 
-function RowCard({ r }: { r: LiteRow }) {
+function RowCard({
+  r,
+  onCancel,
+  canceling,
+}: {
+  r: LiteRow;
+  onCancel: (row: LiteRow) => Promise<void>;
+  canceling: boolean;
+}) {
   const a = actionForRow(r);
+  const canCancel = displayStatus(r) !== "CANCELED" && displayStatus(r) !== "COMPLETED";
   return (
     <article style={{ padding: 14, border: "1px solid #e2e8f0", borderRadius: 16, display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -226,7 +236,7 @@ function RowCard({ r }: { r: LiteRow }) {
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 13, color: "#334155" }}>
-        {typeof r.finalTotalCents !== "undefined" ? <span>Total: <b>{euros(r.finalTotalCents)}</b></span> : null}
+        {typeof r.totalCents !== "undefined" ? <span>Total: <b>{euros(r.totalCents)}</b></span> : null}
         {typeof r.pendingCents !== "undefined" ? <span>Pendiente: <b>{euros(r.pendingCents)}</b></span> : null}
       </div>
 
@@ -247,6 +257,22 @@ function RowCard({ r }: { r: LiteRow }) {
             {a.secondary.label}
           </a>
         ) : null}
+        {canCancel ? (
+          <button
+            type="button"
+            onClick={() => void onCancel(r)}
+            disabled={canceling}
+            style={{
+              ...actionStyle,
+              border: "1px solid #fecaca",
+              background: "#fff1f2",
+              color: "#991b1b",
+              cursor: canceling ? "wait" : "pointer",
+            }}
+          >
+            {canceling ? "Cancelando..." : "Cancelar"}
+          </button>
+        ) : null}
       </div>
     </article>
   );
@@ -258,6 +284,7 @@ export default function StoreCalendarPage() {
   const [err, setErr] = useState<string | null>(null);
   const [data, setData] = useState<ApiResponse | null>(null);
   const [selectedDay, setSelectedDay] = useState<string>("");
+  const [cancelingId, setCancelingId] = useState<string>("");
 
   const month = useMemo(() => monthKey(monthDate), [monthDate]);
 
@@ -328,6 +355,65 @@ export default function StoreCalendarPage() {
         0
       ),
     [data]
+  );
+
+  const askRefundMethod = useCallback(() => {
+    const raw = window.prompt("Método para la devolución: CASH, CARD, BIZUM o TRANSFER", "CARD");
+    if (raw === null) return null;
+    const value = raw.trim().toUpperCase();
+    if (value === "CASH" || value === "CARD" || value === "BIZUM" || value === "TRANSFER") return value;
+    throw new Error("Método de devolución no válido");
+  }, []);
+
+  const cancelReservation = useCallback(
+    async (row: LiteRow) => {
+      const paidCents = Math.max(0, Number(row.paidCents ?? 0));
+      const wantsCancel = window.confirm(
+        paidCents > 0
+          ? "La reserva tiene cobros registrados. Aceptar = continuar con la cancelación."
+          : "¿Cancelar esta reserva?"
+      );
+      if (!wantsCancel) return;
+
+      let refundMode: "NONE" | "FULL" = "NONE";
+      let refundMethod: "CASH" | "CARD" | "BIZUM" | "TRANSFER" = "CARD";
+
+      if (paidCents > 0) {
+        const wantsRefund = window.confirm("Aceptar = cancelar y devolver el dinero cobrado. Cancelar = cancelar sin devolución.");
+        refundMode = wantsRefund ? "FULL" : "NONE";
+        if (wantsRefund) {
+          const chosenMethod = askRefundMethod();
+          if (!chosenMethod) return;
+          refundMethod = chosenMethod;
+        }
+      }
+
+      setCancelingId(row.id);
+      setErr(null);
+      try {
+        const res = await fetch(`/api/store/reservations/${row.id}/cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            refundMode,
+            refundMethod,
+            refundOrigin: "STORE",
+          }),
+        });
+
+        if (!res.ok) {
+          const payload = await res.json().catch(() => null);
+          throw new Error(payload?.error || `Error ${res.status}`);
+        }
+
+        await load();
+      } catch (e: unknown) {
+        setErr(e instanceof Error ? e.message : "No se pudo cancelar la reserva");
+      } finally {
+        setCancelingId("");
+      }
+    },
+    [askRefundMethod, load]
   );
 
   return (
@@ -495,23 +581,23 @@ export default function StoreCalendarPage() {
                 <>
                   <div style={{ padding: 12, borderRadius: 16, border: "1px solid #fcd34d", background: "#fffbeb", display: "grid", gap: 10 }}>
                     <div style={{ fontWeight: 900 }}>Pendientes de formalizar ({selectedGroups.pending.length})</div>
-                    {selectedGroups.pending.length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>Sin pendientes.</div> : selectedGroups.pending.map((r) => <RowCard key={r.id} r={r} />)}
+                    {selectedGroups.pending.length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>Sin pendientes.</div> : selectedGroups.pending.map((r) => <RowCard key={r.id} r={r} onCancel={cancelReservation} canceling={cancelingId === r.id} />)}
                   </div>
 
                   <div style={{ padding: 12, borderRadius: 16, border: "1px solid #e2e8f0", background: "#fff", display: "grid", gap: 10 }}>
                     <div style={{ fontWeight: 900 }}>Operativa ({selectedGroups.ops.length})</div>
-                    {selectedGroups.ops.length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>Sin reservas operativas.</div> : selectedGroups.ops.map((r) => <RowCard key={r.id} r={r} />)}
+                    {selectedGroups.ops.length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>Sin reservas operativas.</div> : selectedGroups.ops.map((r) => <RowCard key={r.id} r={r} onCancel={cancelReservation} canceling={cancelingId === r.id} />)}
                   </div>
 
                   <div style={{ padding: 12, borderRadius: 16, border: "1px solid #e2e8f0", background: "#f8fafc", display: "grid", gap: 10 }}>
                     <div style={{ fontWeight: 900 }}>Histórico ({selectedGroups.hist.length})</div>
-                    {selectedGroups.hist.length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>Sin reservas históricas.</div> : selectedGroups.hist.map((r) => <RowCard key={r.id} r={r} />)}
+                    {selectedGroups.hist.length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>Sin reservas históricas.</div> : selectedGroups.hist.map((r) => <RowCard key={r.id} r={r} onCancel={cancelReservation} canceling={cancelingId === r.id} />)}
                   </div>
                 </>
               )}
 
               <div style={{ fontSize: 12, color: "#64748b" }}>
-                Este panel mantiene la navegación actual: crear, editar, abrir o formalizar según el estado de cada reserva.
+                Este panel permite reagendar desde `Editar` y cancelar con o sin devolución desde cualquier reserva no histórica.
               </div>
             </div>
           )}
