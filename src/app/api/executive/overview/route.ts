@@ -1,12 +1,103 @@
 // src/app/api/executive/overview/route.ts
-import { NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
-import { cookies } from "next/headers";
+import { PayrollStatus, Prisma, WorkLogStatus } from "@prisma/client";
+import { cookies, headers } from "next/headers";
+import { NextResponse } from "next/server";
+
 import { prisma } from "@/lib/prisma";
-import { sessionOptions, AppSession } from "@/lib/session";
-import { PayrollStatus, WorkLogStatus, Prisma } from "@prisma/client";
+import { AppSession, sessionOptions } from "@/lib/session";
 
 export const runtime = "nodejs";
+
+type ReservationMetricInput = {
+  id: string;
+  status: string;
+  formalizedAt: Date | null;
+  source: string | null;
+  marketing?: string | null;
+  scheduledTime: Date | null;
+  activityDate: Date | null;
+  service: { name: string | null } | null;
+  channel: { name: string | null } | null;
+  totalPriceCents: number | null;
+  autoDiscountCents: number | null;
+  manualDiscountCents: number | null;
+  depositCents: number | null;
+  payments: Array<{
+    amountCents: number;
+    direction: "IN" | "OUT";
+    isDeposit: boolean;
+  }>;
+  items: Array<{
+    isExtra: boolean;
+    totalPriceCents: number | null;
+    service: { name: string | null } | null;
+  }>;
+  depositHeld?: boolean;
+  createdAt?: Date;
+};
+
+type MonthExpenseRow = {
+  id: string;
+  status: "PENDING" | "PAID" | "DRAFT" | "CANCELED";
+  costCenter: string;
+  amountCents: number;
+  taxCents: number | null;
+  totalCents: number | null;
+  vendor: {
+    id: string;
+    name: string;
+  } | null;
+  category: {
+    id: string;
+    name: string;
+  } | null;
+};
+
+type OperationsOverviewResponse = {
+  summary?: {
+    inSea?: number;
+    ready?: number;
+    unformalized?: number;
+    incidentsOpen?: number;
+  };
+  alerts?: {
+    criticalPendingPayments?: unknown[];
+  };
+} | null;
+
+const reservationExecutiveSelect =
+  Prisma.validator<Prisma.ReservationSelect>()({
+    id: true,
+    status: true,
+    formalizedAt: true,
+    source: true,
+    marketing: true,
+    scheduledTime: true,
+    activityDate: true,
+    totalPriceCents: true,
+    autoDiscountCents: true,
+    manualDiscountCents: true,
+    depositCents: true,
+    depositHeld: true,
+    createdAt: true,
+    payments: {
+      select: {
+        amountCents: true,
+        direction: true,
+        isDeposit: true,
+      },
+    },
+    channel: { select: { name: true } },
+    service: { select: { name: true } },
+    items: {
+      select: {
+        isExtra: true,
+        totalPriceCents: true,
+        service: { select: { name: true } },
+      },
+    },
+  });
 
 async function requireAdmin() {
   const cookieStore = await cookies();
@@ -14,12 +105,24 @@ async function requireAdmin() {
     cookieStore as unknown as never,
     sessionOptions
   );
+
   if (!session?.userId) return null;
   if (session.role === "ADMIN") return session;
+
   return null;
 }
 
-function getYmdInTz(date: Date, tz: string): { y: number; m: number; d: number } {
+function cookieHeaderFromStore(store: Awaited<ReturnType<typeof cookies>>) {
+  return store
+    .getAll()
+    .map((cookie) => `${cookie.name}=${encodeURIComponent(cookie.value)}`)
+    .join("; ");
+}
+
+function getYmdInTz(
+  date: Date,
+  tz: string
+): { y: number; m: number; d: number } {
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
     year: "numeric",
@@ -28,13 +131,24 @@ function getYmdInTz(date: Date, tz: string): { y: number; m: number; d: number }
   });
   const s = fmt.format(date);
   const [yy, mm, dd] = s.split("-").map(Number);
+
   return { y: yy, m: mm, d: dd };
 }
 
-function addDaysYmd(y: number, m: number, d: number, days: number): { y: number; m: number; d: number } {
+function addDaysYmd(
+  y: number,
+  m: number,
+  d: number,
+  days: number
+): { y: number; m: number; d: number } {
   const base = new Date(Date.UTC(y, m - 1, d));
   base.setUTCDate(base.getUTCDate() + days);
-  return { y: base.getUTCFullYear(), m: base.getUTCMonth() + 1, d: base.getUTCDate() };
+
+  return {
+    y: base.getUTCFullYear(),
+    m: base.getUTCMonth() + 1,
+    d: base.getUTCDate(),
+  };
 }
 
 function tzOffsetMinutes(date: Date, tz: string): number {
@@ -51,7 +165,10 @@ function tzOffsetMinutes(date: Date, tz: string): number {
 
   const parts = dtf.formatToParts(date);
   const map: Record<string, string> = {};
-  for (const p of parts) if (p.type !== "literal") map[p.type] = p.value;
+
+  for (const part of parts) {
+    if (part.type !== "literal") map[part.type] = part.value;
+  }
 
   const asUtc = Date.UTC(
     Number(map.year),
@@ -78,7 +195,9 @@ function zonedTimeToUtc(
 
   for (let i = 0; i < 2; i++) {
     const offsetMin = tzOffsetMinutes(utcGuess, tz);
-    utcGuess = new Date(Date.UTC(y, m - 1, d, hh, mm, ss) - offsetMin * 60_000);
+    utcGuess = new Date(
+      Date.UTC(y, m - 1, d, hh, mm, ss) - offsetMin * 60_000
+    );
   }
 
   return utcGuess;
@@ -89,7 +208,15 @@ function tzDayRangeUtc(tz: string, date: Date) {
   const start = zonedTimeToUtc(ymd.y, ymd.m, ymd.d, 0, 0, 0, tz);
   const next = addDaysYmd(ymd.y, ymd.m, ymd.d, 1);
   const endExclusive = zonedTimeToUtc(next.y, next.m, next.d, 0, 0, 0, tz);
-  return { start, endExclusive, ymd: `${ymd.y}-${String(ymd.m).padStart(2, "0")}-${String(ymd.d).padStart(2, "0")}` };
+
+  return {
+    start,
+    endExclusive,
+    ymd: `${ymd.y}-${String(ymd.m).padStart(2, "0")}-${String(ymd.d).padStart(
+      2,
+      "0"
+    )}`,
+  };
 }
 
 function tzWeekRangeUtc(tz: string, date: Date) {
@@ -127,12 +254,10 @@ function tzWeekRangeUtc(tz: string, date: Date) {
 
 function tzMonthRangeUtc(tz: string, date: Date) {
   const ymd = getYmdInTz(date, tz);
-
   const start = zonedTimeToUtc(ymd.y, ymd.m, 1, 0, 0, 0, tz);
 
   const nextMonthY = ymd.m === 12 ? ymd.y + 1 : ymd.y;
   const nextMonthM = ymd.m === 12 ? 1 : ymd.m + 1;
-
   const endExclusive = zonedTimeToUtc(nextMonthY, nextMonthM, 1, 0, 0, 0, tz);
 
   return {
@@ -143,43 +268,65 @@ function tzMonthRangeUtc(tz: string, date: Date) {
 }
 
 function sumSignedPayments(
-  payments: Array<{ amountCents: number; direction: "IN" | "OUT"; isDeposit: boolean }>,
+  payments: Array<{
+    amountCents: number;
+    direction: "IN" | "OUT";
+    isDeposit: boolean;
+  }>,
   opts?: { includeDeposits?: boolean }
 ) {
   const includeDeposits = opts?.includeDeposits ?? true;
+
   return payments
-    .filter((p) => (includeDeposits ? true : !p.isDeposit))
-    .reduce((sum, p) => sum + (p.direction === "OUT" ? -p.amountCents : p.amountCents), 0);
+    .filter((payment) => (includeDeposits ? true : !payment.isDeposit))
+    .reduce(
+      (sum, payment) =>
+        sum +
+        (payment.direction === "OUT"
+          ? -payment.amountCents
+          : payment.amountCents),
+      0
+    );
 }
 
 function buildReservationMetrics(rows: ReservationMetricInput[]) {
-  const mapped = rows.map((r) => {
-    const serviceTotalCents = r.items
-      .filter((it) => !it.isExtra)
-      .reduce((sum, it) => sum + Number(it.totalPriceCents ?? 0), 0);
+  const mapped = rows.map((reservation) => {
+    const serviceTotalCents = reservation.items
+      .filter((item) => !item.isExtra)
+      .reduce((sum, item) => sum + Number(item.totalPriceCents ?? 0), 0);
 
-    const extrasTotalCents = r.items
-      .filter((it) => it.isExtra)
-      .reduce((sum, it) => sum + Number(it.totalPriceCents ?? 0), 0);
+    const extrasTotalCents = reservation.items
+      .filter((item) => item.isExtra)
+      .reduce((sum, item) => sum + Number(item.totalPriceCents ?? 0), 0);
 
-    const autoDisc = Number(r.autoDiscountCents ?? 0);
-    const manualDisc = Number(r.manualDiscountCents ?? 0);
+    const autoDisc = Number(reservation.autoDiscountCents ?? 0);
+    const manualDisc = Number(reservation.manualDiscountCents ?? 0);
 
     const soldTotalCents =
-      r.items.length > 0
-        ? Math.max(0, serviceTotalCents + extrasTotalCents - autoDisc - manualDisc)
-        : Number(r.totalPriceCents ?? 0);
+      reservation.items.length > 0
+        ? Math.max(
+            0,
+            serviceTotalCents + extrasTotalCents - autoDisc - manualDisc
+          )
+        : Number(reservation.totalPriceCents ?? 0);
 
-    const collectedCents = sumSignedPayments(r.payments, { includeDeposits: true });
-    const collectedServiceCents = sumSignedPayments(r.payments, { includeDeposits: false });
-    const pendingServiceCents = Math.max(0, soldTotalCents - collectedServiceCents);
+    const collectedCents = sumSignedPayments(reservation.payments, {
+      includeDeposits: true,
+    });
+    const collectedServiceCents = sumSignedPayments(reservation.payments, {
+      includeDeposits: false,
+    });
+    const pendingServiceCents = Math.max(
+      0,
+      soldTotalCents - collectedServiceCents
+    );
 
     return {
-      id: r.id,
-      source: r.source ?? "—",
-      marketing: r.marketing ?? "Sin dato",
-      channelName: r.channel?.name ?? "—",
-      serviceName: r.service?.name ?? "—",
+      id: reservation.id,
+      source: reservation.source ?? "—",
+      marketing: reservation.marketing ?? "Sin dato",
+      channelName: reservation.channel?.name ?? "—",
+      serviceName: reservation.service?.name ?? "—",
       soldTotalCents,
       collectedCents,
       pendingCents: pendingServiceCents,
@@ -187,10 +334,10 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
   });
 
   const totals = mapped.reduce(
-    (acc, r) => {
-      acc.salesCents += r.soldTotalCents;
-      acc.collectedCents += r.collectedCents;
-      acc.pendingCents += r.pendingCents;
+    (acc, row) => {
+      acc.salesCents += row.soldTotalCents;
+      acc.collectedCents += row.collectedCents;
+      acc.pendingCents += row.pendingCents;
       return acc;
     },
     { salesCents: 0, collectedCents: 0, pendingCents: 0 }
@@ -198,20 +345,40 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
 
   const channelsMap = new Map<
     string,
-    { channel: string; reservations: number; salesCents: number; collectedCents: number; pendingCents: number }
+    {
+      channel: string;
+      reservations: number;
+      salesCents: number;
+      collectedCents: number;
+      pendingCents: number;
+    }
   >();
 
   const servicesMap = new Map<
     string,
-    { service: string; reservations: number; quantity: number; salesCents: number; collectedCents: number; pendingCents: number }
-  >();
-  const marketingMap = new Map<
-    string,
-    { source: string; reservations: number; salesCents: number; collectedCents: number; pendingCents: number }
+    {
+      service: string;
+      reservations: number;
+      quantity: number;
+      salesCents: number;
+      collectedCents: number;
+      pendingCents: number;
+    }
   >();
 
-  for (const r of mapped) {
-    const chKey = r.channelName || r.source || "—";
+  const marketingMap = new Map<
+    string,
+    {
+      source: string;
+      reservations: number;
+      salesCents: number;
+      collectedCents: number;
+      pendingCents: number;
+    }
+  >();
+
+  for (const row of mapped) {
+    const chKey = row.channelName || row.source || "—";
     if (!channelsMap.has(chKey)) {
       channelsMap.set(chKey, {
         channel: chKey,
@@ -221,13 +388,13 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
         pendingCents: 0,
       });
     }
-    const ch = channelsMap.get(chKey)!;
-    ch.reservations += 1;
-    ch.salesCents += r.soldTotalCents;
-    ch.collectedCents += r.collectedCents;
-    ch.pendingCents += r.pendingCents;
+    const channel = channelsMap.get(chKey)!;
+    channel.reservations += 1;
+    channel.salesCents += row.soldTotalCents;
+    channel.collectedCents += row.collectedCents;
+    channel.pendingCents += row.pendingCents;
 
-    const svKey = r.serviceName || "—";
+    const svKey = row.serviceName || "—";
     if (!servicesMap.has(svKey)) {
       servicesMap.set(svKey, {
         service: svKey,
@@ -238,14 +405,14 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
         pendingCents: 0,
       });
     }
-    const sv = servicesMap.get(svKey)!;
-    sv.reservations += 1;
-    sv.quantity += 1;
-    sv.salesCents += r.soldTotalCents;
-    sv.collectedCents += r.collectedCents;
-    sv.pendingCents += r.pendingCents;
+    const service = servicesMap.get(svKey)!;
+    service.reservations += 1;
+    service.quantity += 1;
+    service.salesCents += row.soldTotalCents;
+    service.collectedCents += row.collectedCents;
+    service.pendingCents += row.pendingCents;
 
-    const mkKey = r.marketing || "Sin dato";
+    const mkKey = row.marketing || "Sin dato";
     if (!marketingMap.has(mkKey)) {
       marketingMap.set(mkKey, {
         source: mkKey,
@@ -255,31 +422,40 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
         pendingCents: 0,
       });
     }
-    const mk = marketingMap.get(mkKey)!;
-    mk.reservations += 1;
-    mk.salesCents += r.soldTotalCents;
-    mk.collectedCents += r.collectedCents;
-    mk.pendingCents += r.pendingCents;
+    const marketing = marketingMap.get(mkKey)!;
+    marketing.reservations += 1;
+    marketing.salesCents += row.soldTotalCents;
+    marketing.collectedCents += row.collectedCents;
+    marketing.pendingCents += row.pendingCents;
   }
 
   const channels = Array.from(channelsMap.values())
-    .map((x) => ({
-      ...x,
-      averageTicketCents: x.reservations > 0 ? Math.round(x.salesCents / x.reservations) : 0,
+    .map((entry) => ({
+      ...entry,
+      averageTicketCents:
+        entry.reservations > 0
+          ? Math.round(entry.salesCents / entry.reservations)
+          : 0,
     }))
     .sort((a, b) => b.salesCents - a.salesCents);
 
   const services = Array.from(servicesMap.values())
-    .map((x) => ({
-      ...x,
-      averageTicketCents: x.reservations > 0 ? Math.round(x.salesCents / x.reservations) : 0,
+    .map((entry) => ({
+      ...entry,
+      averageTicketCents:
+        entry.reservations > 0
+          ? Math.round(entry.salesCents / entry.reservations)
+          : 0,
     }))
     .sort((a, b) => b.salesCents - a.salesCents);
 
   const marketing = Array.from(marketingMap.values())
-    .map((x) => ({
-      ...x,
-      averageTicketCents: x.reservations > 0 ? Math.round(x.salesCents / x.reservations) : 0,
+    .map((entry) => ({
+      ...entry,
+      averageTicketCents:
+        entry.reservations > 0
+          ? Math.round(entry.salesCents / entry.reservations)
+          : 0,
     }))
     .sort((a, b) => b.reservations - a.reservations);
 
@@ -289,7 +465,8 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
     marketing,
     services,
     reservations: mapped.length,
-    averageTicketCents: mapped.length > 0 ? Math.round(totals.salesCents / mapped.length) : 0,
+    averageTicketCents:
+      mapped.length > 0 ? Math.round(totals.salesCents / mapped.length) : 0,
   };
 }
 
@@ -301,6 +478,47 @@ function nextMonth(year: number, month1to12: number) {
   return month1to12 === 12
     ? { year: year + 1, month: 1 }
     : { year, month: month1to12 + 1 };
+}
+
+function ymdKey(date: Date, tz: string) {
+  const { y, m, d } = getYmdInTz(date, tz);
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+function monthKeyForDate(date: Date, tz: string) {
+  const { y, m } = getYmdInTz(date, tz);
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
+function reservationTimestamp(reservation: ReservationMetricInput) {
+  return reservation.scheduledTime ?? reservation.activityDate ?? null;
+}
+
+function reservationInRange(
+  reservation: ReservationMetricInput,
+  start: Date,
+  endExclusive: Date
+) {
+  const timestamp = reservationTimestamp(reservation);
+  return timestamp != null && timestamp >= start && timestamp < endExclusive;
+}
+
+async function loadOperationsOverview() {
+  const cookieStore = await cookies();
+  const headerStore = await headers();
+  const envBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const proto = headerStore.get("x-forwarded-proto") ?? "http";
+  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
+  const baseUrl = envBaseUrl || (host ? `${proto}://${host}` : "");
+
+  if (!baseUrl) return null;
+
+  return fetch(`${baseUrl}/api/operations/overview`, {
+    headers: { cookie: cookieHeaderFromStore(cookieStore) },
+    cache: "no-store",
+  })
+    .then(async (response) => (response.ok ? response.json() : null))
+    .catch(() => null);
 }
 
 export async function GET() {
@@ -320,50 +538,63 @@ export async function GET() {
     reservationsToday,
     reservationsWeek,
     reservationsMonth,
-
     openWorklogs,
     approvedToday,
     approvedWeek,
     approvedMonth,
-
     pendingPayrollAgg,
     monthPayrollAgg,
-
+    barSaleAgg,
+    barProductMarginRows,
     activeInterns,
     lowInternBalance,
-
     openMaintenanceEvents,
     criticalMaintenanceEvents,
     monthMaintenanceAgg,
     monthExpenses,
     lowStockParts,
     operationsOverview,
+    barTodayPayments,
+    barMonthPayments,
+    lowStockBarCount,
+    fulfillmentPending,
+    deliveredNotReturned,
+    assetCounts,
+    assetIncidentsOpen,
+    cashByOriginRows,
   ] = await Promise.all([
     prisma.reservation.findMany({
       where: {
         OR: [
           { scheduledTime: { gte: today.start, lt: today.endExclusive } },
-          { scheduledTime: null, activityDate: { gte: today.start, lt: today.endExclusive } },
+          {
+            scheduledTime: null,
+            activityDate: { gte: today.start, lt: today.endExclusive },
+          },
         ],
       },
       select: reservationExecutiveSelect,
     }),
-
     prisma.reservation.findMany({
       where: {
         OR: [
           { scheduledTime: { gte: week.start, lt: week.endExclusive } },
-          { scheduledTime: null, activityDate: { gte: week.start, lt: week.endExclusive } },
+          {
+            scheduledTime: null,
+            activityDate: { gte: week.start, lt: week.endExclusive },
+          },
         ],
       },
       select: reservationExecutiveSelect,
     }),
-
     prisma.reservation.findMany({
       where: {
         OR: [
           { scheduledTime: { gte: month.start, lt: month.endExclusive } },
-          { scheduledTime: null, activityDate: { gte: month.start, lt: month.endExclusive } },
+          {
+            scheduledTime: null,
+            activityDate: { gte: month.start, lt: month.endExclusive },
+          },
         ],
       },
       select: reservationExecutiveSelect,
@@ -374,7 +605,6 @@ export async function GET() {
         status: WorkLogStatus.OPEN,
       },
     }),
-
     prisma.workLog.aggregate({
       where: {
         status: WorkLogStatus.APPROVED,
@@ -382,7 +612,6 @@ export async function GET() {
       },
       _sum: { workedMinutes: true },
     }),
-
     prisma.workLog.aggregate({
       where: {
         status: WorkLogStatus.APPROVED,
@@ -390,7 +619,6 @@ export async function GET() {
       },
       _sum: { workedMinutes: true },
     }),
-
     prisma.workLog.aggregate({
       where: {
         status: WorkLogStatus.APPROVED,
@@ -405,7 +633,6 @@ export async function GET() {
       },
       _sum: { amountCents: true },
     }),
-
     prisma.payrollEntry.aggregate({
       where: {
         periodStart: { gte: month.start, lt: month.endExclusive },
@@ -413,10 +640,31 @@ export async function GET() {
       _sum: { amountCents: true },
     }),
 
-    prisma.employee.count({
+    prisma.barSale.aggregate({
       where: {
-        isActive: true,
-        kind: "INTERN",
+        soldAt: { gte: month.start, lt: month.endExclusive },
+      },
+      _sum: {
+        totalRevenueCents: true,
+        totalCostCents: true,
+        totalMarginCents: true,
+      },
+    }),
+
+    prisma.barSaleItem.groupBy({
+      by: ["productId"],
+      where: {
+        sale: {
+          soldAt: { gte: month.start, lt: month.endExclusive },
+        },
+      },
+      _sum: {
+        revenueCents: true,
+        costCents: true,
+        marginCents: true,
+      },
+      _count: {
+        _all: true,
       },
     }),
 
@@ -424,28 +672,38 @@ export async function GET() {
       where: {
         isActive: true,
         kind: "INTERN",
-        internshipHoursTotal: { not: null },
       },
-    }).then(async (countWithTotal) => {
-      if (countWithTotal === 0) return 0;
-      const rows = await prisma.employee.findMany({
+    }),
+    prisma.employee
+      .count({
         where: {
           isActive: true,
           kind: "INTERN",
           internshipHoursTotal: { not: null },
         },
-        select: {
-          internshipHoursTotal: true,
-          internshipHoursUsed: true,
-        },
-      });
-      return rows.filter((e) => {
-        const total = e.internshipHoursTotal ?? null;
-        const used = e.internshipHoursUsed ?? 0;
-        const remaining = total !== null ? total - used : null;
-        return remaining !== null && remaining <= 20;
-      }).length;
-    }),
+      })
+      .then(async (countWithTotal) => {
+        if (countWithTotal === 0) return 0;
+
+        const rows = await prisma.employee.findMany({
+          where: {
+            isActive: true,
+            kind: "INTERN",
+            internshipHoursTotal: { not: null },
+          },
+          select: {
+            internshipHoursTotal: true,
+            internshipHoursUsed: true,
+          },
+        });
+
+        return rows.filter((employee) => {
+          const total = employee.internshipHoursTotal ?? null;
+          const used = employee.internshipHoursUsed ?? 0;
+          const remaining = total !== null ? total - used : null;
+          return remaining !== null && remaining <= 20;
+        }).length;
+      }),
 
     prisma.maintenanceEvent.count({
       where: {
@@ -455,23 +713,23 @@ export async function GET() {
         ],
       },
     }),
-
-    prisma.maintenanceEvent.count({
-      where: {
-        severity: { in: ["HIGH", "CRITICAL"] as never[] },
-        OR: [
-          { resolvedAt: null },
-          { status: { in: ["OPEN", "IN_PROGRESS"] as never[] } },
-        ],
-      },
-    }).catch(async () => {
-      return prisma.maintenanceEvent.count({
+    prisma.maintenanceEvent
+      .count({
         where: {
-          resolvedAt: null,
+          severity: { in: ["HIGH", "CRITICAL"] as never[] },
+          OR: [
+            { resolvedAt: null },
+            { status: { in: ["OPEN", "IN_PROGRESS"] as never[] } },
+          ],
         },
-      });
-    }),
-
+      })
+      .catch(async () => {
+        return prisma.maintenanceEvent.count({
+          where: {
+            resolvedAt: null,
+          },
+        });
+      }),
     prisma.maintenanceEvent.aggregate({
       where: {
         createdAt: { gte: month.start, lt: month.endExclusive },
@@ -482,7 +740,6 @@ export async function GET() {
         laborCostCents: true,
       },
     }),
-
     prisma.expense.findMany({
       where: {
         expenseDate: { gte: month.start, lt: month.endExclusive },
@@ -509,83 +766,298 @@ export async function GET() {
         },
       },
     }),
-    
-    prisma.sparePart.findMany({
-      select: {
-        stockQty: true,
-        minStockQty: true,
+    prisma.sparePart
+      .findMany({
+        select: {
+          stockQty: true,
+          minStockQty: true,
+        },
+      })
+      .then((rows) => {
+        return rows.filter(
+          (part) =>
+            (part.minStockQty ?? 0) > 0 &&
+            part.stockQty <= (part.minStockQty ?? 0)
+        ).length;
+      }),
+
+    loadOperationsOverview(),
+
+    prisma.payment.findMany({
+      where: {
+        origin: "BAR",
+        createdAt: { gte: today.start, lt: today.endExclusive },
+        direction: "IN",
       },
-    }).then((rows) => {
-      return rows.filter((p) => (p.minStockQty ?? 0) > 0 && p.stockQty <= (p.minStockQty ?? 0)).length;
+      select: {
+        amountCents: true,
+        isStaffSale: true,
+      },
     }),
 
-    fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/operations/overview`, {
-      headers: { cookie: cookieHeaderFromStore(await cookies()) },
-      cache: "no-store",
-    })
-      .then(async (r) => (r.ok ? r.json() : null))
-      .catch(() => null),
+    prisma.payment.findMany({
+      where: {
+        origin: "BAR",
+        createdAt: { gte: month.start, lt: month.endExclusive },
+        direction: "IN",
+      },
+      select: {
+        amountCents: true,
+        isStaffSale: true,
+      },
+    }),
+    prisma.barProduct.count({
+      where: {
+        isActive: true,
+        controlsStock: true,
+        currentStock: { lte: prisma.barProduct.fields.minStock },
+      },
+    }),
+
+    prisma.fulfillmentTask.count({
+      where: { status: "PENDING" },
+    }),
+    prisma.fulfillmentTask.count({
+      where: {
+        type: "EXTRA_DELIVERY",
+        status: "DELIVERED",
+      },
+    }),
+
+    prisma.rentalAsset.groupBy({
+      by: ["type", "status"],
+      where: { isActive: true },
+      _count: { _all: true },
+    }),
+    prisma.rentalAssetIncident.count({
+      where: {},
+    }),
+
+    prisma.payment.groupBy({
+      by: ["origin"],
+      where: {
+        createdAt: { gte: today.start, lt: today.endExclusive },
+        direction: "IN",
+      },
+      _sum: {
+        amountCents: true,
+      },
+    }),
   ]);
 
-  type MonthExpenseRow = {
-    id: string;
-    status: "PENDING" | "PAID" | "DRAFT" | "CANCELED";
-    costCenter: string;
-    amountCents: number;
-    taxCents: number | null;
-    totalCents: number | null;
-    vendor: {
-      id: string;
-      name: string;
-    } | null;
-    category: {
-      id: string;
-      name: string;
-    } | null;
-  };
+  const marginProductIds = barProductMarginRows.map((r) => r.productId);
+
+  const marginProducts = marginProductIds.length
+    ? await prisma.barProduct.findMany({
+        where: { id: { in: marginProductIds } },
+        select: {
+          id: true,
+          name: true,
+          category: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      })
+    : [];
+
+  const marginProductMap = new Map(marginProducts.map((p) => [p.id, p]));
+
+  const barMarginByProduct = barProductMarginRows
+    .map((row) => {
+      const product = marginProductMap.get(row.productId);
+
+      return {
+        product: product?.name ?? "—",
+        category: product?.category?.name ?? "—",
+        salesCents: Number(row._sum.revenueCents ?? 0),
+        costCents: Number(row._sum.costCents ?? 0),
+        marginCents: Number(row._sum.marginCents ?? 0),
+        tickets: Number(row._count._all ?? 0),
+      };
+    })
+    .sort((a, b) => b.marginCents - a.marginCents)
+    .slice(0, 12);
 
   const todayMetrics = buildReservationMetrics(reservationsToday);
   const weekMetrics = buildReservationMetrics(reservationsWeek);
   const monthMetrics = buildReservationMetrics(reservationsMonth);
 
+  const hrMonth = Number(monthPayrollAgg._sum.amountCents ?? 0);
+  const maintenanceMonth = Number(monthMaintenanceAgg._sum.costCents ?? 0);
+
+  const expenseRows = monthExpenses as unknown as MonthExpenseRow[];
+
+  const barExpenseRows = expenseRows.filter(
+    (e: MonthExpenseRow) => String(e.costCenter ?? "").toUpperCase() === "BAR"
+  );
+
+  const barMonthPurchasesCents = barExpenseRows.reduce(
+    (sum: number, e: MonthExpenseRow) =>
+      sum + Number(e.totalCents ?? e.amountCents ?? 0),
+    0
+  );
+
+  const barMonthPurchasesPaidCents = barExpenseRows
+    .filter((e: MonthExpenseRow) => e.status === "PAID")
+    .reduce(
+      (sum: number, e: MonthExpenseRow) =>
+        sum + Number(e.totalCents ?? e.amountCents ?? 0),
+      0
+    );
+
+  const barMonthPurchasesPendingCents = barExpenseRows
+    .filter((e: MonthExpenseRow) => e.status === "PENDING")
+    .reduce(
+      (sum: number, e: MonthExpenseRow) =>
+        sum + Number(e.totalCents ?? e.amountCents ?? 0),
+      0
+    );
+
+  const barVendorMap = new Map<
+    string,
+    { vendor: string; count: number; totalCents: number }
+  >();
+
+  for (const e of barExpenseRows) {
+    const vendorName = e.vendor?.name ?? "Sin proveedor";
+
+    if (!barVendorMap.has(vendorName)) {
+      barVendorMap.set(vendorName, {
+        vendor: vendorName,
+        count: 0,
+        totalCents: 0,
+      });
+    }
+
+    const entry = barVendorMap.get(vendorName)!;
+    entry.count += 1;
+    entry.totalCents += Number(e.totalCents ?? e.amountCents ?? 0);
+  }
+
+  const barTopVendors = Array.from(barVendorMap.values())
+    .sort((a, b) => b.totalCents - a.totalCents)
+    .slice(0, 8);
+
+  const barCategoryMap = new Map<
+    string,
+    { category: string; count: number; totalCents: number }
+  >();
+
+  for (const e of barExpenseRows) {
+    const categoryName = e.category?.name ?? "Sin categoría";
+
+    if (!barCategoryMap.has(categoryName)) {
+      barCategoryMap.set(categoryName, {
+        category: categoryName,
+        count: 0,
+        totalCents: 0,
+      });
+    }
+
+    const entry = barCategoryMap.get(categoryName)!;
+    entry.count += 1;
+    entry.totalCents += Number(e.totalCents ?? e.amountCents ?? 0);
+  }
+
+  const barPurchasesByCategory = Array.from(barCategoryMap.values())
+    .sort((a, b) => b.totalCents - a.totalCents)
+    .slice(0, 8);
+
+  const cashByOrigin = cashByOriginRows.map((row) => ({
+    origin: row.origin,
+    collectedTodayCents: Number(row._sum.amountCents ?? 0),
+  }));
+
+  const barTodayCents = barTodayPayments.reduce(
+    (sum, payment) => sum + payment.amountCents,
+    0
+  );
+
+  const barMonthCents = barMonthPayments.reduce(
+    (sum, payment) => sum + payment.amountCents,
+    0
+  );
+
+  const barMarginApproxCents = barMonthCents - barMonthPurchasesPaidCents;
+
+  const barTodayStaffCents = barTodayPayments
+    .filter((p: { amountCents: number; isStaffSale?: boolean | null }) => Boolean(p.isStaffSale))
+    .reduce(
+      (sum: number, p: { amountCents: number }) => sum + p.amountCents,
+      0
+    );
+
+  const barMonthStaffCents = barMonthPayments
+    .filter((p: { amountCents: number; isStaffSale?: boolean | null }) => Boolean(p.isStaffSale))
+    .reduce(
+      (sum: number, p: { amountCents: number }) => sum + p.amountCents,
+      0
+    );
+
+  const barMonthRegularCents = barMonthCents - barMonthStaffCents;
+ 
+  const operationsOverviewData = operationsOverview as OperationsOverviewResponse;
+
+  const assetSummary: Record<string, Record<string, number>> = {
+    GOPRO: { AVAILABLE: 0, DELIVERED: 0, MAINTENANCE: 0, DAMAGED: 0, LOST: 0 },
+    WETSUIT: {
+      AVAILABLE: 0,
+      DELIVERED: 0,
+      MAINTENANCE: 0,
+      DAMAGED: 0,
+      LOST: 0,
+    },
+    OTHER: { AVAILABLE: 0, DELIVERED: 0, MAINTENANCE: 0, DAMAGED: 0, LOST: 0 },
+  };
+
+  for (const row of assetCounts) {
+    if (!assetSummary[row.type]) continue;
+    assetSummary[row.type][row.status] = row._count._all;
+  }
+
   const health = {
-    inSea: Number(operationsOverview?.summary?.inSea ?? 0),
-    ready: Number(operationsOverview?.summary?.ready ?? 0),
-    unformalized: Number(operationsOverview?.summary?.unformalized ?? 0),
+    inSea: Number(operationsOverviewData?.summary?.inSea ?? 0),
+    ready: Number(operationsOverviewData?.summary?.ready ?? 0),
+    unformalized: Number(operationsOverviewData?.summary?.unformalized ?? 0),
     criticalPayments: Number(
-      operationsOverview?.alerts?.criticalPendingPayments?.length ?? 0
+      operationsOverviewData?.alerts?.criticalPendingPayments?.length ?? 0
     ),
-    incidentsOpen: Number(operationsOverview?.summary?.incidentsOpen ?? 0),
+    incidentsOpen: Number(operationsOverviewData?.summary?.incidentsOpen ?? 0),
     openWorklogs,
     maintenanceOpen: openMaintenanceEvents,
     maintenanceCritical: criticalMaintenanceEvents,
   };
 
-  const hrMonth = Number(monthPayrollAgg._sum.amountCents ?? 0);
-  const maintenanceMonth = Number(monthMaintenanceAgg._sum.costCents ?? 0);
-  
-  const expenseRows = monthExpenses as unknown as MonthExpenseRow[];
-
   const expensesMonthTotal = expenseRows.reduce(
-    (sum: number, e: MonthExpenseRow) => sum + Number(e.totalCents ?? e.amountCents ?? 0),
+    (sum, expense) => sum + Number(expense.totalCents ?? expense.amountCents ?? 0),
     0
   );
 
   const expensesMonthPaid = expenseRows
-    .filter((e: MonthExpenseRow) => e.status === "PAID")
-    .reduce((sum: number, e: MonthExpenseRow) => sum + Number(e.totalCents ?? e.amountCents ?? 0), 0);
+    .filter((expense) => expense.status === "PAID")
+    .reduce(
+      (sum, expense) =>
+        sum + Number(expense.totalCents ?? expense.amountCents ?? 0),
+      0
+    );
 
   const expensesMonthPending = expenseRows
-    .filter((e: MonthExpenseRow) => e.status === "PENDING")
-    .reduce((sum: number, e: MonthExpenseRow) => sum + Number(e.totalCents ?? e.amountCents ?? 0), 0);
+    .filter((expense) => expense.status === "PENDING")
+    .reduce(
+      (sum, expense) =>
+        sum + Number(expense.totalCents ?? expense.amountCents ?? 0),
+      0
+    );
 
   const expenseCategoryMap = new Map<
     string,
     { category: string; count: number; totalCents: number }
   >();
-
-  for (const e of expenseRows) {
-    const key = e.category?.name ?? "Sin categoría";
+  for (const expense of expenseRows) {
+    const key = expense.category?.name ?? "Sin categoría";
     if (!expenseCategoryMap.has(key)) {
       expenseCategoryMap.set(key, {
         category: key,
@@ -595,9 +1067,8 @@ export async function GET() {
     }
     const entry = expenseCategoryMap.get(key)!;
     entry.count += 1;
-    entry.totalCents += Number(e.totalCents ?? e.amountCents ?? 0);
+    entry.totalCents += Number(expense.totalCents ?? expense.amountCents ?? 0);
   }
-
   const expensesByCategory = Array.from(expenseCategoryMap.values()).sort(
     (a, b) => b.totalCents - a.totalCents
   );
@@ -606,9 +1077,8 @@ export async function GET() {
     string,
     { costCenter: string; count: number; totalCents: number }
   >();
-
-  for (const e of expenseRows) {
-    const key = e.costCenter;
+  for (const expense of expenseRows) {
+    const key = expense.costCenter;
     if (!expenseCostCenterMap.has(key)) {
       expenseCostCenterMap.set(key, {
         costCenter: key,
@@ -618,9 +1088,8 @@ export async function GET() {
     }
     const entry = expenseCostCenterMap.get(key)!;
     entry.count += 1;
-    entry.totalCents += Number(e.totalCents ?? e.amountCents ?? 0);
+    entry.totalCents += Number(expense.totalCents ?? expense.amountCents ?? 0);
   }
-
   const expensesByCostCenter = Array.from(expenseCostCenterMap.values()).sort(
     (a, b) => b.totalCents - a.totalCents
   );
@@ -629,10 +1098,8 @@ export async function GET() {
     string,
     { vendor: string; count: number; totalCents: number }
   >();
-
-  for (const e of expenseRows) {
-    const vendorName = e.vendor?.name ?? "Sin proveedor";
-
+  for (const expense of expenseRows) {
+    const vendorName = expense.vendor?.name ?? "Sin proveedor";
     if (!expenseVendorMap.has(vendorName)) {
       expenseVendorMap.set(vendorName, {
         vendor: vendorName,
@@ -640,22 +1107,25 @@ export async function GET() {
         totalCents: 0,
       });
     }
-
     const entry = expenseVendorMap.get(vendorName)!;
     entry.count += 1;
-    entry.totalCents += Number(e.totalCents ?? e.amountCents ?? 0);
+    entry.totalCents += Number(expense.totalCents ?? expense.amountCents ?? 0);
   }
-
   const expensesByVendor = Array.from(expenseVendorMap.values()).sort(
     (a, b) => b.totalCents - a.totalCents
   );
-  
-  const estimatedMarginCents =
-  monthMetrics.totals.salesCents - hrMonth - maintenanceMonth - expensesMonthTotal;
-  const cashMarginCents =
-  monthMetrics.totals.collectedCents - hrMonth - maintenanceMonth - expensesMonthPaid;
 
-  // Trends 7d / 30d
+  const estimatedMarginCents =
+    monthMetrics.totals.salesCents -
+    hrMonth -
+    maintenanceMonth -
+    expensesMonthTotal;
+  const cashMarginCents =
+    monthMetrics.totals.collectedCents -
+    hrMonth -
+    maintenanceMonth -
+    expensesMonthPaid;
+
   const dayPoints: Array<{
     date: string;
     start: Date;
@@ -663,9 +1133,10 @@ export async function GET() {
   }> = [];
 
   for (let i = 29; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const range = tzDayRangeUtc(tz, d);
+    const day = new Date(now);
+    day.setDate(day.getDate() - i);
+    const range = tzDayRangeUtc(tz, day);
+
     dayPoints.push({
       date: range.ymd,
       start: range.start,
@@ -673,54 +1144,13 @@ export async function GET() {
     });
   }
 
-  const trendDays = await Promise.all(
-    dayPoints.map(async (p) => {
-      const [resRows, approvedAgg] = await Promise.all([
-        prisma.reservation.findMany({
-          where: {
-            OR: [
-              { scheduledTime: { gte: p.start, lt: p.endExclusive } },
-              { scheduledTime: null, activityDate: { gte: p.start, lt: p.endExclusive } },
-            ],
-          },
-          select: reservationExecutiveSelect,
-        }),
-        prisma.workLog.aggregate({
-          where: {
-            status: WorkLogStatus.APPROVED,
-            workDate: { gte: p.start, lt: p.endExclusive },
-          },
-          _sum: { workedMinutes: true },
-        }),
-      ]);
-
-      const metrics = buildReservationMetrics(resRows);
-
-      return {
-        date: p.date,
-        salesCents: metrics.totals.salesCents,
-        collectedCents: metrics.totals.collectedCents,
-        pendingCents: metrics.totals.pendingCents,
-        reservations: metrics.reservations,
-        approvedMinutes: Number(approvedAgg._sum.workedMinutes ?? 0),
-      };
-    })
-  );
-
-  const trends = {
-    days7: trendDays.slice(-7),
-    days30: trendDays,
-    months6: [] as Array<{
-      month: string;
-      salesCents: number;
-      payrollCents: number;
-      maintenanceCents: number;
-      estimatedMarginCents: number;
-      maintenanceEvents: number;
-    }>,
-  };
-
-  const monthKeys: Array<{ year: number; month: number; key: string; start: Date; endExclusive: Date }> = [];
+  const monthKeys: Array<{
+    year: number;
+    month: number;
+    key: string;
+    start: Date;
+    endExclusive: Date;
+  }> = [];
   const monthAnchor = getYmdInTz(now, tz);
 
   for (let i = 5; i >= 0; i--) {
@@ -731,54 +1161,172 @@ export async function GET() {
     const start = monthStartUtc(year, monthNum);
     const nm = nextMonth(year, monthNum);
     const endExclusive = monthStartUtc(nm.year, nm.month);
+
     monthKeys.push({ year, month: monthNum, key, start, endExclusive });
   }
 
-  trends.months6 = await Promise.all(
-    monthKeys.map(async (m) => {
-      const [resRows, payrollAgg, maintenanceAgg, maintenanceEventsAgg] = await Promise.all([
-        prisma.reservation.findMany({
-          where: {
-            OR: [
-              { scheduledTime: { gte: m.start, lt: m.endExclusive } },
-              { scheduledTime: null, activityDate: { gte: m.start, lt: m.endExclusive } },
-            ],
+  const [trendReservations30d, trendApprovedWorklogs30d, trendReservations6m, payrollRows6m, maintenanceRows6m] =
+    await Promise.all([
+      prisma.reservation.findMany({
+        where: {
+          OR: [
+            {
+              scheduledTime: {
+                gte: dayPoints[0].start,
+                lt: dayPoints[dayPoints.length - 1].endExclusive,
+              },
+            },
+            {
+              scheduledTime: null,
+              activityDate: {
+                gte: dayPoints[0].start,
+                lt: dayPoints[dayPoints.length - 1].endExclusive,
+              },
+            },
+          ],
+        },
+        select: reservationExecutiveSelect,
+      }),
+      prisma.workLog.findMany({
+        where: {
+          status: WorkLogStatus.APPROVED,
+          workDate: {
+            gte: dayPoints[0].start,
+            lt: dayPoints[dayPoints.length - 1].endExclusive,
           },
-          select: reservationExecutiveSelect,
-        }),
-        prisma.payrollEntry.aggregate({
-          where: {
-            periodStart: { gte: m.start, lt: m.endExclusive },
+        },
+        select: {
+          workDate: true,
+          workedMinutes: true,
+        },
+      }),
+      prisma.reservation.findMany({
+        where: {
+          OR: [
+            {
+              scheduledTime: {
+                gte: monthKeys[0].start,
+                lt: monthKeys[monthKeys.length - 1].endExclusive,
+              },
+            },
+            {
+              scheduledTime: null,
+              activityDate: {
+                gte: monthKeys[0].start,
+                lt: monthKeys[monthKeys.length - 1].endExclusive,
+              },
+            },
+          ],
+        },
+        select: reservationExecutiveSelect,
+      }),
+      prisma.payrollEntry.findMany({
+        where: {
+          periodStart: {
+            gte: monthKeys[0].start,
+            lt: monthKeys[monthKeys.length - 1].endExclusive,
           },
-          _sum: { amountCents: true },
-        }),
-        prisma.maintenanceEvent.aggregate({
-          where: {
-            createdAt: { gte: m.start, lt: m.endExclusive },
+        },
+        select: {
+          periodStart: true,
+          amountCents: true,
+        },
+      }),
+      prisma.maintenanceEvent.findMany({
+        where: {
+          createdAt: {
+            gte: monthKeys[0].start,
+            lt: monthKeys[monthKeys.length - 1].endExclusive,
           },
-          _sum: { costCents: true },
-        }),
-        prisma.maintenanceEvent.count({
-          where: {
-            createdAt: { gte: m.start, lt: m.endExclusive },
-          },
-        }),
-      ]);
+        },
+        select: {
+          createdAt: true,
+          costCents: true,
+        },
+      }),
+    ]);
 
-      const metrics = buildReservationMetrics(resRows);
-      const payrollCents = Number(payrollAgg._sum.amountCents ?? 0);
-      const maintenanceCents = Number(maintenanceAgg._sum.costCents ?? 0);
+  const approvedMinutesByDay = new Map<string, number>();
+  for (const worklog of trendApprovedWorklogs30d) {
+    const key = ymdKey(worklog.workDate, tz);
+    approvedMinutesByDay.set(
+      key,
+      (approvedMinutesByDay.get(key) ?? 0) + Number(worklog.workedMinutes ?? 0)
+    );
+  }
+
+  const trendDays = dayPoints.map((point) => {
+    const metrics = buildReservationMetrics(
+      trendReservations30d.filter((reservation) =>
+        reservationInRange(reservation, point.start, point.endExclusive)
+      )
+    );
+
+    return {
+      date: point.date,
+      salesCents: metrics.totals.salesCents,
+      collectedCents: metrics.totals.collectedCents,
+      pendingCents: metrics.totals.pendingCents,
+      reservations: metrics.reservations,
+      approvedMinutes: approvedMinutesByDay.get(point.date) ?? 0,
+    };
+  });
+
+  const reservationsByMonth = new Map<string, ReservationMetricInput[]>();
+  for (const reservation of trendReservations6m) {
+    const timestamp = reservationTimestamp(reservation);
+    if (!timestamp) continue;
+    const key = monthKeyForDate(timestamp, tz);
+    const current = reservationsByMonth.get(key) ?? [];
+    current.push(reservation);
+    reservationsByMonth.set(key, current);
+  }
+
+  const payrollByMonth = new Map<string, number>();
+  for (const payroll of payrollRows6m) {
+    const key = monthKeyForDate(payroll.periodStart, tz);
+    payrollByMonth.set(
+      key,
+      (payrollByMonth.get(key) ?? 0) + Number(payroll.amountCents ?? 0)
+    );
+  }
+
+  const maintenanceByMonth = new Map<
+    string,
+    { costCents: number; events: number }
+  >();
+  for (const event of maintenanceRows6m) {
+    const key = monthKeyForDate(event.createdAt, tz);
+    const current = maintenanceByMonth.get(key) ?? { costCents: 0, events: 0 };
+    current.costCents += Number(event.costCents ?? 0);
+    current.events += 1;
+    maintenanceByMonth.set(key, current);
+  }
+
+  const trends = {
+    days7: trendDays.slice(-7),
+    days30: trendDays,
+    months6: monthKeys.map((monthKey) => {
+      const metrics = buildReservationMetrics(
+        reservationsByMonth.get(monthKey.key) ?? []
+      );
+      const payrollCents = payrollByMonth.get(monthKey.key) ?? 0;
+      const maintenance = maintenanceByMonth.get(monthKey.key) ?? {
+        costCents: 0,
+        events: 0,
+      };
 
       return {
-        month: m.key,
+        month: monthKey.key,
         salesCents: metrics.totals.salesCents,
         payrollCents,
-        maintenanceCents,
-        estimatedMarginCents: metrics.totals.salesCents - payrollCents - maintenanceCents,
-        maintenanceEvents: maintenanceEventsAgg,
+        maintenanceCents: maintenance.costCents,
+        estimatedMarginCents:
+          metrics.totals.salesCents - payrollCents - maintenance.costCents,
+        maintenanceEvents: maintenance.events,
       };
-    })
-  );
+    }),
+  };
 
   return NextResponse.json({
     ok: true,
@@ -850,117 +1398,89 @@ export async function GET() {
       monthLaborCostCents: Number(monthMaintenanceAgg._sum.laborCostCents ?? 0),
       lowStockParts,
     },
+    bar: {
+      todaySalesCents: barTodayCents,
+      todayStaffSalesCents: barTodayStaffCents,
+      monthSalesCents: barMonthCents,
+      lowStockCount: lowStockBarCount,
+    },
+    assets: {
+      summary: assetSummary,
+      incidentsOpen: assetIncidentsOpen,
+    },
+    fulfillment: {
+      pending: fulfillmentPending,
+      deliveredNotReturned,
+    },
+    cashByOrigin,
+    barAccounting: {
+      monthSalesCents: barMonthCents,
+      monthRegularSalesCents: barMonthRegularCents,
+      monthStaffSalesCents: barMonthStaffCents,
+      monthPurchasesCents: barMonthPurchasesCents,
+      monthPurchasesPaidCents: barMonthPurchasesPaidCents,
+      monthPurchasesPendingCents: barMonthPurchasesPendingCents,
+      marginApproxCents: barMarginApproxCents,
+      marginRealCents: Number(barSaleAgg._sum.totalMarginCents ?? 0),
+      costTheoreticalCents: Number(barSaleAgg._sum.totalCostCents ?? 0),
+      topMarginProducts: barMarginByProduct,
+      topVendors: barTopVendors,
+      byCategory: barPurchasesByCategory,
+    },
     cash: {
       collectedTodayCents: todayMetrics.totals.collectedCents,
       pendingTodayCents: todayMetrics.totals.pendingCents,
       depositsHeldCents: reservationsToday.reduce(
-        (sum, r) => sum + (r.depositHeld ? Number(r.depositCents ?? 0) : 0),
+        (sum, reservation) =>
+          sum +
+          (reservation.depositHeld ? Number(reservation.depositCents ?? 0) : 0),
         0
       ),
-      depositsLiberableCents: reservationsToday.reduce((sum: number, r: ReservationMetricInput) => {
-      const paidDeposit = r.payments
-          .filter((p: ReservationMetricInput["payments"][number]) => p.isDeposit)
-          .reduce(
-          (acc: number, p: ReservationMetricInput["payments"][number]) =>
-              acc + (p.direction === "OUT" ? -p.amountCents : p.amountCents),
-          0
-      );
-
-      return sum + (r.depositHeld ? 0 : Math.max(0, paidDeposit));
-      }, 0),
-      reservationsWithDebt: reservationsToday.filter((r: ReservationMetricInput) => {
-        const sold =
-            r.items.length > 0
-            ? Math.max(
-                0,
-                r.items.reduce(
-                    (s: number, it: ReservationMetricInput["items"][number]) =>
-                    s + Number(it.totalPriceCents ?? 0),
-                    0
-                ) -
-                    Number(r.autoDiscountCents ?? 0) -
-                    Number(r.manualDiscountCents ?? 0)
-                )
-            : Number(r.totalPriceCents ?? 0);
-
-        const collectedService = r.payments
-            .filter((p: ReservationMetricInput["payments"][number]) => !p.isDeposit)
+      depositsLiberableCents: reservationsToday.reduce(
+        (sum, reservation) => {
+          const paidDeposit = reservation.payments
+            .filter((payment) => payment.isDeposit)
             .reduce(
-            (acc: number, p: ReservationMetricInput["payments"][number]) =>
-                acc + (p.direction === "OUT" ? -p.amountCents : p.amountCents),
-            0
+              (acc, payment) =>
+                acc +
+                (payment.direction === "OUT"
+                  ? -payment.amountCents
+                  : payment.amountCents),
+              0
             );
 
+          return sum + (reservation.depositHeld ? 0 : Math.max(0, paidDeposit));
+        },
+        0
+      ),
+      reservationsWithDebt: reservationsToday.filter((reservation) => {
+        const sold =
+          reservation.items.length > 0
+            ? Math.max(
+                0,
+                reservation.items.reduce(
+                  (sum, item) => sum + Number(item.totalPriceCents ?? 0),
+                  0
+                ) -
+                  Number(reservation.autoDiscountCents ?? 0) -
+                  Number(reservation.manualDiscountCents ?? 0)
+              )
+            : Number(reservation.totalPriceCents ?? 0);
+
+        const collectedService = reservation.payments
+          .filter((payment) => !payment.isDeposit)
+          .reduce(
+            (acc, payment) =>
+              acc +
+              (payment.direction === "OUT"
+                ? -payment.amountCents
+                : payment.amountCents),
+            0
+          );
+
         return Math.max(0, sold - collectedService) > 0;
-        }).length,
-            },
-            trends,
-        });
-        }
-
-const reservationExecutiveSelect = Prisma.validator<Prisma.ReservationSelect>()({
-  id: true,
-  status: true,
-  formalizedAt: true,
-  source: true,
-  marketing: true,
-  scheduledTime: true,
-  activityDate: true,
-  totalPriceCents: true,
-  autoDiscountCents: true,
-  manualDiscountCents: true,
-  depositCents: true,
-  depositHeld: true,
-  createdAt: true,
-  payments: {
-    select: {
-      amountCents: true,
-      direction: true,
-      isDeposit: true,
+      }).length,
     },
-  },
-  channel: { select: { name: true } },
-  service: { select: { name: true } },
-  items: {
-    select: {
-      isExtra: true,
-      totalPriceCents: true,
-      service: { select: { name: true } },
-    },
-  },
-});
-
-type ReservationMetricInput = {
-    id: string;
-    status: string;
-    formalizedAt: Date | null;
-    source: string | null;
-    marketing?: string | null;
-    scheduledTime: Date | null;
-    activityDate: Date | null;
-    service: { name: string | null } | null;
-    channel: { name: string | null } | null;
-    totalPriceCents: number | null;
-    autoDiscountCents: number | null;
-    manualDiscountCents: number | null;
-    depositCents: number | null;
-    payments: Array<{
-        amountCents: number;
-        direction: "IN" | "OUT";
-        isDeposit: boolean;
-    }>;
-    items: Array<{
-        isExtra: boolean;
-        totalPriceCents: number | null;
-        service: { name: string | null } | null;
-    }>;
-    depositHeld?: boolean;
-    createdAt?: Date;
-    };
-
-function cookieHeaderFromStore(store: Awaited<ReturnType<typeof cookies>>) {
-  return store
-    .getAll()
-    .map((c) => `${c.name}=${encodeURIComponent(c.value)}`)
-    .join("; ");
+    trends,
+  });
 }
