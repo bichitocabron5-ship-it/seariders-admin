@@ -322,8 +322,11 @@ model Reservation {
   licenseType          String?
   licenseNumber        String?
   arrivedStoreAt       DateTime?
+  storeQueueStartedAt  DateTime?
   formalizedAt         DateTime?
   formalizedByUserId   String?
+  paymentCompletedAt   DateTime?
+  readyForPlatformAt   DateTime?
   departureAt          DateTime?
   arrivalAt            DateTime?
   createdAt            DateTime              @default(now())
@@ -440,6 +443,7 @@ model ReservationUnit {
   driverBirthDate            DateTime?
   minorAuthorizationProvided Boolean   @default(false)
   minorNeedsAuthorization    Boolean   @default(false)
+  readyForPlatformAt         DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -865,6 +869,17 @@ model TaxiboatTrip {
   @@unique([activityDate, boat, tripNo])
   @@index([createdAt])
   @@index([boat, status])
+}
+
+model TaxiboatOperation {
+  id                String                  @id @default(cuid())
+  boat              TaxiboatBoat            @unique
+  status            TaxiboatOperationStatus @default(AT_PLATFORM)
+  arrivedPlatformAt DateTime?
+  departedPlatformAt DateTime?
+  arrivedBoothAt    DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 }
 
 model Payment {
@@ -2065,6 +2080,12 @@ enum TaxiboatTripStatus {
   OPEN
   DEPARTED
   CANCELED
+}
+
+enum TaxiboatOperationStatus {
+  AT_PLATFORM
+  TO_BOOTH
+  AT_BOOTH
 }
 
 enum PaymentOrigin {
