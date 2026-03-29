@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
+import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
 
 export const runtime = "nodejs";
 
@@ -27,8 +28,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
 
-const now = new Date();
-const activityDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+const activityDate = utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
 
 const max = await prisma.taxiboatTrip.aggregate({
   where: { activityDate, boat: parsed.data.boat ?? "TAXIBOAT_1" },

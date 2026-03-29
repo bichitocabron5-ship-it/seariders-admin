@@ -12,7 +12,12 @@ export type Option = {
   hasPrice?: boolean;
 };
 
-export type Channel = { id: string; name: string; commissionEnabled?: boolean; commissionBps?: number };
+export type Channel = {
+  id: string;
+  name: string;
+  commissionEnabled?: boolean | null;
+  commissionBps?: number | null;
+};
 
 export type CartItem = {
   id: string;

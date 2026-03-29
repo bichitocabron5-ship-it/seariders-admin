@@ -53,6 +53,7 @@ export async function POST(
           id: true,
           status: true,
           formalizedAt: true,
+          paymentCompletedAt: true,
         },
       });
 
@@ -77,10 +78,13 @@ export async function POST(
           throw new Error(`No se puede pasar a READY desde estado ${reservation.status}.`);
         }
 
-        return await tx.reservation.update({
+        const readyAt = new Date();
+        const updated = await tx.reservation.update({
           where: { id },
           data: {
             status: "READY_FOR_PLATFORM",
+            paymentCompletedAt: reservation.paymentCompletedAt ?? readyAt,
+            readyForPlatformAt: readyAt,
           },
           select: {
             id: true,
@@ -88,6 +92,13 @@ export async function POST(
             formalizedAt: true,
           },
         });
+
+        await tx.reservationUnit.updateMany({
+          where: { reservationId: id, status: "READY_FOR_PLATFORM" },
+          data: { readyForPlatformAt: readyAt },
+        });
+
+        return updated;
       }
 
       if (action === "mark_in_sea") {

@@ -42,6 +42,7 @@ export async function POST(_: Request, ctx: { params: Promise<{ assignmentId: st
 
   try {
     const out = await prisma.$transaction(async (tx) => {
+      const readyAt = new Date();
       await tx.$queryRaw`
         SELECT 1
         FROM "MonitorRunAssignment"
@@ -95,6 +96,7 @@ export async function POST(_: Request, ctx: { params: Promise<{ assignmentId: st
             where: { id: unit.id },
             data: {
               status: ReservationUnitStatus.READY_FOR_PLATFORM,
+              readyForPlatformAt: readyAt,
               jetskiId:
                 assignment.jetskiId && unit.jetskiId === assignment.jetskiId
                   ? null
@@ -113,7 +115,12 @@ export async function POST(_: Request, ctx: { params: Promise<{ assignmentId: st
       const reservationStatus = deriveReservationStatusFromUnits(units);
       await tx.reservation.update({
         where: { id: assignment.reservationId },
-        data: { status: reservationStatus },
+        data: {
+          status: reservationStatus,
+          ...(reservationStatus === ReservationStatus.READY_FOR_PLATFORM
+            ? { readyForPlatformAt: readyAt }
+            : {}),
+        },
         select: { id: true },
       });
 

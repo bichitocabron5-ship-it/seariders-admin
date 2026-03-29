@@ -49,9 +49,13 @@ export async function POST(req: Request) {
   }
 
   if (!res.arrivedStoreAt) {
+    const now = new Date();
     await prisma.reservation.update({
       where: { id: res.id },
-      data: { arrivedStoreAt: new Date() },
+      data: {
+        arrivedStoreAt: now,
+        storeQueueStartedAt: now,
+      },
       select: { id: true },
     });
   }

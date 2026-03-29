@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
+import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 
 export const runtime = "nodejs";
 
@@ -14,14 +15,12 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
 
   // ✅ OJO: prisma.taxiboatTrip (no prisma.TaxiboatTrip)
   const trips = await prisma.taxiboatTrip.findMany({
     where: {
-      createdAt: { gte: start, lt: end },
+      activityDate: { gte: start, lt: endExclusive },
     },
     orderBy: { createdAt: "asc" },
     select: {

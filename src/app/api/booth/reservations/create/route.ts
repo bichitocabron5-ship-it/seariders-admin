@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
+import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
 
 const BodySchema = z.object({
   customerName: z.string().min(1),
@@ -38,9 +39,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Body inválido", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  // hoy (fecha actividad). Ajusta si trabajas por día “operativo”.
-  const now = new Date();
-  const activityDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const activityDate = utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
 
 
 

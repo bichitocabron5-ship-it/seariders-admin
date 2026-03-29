@@ -4,16 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
+import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 
 export const runtime = "nodejs";
-
-function startEndToday() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-  return { start, end };
-}
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -22,12 +15,12 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const { start, end } = startEndToday();
+  const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
 
   const rowsDb = await prisma.reservation.findMany({
     where: {
       source: "BOOTH",
-      activityDate: { gte: start, lte: end },
+      activityDate: { gte: start, lt: endExclusive },
     },
     orderBy: { createdAt: "asc" },
     select: {

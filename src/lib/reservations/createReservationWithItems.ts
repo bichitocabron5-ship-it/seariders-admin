@@ -1,7 +1,7 @@
 // src/lib/reservations/createReservationWithItems.ts
 import type { Prisma } from "@prisma/client";
 import { computeAutoDiscountDetail } from "@/lib/discounts";
-import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz, shouldAutoFormalize } from "@/lib/tz-business";
+import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz, shouldAutoFormalize, todayYmdInTz } from "@/lib/tz-business";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 
@@ -80,6 +80,7 @@ export async function createReservationWithItems(params: {
     tz,
     marginMinutes: 5,
   });
+  const isTodayBusiness = input.date === todayYmdInTz(tz);
 
   const formalizeData = shouldFormalize
     ? { formalizedAt: new Date(), formalizedByUserId: sessionUserId }
@@ -391,6 +392,7 @@ export async function createReservationWithItems(params: {
           status: "WAITING",
           activityDate,
           scheduledTime,
+          storeQueueStartedAt: isTodayBusiness ? new Date() : null,
           ...formalizeData,
 
           customerName: input.customerName,

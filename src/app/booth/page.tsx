@@ -40,6 +40,16 @@ type TripRow = {
   reservations?: ReservationLike[];
 };
 
+type TaxiboatOperationRow = {
+  id: string;
+  boat: "TAXIBOAT_1" | "TAXIBOAT_2" | string;
+  status: "AT_PLATFORM" | "TO_BOOTH" | "AT_BOOTH" | string;
+  arrivedPlatformAt?: string | null;
+  departedPlatformAt?: string | null;
+  arrivedBoothAt?: string | null;
+  updatedAt: string;
+};
+
 type CashClosureSummary = {
   ok: boolean;
   isClosed?: boolean;
@@ -89,6 +99,55 @@ function getTaxiboatWaitMeta(assignedAt?: string | null, departedAt?: string | n
   };
 }
 
+function getTaxiboatReturnMeta(
+  row: TaxiboatOperationRow,
+  nowMs?: number
+) {
+  if (row.status === "AT_BOOTH") {
+    const arrivedLabel = row.arrivedBoothAt
+      ? new Date(row.arrivedBoothAt).toLocaleTimeString("es-ES", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "-";
+
+    return {
+      statusLabel: "EN BOOTH",
+      detail: `Llegada a Booth registrada a las ${arrivedLabel}`,
+      bg: "#f0fdf4",
+      fg: "#166534",
+      bd: "#bbf7d0",
+    };
+  }
+
+  if (row.status === "TO_BOOTH") {
+    const departedMs = new Date(row.departedPlatformAt ?? row.updatedAt).getTime();
+    const elapsedMs = Math.max(0, (nowMs ?? Date.now()) - departedMs);
+    return {
+      statusLabel: "EN CAMINO",
+      detail: `Salio de platform hace ${msToClock(elapsedMs)}`,
+      bg: "#fffbeb",
+      fg: "#92400e",
+      bd: "#fde68a",
+    };
+  }
+
+  const arrivedLabel = row.arrivedPlatformAt
+    ? new Date(row.arrivedPlatformAt).toLocaleTimeString("es-ES", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "-";
+
+  return {
+    statusLabel: "EN PLATAFORMA",
+    detail: `Disponible en platform desde ${arrivedLabel}`,
+    bg: "#ecfeff",
+    fg: "#155e75",
+    bd: "#a5f3fc",
+  };
+}
+
 function normalize(s: string) {
   return (s || "").trim().toLowerCase();
 }
@@ -128,6 +187,7 @@ export default function Booth() {
   const [payingId, setPayingId] = useState<string | null>(null);
   const [discountEuros, setDiscountEuros] = useState<string>(""); // descuento opcional
   const [trips, setTrips] = useState<TripRow[]>([]);
+  const [taxiboatOps, setTaxiboatOps] = useState<TaxiboatOperationRow[]>([]);
   const [activeTripId, setActiveTripId] = useState<string>("");
   const [activeBoat, setActiveBoat] = useState<"TAXIBOAT_1"|"TAXIBOAT_2">("TAXIBOAT_1");
   const [cashClosureSummary, setCashClosureSummary] = useState<CashClosureSummary | null>(null);
@@ -251,6 +311,12 @@ async function load() {
     const j = await t.json();
     setTrips(j.trips ?? []);
   }
+
+  const ops = await fetch("/api/platform/taxiboat-operations", { cache: "no-store" });
+  if (ops.ok) {
+    const j = await ops.json();
+    setTaxiboatOps(j.rows ?? []);
+  }
 }
 
 const activeTrip = trips.find((t) => t.id === activeTripId);
@@ -268,6 +334,14 @@ const openTrips = useMemo(() => trips.filter((t) => t.status === "OPEN").length,
 const queueWaiting = useMemo(
   () => rows.filter((r) => !r.arrivedStoreAt && !r.taxiboatDepartedAt && !r.taxiboatTripId).length,
   [rows]
+);
+const preReservationRows = useMemo(
+  () => rows.filter((r) => !r.arrivedStoreAt && !r.taxiboatTripId),
+  [rows]
+);
+const taxiboatOpsByBoat = useMemo(
+  () => new Map(taxiboatOps.map((row) => [row.boat, row])),
+  [taxiboatOps]
 );
 
 function getSplit(id: string): [SplitLine, SplitLine] {
@@ -395,6 +469,16 @@ async function departTrip(tripId: string) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ tripId }),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  await load();
+}
+
+async function markArrivedBooth(boat: "TAXIBOAT_1" | "TAXIBOAT_2") {
+  const r = await fetch("/api/platform/taxiboat-operations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ boat, action: "MARK_ARRIVED_BOOTH" }),
   });
   if (!r.ok) throw new Error(await r.text());
   await load();
@@ -591,10 +675,10 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
           <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
             <div>
               <h2 style={{ margin: 0, fontSize: 22 }}>Pre-reservas de hoy</h2>
-              <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>Asignación a viaje, cobro parcial y seguimiento del estado de cada reserva.</div>
+              <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>Pendientes de asignación a viaje y cobro parcial antes de salir.</div>
             </div>
             <div style={{ display: "grid", gap: 10 }}>
-              {rows.map((r) => {
+              {preReservationRows.map((r) => {
                 const received = !!r.arrivedStoreAt;
                 const assigned = !!r.taxiboatTripId;
                 const departed = !!r.taxiboatDepartedAt;
@@ -609,7 +693,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
                 {!received && (r.pendingCents ?? 0) > 0 ? <div style={{ marginTop: 10, display: "grid", gap: 10 }}><div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}><input disabled={isCashClosed} placeholder="Importe EUR (1)" value={getSplit(r.id)[0].amount} onChange={(e) => setSplitLine(r.id, 0, { amount: e.target.value })} style={{ ...fieldStyle, width: 160 }} /><select disabled={isCashClosed} value={getSplit(r.id)[0].method} onChange={(e) => setSplitLine(r.id, 0, { method: e.target.value as PayMethod })} style={{ ...fieldStyle, width: 180 }}><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="BIZUM">Bizum</option><option value="TRANSFER">Transfer</option></select></div><div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}><input disabled={isCashClosed} placeholder="Importe EUR (2)" value={getSplit(r.id)[1].amount} onChange={(e) => setSplitLine(r.id, 1, { amount: e.target.value })} style={{ ...fieldStyle, width: 160 }} /><select disabled={isCashClosed} value={getSplit(r.id)[1].method} onChange={(e) => setSplitLine(r.id, 1, { method: e.target.value as PayMethod })} style={{ ...fieldStyle, width: 180 }}><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="BIZUM">Bizum</option><option value="TRANSFER">Transfer</option></select><button onClick={() => paySplitNow(r.id, r.pendingCents ?? 0)} disabled={payingId === r.id || isCashClosed} style={{ ...darkBtn, opacity: payingId === r.id || isCashClosed ? 0.5 : 1, cursor: isCashClosed ? "not-allowed" : "pointer" }}>{isCashClosed ? "Caja cerrada" : payingId === r.id ? "Cobrando..." : "Cobrar (split)"}</button></div><div style={{ fontSize: 12, opacity: 0.7 }}>Pendiente: <strong>{euros(r.pendingCents ?? 0)}</strong> · Se pueden usar 1 o 2 líneas.</div></div> : null}
                 <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>{label ? <span style={{ padding: "4px 8px", borderRadius: 999, background: bg, fontSize: 12 }}>{label}</span> : <span />}</div></div>;
               })}
-              {rows.length === 0 ? <div style={{ opacity: 0.7 }}>No hay pre-reservas hoy.</div> : null}
+              {preReservationRows.length === 0 ? <div style={{ opacity: 0.7 }}>No hay pre-reservas pendientes de asignación.</div> : null}
             </div>
           </section>
         </div>
@@ -617,7 +701,56 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
         <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
           <div>
             <div style={{ fontWeight: 900, fontSize: 22 }}>Taxiboat · Viajes</div>
-            <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>Crea, prepara y despacha viajes del día.</div>
+            <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>Crea, prepara y despacha viajes del día. El retorno desde Platform se muestra por barco.</div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+            {(["TAXIBOAT_1", "TAXIBOAT_2"] as const).map((boat) => {
+              const op = taxiboatOpsByBoat.get(boat);
+              const meta = op ? getTaxiboatReturnMeta(op, nowMs) : null;
+
+              return (
+                <div
+                  key={boat}
+                  style={{
+                    border: `1px solid ${meta?.bd ?? "#e5e7eb"}`,
+                    background: meta?.bg ?? "#fff",
+                    borderRadius: 16,
+                    padding: 14,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                    <div style={{ fontWeight: 900 }}>{boatLabel(boat)}</div>
+                    <span
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        border: `1px solid ${meta?.bd ?? "#e5e7eb"}`,
+                        background: "#fff",
+                        color: meta?.fg ?? "#475569",
+                        fontSize: 12,
+                        fontWeight: 900,
+                      }}
+                    >
+                      {meta?.statusLabel ?? "SIN DATO"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, color: meta?.fg ?? "#475569", fontWeight: 800 }}>
+                    {meta?.detail ?? "Sin estado operativo todavía."}
+                  </div>
+                  {op?.status === "TO_BOOTH" ? (
+                    <button
+                      type="button"
+                      onClick={() => void markArrivedBooth(boat)}
+                      style={darkBtn}
+                    >
+                      Marcar llegada a Booth
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, alignItems: "end" }}>
             <select value={activeBoat} onChange={(e) => setActiveBoat(e.target.value as "TAXIBOAT_1" | "TAXIBOAT_2")} style={fieldStyle}><option value="TAXIBOAT_1">Taxiboat 1</option><option value="TAXIBOAT_2">Taxiboat 2</option></select>
