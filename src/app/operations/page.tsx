@@ -1,7 +1,7 @@
-// src/app/operations/page.tsx
+﻿// src/app/operations/page.tsx
 "use client";
 
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 
 type OperationCard = {
   id: string;
@@ -152,20 +152,87 @@ type OverviewResponse = {
   };
 };
 
+type WaitTimesResponse = {
+  ok: true;
+  generatedAt: string;
+  ymd: string;
+  sla: {
+    boothAssignTaxiMin: number;
+    taxiDepartAfterAssignMin: number;
+    boothToStoreMin: number;
+    platformToBoothLiveMin: number;
+    storeQueueMin: number;
+    storeFormalizeMin: number;
+    storeFormalizeToPaymentMin: number;
+    storePaymentToReadyMin: number;
+    storeTotalToReadyMin: number;
+    platformQueueLiveMin: number;
+    platformUnitToAssignMin: number;
+    platformAssignToSeaMin: number;
+    seaDurationMin: number;
+    seaDelayMin: number;
+  };
+  summary: {
+    boothAssignTaxiAvgMin: number | null;
+    taxiAssignToDepartAvgMin: number | null;
+    boothToStoreTripAvgMin: number | null;
+    boothToStoreTotalAvgMin: number | null;
+    platformToBoothLiveAvgMin: number | null;
+
+    storeQueueAvgMin: number | null;
+    storeArrivedToFormalizedAvgMin: number | null;
+    storeFormalizedToPaymentAvgMin: number | null;
+    storePaymentToReadyAvgMin: number | null;
+    storeFormalizedToReadyAvgMin: number | null;
+
+    platformQueueLiveAvgMin: number | null;
+    platformUnitToAssignAvgMin: number | null;
+    platformAssignToSeaAvgMin: number | null;
+
+    seaDurationAvgMin: number | null;
+    seaDelayAvgMin: number | null;
+    runOpenDurationAvgMin: number | null;
+  };
+  counts: {
+    reservations: number;
+    unitsReadyForPlatformWithoutAssignment: number;
+    activeAlerts: number;
+    assignments: number;
+  };
+  active: Array<{
+    reservationId: string;
+    label: string;
+    phase: string;
+    waitedMin: number;
+    targetMin: number;
+    overByMin: number;
+    startedAt: string;
+    scheduledTime: string | null;
+  }>;
+  phaseRows: Array<{
+    phase: string;
+    avgMin: number | null;
+    maxMin: number | null;
+    cases: number;
+    slaTargetMin: number;
+    slaOkPct: number | null;
+  }>;
+};
+
 function eur(cents: number | null | undefined) {
   if (cents == null) return "-";
   return `${(cents / 100).toFixed(2)} EUR`;
 }
 
-function fmtDateTime(iso: string | null) {
-  if (!iso) return "-";
+function fmtDateTime(value: string | null | undefined) {
+  if (!value) return "-";
   try {
-    return new Date(iso).toLocaleString("es-ES", {
+    return new Date(value).toLocaleString("es-ES", {
       dateStyle: "short",
       timeStyle: "short",
     });
   } catch {
-    return iso;
+    return value;
   }
 }
 
@@ -180,6 +247,105 @@ function fmtDate(iso: string | null) {
   }
 }
 
+function waitSeverity(waitedMin: number, targetMin: number) {
+  if (!Number.isFinite(waitedMin) || !Number.isFinite(targetMin) || targetMin <= 0) {
+    return "neutral" as const;
+  }
+
+  if (waitedMin <= targetMin) return "ok" as const;
+  if (waitedMin <= targetMin * 1.5) return "warn" as const;
+  return "danger" as const;
+}
+
+function pctSeverity(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "neutral" as const;
+  if (value >= 90) return "ok" as const;
+  if (value >= 75) return "warn" as const;
+  return "danger" as const;
+}
+
+function waitSeverityColors(level: "ok" | "warn" | "danger" | "neutral") {
+  switch (level) {
+    case "ok":
+      return {
+        bg: "#f0fdf4",
+        border: "#bbf7d0",
+        text: "#166534",
+      };
+    case "warn":
+      return {
+        bg: "#fff7ed",
+        border: "#fed7aa",
+        text: "#b45309",
+      };
+    case "danger":
+      return {
+        bg: "#fff1f2",
+        border: "#fecaca",
+        text: "#b91c1c",
+      };
+    default:
+      return {
+        bg: "#f8fafc",
+        border: "#e2e8f0",
+        text: "#475569",
+      };
+  }
+}
+
+function severityLabel(level: "ok" | "warn" | "danger" | "neutral") {
+  switch (level) {
+    case "ok":
+      return "OK";
+    case "warn":
+      return "ATENCIÓN";
+    case "danger":
+      return "CRÍTICO";
+    default:
+      return "—";
+  }
+}
+
+function phaseLink(row: { phase: string; reservationId: string }) {
+  const p = row.phase.toUpperCase();
+
+  if (p.includes("BOOTH")) {
+    return `/booth?reservationId=${row.reservationId}`;
+  }
+
+  if (p.includes("STORE")) {
+    return `/store/create?reservationId=${row.reservationId}`;
+  }
+
+  if (p.includes("PLATFORM")) {
+    return `/platform`;
+  }
+
+  if (p.includes("SERVICIO")) {
+    return `/platform`;
+  }
+
+  return `/operations?reservationId=${row.reservationId}`;
+}
+
+function fmtMin(v: number | null | undefined) {
+  if (v == null || !Number.isFinite(v)) return "-";
+  return `${Math.round(v)} min`;
+}
+
+function fmtPct(v: number | null | undefined) {
+  if (v == null || !Number.isFinite(v)) return "-";
+  return `${Math.round(v)}%`;
+}
+
+function cleanLabel(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7E]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function bucketTitle(key: keyof OverviewResponse["board"]) {
   switch (key) {
     case "pending":
@@ -189,7 +355,7 @@ function bucketTitle(key: keyof OverviewResponse["board"]) {
     case "ready":
       return "Ready";
     case "inSea":
-      return "In Sea";
+      return "En mar";
     case "completed":
       return "Completadas";
     default:
@@ -210,34 +376,100 @@ export default function OperationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [waitTimes, setWaitTimes] = useState<WaitTimesResponse | null>(null);
+  const [waitTimesLoading, setWaitTimesLoading] = useState(false);
+  const [waitTimesError, setWaitTimesError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setWaitTimesLoading(true);
+    setWaitTimesError(null);
 
     try {
-      const res = await fetch("/api/operations/overview", { cache: "no-store" });
-      if (!res.ok) throw new Error(await res.text());
-      const json = (await res.json()) as OverviewResponse;
-      setData(json);
+      const [overviewRes, waitTimesRes] = await Promise.all([
+        fetch("/api/operations/overview", { cache: "no-store" }),
+        fetch("/api/operations/wait-times", { cache: "no-store" }),
+      ]);
+
+      if (!overviewRes.ok) throw new Error(await overviewRes.text());
+      if (!waitTimesRes.ok) throw new Error(await waitTimesRes.text());
+
+      const overviewJson = (await overviewRes.json()) as OverviewResponse;
+      const waitTimesJson = (await waitTimesRes.json()) as WaitTimesResponse;
+
+      setData(overviewJson);
+      setWaitTimes(waitTimesJson);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error cargando operaciones");
+      const msg = e instanceof Error ? e.message : "Error cargando operaciones";
+      setError(msg);
+      setWaitTimesError(msg);
     } finally {
       setLoading(false);
+      setWaitTimesLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+    useEffect(() => {
+      load();
+    }, [load]);
+
+  const activeWaitRows = useMemo(
+    () =>
+      (waitTimes?.active ?? []).map((row) => {
+        const severity = waitSeverity(row.waitedMin, row.targetMin);
+
+        return {
+          reservationId: row.reservationId,
+          reserva: row.label,
+          fase: row.phase,
+          actual: fmtMin(row.waitedMin),
+          sla: fmtMin(row.targetMin),
+          retraso: row.overByMin > 0 ? `+${row.overByMin} min` : "OK",
+          desde: fmtDateTime(row.startedAt),
+          prevista: row.scheduledTime ? fmtDateTime(row.scheduledTime) : "—",
+          severity,
+          severityLabel: severityLabel(severity),
+          severityColors: waitSeverityColors(severity),
+          href: phaseLink(row),
+        };
+      }),
+    [waitTimes]
+  );
+
+  const phaseSummaryRows = useMemo(
+    () =>
+      (waitTimes?.phaseRows ?? []).map((row) => {
+        const severity = pctSeverity(row.slaOkPct);
+
+        return {
+          fase: row.phase,
+          media: fmtMin(row.avgMin),
+          max: fmtMin(row.maxMin),
+          casos: String(row.cases),
+          sla: fmtMin(row.slaTargetMin),
+          cumplimiento: fmtPct(row.slaOkPct),
+          severity,
+          severityLabel: severityLabel(severity),
+          severityColors: waitSeverityColors(severity),
+        };
+      }),
+    [waitTimes]
+  );
+
+  const criticalWaitAlerts = useMemo(
+    () => (waitTimes?.active ?? []).filter((row) => row.overByMin > 0).slice(0, 8),
+    [waitTimes]
+  );
 
   return (
     <div style={pageShell}>
       <section style={heroCard}>
         <div style={{ display: "grid", gap: 8 }}>
-          <div style={eyebrow}>Operations Center</div>
+          <div style={eyebrow}>Operaciones</div>
           <div style={heroTitle}>Centro de operaciones</div>
           <div style={heroText}>
-            Vista unificada para reservas, alertas criticas y flujo de paso entre Booth, Store y Platform, con contratos incompletos y extras pendientes de plataforma.
+            Vista unificada de reservas, alertas operativas y flujo entre Booth, Store y Platform, con contratos incompletos y extras pendientes.
           </div>
           {data ? (
             <div style={heroMeta}>Fecha operativa: {fmtDate(data.businessDate)}</div>
@@ -281,13 +513,432 @@ export default function OperationsPage() {
               <Kpi title="Pendiente" value={data.summary.pending} warn={data.summary.pending > 0} />
               <Kpi title="Proximas" value={data.summary.upcoming} />
               <Kpi title="Ready" value={data.summary.ready} />
-              <Kpi title="In Sea" value={data.summary.inSea} />
+              <Kpi title="En mar" value={data.summary.inSea} />
               <Kpi title="Completadas" value={data.summary.completed} />
               <Kpi title="Cobros pendientes" value={data.summary.pendingPayments} warn={data.summary.pendingPayments > 0} />
               <Kpi title="Sin formalizar" value={data.summary.unformalized} warn={data.summary.unformalized > 0} />
               <Kpi title="Alertas criticas" value={data.summary.criticalAlerts} warn={data.summary.criticalAlerts > 0} />
               <Kpi title="Saturacion" value={data.summary.saturationWarnings} warn={data.summary.saturationWarnings > 0} />
             </div>
+          </section>
+
+          <section
+            style={{
+              display: "grid",
+              gap: 16,
+              border: "1px solid #dbeafe",
+              borderRadius: 20,
+              padding: 18,
+              background: "#f8fbff",
+              boxShadow: "0 14px 34px rgba(20, 32, 51, 0.05)",
+            }}
+          >
+            <div style={{ display: "grid", gap: 4 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 900,
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                  color: "#0369a1",
+                }}
+              >
+                Tiempos operativos
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#0f172a" }}>
+                Esperas, SLA y cuellos de botella del dia
+              </div>
+              <div style={{ fontSize: 13, color: "#64748b" }}>
+                Control live de Booth, Store, Platform y servicio en mar.
+                {waitTimes?.generatedAt ? ` | Actualizado ${fmtDateTime(waitTimes.generatedAt)}` : ""}
+              </div>
+            </div>
+
+            {waitTimesLoading ? (
+              <div style={{ color: "#475569", fontWeight: 700 }}>
+                Cargando tiempos operativos...
+              </div>
+            ) : waitTimesError ? (
+              <div
+                style={{
+                  border: "1px solid #fecaca",
+                  background: "#fff1f2",
+                  color: "#991b1b",
+                  borderRadius: 12,
+                  padding: 12,
+                  fontWeight: 800,
+                }}
+              >
+                {waitTimesError}
+              </div>
+            ) : waitTimes ? (
+              <>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  {[
+                    {
+                      title: "Taxi asignado",
+                      value: waitTimes.summary.boothAssignTaxiAvgMin,
+                      target: waitTimes.sla.boothAssignTaxiMin,
+                    },
+                    {
+                      title: "Booth → Store",
+                      value: waitTimes.summary.boothToStoreTotalAvgMin,
+                      target: waitTimes.sla.boothToStoreMin,
+                    },
+                    {
+                      title: "Platform → Booth",
+                      value: waitTimes.summary.platformToBoothLiveAvgMin,
+                      target: waitTimes.sla.platformToBoothLiveMin,
+                    },
+                    {
+                      title: "Cola Store",
+                      value: waitTimes.summary.storeQueueAvgMin,
+                      target: waitTimes.sla.storeQueueMin,
+                    },
+                    {
+                      title: "Formalizado → Ready",
+                      value: waitTimes.summary.storeFormalizedToReadyAvgMin,
+                      target: waitTimes.sla.storeTotalToReadyMin,
+                    },
+                    {
+                      title: "Cola Platform",
+                      value: waitTimes.summary.platformQueueLiveAvgMin,
+                      target: waitTimes.sla.platformQueueLiveMin,
+                    },
+                    {
+                      title: "Asignado → Mar",
+                      value: waitTimes.summary.platformAssignToSeaAvgMin,
+                      target: waitTimes.sla.platformAssignToSeaMin,
+                    },
+                    {
+                      title: "Duración mar",
+                      value: waitTimes.summary.seaDurationAvgMin,
+                      target: waitTimes.sla.seaDurationMin,
+                    },
+                    {
+                      title: "Retraso medio",
+                      value: waitTimes.summary.seaDelayAvgMin,
+                      target: waitTimes.sla.seaDelayMin,
+                    },
+                  ].map((item) => {
+                    const severity =
+                      item.value == null ? "neutral" : waitSeverity(item.value, item.target ?? 0);
+                    const colors = waitSeverityColors(severity);
+
+                    return (
+                      <div
+                        key={item.title}
+                        style={{
+                          border: `1px solid ${colors.border}`,
+                          background: colors.bg,
+                          borderRadius: 16,
+                          padding: 14,
+                          display: "grid",
+                          gap: 6,
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>
+                            {item.title}
+                          </div>
+                          <span
+                            style={{
+                              border: `1px solid ${colors.border}`,
+                              background: "#fff",
+                              color: colors.text,
+                              borderRadius: 999,
+                              padding: "3px 8px",
+                              fontSize: 11,
+                              fontWeight: 900,
+                            }}
+                          >
+                            {severityLabel(severity)}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: 28, fontWeight: 900, color: "#0f172a" }}>
+                          {fmtMin(item.value)}
+                        </div>
+
+                        <div style={{ fontSize: 12, color: colors.text, fontWeight: 800 }}>
+                          SLA: {fmtMin(item.target)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                    gap: 16,
+                  }}
+                >
+                  <div
+                    style={{
+                      border: "1px solid #fee2e2",
+                      borderRadius: 16,
+                      padding: 16,
+                      background: "#fffafa",
+                      display: "grid",
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ fontSize: 16, fontWeight: 900, color: "#7f1d1d" }}>
+                      Alertas SLA
+                    </div>
+
+                    {criticalWaitAlerts.length === 0 ? (
+                      <div style={{ fontSize: 13, color: "#475569" }}>
+                        No hay alertas de espera fuera de SLA ahora mismo.
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {criticalWaitAlerts.map((row) => {
+                          const severity = waitSeverity(row.waitedMin, row.targetMin);
+                          const colors = waitSeverityColors(severity);
+                          const href = phaseLink(row);
+
+                          return (
+                            <a
+                              key={`${row.reservationId}-${row.phase}-${row.startedAt}`}
+                              href={href}
+                              style={{
+                                border: `1px solid ${colors.border}`,
+                                background: colors.bg,
+                                color: colors.text,
+                                borderRadius: 12,
+                                padding: 10,
+                                display: "grid",
+                                gap: 4,
+                                textDecoration: "none",
+                              }}
+                            >
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                                <div style={{ fontWeight: 900 }}>{row.label}</div>
+                                <span
+                                  style={{
+                                    border: `1px solid ${colors.border}`,
+                                    background: "#fff",
+                                    color: colors.text,
+                                    borderRadius: 999,
+                                    padding: "3px 8px",
+                                    fontSize: 11,
+                                    fontWeight: 900,
+                                  }}
+                                >
+                                  {severityLabel(severity)}
+                                </span>
+                              </div>
+
+                              <div style={{ fontSize: 13 }}>
+                                {row.phase} · esperando {fmtMin(row.waitedMin)} · SLA {fmtMin(row.targetMin)}
+                              </div>
+
+                              <div style={{ fontSize: 12, fontWeight: 800 }}>
+                                Retraso: +{row.overByMin} min
+                              </div>
+
+                              <div style={{ fontSize: 12, textDecoration: "underline" }}>
+                                Abrir reserva / área
+                              </div>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 16,
+                      padding: 16,
+                      background: "#fff",
+                      display: "grid",
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>
+                      Resumen live
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                        gap: 12,
+                      }}
+                    >
+                      <Kpi title="Reservas hoy" value={waitTimes.counts.reservations} />
+                      <Kpi
+                        title="Sin asignacion Platform"
+                        value={waitTimes.counts.unitsReadyForPlatformWithoutAssignment}
+                        warn={waitTimes.counts.unitsReadyForPlatformWithoutAssignment > 0}
+                      />
+                      <Kpi
+                        title="Alertas activas"
+                        value={waitTimes.counts.activeAlerts}
+                        warn={waitTimes.counts.activeAlerts > 0}
+                      />
+                      <Kpi title="Assignments" value={waitTimes.counts.assignments} />
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 16,
+                    padding: 16,
+                    background: "#fff",
+                    display: "grid",
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>
+                    Top esperas activas
+                  </div>
+
+                  {activeWaitRows.length === 0 ? (
+                    <div style={{ fontSize: 13, color: "#64748b" }}>
+                      No hay esperas activas relevantes.
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>
+                            <th style={{ padding: "10px 8px" }}>Reserva</th>
+                            <th style={{ padding: "10px 8px" }}>Fase</th>
+                            <th style={{ padding: "10px 8px", textAlign: "right" }}>Actual</th>
+                            <th style={{ padding: "10px 8px", textAlign: "right" }}>SLA</th>
+                            <th style={{ padding: "10px 8px", textAlign: "right" }}>Retraso</th>
+                            <th style={{ padding: "10px 8px" }}>Desde</th>
+                            <th style={{ padding: "10px 8px" }}>Hora prevista</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeWaitRows.map((row, idx) => (
+                            <tr
+                              key={`${row.reserva}-${row.fase}-${idx}`}
+                              style={{ borderBottom: "1px solid #f1f5f9" }}
+                            >
+                              <td style={{ padding: "10px 8px", fontWeight: 800 }}>
+                                <a
+                                  href={row.href}
+                                  style={{
+                                    color: "#0f172a",
+                                    textDecoration: "underline",
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  {row.reserva}
+                                </a>
+                              </td>
+
+                              <td style={{ padding: "10px 8px" }}>{row.fase}</td>
+
+                              <td style={{ padding: "10px 8px", textAlign: "right" }}>{row.actual}</td>
+
+                              <td style={{ padding: "10px 8px", textAlign: "right" }}>{row.sla}</td>
+
+                              <td style={{ padding: "10px 8px", textAlign: "right" }}>
+                                <span
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    border: `1px solid ${row.severityColors.border}`,
+                                    background: row.severityColors.bg,
+                                    color: row.severityColors.text,
+                                    borderRadius: 999,
+                                    padding: "4px 8px",
+                                    fontWeight: 900,
+                                    minWidth: 82,
+                                  }}
+                                >
+                                  {row.retraso}
+                                </span>
+                              </td>
+
+                              <td style={{ padding: "10px 8px" }}>{row.desde}</td>
+                              <td style={{ padding: "10px 8px" }}>{row.prevista}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 16,
+                    padding: 16,
+                    background: "#fff",
+                    display: "grid",
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>
+                    Resumen por fase
+                  </div>
+
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ textAlign: "left", borderBottom: "1px solid #e5e7eb" }}>
+                          <th style={{ padding: "10px 8px" }}>Fase</th>
+                          <th style={{ padding: "10px 8px", textAlign: "right" }}>Media</th>
+                          <th style={{ padding: "10px 8px", textAlign: "right" }}>Max</th>
+                          <th style={{ padding: "10px 8px", textAlign: "right" }}>Casos</th>
+                          <th style={{ padding: "10px 8px", textAlign: "right" }}>SLA</th>
+                          <th style={{ padding: "10px 8px", textAlign: "right" }}>Cumplimiento</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {phaseSummaryRows.map((row, idx) => (
+                          <tr key={`${row.fase}-${idx}`} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "10px 8px", fontWeight: 800 }}>{row.fase}</td>
+                            <td style={{ padding: "10px 8px", textAlign: "right" }}>{row.media}</td>
+                            <td style={{ padding: "10px 8px", textAlign: "right" }}>{row.max}</td>
+                            <td style={{ padding: "10px 8px", textAlign: "right" }}>{row.casos}</td>
+                            <td style={{ padding: "10px 8px", textAlign: "right" }}>{row.sla}</td>
+                            <td style={{ padding: "10px 8px", textAlign: "right" }}>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  border: `1px solid ${row.severityColors.border}`,
+                                  background: row.severityColors.bg,
+                                  color: row.severityColors.text,
+                                  borderRadius: 999,
+                                  padding: "4px 8px",
+                                  fontWeight: 900,
+                                  minWidth: 76,
+                                }}
+                              >
+                                {row.cumplimiento}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            ) : null}
           </section>
 
           {(data.alerts.waitingTooLong.length > 0 ||
@@ -330,7 +981,7 @@ export default function OperationsPage() {
 
                 {data.alerts.completeOrSaturated.map((r) => (
                   <div key={`cs-${r.reservationId}`} style={alertWarn}>
-                    <strong>{r.customerName}</strong> · {r.serviceName ?? "Servicio"} · {r.message}
+                    <strong>{r.customerName}</strong> | {r.serviceName ?? "Servicio"} | {r.message}
                   </div>
                 ))}
               </div>
@@ -432,7 +1083,7 @@ export default function OperationsPage() {
                 title="Platform"
                 sections={[
                   { title: "Ready", rows: data.areas.platform.ready },
-                  { title: "In Sea", rows: data.areas.platform.inSea },
+                  { title: "En mar", rows: data.areas.platform.inSea },
                   { title: "Extras pendientes", rows: data.areas.platform.extrasPending },
                 ]}
               />
@@ -452,15 +1103,15 @@ export default function OperationsPage() {
                 {data.saturation.map((s, idx) => (
                   <div key={`${s.serviceName ?? "service"}-${idx}`} style={saturationItem}>
                     <div style={{ fontWeight: 900 }}>
-                      {s.serviceName ?? "Servicio"} · {s.count} reservas en la misma ventana
+                      {s.serviceName ?? "Servicio"} | {s.count} reservas en la misma ventana
                     </div>
 
                     <div style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 12, opacity: 0.88 }}>
                       {s.reservations.map((r) => (
                         <div key={r.id}>
                           <strong>{r.customerName}</strong>
-                          {" · "}{fmtDateTime(r.scheduledTime)}
-                          {" · "}{r.status ?? "-"}
+                          {" | "}{fmtDateTime(r.scheduledTime)}
+                          {" | "}{r.status ?? "-"}
                         </div>
                       ))}
                     </div>
@@ -521,8 +1172,8 @@ function OperationItem({
           <div style={{ fontWeight: 950, fontSize: 16 }}>{row.customerName}</div>
           <div style={{ fontSize: 12, opacity: 0.78 }}>
             {row.serviceName ?? "Servicio"}
-            {row.durationMinutes ? ` · ${row.durationMinutes} min` : ""}
-            {row.channelName ? ` · ${row.channelName}` : ""}
+            {row.durationMinutes ? ` | ${row.durationMinutes} min` : ""}
+            {row.channelName ? ` | ${row.channelName}` : ""}
           </div>
         </div>
 
@@ -547,8 +1198,8 @@ function OperationItem({
       {row.taxiboatTripId ? (
         <div style={subtlePanel}>
           Taxiboat: <strong>{row.taxiboatBoat ?? "-"}</strong>
-          {row.taxiboatTripNo ? ` · viaje ${row.taxiboatTripNo}` : ""}
-          {row.taxiboatDepartedAt ? ` · salido ${fmtDateTime(row.taxiboatDepartedAt)}` : ""}
+          {row.taxiboatTripNo ? ` | viaje ${row.taxiboatTripNo}` : ""}
+          {row.taxiboatDepartedAt ? ` | salido ${fmtDateTime(row.taxiboatDepartedAt)}` : ""}
         </div>
       ) : null}
 
@@ -996,3 +1647,4 @@ const tagWarn: CSSProperties = {
   background: "#fff1d9",
   color: "#8a5100",
 };
+
