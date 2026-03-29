@@ -218,13 +218,39 @@ export function useReservationPrefill(args: {
     customerAddress?: string | null;
     customerPostalCode?: string | null;
     customerBirthDate?: string | null;
-    customerDocType?: string | null;
-    customerDocNumber?: string | null;
-    marketing?: string | null;
-    companionsCount?: number | null;
-    activityDate: string;
-    scheduledTime?: string | null;
-  }) => void;
+      customerDocType?: string | null;
+      customerDocNumber?: string | null;
+      marketing?: string | null;
+      companionsCount?: number | null;
+      basePriceCents?: number | null;
+      manualDiscountCents?: number | null;
+      autoDiscountCents?: number | null;
+      totalPriceCents?: number | null;
+      service?: {
+        id: string;
+        name: string;
+        code?: string | null;
+        category?: string | null;
+        isLicense?: boolean | null;
+      } | null;
+      option?: {
+        id: string;
+        serviceId: string;
+        code?: string | null;
+        durationMinutes?: number | null;
+        paxMax?: number | null;
+        contractedMinutes?: number | null;
+        basePriceCents?: number | null;
+      } | null;
+      channel?: {
+        id: string;
+        name: string;
+        commissionEnabled?: boolean | null;
+        commissionBps?: number | null;
+      } | null;
+      activityDate: string;
+      scheduledTime?: string | null;
+    }) => void;
   setDateStr: (v: string) => void;
   setTimeStr: (v: string) => void;
 }) {

@@ -136,6 +136,12 @@ type BarProductLookup = {
   costPriceCents?: number | null;
 };
 
+type BarProductsResponse = {
+  rows?: Array<{
+    products?: BarProductLookup[];
+  }>;
+};
+
 type BarRestockLine = {
   productId: string;
   quantity: string;
@@ -1762,11 +1768,11 @@ function ApplyBarRestockModal({
   const loadProducts = useCallback(async () => {
     const res = await fetch("/api/admin/bar/products", { cache: "no-store" });
     if (!res.ok) throw new Error(await res.text());
-    const json = await res.json();
+    const json = (await res.json()) as BarProductsResponse;
 
     const flat =
-      (json.rows ?? []).flatMap((cat: any) =>
-        (cat.products ?? []).map((p: any) => ({
+      (json.rows ?? []).flatMap((cat) =>
+        (cat.products ?? []).map((p) => ({
           id: p.id,
           name: p.name,
           unitLabel: p.unitLabel ?? "ud",
