@@ -1,4 +1,5 @@
-﻿"use client";
+﻿// src/app/admin/expenses/page.tsx
+"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -15,6 +16,7 @@ type ExpenseCostCenter =
   | "STORE"
   | "PLATFORM"
   | "BOOTH"
+  | "BAR"
   | "HR"
   | "MECHANICS"
   | "OPERATIONS"
@@ -70,6 +72,11 @@ type ExpenseRow = {
     fullName: string;
   } | null;
 
+  barRestock?: {
+    id: string;
+    appliedAt: string;
+  } | null;
+
   createdAt: string;
   updatedAt: string;
 };
@@ -121,18 +128,33 @@ type ExpensesResponse = {
   };
 };
 
+type BarProductLookup = {
+  id: string;
+  name: string;
+  unitLabel: string | null;
+  salePriceCents?: number;
+  costPriceCents?: number | null;
+};
+
+type BarRestockLine = {
+  productId: string;
+  quantity: string;
+  unitCostEuros: string;
+};
+
 const EXPENSE_STATUSES: ExpenseStatus[] = ["DRAFT", "PENDING", "PAID", "CANCELED"];
 const COST_CENTERS: ExpenseCostCenter[] = [
   "GENERAL",
   "STORE",
   "PLATFORM",
   "BOOTH",
+  "BAR",
   "HR",
   "MECHANICS",
   "OPERATIONS",
   "MARKETING",
   "PORT",
-];
+] as const;
 const PAYMENT_METHODS: ExpensePaymentMethod[] = [
   "CASH",
   "CARD",
@@ -185,6 +207,7 @@ function normalizeExpenseRow(row: ExpenseRow): ExpenseRow {
           taxId: normalizeText(row.vendor.taxId) ?? null,
         }
       : row.vendor,
+    barRestock: row.barRestock ?? null,
   };
 }
 
@@ -236,6 +259,8 @@ function costCenterLabel(v: ExpenseCostCenter) {
       return "Plataforma";
     case "BOOTH":
       return "Carpa";
+    case "BAR":
+      return "Bar";
     case "HR":
       return "RRHH";
     case "MECHANICS":
@@ -280,6 +305,8 @@ function shortCostCenter(v: ExpenseCostCenter) {
       return "PLT";
     case "BOOTH":
       return "BTH";
+    case "BAR":
+      return "BAR";
     case "HR":
       return "HR";
     case "MECHANICS":
@@ -364,6 +391,8 @@ export default function AdminExpensesPage() {
 
   const [openCategoryModal, setOpenCategoryModal] = useState(false);
   const [openVendorModal, setOpenVendorModal] = useState(false);
+
+  const [restockingExpense, setRestockingExpense] = useState<ExpenseRow | null>(null);
 
   const filteredVendors = useMemo(() => {
     if (!categoryId) return vendors.filter((v) => v.isActive);
@@ -745,6 +774,17 @@ export default function AdminExpensesPage() {
                         </div>
                       ) : null}
 
+                      {["BAR", "OPERATIONS"].includes(String(row.costCenter)) ? (
+                        <button
+                          type="button"
+                          onClick={() => setRestockingExpense(row)}
+                          disabled={Boolean(row.barRestock) || row.status === "CANCELED"}
+                          style={ghostBtn}
+                        >
+                          {row.barRestock ? "Stock aplicado" : "Aplicar a stock Bar"}
+                        </button>
+                      ) : null}
+
                       <div style={subLine}>
                         Fecha: <b>{fmtDate(row.expenseDate)}</b>
                         {" / "}Categoria: <b>{row.category?.name ?? "-"}</b>
@@ -823,6 +863,17 @@ export default function AdminExpensesPage() {
             setOpenCategoryModal(false);
             setEditingCategory(null);
             await loadLookups();
+          }}
+        />
+      ) : null}
+
+      {restockingExpense ? (
+        <ApplyBarRestockModal
+          expense={restockingExpense}
+          onClose={() => setRestockingExpense(null)}
+          onSaved={async () => {
+            setRestockingExpense(null);
+            await load();
           }}
         />
       ) : null}
@@ -1686,6 +1737,186 @@ function MiniBadge({
   );
 }
 
+function ApplyBarRestockModal({
+  expense,
+  onClose,
+  onSaved,
+}: {
+  expense: ExpenseRow;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [products, setProducts] = useState<BarProductLookup[]>([]);
+  const [note, setNote] = useState("");
+  const [lines, setLines] = useState<BarRestockLine[]>([
+    { productId: "", quantity: "1", unitCostEuros: "0" },
+  ]);
+
+  function cents(value: string) {
+    const n = Number((value ?? "").replace(",", "."));
+    return Number.isFinite(n) ? Math.round(n * 100) : 0;
+  }
+
+  const loadProducts = useCallback(async () => {
+    const res = await fetch("/api/admin/bar/products", { cache: "no-store" });
+    if (!res.ok) throw new Error(await res.text());
+    const json = await res.json();
+
+    const flat =
+      (json.rows ?? []).flatMap((cat: any) =>
+        (cat.products ?? []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          unitLabel: p.unitLabel ?? "ud",
+          costPriceCents: p.costPriceCents ?? null,
+        }))
+      ) ?? [];
+
+    setProducts(flat);
+  }, []);
+
+  useEffect(() => {
+    loadProducts().catch((e) =>
+      setError(e instanceof Error ? e.message : "Error cargando productos Bar")
+    );
+  }, [loadProducts]);
+
+  function updateLine(index: number, patch: Partial<BarRestockLine>) {
+    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
+  }
+
+  function addLine() {
+    setLines((prev) => [...prev, { productId: "", quantity: "1", unitCostEuros: "0" }]);
+  }
+
+  function removeLine(index: number) {
+    setLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  }
+
+  async function submit() {
+    try {
+      setBusy(true);
+      setError(null);
+
+      const items = lines.map((line) => ({
+        productId: line.productId,
+        quantity: Number(line.quantity),
+        unitCostCents: cents(line.unitCostEuros),
+      }));
+
+      const res = await fetch(`/api/admin/expenses/${expense.id}/apply-bar-restock`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          note: note || null,
+          items,
+        }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+
+      await onSaved();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error aplicando reposición");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ModalShell title="Aplicar a stock Bar" onClose={onClose}>
+      <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ fontSize: 13, color: "#475569" }}>
+          Gasto: <strong>{expense.description}</strong>
+        </div>
+
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Nota opcional"
+          style={inputStyle}
+        />
+
+        <div style={{ display: "grid", gap: 10 }}>
+          {lines.map((line, index) => (
+            <div
+              key={index}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 1fr 1fr auto",
+                gap: 10,
+                alignItems: "center",
+              }}
+            >
+              <select
+                value={line.productId}
+                onChange={(e) => {
+                  const productId = e.target.value;
+                  const selected = products.find((p) => p.id === productId);
+                  updateLine(index, {
+                    productId,
+                    unitCostEuros:
+                      selected?.costPriceCents != null
+                        ? (Number(selected.costPriceCents) / 100).toFixed(2)
+                        : line.unitCostEuros,
+                  });
+                }}
+                style={inputStyle}
+              >
+                <option value="">Producto Bar</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                value={line.quantity}
+                onChange={(e) => updateLine(index, { quantity: e.target.value })}
+                placeholder="Cantidad"
+                style={inputStyle}
+              />
+
+              <input
+                value={line.unitCostEuros}
+                onChange={(e) => updateLine(index, { unitCostEuros: e.target.value })}
+                placeholder="Coste unitario €"
+                style={inputStyle}
+              />
+
+              <button type="button" onClick={() => removeLine(index)} style={ghostBtn}>
+                Quitar
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {error ? <div style={errorBox}>{error}</div> : null}
+
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" onClick={addLine} style={ghostBtn}>
+              Añadir línea
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" onClick={onClose} style={ghostBtn}>
+              Cancelar
+            </button>
+            <button type="button" onClick={submit} disabled={busy} style={primaryBtn}>
+              {busy ? "Aplicando..." : "Aplicar a stock Bar"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
 const kpiGrid: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
@@ -1894,4 +2125,3 @@ const modalStyle: React.CSSProperties = {
   display: "grid",
   gap: 16,
 };
-

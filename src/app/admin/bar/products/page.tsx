@@ -14,6 +14,7 @@ type Product = {
   name: string;
   type: string;
   salePriceCents: number;
+  costPriceCents: number | null;
   vatRate: string | number;
   controlsStock: boolean;
   currentStock: string | number;
@@ -53,6 +54,7 @@ export default function AdminBarProductsPage() {
   const [name, setName] = useState("");
   const [type, setType] = useState("DRINK");
   const [salePriceEuros, setSalePriceEuros] = useState("");
+  const [costPriceEuros, setCostPriceEuros] = useState("0");
   const [vatRate, setVatRate] = useState("21");
   const [controlsStock, setControlsStock] = useState(true);
   const [currentStock, setCurrentStock] = useState("0");
@@ -66,6 +68,7 @@ export default function AdminBarProductsPage() {
   const [editName, setEditName] = useState("");
   const [editType, setEditType] = useState("DRINK");
   const [editSalePriceEuros, setEditSalePriceEuros] = useState("");
+  const [editCostPriceEuros, setEditCostPriceEuros] = useState("0");
   const [editVatRate, setEditVatRate] = useState("21");
   const [editControlsStock, setEditControlsStock] = useState(true);
   const [editCurrentStock, setEditCurrentStock] = useState("0");
@@ -116,6 +119,7 @@ export default function AdminBarProductsPage() {
           name,
           type,
           salePriceCents: centsFromEuroInput(salePriceEuros),
+          costPriceCents: centsFromEuroInput(costPriceEuros),
           vatRate: Number(vatRate),
           controlsStock,
           currentStock: Number(currentStock || 0),
@@ -128,6 +132,7 @@ export default function AdminBarProductsPage() {
       if (!res.ok) throw new Error(await res.text());
       setName("");
       setSalePriceEuros("");
+      setCostPriceEuros("0");
       setCurrentStock("0");
       setMinStock("0");
       setStaffEligible(false);
@@ -162,6 +167,7 @@ export default function AdminBarProductsPage() {
     setEditName(row.name);
     setEditType(row.type);
     setEditSalePriceEuros((Number(row.salePriceCents) / 100).toFixed(2));
+    setEditCostPriceEuros((Number(row.costPriceCents ?? 0) / 100).toFixed(2));
     setEditVatRate(String(row.vatRate));
     setEditControlsStock(row.controlsStock);
     setEditCurrentStock(String(row.currentStock));
@@ -177,6 +183,7 @@ export default function AdminBarProductsPage() {
     setEditName("");
     setEditType("DRINK");
     setEditSalePriceEuros("");
+    setEditCostPriceEuros("0");
     setEditVatRate("21");
     setEditControlsStock(true);
     setEditCurrentStock("0");
@@ -198,6 +205,7 @@ export default function AdminBarProductsPage() {
           name: editName,
           type: editType,
           salePriceCents: centsFromEuroInput(editSalePriceEuros),
+          costPriceCents: centsFromEuroInput(editCostPriceEuros),
           vatRate: Number(editVatRate),
           controlsStock: editControlsStock,
           currentStock: Number(editCurrentStock || 0),
@@ -252,6 +260,7 @@ export default function AdminBarProductsPage() {
             <option value="OTHER">Otro</option>
           </Select>
           <Input value={salePriceEuros} onChange={(e) => setSalePriceEuros(e.target.value)} placeholder="Ej: 2,50" />
+          <Input value={costPriceEuros} onChange={(e) => setCostPriceEuros(e.target.value)} placeholder="Ej: 1,00" />
           <Input value={vatRate} onChange={(e) => setVatRate(e.target.value)} placeholder="Ej: 10 o 21" />
           <Input value={unitLabel} onChange={(e) => setUnitLabel(e.target.value)} placeholder="Ej: ud, botella, lata, bolsa" />
           <Input value={currentStock} onChange={(e) => setCurrentStock(e.target.value)} placeholder="Ej: 24" />
@@ -293,6 +302,7 @@ export default function AdminBarProductsPage() {
                       {row.staffEligible ? `Staff ${(Number(row.staffPriceCents ?? 0) / 100).toFixed(2)} EUR` : "Sin precio staff"}
                     </div>
                   </div>
+                  <div>Coste {(Number(row.costPriceCents ?? 0) / 100).toFixed(2)} €</div>
                   <div>{(Number(row.salePriceCents) / 100).toFixed(2)} EUR</div>
                   <div>IVA {row.vatRate}%</div>
                   <div>Stock {String(row.currentStock)}</div>
@@ -327,6 +337,7 @@ export default function AdminBarProductsPage() {
                       <option value="OTHER">Otro</option>
                     </Select>
                     <Input value={editSalePriceEuros} onChange={(e) => setEditSalePriceEuros(e.target.value)} placeholder="Ej: 2,50" />
+                    <Input value={editCostPriceEuros} onChange={(e) => setEditCostPriceEuros(e.target.value)} placeholder="Ej: 1,00" />
                     <Input value={editVatRate} onChange={(e) => setEditVatRate(e.target.value)} placeholder="Ej: 10 o 21" />
                     <Input value={editUnitLabel} onChange={(e) => setEditUnitLabel(e.target.value)} placeholder="Ej: ud, botella, lata, bolsa" />
                     <Input value={editCurrentStock} onChange={(e) => setEditCurrentStock(e.target.value)} placeholder="Ej: 24" />
