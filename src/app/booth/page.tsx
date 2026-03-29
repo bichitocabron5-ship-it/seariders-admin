@@ -134,7 +134,8 @@ export default function Booth() {
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   // form
-  const [customerName, setCustomerName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [customerCountry, setCustomerCountry] = useState("ES");
   const [serviceId, setServiceId] = useState("");
   const [optionId, setOptionId] = useState("");
@@ -318,6 +319,11 @@ useEffect(() => {
   async function createPre(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    const customerName = `${String(firstName ?? "").trim()} ${String(lastName ?? "").trim()}`.trim();
+    if (!customerName) {
+      setError("Nombre requerido");
+      return;
+    }
 
     const r = await fetch("/api/booth/reservations/create", {
       method: "POST",
@@ -342,7 +348,8 @@ useEffect(() => {
     const j = await r.json();
     alert(`Creada. Código: ${j.boothCode}`);
 
-    setCustomerName("");
+    setFirstName("");
+    setLastName("");
     setQuantity(1);
     setPax(2);
     setDiscountEuros("");
@@ -552,7 +559,10 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
               <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>Alta rápida para carpa con precio, descuento y canal.</div>
             </div>
             <form onSubmit={createPre} style={{ display: "grid", gap: 12 }}>
-              <label>Nombre<input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required style={fieldStyle} /></label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label>Nombre<input value={firstName} onChange={(e) => setFirstName(e.target.value)} required style={fieldStyle} /></label>
+                <label>Apellidos<input value={lastName} onChange={(e) => setLastName(e.target.value)} required style={fieldStyle} /></label>
+              </div>
               <div style={{ display: "grid", gap: 6 }}>
                 <div>País</div>
                 <Select<CountryOption, false>
@@ -597,8 +607,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
                 {waitMeta ? <div style={{ marginTop: 8, display: "inline-flex", gap: 8, alignItems: "center", padding: "6px 10px", borderRadius: 999, border: `1px solid ${waitMeta.bd}`, background: waitMeta.bg, color: waitMeta.fg, fontSize: 12, fontWeight: 900 }}>{waitMeta.label}</div> : null}
                 {!received && activeTripId ? <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>{!assigned ? <button onClick={() => assignToActiveTrip(r.id)} style={darkBtn}>Añadir al viaje</button> : <span style={{ padding: "4px 8px", borderRadius: 999, background: "#e0f2fe" }}>Asignado a viaje</span>}<div style={{ fontSize: 12, opacity: 0.75 }}>Viaje activo: {activeTripLabel || activeTripId}</div></div> : null}
                 {!received && (r.pendingCents ?? 0) > 0 ? <div style={{ marginTop: 10, display: "grid", gap: 10 }}><div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}><input disabled={isCashClosed} placeholder="Importe EUR (1)" value={getSplit(r.id)[0].amount} onChange={(e) => setSplitLine(r.id, 0, { amount: e.target.value })} style={{ ...fieldStyle, width: 160 }} /><select disabled={isCashClosed} value={getSplit(r.id)[0].method} onChange={(e) => setSplitLine(r.id, 0, { method: e.target.value as PayMethod })} style={{ ...fieldStyle, width: 180 }}><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="BIZUM">Bizum</option><option value="TRANSFER">Transfer</option></select></div><div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}><input disabled={isCashClosed} placeholder="Importe EUR (2)" value={getSplit(r.id)[1].amount} onChange={(e) => setSplitLine(r.id, 1, { amount: e.target.value })} style={{ ...fieldStyle, width: 160 }} /><select disabled={isCashClosed} value={getSplit(r.id)[1].method} onChange={(e) => setSplitLine(r.id, 1, { method: e.target.value as PayMethod })} style={{ ...fieldStyle, width: 180 }}><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="BIZUM">Bizum</option><option value="TRANSFER">Transfer</option></select><button onClick={() => paySplitNow(r.id, r.pendingCents ?? 0)} disabled={payingId === r.id || isCashClosed} style={{ ...darkBtn, opacity: payingId === r.id || isCashClosed ? 0.5 : 1, cursor: isCashClosed ? "not-allowed" : "pointer" }}>{isCashClosed ? "Caja cerrada" : payingId === r.id ? "Cobrando..." : "Cobrar (split)"}</button></div><div style={{ fontSize: 12, opacity: 0.7 }}>Pendiente: <strong>{euros(r.pendingCents ?? 0)}</strong> · Se pueden usar 1 o 2 líneas.</div></div> : null}
-                <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>{label ? <span style={{ padding: "4px 8px", borderRadius: 999, background: bg, fontSize: 12 }}>{label}</span> : <span />}
-                <a href={`/store/create?reservationId=${r.id}`} style={ghostBtn}>Abrir / formalizar</a></div></div>;
+                <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>{label ? <span style={{ padding: "4px 8px", borderRadius: 999, background: bg, fontSize: 12 }}>{label}</span> : <span />}</div></div>;
               })}
               {rows.length === 0 ? <div style={{ opacity: 0.7 }}>No hay pre-reservas hoy.</div> : null}
             </div>

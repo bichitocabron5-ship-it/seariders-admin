@@ -19,6 +19,31 @@ function startOfToday() {
   return d;
 }
 
+function computeDepositCents(params: {
+  storedDepositCents?: number | null;
+  quantity: number | null;
+  isLicense: boolean;
+  serviceCategory?: string | null;
+  items?: Array<{ quantity: number | null; isExtra: boolean; service: { category: string | null } | null }>;
+}) {
+  const stored = Number(params.storedDepositCents ?? 0);
+  if (stored > 0) return stored;
+
+  const jetskiUnitsFromItems = (params.items ?? [])
+    .filter((item) => !item.isExtra && String(item.service?.category ?? "").toUpperCase() === "JETSKI")
+    .reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+
+  const fallbackUnits =
+    jetskiUnitsFromItems > 0
+      ? jetskiUnitsFromItems
+      : String(params.serviceCategory ?? "").toUpperCase() === "JETSKI"
+        ? Math.max(0, Number(params.quantity ?? 0))
+        : 0;
+
+  if (fallbackUnits <= 0) return stored;
+  return (params.isLicense ? 50000 : 10000) * fallbackUnits;
+}
+
 async function ensureUnitsTx(
   tx: Prisma.TransactionClient,
   reservation: {
@@ -150,7 +175,13 @@ export async function POST(req: Request) {
         .reduce((sum, p) => sum + (p.direction === "OUT" ? -1 : 1) * p.amountCents, 0);
 
       const serviceDueCents = Number(reservation.totalPriceCents ?? 0);
-      const depositDueCents = Number(reservation.depositCents ?? 0);
+      const depositDueCents = computeDepositCents({
+        storedDepositCents: reservation.depositCents,
+        quantity: reservation.quantity,
+        isLicense: Boolean(reservation.isLicense),
+        serviceCategory: reservation.service?.category ?? null,
+        items: reservation.items ?? [],
+      });
 
       const pendingServiceCents = Math.max(0, serviceDueCents - netServicePaidCents);
       const pendingDepositCents = Math.max(0, depositDueCents - netDepositPaidCents);

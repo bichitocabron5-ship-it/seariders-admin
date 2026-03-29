@@ -77,6 +77,15 @@ function StoreCreatePageInner() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [categoriesMain, setCategoriesMain] = useState<string[]>([]);
   const [packPreview, setPackPreview] = useState<PackPreview | null>(null);
+  const [prefillServiceFallback, setPrefillServiceFallback] = useState<ServiceMain | null>(null);
+  const [prefillOptionFallback, setPrefillOptionFallback] = useState<Option | null>(null);
+  const [prefillChannelFallback, setPrefillChannelFallback] = useState<Channel | null>(null);
+  const [prefillPricing, setPrefillPricing] = useState<{
+    basePriceCents: number;
+    manualDiscountCents: number;
+    autoDiscountCents: number;
+    totalPriceCents: number;
+  } | null>(null);
 
   const [category, setCategory] = useState<string>("");
   const [serviceId, setServiceId] = useState<string>("");
@@ -132,6 +141,13 @@ function StoreCreatePageInner() {
       customerDocNumber?: string | null;
       marketing?: string | null;
       companionsCount?: number | null;
+      basePriceCents?: number | null;
+      manualDiscountCents?: number | null;
+      autoDiscountCents?: number | null;
+      totalPriceCents?: number | null;
+      service?: ServiceMain | null;
+      option?: Option | null;
+      channel?: Channel | null;
     }) => {
       setCustomerName(res.customerName ?? "");
       setPax(Number(res.pax ?? 1));
@@ -153,6 +169,23 @@ function StoreCreatePageInner() {
       setCustomerDocNumber(res.customerDocNumber ?? "");
       setMarketingSource(res.marketing ?? "");
       setCompanions(res.companionsCount ?? 0);
+      setCategory(String(res.service?.category ?? "").toUpperCase());
+      setPrefillServiceFallback(res.service ?? null);
+      setPrefillOptionFallback(
+        res.option
+          ? {
+              ...res.option,
+              hasPrice: Number(res.option.basePriceCents ?? 0) > 0,
+            }
+          : null
+      );
+      setPrefillChannelFallback(res.channel ?? null);
+      setPrefillPricing({
+        basePriceCents: Number(res.basePriceCents ?? res.option?.basePriceCents ?? 0),
+        manualDiscountCents: Number(res.manualDiscountCents ?? 0),
+        autoDiscountCents: Number(res.autoDiscountCents ?? 0),
+        totalPriceCents: Number(res.totalPriceCents ?? 0),
+      });
     },
     []
   );
@@ -278,8 +311,8 @@ function StoreCreatePageInner() {
   }, [dateStr, timeStr]);
 
   const selectedService = useMemo(
-    () => servicesMain.find((s) => s.id === serviceId) ?? null,
-    [servicesMain, serviceId]
+    () => servicesMain.find((s) => s.id === serviceId) ?? (prefillServiceFallback?.id === serviceId ? prefillServiceFallback : null),
+    [servicesMain, serviceId, prefillServiceFallback]
   );
 
   useEffect(() => {
@@ -296,22 +329,38 @@ function StoreCreatePageInner() {
 
   // Filtrar servicios por categoría (solo modo normal)
   const servicesMainFiltered = useMemo(() => {
-    if (!category) return servicesMain;
-    return servicesMain.filter((s) => (s.category ?? "") === category);
-  }, [servicesMain, category]);
+    const list = !category ? servicesMain : servicesMain.filter((s) => (s.category ?? "") === category);
+    if (
+      prefillServiceFallback &&
+      prefillServiceFallback.id === serviceId &&
+      !list.some((s) => s.id === prefillServiceFallback.id) &&
+      (!category || (prefillServiceFallback.category ?? "") === category)
+    ) {
+      return [prefillServiceFallback, ...list];
+    }
+    return list;
+  }, [servicesMain, category, prefillServiceFallback, serviceId]);
 
   // Categoría real del servicio seleccionado (fuente de verdad para availability)
   const selectedCategory = useMemo(() => {
     if (!serviceId) return "";
-    const svc = servicesMain.find((s) => s.id === serviceId);
+    const svc = servicesMain.find((s) => s.id === serviceId) ?? (prefillServiceFallback?.id === serviceId ? prefillServiceFallback : null);
     return String(svc?.category ?? "").toUpperCase();
-  }, [serviceId, servicesMain]);
+  }, [serviceId, servicesMain, prefillServiceFallback]);
 
   // Opciones del servicio seleccionado (en tu API ya vienen filtradas por servicios visibles)
   const filteredOptions = useMemo(() => {
     if (!serviceId) return [];
-    return options.filter((o) => o.serviceId === serviceId);
-  }, [options, serviceId]);
+    const list = options.filter((o) => o.serviceId === serviceId);
+    if (
+      prefillOptionFallback &&
+      prefillOptionFallback.serviceId === serviceId &&
+      !list.some((o) => o.id === prefillOptionFallback.id)
+    ) {
+      return [prefillOptionFallback, ...list];
+    }
+    return list;
+  }, [options, serviceId, prefillOptionFallback]);
 
   const optionById = useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
 
@@ -369,21 +418,6 @@ function StoreCreatePageInner() {
     return servicesMain.find((s) => s.id === serviceId)?.name ?? "";
   }
 
-  function getMaxAllowedForCartItem(item: CartItem) {
-    const serviceName = getServiceNameById(item.serviceId);
-
-    if (isGoProName(serviceName)) {
-      return getAvailableGoPro();
-    }
-
-    if (isWetsuitName(serviceName)) {
-      const size = extractWetsuitSize(serviceName);
-      return getAvailableWetsuit(size);
-    }
-
-    return Number.POSITIVE_INFINITY;
-  }
-
   // Si cambia service, ajustar optionId (solo normal)
   useEffect(() => {
     if (!filteredOptions.length) {
@@ -400,7 +434,15 @@ function StoreCreatePageInner() {
     }
   }, [filteredOptions, optionId]);
 
-  const selectedOpt = useMemo(() => options.find((o) => o.id === optionId) ?? null, [options, optionId]);
+  const selectedOpt = useMemo(
+    () => options.find((o) => o.id === optionId) ?? (prefillOptionFallback?.id === optionId ? prefillOptionFallback : null),
+    [options, optionId, prefillOptionFallback]
+  );
+
+  const channelsWithFallback = useMemo(() => {
+    if (!prefillChannelFallback || channels.some((c) => c.id === prefillChannelFallback.id)) return channels;
+    return [prefillChannelFallback, ...channels];
+  }, [channels, prefillChannelFallback]);
 
   useEffect(() => {
     // si no hay serviceId elegido, elige el primero según categoría actual
@@ -557,17 +599,17 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   
   const shownBaseCents = useCart
   ? cartSubtotalCents
-  : (discountPreview?.baseTotalCents ?? baseTotalCents);
+  : (discountPreview?.baseTotalCents ?? (isMigrateMode ? Number(prefillPricing?.basePriceCents ?? baseTotalCents) : baseTotalCents));
 
   const shownDiscountCents = useCart
     ? 0
-    : (discountPreview?.autoDiscountCents ?? 0);
+    : (discountPreview?.autoDiscountCents ?? (isMigrateMode ? Number((prefillPricing?.manualDiscountCents ?? 0) + (prefillPricing?.autoDiscountCents ?? 0)) : 0));
 
   const shownFinalCents = useCart
     ? cartSubtotalCents
-    : (discountPreview?.finalTotalCents ?? Math.max(0, shownBaseCents - shownDiscountCents));
+    : (discountPreview?.finalTotalCents ?? (isMigrateMode ? Number(prefillPricing?.totalPriceCents ?? Math.max(0, shownBaseCents - shownDiscountCents)) : Math.max(0, shownBaseCents - shownDiscountCents)));
 
-  const shownReason = discountPreview?.reason ?? null;
+  const shownReason = discountPreview?.reason ?? (isMigrateMode && shownDiscountCents > 0 ? "Precio heredado de la pre-reserva de carpa." : null);
 
   const MANUAL_DISC_MAX_PCT = 30;
   const maxManualDiscountCents = Math.floor((shownBaseCents * MANUAL_DISC_MAX_PCT) / 100);
@@ -1033,7 +1075,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       packPreview,
       filteredOptions,
       selectedOpt,
-      channels,
+      channels: channelsWithFallback,
     },
     handlers: {
       onFirstNameChange: handleFirstNameChange,

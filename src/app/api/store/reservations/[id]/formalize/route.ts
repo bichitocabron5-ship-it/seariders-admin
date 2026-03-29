@@ -52,6 +52,39 @@ function normalizeOptionalString(v: string | null | undefined) {
   return t.length ? t : null;
 }
 
+function firstNonEmpty(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const normalized = normalizeOptionalString(value);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+function computeDepositCents(params: {
+  storedDepositCents?: number | null;
+  quantity: number | null;
+  isLicense: boolean;
+  serviceCategory?: string | null;
+  items?: Array<{ quantity: number | null; isExtra: boolean; service: { category: string | null } | null }>;
+}) {
+  const stored = Number(params.storedDepositCents ?? 0);
+  if (stored > 0) return stored;
+
+  const jetskiUnitsFromItems = (params.items ?? [])
+    .filter((item) => !item.isExtra && String(item.service?.category ?? "").toUpperCase() === "JETSKI")
+    .reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+
+  const fallbackUnits =
+    jetskiUnitsFromItems > 0
+      ? jetskiUnitsFromItems
+      : String(params.serviceCategory ?? "").toUpperCase() === "JETSKI"
+        ? Math.max(0, Number(params.quantity ?? 0))
+        : 0;
+
+  if (fallbackUnits <= 0) return stored;
+  return (params.isLicense ? 50000 : 10000) * fallbackUnits;
+}
+
 function toYmdInTz(d: Date, tz: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
@@ -207,6 +240,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: true,
           pax: true,
           isLicense: true,
+          depositCents: true,
           companionsCount: true,
           licenseSchool: true,
           licenseType: true,
@@ -224,6 +258,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
                   code: true,
                 },
               },
+            },
+          },
+          contracts: {
+            orderBy: { unitIndex: "asc" },
+            select: {
+              driverName: true,
+              driverPhone: true,
+              driverEmail: true,
+              driverCountry: true,
+              driverAddress: true,
+              driverPostalCode: true,
+              driverDocType: true,
+              driverDocNumber: true,
             },
           },
         },
@@ -258,29 +305,56 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const activityDate = utcDateFromYmdInTz(tz, activityDateYmd);
       const scheduledTime = utcDateTimeFromYmdHmInTz(tz, activityDateYmd, timeHm ?? null);
 
-      const customerName = (b.customerName ?? current.customerName ?? "").trim();
-      const customerPhone = normalizeOptionalString(
-        b.customerPhone !== undefined ? b.customerPhone : current.customerPhone
+      const primaryContract = current.contracts.find((contract) =>
+        Boolean(
+          contract.driverName ||
+            contract.driverPhone ||
+            contract.driverEmail ||
+            contract.driverCountry ||
+            contract.driverAddress ||
+            contract.driverPostalCode ||
+            contract.driverDocType ||
+            contract.driverDocNumber
+        )
       );
-      const customerEmail = normalizeOptionalString(
-        b.customerEmail !== undefined ? b.customerEmail : current.customerEmail
+
+      const customerName = firstNonEmpty(b.customerName, current.customerName, primaryContract?.driverName) ?? "";
+      const customerPhone = firstNonEmpty(
+        b.customerPhone !== undefined ? b.customerPhone : undefined,
+        current.customerPhone,
+        primaryContract?.driverPhone
       );
-      const customerCountry = normalizeOptionalString(
-        b.customerCountry !== undefined ? b.customerCountry : current.customerCountry
+      const customerEmail = firstNonEmpty(
+        b.customerEmail !== undefined ? b.customerEmail : undefined,
+        current.customerEmail,
+        primaryContract?.driverEmail
       );
-      const customerAddress = normalizeOptionalString(
-        b.customerAddress !== undefined ? b.customerAddress : current.customerAddress
+      const customerCountry = firstNonEmpty(
+        b.customerCountry !== undefined ? b.customerCountry : undefined,
+        current.customerCountry,
+        primaryContract?.driverCountry
       );
-      const customerPostalCode = normalizeOptionalString(
-        b.customerPostalCode !== undefined ? b.customerPostalCode : current.customerPostalCode
+      const customerAddress = firstNonEmpty(
+        b.customerAddress !== undefined ? b.customerAddress : undefined,
+        current.customerAddress,
+        primaryContract?.driverAddress
+      );
+      const customerPostalCode = firstNonEmpty(
+        b.customerPostalCode !== undefined ? b.customerPostalCode : undefined,
+        current.customerPostalCode,
+        primaryContract?.driverPostalCode
       );
       const customerBirthDate =
         b.customerBirthDate !== undefined ? (b.customerBirthDate ? new Date(b.customerBirthDate) : null) : current.customerBirthDate;
-      const customerDocType = normalizeOptionalString(
-        b.customerDocType !== undefined ? b.customerDocType : current.customerDocType
+      const customerDocType = firstNonEmpty(
+        b.customerDocType !== undefined ? b.customerDocType : undefined,
+        current.customerDocType,
+        primaryContract?.driverDocType
       );
-      const customerDocNumber = normalizeOptionalString(
-        b.customerDocNumber !== undefined ? b.customerDocNumber : current.customerDocNumber
+      const customerDocNumber = firstNonEmpty(
+        b.customerDocNumber !== undefined ? b.customerDocNumber : undefined,
+        current.customerDocNumber,
+        primaryContract?.driverDocNumber
       );
       const marketing = normalizeOptionalString(
         b.marketing !== undefined ? b.marketing : current.marketing
@@ -377,6 +451,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (!Number.isFinite(companionsCount) || companionsCount < 0 || companionsCount > 20) {
         throw new Error("Acompanantes invalido.");
       }
+      const depositCents = computeDepositCents({
+        storedDepositCents: current.depositCents,
+        quantity,
+        isLicense: Boolean(isLicense),
+        serviceCategory,
+        items: current.items ?? [],
+      });
 
       const data: Prisma.ReservationUncheckedUpdateInput = {
         customerName,
@@ -395,6 +476,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         quantity,
         pax,
         companionsCount,
+        depositCents,
         isLicense,
         licenseSchool: isLicense ? licenseSchool ?? null : null,
         licenseType: isLicense ? licenseType ?? null : null,

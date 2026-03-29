@@ -39,6 +39,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       quantity: true,
       pax: true,
       isLicense: true,
+      basePriceCents: true,
+      manualDiscountCents: true,
+      autoDiscountCents: true,
+      totalPriceCents: true,
       customerName: true,
       customerPhone: true,
       customerEmail: true,
@@ -56,6 +60,34 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       licenseNumber: true,
       giftVoucherId: true,
       passVoucherId: true,
+      service: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          category: true,
+          isLicense: true,
+        },
+      },
+      option: {
+        select: {
+          id: true,
+          serviceId: true,
+          code: true,
+          durationMinutes: true,
+          paxMax: true,
+          contractedMinutes: true,
+          basePriceCents: true,
+        },
+      },
+      channel: {
+        select: {
+          id: true,
+          name: true,
+          commissionEnabled: true,
+          commissionBps: true,
+        },
+      },
     },
   });
 
