@@ -1,6 +1,7 @@
 // src/app/store/dashboard/components/ReadyReservationCard.tsx
 "use client";
 
+import { useRouter } from "next/navigation";
 import type React from "react";
 import type { ExtraUiMap, PayLine, PayMethod, ReservationRow, Service } from "../types";
 import { euros, hhmm, statusColor } from "../utils";
@@ -41,6 +42,7 @@ type ReadyReservationCardProps = {
   showReturnedBanner?: boolean;
   showReturnedActions?: boolean;
   completeReturn: (reservationId: string) => Promise<void>;
+  cancelReservation: (reservationId: string, opts: { refund: boolean; method: PayMethod }) => Promise<void>;
 };
 
 function Badge({ label, color }: { label: string; color: string }) {
@@ -87,7 +89,9 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
     showReturnedBanner = false,
     showReturnedActions = false,
     completeReturn,
+    cancelReservation,
   } = props;
+  const router = useRouter();
 
   const paidDepositCents = Number(r.paidDepositCents ?? 0);
   const deposit = Number(r.depositCents ?? 0);
@@ -97,6 +101,8 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
   const hasDepositIn = (r.payments ?? []).some((p) => p.isDeposit && p.direction !== "OUT");
   const hasDepositOut = (r.payments ?? []).some((p) => p.isDeposit && p.direction === "OUT");
   const depositHeld = r.depositHeld === true;
+  const paid = Number(r.paidCents ?? 0);
+  const hasRefundableAmount = paid > 0;
   const depositStatus = depositHeld
     ? "RETENIDA"
     : paidDepositCents <= 0
@@ -104,7 +110,6 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
         ? "DEVUELTA"
         : "PENDIENTE"
       : "LIBERABLE";
-  const paid = Number(r.paidCents ?? 0);
   const isFullyPaid = pendingTotal === 0;
 
   return (
@@ -115,13 +120,37 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
           <span style={{ fontSize: 12, opacity: 0.7 }}>{hhmm(r.scheduledTime) || "sin hora"}</span>
           <Badge label={r.status} color={statusColor(r.status)} />
         </div>
-        <button
-          type="button"
-          onClick={onToggleOpen}
-          style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e7eb", fontWeight: 900, background: "#fff", cursor: "pointer" }}
-        >
-          {isOpen ? "Cerrar" : "Abrir"}
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <button type="button" onClick={() => router.push(`/store/create?editFrom=${r.id}`)} style={btnSecondary}>
+            Reagendar
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!hasRefundableAmount) {
+                if (!window.confirm("¿Cancelar esta reserva?")) return;
+                await cancelReservation(r.id, { refund: false, method });
+                return;
+              }
+
+              const refund = window.confirm(
+                `La reserva tiene cobros registrados. Aceptar = cancelar y devolver usando ${method}. Cancelar = seguir sin devolución.`
+              );
+              if (!refund && !window.confirm("¿Confirmas cancelar sin devolución?")) return;
+              await cancelReservation(r.id, { refund, method });
+            }}
+            style={{ ...btnSecondary, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b" }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onToggleOpen}
+            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e7eb", fontWeight: 900, background: "#fff", cursor: "pointer" }}
+          >
+            {isOpen ? "Cerrar" : "Abrir"}
+          </button>
+        </div>
       </div>
 
         {showReturnedBanner && r.arrivalAt ? (

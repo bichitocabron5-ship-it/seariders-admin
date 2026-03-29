@@ -296,6 +296,26 @@ export default function StoreDashboard() {
     }
   }
 
+  async function cancelReservation(reservationId: string, opts: { refund: boolean; method: PayMethod }) {
+    setError(null);
+    try {
+      const r = await fetch(`/api/store/reservations/${reservationId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          refundMode: opts.refund ? "FULL" : "NONE",
+          refundMethod: opts.method,
+          refundOrigin: "STORE",
+        }),
+      });
+
+      await ensureOkResponse(r, "No se pudo cancelar la reserva");
+      await load();
+    } catch (e: unknown) {
+      handleActionError("cancel reservation", e, "No se pudo cancelar la reserva");
+    }
+  }
+
   async function addExtraToReservation(reservationId: string) {
     setError(null);
     try {
@@ -606,6 +626,7 @@ export default function StoreDashboard() {
                     chargeServiceSplit={chargeServiceSplit}
                     btnSecondary={btnSecondary}
                     nowMs={nowMs}
+                    cancelReservation={cancelReservation}
                   />
                 );
               })}
@@ -645,6 +666,7 @@ export default function StoreDashboard() {
                 chargeServiceSplit={chargeServiceSplit}
                 btnSecondary={btnSecondary}
                 completeReturn={completeReturn}
+                cancelReservation={cancelReservation}
               />
             );
           })}
@@ -695,6 +717,7 @@ export default function StoreDashboard() {
                     showReturnedBanner
                     showReturnedActions
                     completeReturn={completeReturn}
+                    cancelReservation={cancelReservation}
                   />
                 );
               })}
