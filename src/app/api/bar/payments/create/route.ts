@@ -45,7 +45,17 @@ export async function POST(req: Request) {
     return new NextResponse("Datos inválidos", { status: 400 });
   }
 
-  const { productId, quantity, amountCents, method, date, shift, label, staffMode } = parsed.data;
+  const {
+    productId,
+    quantity,
+    amountCents,
+    method,
+    note,
+    date,
+    shift,
+    label,
+    staffMode,
+  } = parsed.data;
   const businessDate = parseBusinessDate(date);
 
   const d0 = new Date(businessDate);
@@ -79,6 +89,7 @@ export async function POST(req: Request) {
           id: true,
           name: true,
           salePriceCents: true,
+          costPriceCents: true,
           staffEligible: true,
           staffPriceCents: true,
           isActive: true,
@@ -131,6 +142,7 @@ export async function POST(req: Request) {
           method,
           amountCents,
           isDeposit: false,
+          isStaffSale: Boolean(staffMode),
           shiftSessionId: shiftSession?.id ?? null,
           createdByUserId: session.userId,
         },
@@ -140,6 +152,49 @@ export async function POST(req: Request) {
           method: true,
           origin: true,
           createdAt: true,
+          isStaffSale: true,
+        },
+      });
+
+      const unitCostCents =
+        product.costPriceCents != null ? Number(product.costPriceCents) : null;
+
+      const totalCostCents =
+        unitCostCents != null ? Math.round(unitCostCents * quantity) : 0;
+
+      const totalMarginCents = amountCents - totalCostCents;
+
+      const barSale = await tx.barSale.create({
+        data: {
+          paymentId: payment.id,
+          shiftSessionId: shiftSession?.id ?? null,
+          soldAt: new Date(),
+          soldByUserId: session.userId,
+          staffMode: Boolean(staffMode),
+          note: note?.trim() || null,
+          totalRevenueCents: amountCents,
+          totalCostCents,
+          totalMarginCents,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      await tx.barSaleItem.create({
+        data: {
+          saleId: barSale.id,
+          productId: product.id,
+          quantity,
+          unitPriceCents: Math.round(amountCents / quantity),
+          revenueCents: amountCents,
+          unitCostCents,
+          costCents: unitCostCents != null ? Math.round(unitCostCents * quantity) : null,
+          marginCents:
+            unitCostCents != null
+              ? amountCents - Math.round(unitCostCents * quantity)
+              : null,
+          promotionLabel: pricing.label ?? null,
         },
       });
 

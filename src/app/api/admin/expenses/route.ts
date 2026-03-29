@@ -47,7 +47,7 @@ async function requireAdmin() {
 const Query = z.object({
   q: z.string().optional(),
   status: z.nativeEnum(ExpenseStatus).optional(),
-  costCenter: z.nativeEnum(ExpenseCostCenter).optional(),
+  costCenter: z.nativeEnum(ExpenseCostCenter),
   categoryId: z.string().optional(),
   vendorId: z.string().optional(),
   from: z.string().optional(), // YYYY-MM-DD
@@ -64,7 +64,7 @@ const Body = z.object({
   categoryId: z.string().min(1),
   vendorId: z.string().optional().nullable(),
 
-  costCenter: z.nativeEnum(ExpenseCostCenter).optional(),
+  costCenter: z.nativeEnum(ExpenseCostCenter),
   status: z.nativeEnum(ExpenseStatus).optional(),
   paymentMethod: z.nativeEnum(ExpensePaymentMethod).optional().nullable(),
 
@@ -191,6 +191,13 @@ export async function GET(req: Request) {
           fullName: true,
         },
       },
+
+      barRestock: {
+          select: {
+            id: true,
+            appliedAt: true,
+          },
+        },
 
       createdAt: true,
       updatedAt: true,

@@ -1,4 +1,5 @@
-﻿"use client";
+﻿// src/app/executive/page.tsx
+"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -141,6 +142,53 @@ type ExecutiveResponse = {
       maintenanceEvents: number;
     }>;
   };
+  bar: {
+    todayStaffSalesCents: number;
+    todaySalesCents: number;
+    monthSalesCents: number;
+    lowStockCount: number;
+  };
+  assets: {
+    summary: Record<string, Record<string, number>>;
+    incidentsOpen: number;
+  };
+  fulfillment: {
+    pending: number;
+    deliveredNotReturned: number;
+  };
+  cashByOrigin: Array<{
+    origin: string;
+    collectedTodayCents: number;
+  }>;
+  barAccounting: {
+    monthRegularSalesCents: number;
+    monthStaffSalesCents: number;
+    monthSalesCents: number;
+    monthPurchasesCents: number;
+    monthPurchasesPaidCents: number;
+    monthPurchasesPendingCents: number;
+    marginApproxCents: number;
+    marginRealCents: number;
+    costTheoreticalCents: number;
+    topMarginProducts: Array<{
+      product: string;
+      category: string;
+      salesCents: number;
+      costCents: number;
+      marginCents: number;
+      tickets: number;
+    }>;
+    topVendors: Array<{
+      vendor: string;
+      count: number;
+      totalCents: number;
+    }>;
+    byCategory: Array<{
+      category: string;
+      count: number;
+      totalCents: number;
+    }>;
+  };
 };
 
 const money0 = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
@@ -149,24 +197,19 @@ const ints = new Intl.NumberFormat("es-ES");
 
 function fixText(value: string | null | undefined, fallback = "-") {
   if (!value) return fallback;
-  return value
-    .replaceAll("ÃƒÂ¡", "Ã¡")
-    .replaceAll("ÃƒÂ©", "Ã©")
-    .replaceAll("ÃƒÂ­", "Ã­")
-    .replaceAll("ÃƒÂ³", "Ã³")
-    .replaceAll("ÃƒÂº", "Ãº")
-    .replaceAll("ÃƒÂ", "Ã")
-    .replaceAll("Ãƒâ€°", "Ã‰")
-    .replaceAll("ÃƒÂ", "Ã")
-    .replaceAll("Ãƒâ€œ", "Ã“")
-    .replaceAll("ÃƒÅ¡", "Ãš")
-    .replaceAll("ÃƒÂ±", "Ã±")
-    .replaceAll("Ãƒâ€˜", "Ã‘")
-    .replaceAll("Ã¢â€šÂ¬", "â‚¬")
-    .replaceAll("Ã¢â‚¬â€", "â€”")
-    .replaceAll("Ã¢â‚¬Â¦", "â€¦")
-    .replaceAll("Ã‚Â·", "Â·")
-    .replaceAll("Ã‚Âº", "Âº");
+  let normalized = value;
+
+  if (/[ÃÂâ]/.test(normalized)) {
+    try {
+      normalized = decodeURIComponent(escape(normalized));
+    } catch {
+      // Keep original value if decoding fails.
+    }
+  }
+
+  return normalized
+    .replace(/[\u2018\u2019\u2032]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"');
 }
 
 function eur(cents: number | null | undefined) {
@@ -209,20 +252,46 @@ function shortMonthLabel(value: string) {
   return `${month}/${year.slice(2)}`;
 }
 
+function shortDateTimeLabel(value: Date | null) {
+  if (!value) return "-";
+  return value.toLocaleString("es-ES", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function rangeLabel(start: string, endExclusive: string) {
+  const startDate = new Date(start);
+  const endDate = new Date(endExclusive);
+  const inclusiveEnd = new Date(endDate.getTime() - 1);
+
+  return `${startDate.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "short",
+  })} - ${inclusiveEnd.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "short",
+  })}`;
+}
+
 function costCenterLabel(value: string) {
   switch (value) {
     case "GENERAL":
       return "General";
     case "STORE":
-      return "Store";
+      return "Tienda";
     case "PLATFORM":
       return "Plataforma";
     case "BOOTH":
-      return "Booth";
+      return "Carpa";
+    case "BAR":
+      return "Bar";
     case "HR":
       return "RR. HH.";
     case "MECHANICS":
-      return "Mecanica";
+      return "Mecánica";
     case "OPERATIONS":
       return "Operativa";
     case "MARKETING":
@@ -234,10 +303,37 @@ function costCenterLabel(value: string) {
   }
 }
 
+function originLabel(value: string) {
+  switch (value) {
+    case "STORE":
+      return "Tienda";
+    case "BOOTH":
+      return "Carpa";
+    case "BAR":
+      return "Bar";
+    default:
+      return fixText(value, "-");
+  }
+}
+
+function assetTypeLabel(value: string) {
+  switch (value) {
+    case "GOPRO":
+      return "GoPro";
+    case "WETSUIT":
+      return "Neoprenos";
+    case "OTHER":
+      return "Otros";
+    default:
+      return fixText(value, "-");
+  }
+}
+
 export default function ExecutivePage() {
   const [data, setData] = useState<ExecutiveResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -246,6 +342,7 @@ export default function ExecutivePage() {
       const res = await fetch("/api/executive/overview", { cache: "no-store" });
       if (!res.ok) throw new Error(await res.text());
       setData((await res.json()) as ExecutiveResponse);
+      setRefreshedAt(new Date());
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error cargando el dashboard operativo");
     } finally {
@@ -294,8 +391,114 @@ export default function ExecutivePage() {
   const expenseCategories = useMemo(
     () =>
       data?.expenses.byCategory.slice(0, 8).map((row) => ({
-        label: fixText(row.category, "Sin categoria"),
+        label: fixText(row.category, "Sin categoría"),
         Total: row.totalCents,
+      })) ?? [],
+    [data]
+  );
+
+  const rangeCards = useMemo(
+    () =>
+      data
+        ? [
+            { label: "Hoy", value: rangeLabel(data.ranges.today.start, data.ranges.today.endExclusive) },
+            { label: "Semana", value: rangeLabel(data.ranges.week.start, data.ranges.week.endExclusive) },
+            { label: "Mes", value: rangeLabel(data.ranges.month.start, data.ranges.month.endExclusive) },
+            { label: "Actualizado", value: shortDateTimeLabel(refreshedAt) },
+          ]
+        : [],
+    [data, refreshedAt]
+  );
+
+  const executiveBrief = useMemo(
+    () =>
+      data
+        ? [
+            {
+              title: "Liquidez",
+              value: eur(data.kpis.month.collectedCents),
+              detail: `Pendiente ${eur(data.kpis.month.pendingCents)} · Depósitos ${eur(data.cash.depositsHeldCents)}`,
+              warn: data.kpis.month.pendingCents > 0,
+            },
+            {
+              title: "Operación",
+              value: `${fmtInt(data.health.ready)} ready / ${fmtInt(data.health.inSea)} en mar`,
+              detail: `${fmtInt(data.health.criticalPayments)} cobros críticos · ${fmtInt(data.health.maintenanceOpen)} mantenimientos abiertos`,
+              warn: data.health.criticalPayments > 0 || data.health.maintenanceOpen > 0,
+            },
+            {
+              title: "Bar",
+              value: eur(data.barAccounting.marginRealCents),
+              detail: `Ventas ${eur(data.bar.monthSalesCents)} · Compras ${eur(data.barAccounting.monthPurchasesCents)}`,
+              warn: data.barAccounting.marginRealCents < 0 || data.bar.lowStockCount > 0,
+            },
+          ]
+        : [],
+    [data]
+  );
+
+  const cashOriginRows = useMemo(
+    () =>
+      data?.cashByOrigin.map((row) => ({
+        origen: originLabel(row.origin),
+        total: eur(row.collectedTodayCents),
+      })) ?? [],
+    [data]
+  );
+
+  const assetRows = useMemo(() => {
+    if (!data?.assets?.summary) return [];
+
+    return Object.entries(data.assets.summary).map(([type, summary]) => ({
+      tipo: assetTypeLabel(type),
+      disponibles: fmtInt(summary.AVAILABLE ?? 0),
+      entregados: fmtInt(summary.DELIVERED ?? 0),
+      mantenimiento: fmtInt(summary.MAINTENANCE ?? 0),
+      dañados: fmtInt(summary.DAMAGED ?? 0),
+      perdidos: fmtInt(summary.LOST ?? 0),
+    }));
+  }, [data]);
+
+  const operationsCostRows = useMemo(
+    () => [
+      { nombre: "Payroll mes", total: eur(data?.hr.monthPayrollCents) },
+      { nombre: "Mecánica mes", total: eur(data?.mechanics.monthCostCents) },
+      { nombre: "Gastos pagados mes", total: eur(data?.expenses.monthPaidCents) },
+      { nombre: "Gastos pendientes mes", total: eur(data?.expenses.monthPendingCents) },
+      { nombre: "Ventas Bar mes", total: eur(data?.bar.monthSalesCents) },
+    ],
+    [data]
+  );
+
+  const barVendorRows = useMemo(
+    () =>
+      data?.barAccounting.topVendors.map((row) => ({
+        proveedor: fixText(row.vendor, "-"),
+        compras: fmtInt(row.count),
+        total: eur(row.totalCents),
+      })) ?? [],
+    [data]
+  );
+
+  const barCategoryRows = useMemo(
+    () =>
+      data?.barAccounting.byCategory.map((row) => ({
+        categoria: fixText(row.category, "-"),
+        compras: fmtInt(row.count),
+        total: eur(row.totalCents),
+      })) ?? [],
+    [data]
+  );
+
+  const barMarginProductRows = useMemo(
+    () =>
+      data?.barAccounting.topMarginProducts.map((row) => ({
+        producto: fixText(row.product, "-"),
+        categoria: fixText(row.category, "-"),
+        ventas: eur(row.salesCents),
+        coste: eur(row.costCents),
+        margen: eur(row.marginCents),
+        tickets: fmtInt(row.tickets),
       })) ?? [],
     [data]
   );
@@ -307,8 +510,15 @@ export default function ExecutivePage() {
           <div style={eyebrowStyle}>Panel ejecutivo</div>
           <h1 style={titleStyle}>Contabilidad y Operaciones</h1>
           <p style={subtitleStyle}>
-            Seguimiento de negocio, caja, operativa, RR. HH. y mantenimiento con metricas mas legibles y una vista ejecutiva mas limpia.
+            Seguimiento de negocio, caja, operativa, RR. HH. y mantenimiento con métricas más legibles y una vista ejecutiva más limpia.
           </p>
+          {rangeCards.length > 0 ? (
+            <div style={metaGrid}>
+              {rangeCards.map((item) => (
+                <MetaBadge key={item.label} label={item.label} value={item.value} />
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div style={actionsStyle}>
@@ -318,7 +528,7 @@ export default function ExecutivePage() {
           <Link href="/admin" style={ghostBtn}>Admin</Link>
           <Link href="/operations" style={ghostBtn}>Operaciones</Link>
           <Link href="/hr" style={ghostBtn}>RR. HH.</Link>
-          <Link href="/mechanics" style={ghostBtn}>Mecanica</Link>
+          <Link href="/mechanics" style={ghostBtn}>Mecánica</Link>
           <Link href="/admin/expenses" style={ghostBtn}>Gastos</Link>
         </div>
       </section>
@@ -335,7 +545,19 @@ export default function ExecutivePage() {
             <HeroStat label="Ticket medio" value={eur(data.kpis.month.averageTicketCents)} detail={`Semana ${eur(data.kpis.week.averageTicketCents)}`} />
           </div>
 
-          <Section title="Pulso comercial" subtitle="Ventas, cobro y reservas en los ultimos 7 dias.">
+          <div style={briefGrid}>
+            {executiveBrief.map((item) => (
+              <BriefCard
+                key={item.title}
+                title={item.title}
+                value={item.value}
+                detail={item.detail}
+                warn={item.warn}
+              />
+            ))}
+          </div>
+
+          <Section title="Pulso comercial" subtitle="Ventas, cobro y reservas en los últimos 7 días.">
             <div style={chartLarge}>
               <ResponsiveContainer>
                 <ComposedChart data={sales7d}>
@@ -410,7 +632,7 @@ export default function ExecutivePage() {
                 <MetricCard title="Ready" value={fmtInt(data.health.ready)} />
                 <MetricCard title="En mar" value={fmtInt(data.health.inSea)} />
                 <MetricCard title="Sin formalizar" value={fmtInt(data.health.unformalized)} warn={data.health.unformalized > 0} />
-                <MetricCard title="Cobros criticos" value={fmtInt(data.health.criticalPayments)} warn={data.health.criticalPayments > 0} />
+                <MetricCard title="Cobros críticos" value={fmtInt(data.health.criticalPayments)} warn={data.health.criticalPayments > 0} />
                 <MetricCard title="Jornadas abiertas" value={fmtInt(data.health.openWorklogs)} warn={data.health.openWorklogs > 0} />
                 <MetricCard title="Incidencias abiertas" value={fmtInt(data.health.incidentsOpen)} warn={data.health.incidentsOpen > 0} />
                 <MetricCard title="Mantenimiento abierto" value={fmtInt(data.health.maintenanceOpen)} warn={data.health.maintenanceOpen > 0} />
@@ -418,31 +640,108 @@ export default function ExecutivePage() {
               </div>
             </Section>
 
-            <Section title="Caja y deuda" subtitle="Cobro del dia, depositos y reservas con riesgo.">
+            <Section title="Caja y deuda" subtitle="Cobro del día, depósitos y reservas con riesgo.">
               <div style={metricsGrid}>
                 <MetricCard title="Cobrado hoy" value={eur(data.cash.collectedTodayCents)} />
                 <MetricCard title="Pendiente hoy" value={eur(data.cash.pendingTodayCents)} warn={data.cash.pendingTodayCents > 0} />
-                <MetricCard title="Depositos retenidos" value={eur(data.cash.depositsHeldCents)} />
-                <MetricCard title="Depositos liberables" value={eur(data.cash.depositsLiberableCents)} />
+                <MetricCard title="Depósitos retenidos" value={eur(data.cash.depositsHeldCents)} />
+                <MetricCard title="Depósitos liberables" value={eur(data.cash.depositsLiberableCents)} />
                 <MetricCard title="Reservas con deuda" value={fmtInt(data.cash.reservationsWithDebt)} warn={data.cash.reservationsWithDebt > 0} />
               </div>
             </Section>
           </div>
 
+          <div style={twoCol}>
+            <Section title="Bar y retail" subtitle="Ventas y presión operativa del módulo Bar.">
+              <div style={metricsGrid}>
+                <MetricCard title="Ventas Bar hoy" value={eur(data.bar.todaySalesCents)} />
+                <MetricCard title="Staff hoy" value={eur(data.bar.todayStaffSalesCents)} />
+                <MetricCard title="Ventas Bar mes" value={eur(data.bar.monthSalesCents)} />
+                <MetricCard title="Stock bajo Bar" value={fmtInt(data.bar.lowStockCount)} warn={data.bar.lowStockCount > 0} />
+              </div>
+            </Section>
+
+            <Section title="Fulfillment y reutilizables" subtitle="Entrega, devolución e incidencias de equipos.">
+              <div style={metricsGrid}>
+                <MetricCard title="Pendientes de entrega" value={fmtInt(data.fulfillment.pending)} warn={data.fulfillment.pending > 0} />
+                <MetricCard title="Entregado no devuelto" value={fmtInt(data.fulfillment.deliveredNotReturned)} warn={data.fulfillment.deliveredNotReturned > 0} />
+                <MetricCard title="Incidencias assets" value={fmtInt(data.assets.incidentsOpen)} warn={data.assets.incidentsOpen > 0} />
+              </div>
+
+              <DataTable
+                columns={[
+                  { key: "tipo", label: "Tipo" },
+                  { key: "disponibles", label: "Disponibles", align: "right" },
+                  { key: "entregados", label: "Entregados", align: "right" },
+                  { key: "mantenimiento", label: "Mantenimiento", align: "right" },
+                  { key: "dañados", label: "Dañados", align: "right" },
+                  { key: "perdidos", label: "Perdidos", align: "right" },
+                ]}
+                rows={assetRows}
+              />
+            </Section>
+          </div>
+
+          <Section title="Contabilidad Bar" subtitle="Ventas, compras y margen operativo aproximado del mes.">
+            <div style={metricsGrid}>
+              <MetricCard title="Ventas mes" value={eur(data.barAccounting.monthSalesCents)} />
+              <MetricCard title="Ventas normales" value={eur(data.barAccounting.monthRegularSalesCents)} />
+              <MetricCard title="Ventas staff" value={eur(data.barAccounting.monthStaffSalesCents)} />
+              <MetricCard title="Compras mes" value={eur(data.barAccounting.monthPurchasesCents)} />
+              <MetricCard title="Compras pagadas" value={eur(data.barAccounting.monthPurchasesPaidCents)} />
+              <MetricCard title="Compras pendientes" value={eur(data.barAccounting.monthPurchasesPendingCents)} warn={data.barAccounting.monthPurchasesPendingCents > 0} />
+              <MetricCard title="Coste teórico ventas" value={eur(data.barAccounting.costTheoreticalCents)} />
+              <MetricCard title="Margen aprox." value={eur(data.barAccounting.marginApproxCents)} warn={data.barAccounting.marginApproxCents < 0} />
+              <MetricCard title="Margen bruto real" value={eur(data.barAccounting.marginRealCents)} warn={data.barAccounting.marginRealCents < 0} />
+            </div>
+
+            <div style={twoCol}>
+              <DataTable
+                columns={[
+                  { key: "categoria", label: "Categoría" },
+                  { key: "compras", label: "Compras", align: "right" },
+                  { key: "total", label: "Total", align: "right" },
+                ]}
+                rows={barCategoryRows}
+              />
+
+              <DataTable
+                columns={[
+                  { key: "proveedor", label: "Proveedor" },
+                  { key: "compras", label: "Compras", align: "right" },
+                  { key: "total", label: "Total", align: "right" },
+                ]}
+                rows={barVendorRows}
+              />
+
+              <DataTable
+                columns={[
+                  { key: "producto", label: "Producto" },
+                  { key: "categoria", label: "Categoría" },
+                  { key: "ventas", label: "Ventas", align: "right" },
+                  { key: "coste", label: "Coste", align: "right" },
+                  { key: "margen", label: "Margen", align: "right" },
+                  { key: "tickets", label: "Tickets", align: "right" },
+                ]}
+                rows={barMarginProductRows}
+              />
+            </div>
+          </Section>
+
           <div style={threeCol}>
-            <Section title="RR. HH." subtitle="Horas aprobadas, payroll y practicas.">
+            <Section title="RR. HH." subtitle="Horas aprobadas, payroll y prácticas.">
               <div style={metricsGrid}>
                 <MetricCard title="Hoy" value={fmtMinutes(data.hr.approvedMinutesToday)} />
                 <MetricCard title="Semana" value={fmtMinutes(data.hr.approvedMinutesWeek)} />
                 <MetricCard title="Mes" value={fmtMinutes(data.hr.approvedMinutesMonth)} />
                 <MetricCard title="Payroll pendiente" value={eur(data.hr.pendingPayrollCents)} warn={data.hr.pendingPayrollCents > 0} />
                 <MetricCard title="Coste del mes" value={eur(data.hr.monthPayrollCents)} />
-                <MetricCard title="Practicas activas" value={fmtInt(data.hr.activeInterns)} />
+                <MetricCard title="Prácticas activas" value={fmtInt(data.hr.activeInterns)} />
                 <MetricCard title="Bolsa baja" value={fmtInt(data.hr.internshipLowBalance)} warn={data.hr.internshipLowBalance > 0} />
               </div>
             </Section>
 
-            <Section title="Mecanica" subtitle="Carga abierta, criticidad y coste mensual.">
+            <Section title="Mecánica" subtitle="Carga abierta, criticidad y coste mensual.">
               <div style={metricsGrid}>
                 <MetricCard title="Eventos abiertos" value={fmtInt(data.mechanics.openEvents)} warn={data.mechanics.openEvents > 0} />
                 <MetricCard title="Eventos criticos" value={fmtInt(data.mechanics.criticalEvents)} warn={data.mechanics.criticalEvents > 0} />
@@ -453,15 +752,35 @@ export default function ExecutivePage() {
               </div>
             </Section>
 
-            <Section title="Gasto operativo" subtitle="Resumen contable del mes.">
+            <Section title="Gasto operativo" subtitle="Resumen contable del mes y coste operativo base.">
               <div style={metricsGrid}>
                 <MetricCard title="Total mes" value={eur(data.expenses.monthTotalCents)} />
                 <MetricCard title="Pagado" value={eur(data.expenses.monthPaidCents)} />
                 <MetricCard title="Pendiente" value={eur(data.expenses.monthPendingCents)} warn={data.expenses.monthPendingCents > 0} />
-                <MetricCard title="Numero de gastos" value={fmtInt(data.expenses.monthCount)} />
+                <MetricCard title="Número de gastos" value={fmtInt(data.expenses.monthCount)} />
+                <MetricCard title="Margen estimado" value={eur(data.kpis.month.estimatedMarginCents)} warn={data.kpis.month.estimatedMarginCents < 0} />
+                <MetricCard title="Margen caja" value={eur(data.kpis.month.cashMarginCents)} warn={data.kpis.month.cashMarginCents < 0} />
               </div>
+
+              <DataTable
+                columns={[
+                  { key: "nombre", label: "Concepto" },
+                  { key: "total", label: "Importe", align: "right" },
+                ]}
+                rows={operationsCostRows}
+              />
             </Section>
           </div>
+
+          <Section title="Caja por origen" subtitle="Cobro del día separado por Store, Booth y Bar.">
+            <DataTable
+              columns={[
+                { key: "origen", label: "Origen" },
+                { key: "total", label: "Cobrado hoy", align: "right" },
+              ]}
+              rows={cashOriginRows}
+            />
+          </Section>
 
           <div style={twoCol}>
             <Section title="Captación" subtitle="Origen declarado por el cliente en reservas del mes.">
@@ -517,7 +836,7 @@ export default function ExecutivePage() {
           </div>
 
           <div style={twoCol}>
-            <Section title="Gastos por categoria" subtitle="Top de categorias de gasto del mes.">
+            <Section title="Gastos por categoría" subtitle="Top de categorías de gasto del mes.">
               <div style={chartMedium}>
                 <ResponsiveContainer>
                   <BarChart data={expenseCategories} layout="vertical" margin={{ left: 8, right: 12 }}>
@@ -531,7 +850,7 @@ export default function ExecutivePage() {
               </div>
             </Section>
 
-            <Section title="Centros de coste" subtitle="Distribucion por area operativa.">
+            <Section title="Centros de coste" subtitle="Distribución por área operativa.">
               <DataTable
                 columns={[
                   { key: "centro", label: "Centro" },
@@ -608,6 +927,40 @@ function MetricCard(props: { title: string; value: string; warn?: boolean }) {
     >
       <div style={labelStyle}>{props.title}</div>
       <div style={{ ...metricValueStyle, color: props.warn ? "#92400e" : "#0f172a" }}>{props.value}</div>
+    </div>
+  );
+}
+
+function BriefCard(props: {
+  title: string;
+  value: string;
+  detail: string;
+  warn?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        ...briefCard,
+        borderColor: props.warn ? "#fde68a" : "#dbe4ea",
+        background: props.warn
+          ? "linear-gradient(180deg, #fffbeb 0%, #ffffff 100%)"
+          : briefCard.background,
+      }}
+    >
+      <div style={labelStyle}>{props.title}</div>
+      <div style={{ ...metricValueStyle, color: props.warn ? "#92400e" : "#0f172a" }}>
+        {props.value}
+      </div>
+      <div style={detailStyle}>{props.detail}</div>
+    </div>
+  );
+}
+
+function MetaBadge(props: { label: string; value: string }) {
+  return (
+    <div style={metaBadge}>
+      <div style={metaLabel}>{props.label}</div>
+      <div style={metaValue}>{props.value}</div>
     </div>
   );
 }
@@ -780,6 +1133,36 @@ const heroStatsGrid: React.CSSProperties = {
   gap: 14,
 };
 
+const metaGrid: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+};
+
+const metaBadge: React.CSSProperties = {
+  border: "1px solid #dbe4ea",
+  borderRadius: 16,
+  padding: "10px 12px",
+  background: "rgba(255,255,255,0.88)",
+  display: "grid",
+  gap: 4,
+  minWidth: 140,
+};
+
+const metaLabel: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "#64748b",
+};
+
+const metaValue: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+  color: "#0f172a",
+};
+
 const heroStatCard: React.CSSProperties = {
   border: "1px solid #dbe4ea",
   borderRadius: 22,
@@ -850,6 +1233,12 @@ const metricsGrid: React.CSSProperties = {
   gap: 12,
 };
 
+const briefGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 14,
+};
+
 const metricCard: React.CSSProperties = {
   border: "1px solid #dbe4ea",
   borderRadius: 18,
@@ -858,6 +1247,16 @@ const metricCard: React.CSSProperties = {
   display: "grid",
   gap: 6,
   minHeight: 98,
+};
+
+const briefCard: React.CSSProperties = {
+  border: "1px solid #dbe4ea",
+  borderRadius: 20,
+  padding: 16,
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+  display: "grid",
+  gap: 8,
+  minHeight: 112,
 };
 
 const twoCol: React.CSSProperties = {
@@ -941,4 +1340,3 @@ const dotStyle: React.CSSProperties = {
   borderRadius: 999,
   display: "inline-block",
 };
-
