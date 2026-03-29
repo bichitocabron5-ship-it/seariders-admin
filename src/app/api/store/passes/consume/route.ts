@@ -135,6 +135,8 @@ export async function POST(req: Request) {
           status: "WAITING",
           activityDate,
           scheduledTime,
+          storeQueueStartedAt: new Date(),
+          paymentCompletedAt: new Date(),
 
           formalizedAt: null,
           formalizedByUserId: null,

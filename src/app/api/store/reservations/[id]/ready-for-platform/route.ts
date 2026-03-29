@@ -34,7 +34,8 @@ async function ensureUnitsTx(
     isLicense: boolean;
     serviceCategory?: string | null;
     items: Array<{ quantity: number | null; isExtra: boolean; service: { category: string | null } | null }>;
-  }
+  },
+  readyAt?: Date
 ) {
   if (reservation.isPackParent && !reservation.parentReservationId) return;
 
@@ -52,9 +53,15 @@ async function ensureUnitsTx(
   });
   const set = new Set(existing.map((u: { unitIndex: number }) => Number(u.unitIndex)));
 
-  const toCreate: Array<{ reservationId: string; unitIndex: number }> = [];
+  const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
   for (let i = 1; i <= requiredUnits; i++) {
-    if (!set.has(i)) toCreate.push({ reservationId: reservation.id, unitIndex: i });
+    if (!set.has(i)) {
+      toCreate.push({
+        reservationId: reservation.id,
+        unitIndex: i,
+        ...(readyAt ? { readyForPlatformAt: readyAt } : {}),
+      });
+    }
   }
 
   if (toCreate.length > 0) {
@@ -70,6 +77,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const readyAt = new Date();
       // 1) cargar reserva padre + items
       const parent = await tx.reservation.findUnique({
         where: { id },
@@ -81,6 +89,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           parentReservationId: true,
           activityDate: true,
           scheduledTime: true,
+          storeQueueStartedAt: true,
+          paymentCompletedAt: true,
           channelId: true,
           customerName: true,
           customerCountry: true,
@@ -119,6 +129,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         data: {
           status: 
           ReservationStatus.READY_FOR_PLATFORM,
+          paymentCompletedAt: parent.paymentCompletedAt ?? readyAt,
+          readyForPlatformAt: readyAt,
         }
       });
       await ensureUnitsTx(tx, {
@@ -133,6 +145,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           isExtra: Boolean(it.isExtra),
           service: it.service ? { category: it.service.category ?? null } : null,
         })),
+      }, readyAt);
+      await tx.reservationUnit.updateMany({
+        where: { reservationId: parent.id, status: "READY_FOR_PLATFORM" },
+        data: { readyForPlatformAt: readyAt },
       });
 
       // Si no es pack, terminamos aquí
@@ -167,6 +183,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           data: {
             source: parent.source, // o "STORE" fijo si lo prefieres
             status: ReservationStatus.READY_FOR_PLATFORM,
+            storeQueueStartedAt: parent.storeQueueStartedAt ?? readyAt,
+            paymentCompletedAt: parent.paymentCompletedAt ?? readyAt,
+            readyForPlatformAt: readyAt,
             activityDate: parent.activityDate ?? startOfToday(),
             scheduledTime: parent.scheduledTime,
 	          isPackParent: false,
@@ -213,6 +232,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
               service: it.service ? { category: it.service.category ?? null } : null,
             },
           ],
+        }, readyAt);
+        await tx.reservationUnit.updateMany({
+          where: { reservationId: child.id, status: "READY_FOR_PLATFORM" },
+          data: { readyForPlatformAt: readyAt },
         });
 
         createdChildrenIds.push(child.id);

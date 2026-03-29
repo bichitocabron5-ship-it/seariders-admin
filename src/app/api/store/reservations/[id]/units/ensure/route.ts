@@ -31,6 +31,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
           id: true,
           quantity: true,
           status: true,
+          readyForPlatformAt: true,
           parentReservationId: true,
           isPackParent: true,
           isLicense: true,
@@ -74,8 +75,18 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       });
       const set = new Set(existing.map((x) => Number(x.unitIndex)));
 
-      const toCreate: Array<{ reservationId: string; unitIndex: number }> = [];
-      for (let i = 1; i <= requiredUnits; i++) if (!set.has(i)) toCreate.push({ reservationId: id, unitIndex: i });
+      const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
+      for (let i = 1; i <= requiredUnits; i++) {
+        if (!set.has(i)) {
+          toCreate.push({
+            reservationId: id,
+            unitIndex: i,
+            ...(r.status === "READY_FOR_PLATFORM"
+              ? { readyForPlatformAt: r.readyForPlatformAt ?? new Date() }
+              : {}),
+          });
+        }
+      }
 
       if (toCreate.length) {
         await tx.reservationUnit.createMany({ data: toCreate, skipDuplicates: true });

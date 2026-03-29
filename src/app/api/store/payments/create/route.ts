@@ -54,7 +54,8 @@ async function ensureUnitsTx(
     isLicense: boolean;
     serviceCategory?: string | null;
     items: Array<{ quantity: number | null; isExtra: boolean; service: { category: string | null } | null }>;
-  }
+  },
+  readyAt?: Date
 ) {
   // Pack padre: la operativa vive en hijas
   if (reservation.isPackParent && !reservation.parentReservationId) return;
@@ -73,9 +74,15 @@ async function ensureUnitsTx(
   });
 
   const existingSet = new Set(existing.map((u: { unitIndex: number }) => Number(u.unitIndex)));
-  const toCreate: Array<{ reservationId: string; unitIndex: number }> = [];
+  const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
   for (let i = 1; i <= requiredUnits; i++) {
-    if (!existingSet.has(i)) toCreate.push({ reservationId: reservation.id, unitIndex: i });
+    if (!existingSet.has(i)) {
+      toCreate.push({
+        reservationId: reservation.id,
+        unitIndex: i,
+        ...(readyAt ? { readyForPlatformAt: readyAt } : {}),
+      });
+    }
   }
 
   if (toCreate.length > 0) {
@@ -129,6 +136,8 @@ export async function POST(req: Request) {
           source: true,
           activityDate: true,
           scheduledTime: true,
+          storeQueueStartedAt: true,
+          paymentCompletedAt: true,
           channelId: true,
           customerName: true,
           customerCountry: true,
@@ -283,12 +292,17 @@ export async function POST(req: Request) {
 
       let statusUpdated = false;
       let splitInfo: { ok: true; childrenCreated: number; childrenIds?: string[] } | null = null;
+      const readyAt = new Date();
 
       if (fullyPaid && canAutoMove) {
         if (reservation.status !== ReservationStatus.READY_FOR_PLATFORM && reservation.status !== ReservationStatus.IN_SEA) {
           await tx.reservation.update({
             where: { id: reservation.id },
-            data: { status: ReservationStatus.READY_FOR_PLATFORM },
+            data: {
+              status: ReservationStatus.READY_FOR_PLATFORM,
+              paymentCompletedAt: reservation.paymentCompletedAt ?? readyAt,
+              readyForPlatformAt: readyAt,
+            },
           });
           statusUpdated = true;
         }
@@ -306,7 +320,13 @@ export async function POST(req: Request) {
             isExtra: Boolean(it.isExtra),
             service: it.service ? { category: it.service.category ?? null } : null,
           })),
-        });
+        }, reservation.status === ReservationStatus.READY_FOR_PLATFORM || reservation.status === ReservationStatus.IN_SEA ? undefined : readyAt);
+        if (reservation.status !== ReservationStatus.READY_FOR_PLATFORM && reservation.status !== ReservationStatus.IN_SEA) {
+          await tx.reservationUnit.updateMany({
+            where: { reservationId: reservation.id, status: "READY_FOR_PLATFORM" },
+            data: { readyForPlatformAt: readyAt },
+          });
+        }
 
         // ✅ OPCIONAL/RECOMENDADO: packs → split automático de extras pendientes en hijas
         const isPackParent = Boolean(reservation.packId && reservation.isPackParent && !reservation.parentReservationId);
@@ -327,6 +347,9 @@ export async function POST(req: Request) {
                 data: {
                   source: reservation.source,
                   status: ReservationStatus.READY_FOR_PLATFORM,
+                  storeQueueStartedAt: reservation.storeQueueStartedAt ?? readyAt,
+                  paymentCompletedAt: readyAt,
+                  readyForPlatformAt: readyAt,
                   activityDate: reservation.activityDate ?? startOfToday(),
                   scheduledTime: reservation.scheduledTime,
                   isPackParent: false,
@@ -358,8 +381,8 @@ export async function POST(req: Request) {
                 select: { id: true },
               });
 
-              await ensureUnitsTx(tx, {
-                id: child.id,
+            await ensureUnitsTx(tx, {
+              id: child.id,
                 quantity: Number(it.quantity ?? 1),
                 isPackParent: false,
                 parentReservationId: reservation.id,
@@ -371,7 +394,7 @@ export async function POST(req: Request) {
                     service: it.service ? { category: it.service.category ?? null } : null,
                   },
                 ],
-              });
+            }, readyAt);
 
               childrenIds.push(child.id);
               created++;

@@ -126,7 +126,7 @@ export async function GET(req: Request) {
       unitIndex: true,
       status: true,
       jetskiId: true,
-      updatedAt: true,
+      readyForPlatformAt: true,
       reservation: {
         select: {
           id: true,
@@ -148,7 +148,7 @@ export async function GET(req: Request) {
   const queue = units.map((u) => ({
     reservationId: u.reservation.id,
     reservationUnitId: u.id,
-    queueEnteredAt: u.updatedAt,
+    queueEnteredAt: u.readyForPlatformAt,
     customerName: u.reservation.customerName,
     serviceName: u.reservation.service?.name ?? null,
     category: u.reservation.service?.category ?? null,

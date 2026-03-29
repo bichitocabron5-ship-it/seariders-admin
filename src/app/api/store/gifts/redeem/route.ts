@@ -112,6 +112,8 @@ export async function POST(req: Request) {
 
           activityDate,
           scheduledTime: null, // ðŸ‘ˆ importante
+          storeQueueStartedAt: now,
+          paymentCompletedAt: now,
 
           serviceId: v.product.serviceId,
           optionId: v.product.optionId,

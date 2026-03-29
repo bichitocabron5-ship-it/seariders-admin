@@ -32,6 +32,8 @@ async function ensureUnitsTx(tx: Prisma.TransactionClient, reservationId: string
     where: { id: reservationId },
     select: {
       id: true,
+      status: true,
+      readyForPlatformAt: true,
       quantity: true,
       isPackParent: true,
       parentReservationId: true,
@@ -67,8 +69,16 @@ async function ensureUnitsTx(tx: Prisma.TransactionClient, reservationId: string
   });
   const set = new Set(existing.map((u: UnitIndex) => Number(u.unitIndex)));
 
-  const toCreate: Array<{ reservationId: string; unitIndex: number }> = [];
-  for (let i = 1; i <= requiredUnits; i++) if (!set.has(i)) toCreate.push({ reservationId: r.id, unitIndex: i });
+  const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
+  for (let i = 1; i <= requiredUnits; i++) {
+    if (!set.has(i)) {
+      toCreate.push({
+        reservationId: r.id,
+        unitIndex: i,
+        ...(r.status === "READY_FOR_PLATFORM" && r.readyForPlatformAt ? { readyForPlatformAt: r.readyForPlatformAt } : {}),
+      });
+    }
+  }
   if (toCreate.length > 0) await tx.reservationUnit.createMany({ data: toCreate, skipDuplicates: true });
 }
 
@@ -81,14 +91,29 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
 
   await prisma.$transaction(async (tx) => {
+    const current = await tx.reservation.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, paymentCompletedAt: true },
+    });
+    if (!current) throw new Error("Reserva no existe");
+
+    const readyAt = parsed.data.status === "READY_FOR_PLATFORM" ? new Date() : null;
     await tx.reservation.update({
       where: { id: parsed.data.id },
-      data: { status: parsed.data.status },
+      data: {
+        status: parsed.data.status,
+        ...(readyAt ? { paymentCompletedAt: current.paymentCompletedAt ?? readyAt } : {}),
+        ...(readyAt ? { readyForPlatformAt: readyAt } : {}),
+      },
       select: { id: true },
     });
 
     if (parsed.data.status === "READY_FOR_PLATFORM") {
       await ensureUnitsTx(tx, parsed.data.id);
+      await tx.reservationUnit.updateMany({
+        where: { reservationId: parsed.data.id, status: "READY_FOR_PLATFORM" },
+        data: { readyForPlatformAt: readyAt ?? undefined },
+      });
     }
 
     await syncStoreFulfillmentTasksForReservation(tx, parsed.data.id);

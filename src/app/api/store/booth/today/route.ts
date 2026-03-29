@@ -4,15 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
+import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 
 export const runtime = "nodejs";
-
-function startOfDay(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-}
-function endOfDayExclusive(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0);
-}
 
 type BoothRow = {
   id: string;
@@ -45,15 +39,13 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const now = new Date();
-  const start = startOfDay(now);
-  const end = endOfDayExclusive(now);
+  const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
 
   // 1) Traer reservas BOOTH del dÃ­a + info del viaje
   const rowsDb = await prisma.reservation.findMany({
     where: {
       source: "BOOTH",
-      activityDate: { gte: start, lt: end },
+      activityDate: { gte: start, lt: endExclusive },
       boothCode: { not: null },
     },
     select: {
