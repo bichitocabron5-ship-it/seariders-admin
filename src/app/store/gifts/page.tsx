@@ -3,6 +3,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { StoreHero, storeStyles } from "@/components/store-ui";
 
 type GiftProduct = { id: string; name: string; priceCents: number; isActive: boolean };
 type PendingRow = {
@@ -33,39 +34,14 @@ function todayMadridYMD() {
   return fmt.format(new Date());
 }
 
-const shellStyle: React.CSSProperties = {
-  padding: 24,
-  maxWidth: 1200,
-  margin: "0 auto",
-  display: "grid",
-  gap: 18,
-};
+const shellStyle: React.CSSProperties = { ...storeStyles.shell, width: "min(1200px, 100%)" };
 
-const panelStyle: React.CSSProperties = {
-  padding: 18,
-  border: "1px solid #dbe4ea",
-  borderRadius: 20,
-  background: "#ffffff",
-  boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)",
-};
+const panelStyle: React.CSSProperties = storeStyles.panel;
 
 const labelStyle: React.CSSProperties = { display: "grid", gap: 6, fontSize: 13, fontWeight: 700 };
-const inputStyle: React.CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff" };
-const primaryButtonStyle: React.CSSProperties = {
-  padding: "12px 16px",
-  borderRadius: 12,
-  border: "1px solid #0f172a",
-  background: "#0f172a",
-  color: "#fff",
-  fontWeight: 800,
-};
-const secondaryButtonStyle: React.CSSProperties = {
-  padding: "12px 16px",
-  borderRadius: 12,
-  border: "1px solid #d0d9e4",
-  background: "#fff",
-  fontWeight: 700,
-};
+const inputStyle: React.CSSProperties = storeStyles.input;
+const primaryButtonStyle: React.CSSProperties = storeStyles.primaryButton;
+const secondaryButtonStyle: React.CSSProperties = storeStyles.secondaryButton;
 
 export default function StoreGiftsPage() {
   const [products, setProducts] = useState<GiftProduct[]>([]);
@@ -178,33 +154,20 @@ export default function StoreGiftsPage() {
 
   return (
     <div style={shellStyle}>
-      <section
-        style={{
-          ...panelStyle,
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 16,
-          flexWrap: "wrap",
-          alignItems: "flex-end",
-          background: "linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%)",
-        }}
-      >
-        <div style={{ display: "grid", gap: 6 }}>
-          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", color: "#0f766e" }}>Store</div>
-          <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1 }}>Regalos</h1>
-          <div style={{ color: "#475569", maxWidth: 640 }}>
-            Venta y canje de regalos con acceso directo a la formalización en tienda.
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <StoreHero
+        title="Regalos"
+        description="Venta y canje de regalos con acceso directo a la formalización en tienda."
+        actions={
+          <>
           <button onClick={load} disabled={loading} style={secondaryButtonStyle}>
             {loading ? "Cargando..." : "Refrescar"}
           </button>
           <a href="/store" style={{ ...secondaryButtonStyle, textDecoration: "none", color: "#111827", display: "inline-flex", alignItems: "center" }}>
             Volver a tienda
           </a>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {err ? (
         <div style={{ padding: 12, borderRadius: 14, background: "#fff1f2", border: "1px solid #fecdd3", color: "#9f1239", fontWeight: 700 }}>

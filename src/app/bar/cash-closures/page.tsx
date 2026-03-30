@@ -235,7 +235,7 @@ export default function BarCashClosuresPage() {
   const headerRight = (
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
       <Select value={shift} onChange={(e) => setShift(e.target.value as Shift)}>
-        <option value="MORNING">Manana</option>
+        <option value="MORNING">Mañana</option>
         <option value="AFTERNOON">Tarde</option>
       </Select>
       <Link href="/admin/cash-closures?origin=BAR" style={{ ...styles.btn, textDecoration: "none" }}>
@@ -254,7 +254,7 @@ export default function BarCashClosuresPage() {
           style={{
             display: "grid",
             gap: 18,
-            gridTemplateColumns: "1.4fr 1fr",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
             alignItems: "stretch",
           }}
         >
@@ -285,7 +285,7 @@ export default function BarCashClosuresPage() {
                 Caja BAR
               </div>
               <div style={{ fontSize: 14, color: "#d1fae5", maxWidth: 620 }}>
-                Revision del turno, declaracion por metodo y cierre final del punto BAR.
+                Revisión del turno, declaración por método y cierre final del punto BAR.
               </div>
             </div>
 
@@ -294,7 +294,7 @@ export default function BarCashClosuresPage() {
                 Fecha: {today}
               </span>
               <span style={{ ...styles.pill, background: "rgba(15, 23, 42, 0.2)", border: "1px solid rgba(148, 163, 184, 0.3)", color: "#fff" }}>
-                Turno: {shift === "MORNING" ? "Manana" : "Tarde"}
+                Turno: {shift === "MORNING" ? "Mañana" : "Tarde"}
               </span>
               <span style={{ ...styles.pill, background: "rgba(15, 23, 42, 0.2)", border: "1px solid rgba(148, 163, 184, 0.3)", color: "#fff" }}>
                 Estado: {sum?.isClosed ? "Cerrado" : "Abierto"}
@@ -312,7 +312,7 @@ export default function BarCashClosuresPage() {
 
       {sum?.isClosed ? (
         <Alert kind="info">
-          Este turno ya esta cerrado. Puedes revisarlo en <Link href="/admin/cash-closures?origin=BAR">admin/cash-closures</Link>.
+          Este turno ya está cerrado. Puedes revisarlo en <Link href="/admin/cash-closures?origin=BAR">admin/cash-closures</Link>.
         </Alert>
       ) : null}
 
@@ -378,7 +378,7 @@ export default function BarCashClosuresPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "160px 1fr 140px 140px",
+              gridTemplateColumns: "minmax(120px, 160px) minmax(140px, 1fr) minmax(110px, 140px) minmax(110px, 140px)",
               gap: 12,
               alignItems: "center",
               fontSize: 12,
@@ -401,7 +401,7 @@ export default function BarCashClosuresPage() {
                 key={method}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "160px 1fr 140px 140px",
+                  gridTemplateColumns: "minmax(120px, 160px) minmax(140px, 1fr) minmax(110px, 140px) minmax(110px, 140px)",
                   gap: 12,
                   alignItems: "center",
                 }}

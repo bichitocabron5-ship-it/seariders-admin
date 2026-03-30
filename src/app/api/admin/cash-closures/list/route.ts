@@ -44,7 +44,7 @@ export async function GET(req: Request) {
     includeVoided: u.searchParams.get("includeVoided") ?? undefined,
     take: u.searchParams.get("take") ?? undefined,
   });
-  if (!parsed.success) return NextResponse.json({ error: "ParÃ¡metros invÃ¡lidos" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Parámetros inválidos" }, { status: 400 });
 
   const take = Math.min(200, Math.max(20, Number(parsed.data.take ?? 80)));
 

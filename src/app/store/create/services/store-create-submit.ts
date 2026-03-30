@@ -1,4 +1,9 @@
-import type { CartItem } from "../types";
+type SubmitCartItem = {
+  serviceId: string;
+  optionId: string;
+  quantity: number;
+  pax: number;
+};
 
 function normTrim(v: unknown) {
   return String(v ?? "").trim();
@@ -19,7 +24,7 @@ export function buildEditUpdateBody(args: {
   optionId: string;
   quantity: number;
   companions: number;
-  cartItems: CartItem[];
+  cartItems: SubmitCartItem[];
   customerPhone: string;
   customerEmail: string;
   customerCountry: string;
@@ -112,7 +117,7 @@ export function buildFormalizeBody(args: {
 
 export function buildItemsToSend(args: {
   isPackMode: boolean;
-  cartItems: CartItem[];
+  cartItems: SubmitCartItem[];
   serviceId: string;
   optionId: string;
   quantity: number;

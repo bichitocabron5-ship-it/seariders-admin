@@ -24,7 +24,7 @@ function startEndOfMonthInTz(ym: string) {
   // inicio mes en Madrid => Date UTC correcto
   const start = tzLocalToUtcDate(tz, y, m, 1, 0, 0);
 
-  // fin exclusivo: primer dÃ­a del mes siguiente a las 00:00 Madrid
+  // fin exclusivo: primer día del mes siguiente a las 00:00 Madrid
   const endExclusive =
     m === 12
       ? tzLocalToUtcDate(tz, y + 1, 1, 1, 0, 0)
@@ -68,7 +68,7 @@ export async function GET(req: Request) {
       activityDate: true,
       scheduledTime: true,
       customerName: true,
-      formalizedAt: true, // âœ…
+      formalizedAt: true,
       totalPriceCents: true, // servicio final
       depositCents: true,     // fianza
       service: { select: { name: true, category: true } },
@@ -84,7 +84,7 @@ export async function GET(req: Request) {
   // 2) Pagos agrupados por reserva (neto IN/OUT) + separar fianza/servicio
   const payments = await prisma.payment.findMany({
     where: {
-      reservationId: { in: ids, not: null }, // <- Prisma a veces se pone tiquismiquis con tipos aquÃ­
+      reservationId: { in: ids, not: null }, // Prisma a veces se pone tiquismiquis con tipos aquí
     },
     select: { reservationId: true, amountCents: true, direction: true, isDeposit: true },
   });
@@ -93,7 +93,7 @@ export async function GET(req: Request) {
 
   for (const p of payments) {
     const rid = p.reservationId;
-    if (!rid) continue; // ðŸ‘ˆ evita null
+    if (!rid) continue; // evita null
 
     const sign = p.direction === "OUT" ? -1 : 1;
 
@@ -151,7 +151,7 @@ export async function GET(req: Request) {
     days[k].count += 1;
   }
 
-  // (opcional) ordenar cada dÃ­a por hora
+  // (opcional) ordenar cada día por hora
   for (const k of Object.keys(days)) {
     days[k].rows.sort((a, b) => {
       const da = new Date(a.scheduledTime ?? a.activityDate).getTime();

@@ -5,29 +5,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { getCountryOptionsEs } from "@/lib/countries";
 import { BUSINESS_TZ, shouldAutoFormalize } from "@/lib/tz-business";
 import { needsContractForCategory } from "@/lib/reservation-rules";
+import { opsStyles } from "@/components/ops-ui";
 import { AvailabilitySection, PricingSection, SubmitSection } from "./components/form-sections";
 import { ReservationBasicsSection } from "./components/reservation-basics-section";
 import { CartSection, ContractsSection } from "./components/store-sections";
-import { useAvailability, useContractsState, useDiscountPreview, useReservationPrefill } from "./hooks/store-create-hooks";
-import { buildCreateBody, buildEditUpdateBody, buildFormalizeBody, buildItemsToSend } from "./services/store-create-submit";
-import { validateBeforeSubmit, validateItemsForCreate } from "./services/store-create-validation";
-import { ensureOkResponse, errorMessage, isAbortError, throwValidationError } from "./utils/errors";
-import type { CartItem, Channel, Option, PackPreview, ServiceMain, UIMode } from "./types";
-import { getAssetAvailability, type AssetAvailability } from "../services/assets";
-
-type CustomerSearchRow = {
-  reservationId: string;
-  customerName: string | null;
-  email: string | null;
-  phone: string | null;
-  customerDocNumber: string | null;
-  country: string | null;
-  birthDate: string | null;
-  address: string | null;
-  postalCode: string | null;
-  licenseNumber: string | null;
-  lastActivityAt: string | null;
-};
+import { StoreCreateCustomerProfileSection, StoreCreateSummaryStrip } from "./components/store-create-overview";
+import { useAvailability, useContractsState, useCustomerProfileSearch, useDiscountPreview, useReservationPrefill, useStoreCreateCatalog, useStoreCreateSelection } from "./hooks/store-create-hooks";
+import { submitStoreCreateCreateFlow, submitStoreCreateEditFlow, submitStoreCreateMigrateFlow } from "./services/store-create-submit-flow";
+import { errorMessage } from "./utils/errors";
+import type { CartItem, Channel, Option, ServiceMain, UIMode } from "./types";
+import type { AssetAvailability } from "../services/assets";
 
 function todayMadridYMD() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -64,19 +51,17 @@ function StoreCreatePageInner() {
   const prefillReservationId = migrateReservationId || editReservationId;
   const defaultDate = sp.get("date") ?? todayMadridYMD();
 
-  const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateStr, setDateStr] = useState(defaultDate);
   const [timeStr, setTimeStr] = useState<string>("");
   const [availabilityTick, setAvailabilityTick] = useState(0);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [assetAvailability, setAssetAvailability] = useState<AssetAvailability[]>([]);
 
+  const [assetAvailability, setAssetAvailability] = useState<AssetAvailability[]>([]);
   const [servicesMain, setServicesMain] = useState<ServiceMain[]>([]);
   const [options, setOptions] = useState<Option[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [categoriesMain, setCategoriesMain] = useState<string[]>([]);
-  const [packPreview, setPackPreview] = useState<PackPreview | null>(null);
   const [prefillServiceFallback, setPrefillServiceFallback] = useState<ServiceMain | null>(null);
   const [prefillOptionFallback, setPrefillOptionFallback] = useState<Option | null>(null);
   const [prefillChannelFallback, setPrefillChannelFallback] = useState<Channel | null>(null);
@@ -110,11 +95,6 @@ function StoreCreatePageInner() {
   const [customerDocType, setCustomerDocType] = useState("");
   const [customerDocNumber, setCustomerDocNumber] = useState("");
   const [marketingSource, setMarketingSource] = useState("");
-
-  const [customerSearch, setCustomerSearch] = useState("");
-  const [customerMatches, setCustomerMatches] = useState<CustomerSearchRow[]>([]);
-  const [customerSearchBusy, setCustomerSearchBusy] = useState(false);
-  const [customerSearchError, setCustomerSearchError] = useState<string | null>(null);
 
   const [manualDiscountEuros, setManualDiscountEuros] = useState<number>(0);
   const [manualDiscountReason, setManualDiscountReason] = useState<string>("");
@@ -213,6 +193,42 @@ function StoreCreatePageInner() {
 
   const { availability, availabilityLoading, availabilityError } = useAvailability(dateStr, availabilityTick);
 
+  const {
+    loadingCatalog,
+    catalogError,
+    servicesMain: loadedServicesMain,
+    options: loadedOptions,
+    channels: loadedChannels,
+    categoriesMain: loadedCategoriesMain,
+    assetAvailability: loadedAssetAvailability,
+    initialDefaults,
+  } = useStoreCreateCatalog({
+    migrateReservationId,
+  });
+
+  const {
+    customerSearch,
+    setCustomerSearch,
+    customerMatches,
+    customerSearchBusy,
+    customerSearchError,
+    appliedCustomerProfileName,
+    searchCustomers,
+    applyCustomerProfile,
+  } = useCustomerProfileSearch({
+    onApplyProfile: (p) => {
+      if (p.customerName != null) setCustomerName(p.customerName);
+      if (p.email != null) setCustomerEmail(p.email);
+      if (p.phone != null) setCustomerPhone(p.phone);
+      if (p.customerDocNumber != null) setCustomerDocNumber(p.customerDocNumber);
+      if (p.country != null) setCustomerCountry(p.country);
+      if (p.birthDate != null) setCustomerBirthDate(p.birthDate);
+      if (p.address != null) setCustomerAddress(p.address);
+      if (p.postalCode != null) setCustomerPostalCode(p.postalCode);
+      if (p.licenseNumber != null) setLicenseNumber(p.licenseNumber);
+    },
+  });
+
   // opcional: si entras en edit y ya hay customerName, lo separa "a lo bestia" una vez
   useEffect(() => {
     const t = String(customerName ?? "").trim();
@@ -240,59 +256,25 @@ function StoreCreatePageInner() {
     window.history.replaceState({}, "", u.toString());
   }, [dateStr, isEditMode, isMigrateMode]);
 
-  // Cargar catálogo
   useEffect(() => {
-    const ac = new AbortController();
+    setServicesMain(loadedServicesMain);
+    setOptions(loadedOptions);
+    setChannels(loadedChannels);
+    setCategoriesMain(loadedCategoriesMain);
+    setAssetAvailability(loadedAssetAvailability);
+  }, [loadedServicesMain, loadedOptions, loadedChannels, loadedCategoriesMain, loadedAssetAvailability]);
 
-    (async () => {
-      setLoadingCatalog(true);
-      setError(null);
+  useEffect(() => {
+    if (!initialDefaults) return;
+    setServiceId(initialDefaults.serviceId);
+    setOptionId(initialDefaults.optionId);
+    setChannelId(initialDefaults.channelId);
+  }, [initialDefaults]);
 
-  try {
-    const [catalogRes, assetsData] = await Promise.all([
-      fetch("/api/pos/catalog?origin=STORE", { cache: "no-store", signal: ac.signal }),
-      getAssetAvailability(),
-    ]);
-
-    if (!catalogRes.ok) throw new Error(await catalogRes.text());
-    const data = await catalogRes.json();
-
-    const sm = (data?.servicesMain ?? []) as ServiceMain[];
-    const op = (data?.options ?? []) as Option[];
-    const ch = (data?.channels ?? []) as Channel[];
-
-    setServicesMain(sm);
-    setOptions(op);
-    setChannels(ch);
-    setCategoriesMain(((data?.categories?.main ?? []) as string[]) ?? []);
-    setAssetAvailability(assetsData.rows ?? []);
-
-    if (!migrateReservationId) {
-      const main0 = (data.servicesMain ?? [])[0];
-      if (main0) {
-        setServiceId(main0.id);
-        const firstOpt =
-          ((data.options ?? []) as Option[]).find((o) => o.serviceId === main0.id) ??
-          null;
-        setOptionId(firstOpt?.id ?? "");
-      } else {
-        setServiceId("");
-        setOptionId("");
-      }
-
-      const ch0 = (data.channels ?? [])[0];
-      setChannelId(ch0?.id ?? "");
-    }
-  } catch (e: unknown) {
-    if (isAbortError(e)) return;
-    setError(errorMessage(e, "No se pudo cargar el catálogo"));
-  } finally {
-    setLoadingCatalog(false);
-  }
-    })();
-
-    return () => ac.abort();
-  }, [migrateReservationId]);
+  useEffect(() => {
+    if (!catalogError) return;
+    setError(catalogError);
+  }, [catalogError]);
 
   useEffect(() => {
     if (!isLicense) {
@@ -310,59 +292,36 @@ function StoreCreatePageInner() {
     }
   }, [dateStr, timeStr]);
 
-  const selectedService = useMemo(
-    () => servicesMain.find((s) => s.id === serviceId) ?? (prefillServiceFallback?.id === serviceId ? prefillServiceFallback : null),
-    [servicesMain, serviceId, prefillServiceFallback]
-  );
-
-  useEffect(() => {
-    if (!selectedService) return;
-    setIsLicense(Boolean(selectedService.isLicense));
-  }, [selectedService]);
-
-  const isPackMode = (selectedService?.category ?? "").toUpperCase() === "PACK";
-  const canAddToCart = !isPackMode && !!serviceId && !!optionId && Number(quantity) > 0 && Number(pax) > 0;
-  
-  useEffect(() => {
-    if (isPackMode) setCartItems([]);
-  }, [isPackMode]);
-
-  // Filtrar servicios por categoría (solo modo normal)
-  const servicesMainFiltered = useMemo(() => {
-    const list = !category ? servicesMain : servicesMain.filter((s) => (s.category ?? "") === category);
-    if (
-      prefillServiceFallback &&
-      prefillServiceFallback.id === serviceId &&
-      !list.some((s) => s.id === prefillServiceFallback.id) &&
-      (!category || (prefillServiceFallback.category ?? "") === category)
-    ) {
-      return [prefillServiceFallback, ...list];
-    }
-    return list;
-  }, [servicesMain, category, prefillServiceFallback, serviceId]);
-
-  // Categoría real del servicio seleccionado (fuente de verdad para availability)
-  const selectedCategory = useMemo(() => {
-    if (!serviceId) return "";
-    const svc = servicesMain.find((s) => s.id === serviceId) ?? (prefillServiceFallback?.id === serviceId ? prefillServiceFallback : null);
-    return String(svc?.category ?? "").toUpperCase();
-  }, [serviceId, servicesMain, prefillServiceFallback]);
-
-  // Opciones del servicio seleccionado (en tu API ya vienen filtradas por servicios visibles)
-  const filteredOptions = useMemo(() => {
-    if (!serviceId) return [];
-    const list = options.filter((o) => o.serviceId === serviceId);
-    if (
-      prefillOptionFallback &&
-      prefillOptionFallback.serviceId === serviceId &&
-      !list.some((o) => o.id === prefillOptionFallback.id)
-    ) {
-      return [prefillOptionFallback, ...list];
-    }
-    return list;
-  }, [options, serviceId, prefillOptionFallback]);
-
-  const optionById = useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
+  const {
+    isPackMode,
+    canAddToCart,
+    servicesMainFiltered,
+    selectedCategory,
+    filteredOptions,
+    optionById,
+    selectedOpt,
+    channelsWithFallback,
+    baseTotalCents,
+    packPreview,
+    handleCategoryChange,
+  } = useStoreCreateSelection({
+    servicesMain,
+    options,
+    channels,
+    category,
+    serviceId,
+    optionId,
+    quantity,
+    pax,
+    prefillServiceFallback,
+    prefillOptionFallback,
+    prefillChannelFallback,
+    setServiceId,
+    setOptionId,
+    setIsLicense,
+    setTimeStr,
+    setCartItems,
+  });
 
   const cartSubtotalCents = useMemo(() => {
     if (isPackMode) return 0; // pack se calcula aparte
@@ -417,68 +376,6 @@ function StoreCreatePageInner() {
   function getServiceNameById(serviceId: string) {
     return servicesMain.find((s) => s.id === serviceId)?.name ?? "";
   }
-
-  // Si cambia service, ajustar optionId (solo normal)
-  useEffect(() => {
-    if (!filteredOptions.length) {
-      setOptionId("");
-      return;
-    }
-
-    if (!filteredOptions.some((o) => o.id === optionId)) {
-      const withPrice =
-        filteredOptions.find((o) => (o.hasPrice ?? true) && (o.basePriceCents ?? 0) > 0) ??
-        filteredOptions[0];
-
-      setOptionId(withPrice.id);
-    }
-  }, [filteredOptions, optionId]);
-
-  const selectedOpt = useMemo(
-    () => options.find((o) => o.id === optionId) ?? (prefillOptionFallback?.id === optionId ? prefillOptionFallback : null),
-    [options, optionId, prefillOptionFallback]
-  );
-
-  const channelsWithFallback = useMemo(() => {
-    if (!prefillChannelFallback || channels.some((c) => c.id === prefillChannelFallback.id)) return channels;
-    return [prefillChannelFallback, ...channels];
-  }, [channels, prefillChannelFallback]);
-
-  useEffect(() => {
-    // si no hay serviceId elegido, elige el primero según categoría actual
-    if (!serviceId) {
-      const list = category
-        ? servicesMain.filter((s) => (s.category ?? "") === category)
-        : servicesMain;
-      const s0 = list[0];
-      if (s0) setServiceId(s0.id);
-    }
-
-    // fuerza a elegir hora de nuevo al salir de pack (evita arrastres)
-    setTimeStr("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, servicesMain]);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      setPackPreview(null);
-      if (selectedCategory !== "PACK" || !serviceId) return;
-      const r = await fetch(`/api/store/packs?serviceId=${serviceId}`, { cache: "no-store" });
-      if (!r.ok) return;
-      const j = await r.json();
-      if (alive) setPackPreview(j.pack);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [selectedCategory, serviceId]);
-
-  const baseTotalCents = useMemo(() => {
-    if (!selectedOpt) return 0;
-    const unit = Number(selectedOpt.basePriceCents ?? 0) || 0;
-    return unit * Number(quantity || 0);
-  }, [selectedOpt, quantity]);
 
   const canCreate = Boolean(
     serviceId &&
@@ -711,269 +608,6 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     setCartItems([]);
   }
 
-  async function handleEditSubmit() {
-    if (!editReservationId) return;
-    validateBeforeSubmit({
-      flow: "EDIT",
-      customerName,
-      quantity,
-      pax,
-      isVoucherFormalizeFlow,
-      serviceId,
-      optionId,
-      channelId,
-      cartItemsLength: cartItems.length,
-      canCreate,
-      uiMode,
-      dateStr,
-      todayYmd: todayMadridYMD(),
-    });
-
-    const body = buildEditUpdateBody({
-      pax,
-      isLicense: Boolean(isLicense),
-      channelId,
-      dateStr,
-      timeStr,
-      serviceId,
-      optionId,
-      quantity,
-      companions,
-      cartItems,
-      customerPhone,
-      customerEmail,
-      customerCountry,
-      customerAddress,
-      customerPostalCode,
-      customerBirthDate,
-      customerDocType,
-      customerDocNumber,
-      marketingSource,
-      licenseSchool,
-      licenseType,
-      licenseNumber,
-    });
-
-    const res = await fetch(`/api/store/reservations/${editReservationId}/update`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    await ensureOkResponse(res, "No se pudo actualizar la reserva");
-    const j = await res.json();
-    router.push(`/store?reservationId=${j.id}`);
-  }
-
-  async function handleMigrateSubmit() {
-    if (!migrateReservationId) return;
-    validateBeforeSubmit({
-      flow: "MIGRATE",
-      customerName,
-      quantity,
-      pax,
-      isVoucherFormalizeFlow,
-      serviceId,
-      optionId,
-      channelId,
-      cartItemsLength: cartItems.length,
-      canCreate,
-      uiMode,
-      dateStr,
-      todayYmd: todayMadridYMD(),
-    });
-
-    const body = buildFormalizeBody({
-      customerName,
-      customerPhone,
-      customerEmail,
-      customerCountry,
-      marketingSource,
-      isVoucherFormalizeFlow,
-      serviceId,
-      optionId,
-      channelId,
-      quantity,
-      pax,
-      companions,
-      dateStr,
-      timeStr,
-    });
-
-    const res = await fetch(`/api/store/reservations/${migrateReservationId}/formalize`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    await ensureOkResponse(res, "No se pudo formalizar la reserva");
-    const j = await res.json();
-    router.push(`/store?reservationId=${j.id}`);
-  }
-
-  const searchCustomers = useCallback(async (term: string) => {
-    const q = term.trim();
-
-    if (q.length < 2) {
-      setCustomerMatches([]);
-      setCustomerSearchError(null);
-      return;
-    }
-
-    try {
-      setCustomerSearchBusy(true);
-      setCustomerSearchError(null);
-
-      const res = await fetch(
-        `/api/store/customers/search?q=${encodeURIComponent(q)}&take=8`,
-        { cache: "no-store" }
-      );
-
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
-
-      const data = await res.json();
-      setCustomerMatches(data.rows ?? []);
-    } catch (e: unknown) {
-      setCustomerSearchError(
-        e instanceof Error ? e.message : "Error buscando clientes"
-      );
-    } finally {
-      setCustomerSearchBusy(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const q = customerSearch.trim();
-
-    if (q.length < 2) {
-      setCustomerMatches([]);
-      setCustomerSearchError(null);
-      return;
-    }
-
-    const t = setTimeout(() => {
-      searchCustomers(q);
-    }, 350);
-
-    return () => clearTimeout(t);
-  }, [customerSearch, searchCustomers]);
-
-  async function applyCustomerProfile(reservationId: string) {
-    try {
-      setCustomerSearchError(null);
-
-      const res = await fetch(
-        `/api/store/customers/profile?reservationId=${encodeURIComponent(reservationId)}`,
-        { cache: "no-store" }
-      );
-
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
-
-      const data = await res.json();
-      const p = data.profile;
-
-      if (p.customerName != null) setCustomerName(p.customerName);
-      if (p.email != null) setCustomerEmail(p.email);
-      if (p.phone != null) setCustomerPhone(p.phone);
-      if (p.customerDocNumber != null) setCustomerDocNumber(p.customerDocNumber);
-      if (p.country != null) setCustomerCountry(p.country);
-      if (p.birthDate != null) setCustomerBirthDate(p.birthDate);
-      if (p.address != null) setCustomerAddress(p.address);
-      if (p.postalCode != null) setCustomerPostalCode(p.postalCode);
-      if (p.licenseNumber != null) setLicenseNumber(p.licenseNumber);
-
-      setCustomerMatches([]);
-      setCustomerSearch("");
-    } catch (e: unknown) {
-      setCustomerSearchError(
-        e instanceof Error ? e.message : "Error cargando ficha"
-      );
-    }
-  }
-
-  async function handleCreateSubmit() {
-    validateBeforeSubmit({
-      flow: "CREATE",
-      customerName,
-      quantity,
-      pax,
-      isVoucherFormalizeFlow,
-      serviceId,
-      optionId,
-      channelId,
-      cartItemsLength: cartItems.length,
-      canCreate,
-      uiMode,
-      dateStr,
-      todayYmd: todayMadridYMD(),
-    });
-
-    const time = (timeStr ?? "").trim();
-    if (!/^\d{2}:\d{2}$/.test(time)) {
-      throwValidationError("Hora requerida (HH:MM)");
-    }
-
-    const itemsToSend = buildItemsToSend({
-      isPackMode,
-      cartItems,
-      serviceId,
-      optionId,
-      quantity,
-      pax,
-    });
-
-    validateItemsForCreate(itemsToSend);
-
-    const body = buildCreateBody({
-      customerName,
-      customerPhone,
-      customerEmail,
-      customerCountry,
-      customerAddress,
-      customerPostalCode,
-      customerBirthDate,
-      customerDocType,
-      customerDocNumber,
-      marketingSource,
-      isLicense: Boolean(isLicense),
-      licenseSchool,
-      licenseType,
-      licenseNumber,
-      channelId,
-      dateStr,
-      time,
-      pax,
-      companions,
-      manualDiscountCents,
-      manualDiscountReason,
-      itemsToSend,
-    });
-
-    const res = await fetch("/api/store/reservations/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    await ensureOkResponse(res, "No se pudo crear la reserva");
-    const j = await res.json();
-
-    if (!j.autoFormalized) {
-      router.push(`/store/calendar?day=${dateStr}`);
-      return;
-    }
-    if (Number(j.requiredContractUnits ?? 0) > 0) {
-      router.push(`/store/create?migrateFrom=${j.id}#contracts`);
-      return;
-    }
-
-    router.push(`/store?reservationId=${j.id}`);
-  }
-
   async function createReservation(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -981,7 +615,38 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
     try {
       if (isEditMode && editReservationId) {
-        await handleEditSubmit();
+        await submitStoreCreateEditFlow({
+          editReservationId,
+          customerName,
+          quantity,
+          pax,
+          isVoucherFormalizeFlow,
+          serviceId,
+          optionId,
+          channelId,
+          cartItemsLength: cartItems.length,
+          canCreate,
+          uiMode,
+          dateStr,
+          todayYmd: todayMadridYMD(),
+          isLicense: Boolean(isLicense),
+          timeStr,
+          companions,
+          cartItems,
+          customerPhone,
+          customerEmail,
+          customerCountry,
+          customerAddress,
+          customerPostalCode,
+          customerBirthDate,
+          customerDocType,
+          customerDocNumber,
+          marketingSource,
+          licenseSchool,
+          licenseType,
+          licenseNumber,
+          router,
+        });
         return;
       }
 
@@ -991,11 +656,65 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       }
 
       if (isMigrateMode && migrateReservationId) {
-        await handleMigrateSubmit();
+        await submitStoreCreateMigrateFlow({
+          migrateReservationId,
+          customerName,
+          quantity,
+          pax,
+          isVoucherFormalizeFlow,
+          serviceId,
+          optionId,
+          channelId,
+          cartItemsLength: cartItems.length,
+          canCreate,
+          uiMode,
+          dateStr,
+          todayYmd: todayMadridYMD(),
+          customerPhone,
+          customerEmail,
+          customerCountry,
+          marketingSource,
+          companions,
+          timeStr,
+          router,
+        });
         return;
       }
 
-      await handleCreateSubmit();
+      await submitStoreCreateCreateFlow({
+        customerName,
+        quantity,
+        pax,
+        isVoucherFormalizeFlow,
+        serviceId,
+        optionId,
+        channelId,
+        cartItemsLength: cartItems.length,
+        canCreate,
+        uiMode,
+        dateStr,
+        todayYmd: todayMadridYMD(),
+        isPackMode,
+        cartItems,
+        timeStr,
+        customerPhone,
+        customerEmail,
+        customerCountry,
+        customerAddress,
+        customerPostalCode,
+        customerBirthDate,
+        customerDocType,
+        customerDocNumber,
+        marketingSource,
+        isLicense: Boolean(isLicense),
+        licenseSchool,
+        licenseType,
+        licenseNumber,
+        companions,
+        manualDiscountCents,
+        manualDiscountReason,
+        router,
+      });
       return;
     } catch (err: unknown) {
       const msg = errorMessage(err, "Error");
@@ -1029,18 +748,9 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     updateFullName(firstName, value);
   }
 
-  function handleCategoryChange(next: string) {
+  function handleCategorySelection(next: string) {
     setCategory(next);
-
-    const list = next ? servicesMain.filter((svc) => (svc.category ?? "") === next) : servicesMain;
-    const firstService = list[0] ?? null;
-    setServiceId(firstService?.id ?? "");
-
-    const firstOption =
-      options.find((opt) => opt.serviceId === (firstService?.id ?? "") && (opt.hasPrice ?? true) && (opt.basePriceCents ?? 0) > 0) ??
-      options.find((opt) => opt.serviceId === (firstService?.id ?? "")) ??
-      null;
-    setOptionId(firstOption?.id ?? "");
+    handleCategoryChange(next);
   }
 
   const reservationBasicsSectionProps = {
@@ -1089,7 +799,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       onCustomerDocTypeChange: setCustomerDocType,
       onCustomerDocNumberChange: setCustomerDocNumber,
       onMarketingSourceChange: setMarketingSource,
-      onCategoryChange: handleCategoryChange,
+      onCategoryChange: handleCategorySelection,
       onServiceChange: setServiceId,
       onOptionChange: setOptionId,
       onChannelChange: setChannelId,
@@ -1100,24 +810,17 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   };
 
   const shellStyle: React.CSSProperties = {
-    padding: 24,
-    maxWidth: 1040,
-    margin: "0 auto",
-    display: "grid",
-    gap: 18,
+    ...opsStyles.pageShell,
+    width: "min(1240px, 100%)",
   };
   const panelStyle: React.CSSProperties = {
-    border: "1px solid #dbe4ea",
+    ...opsStyles.sectionCard,
     borderRadius: 20,
     background: "#fff",
     boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)",
   };
   const secondaryButtonStyle: React.CSSProperties = {
-    padding: "10px 14px",
-    fontWeight: 900,
-    borderRadius: 12,
-    border: "1px solid #d0d9e4",
-    background: "#fff",
+    ...opsStyles.ghostButton,
     color: "#111827",
   };
   const badgeStyle: React.CSSProperties = {
@@ -1127,30 +830,34 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     textTransform: "uppercase",
   };
   const heroPillStyle: React.CSSProperties = {
-    padding: "6px 12px",
-    borderRadius: 999,
+    ...opsStyles.heroPill,
     border: "1px solid rgba(125, 211, 252, 0.35)",
     background: "rgba(15, 23, 42, 0.24)",
-    color: "#fff",
-    fontWeight: 900,
-    fontSize: 12,
   };
-  const statCardStyle: React.CSSProperties = {
-    ...panelStyle,
-    padding: 16,
-    display: "grid",
-    gap: 6,
-    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-  };
+  const summaryCards = [
+    {
+      label: "Disponibilidad",
+      value: availabilityLoading ? "..." : availabilityError ? "Error" : "OK",
+    },
+    {
+      label: "Precio actual",
+      value: euros(shownFinalCentsWithManual),
+    },
+    {
+      label: "Contratos",
+      value: requiredUnits > 0 ? `${readyCount}/${requiredUnits}` : "No aplica",
+    },
+    {
+      label: "Canal",
+      value: channels.find((ch) => ch.id === channelId)?.name ?? "Sin canal",
+    },
+  ];
 
   return (
     <div style={shellStyle}>
       <section
         style={{
-          ...panelStyle,
-          padding: 24,
-          display: "grid",
-          gap: 18,
+          ...opsStyles.heroCard,
           background:
             "radial-gradient(circle at top left, rgba(125, 211, 252, 0.22), transparent 28%), radial-gradient(circle at right bottom, rgba(15, 118, 110, 0.14), transparent 24%), linear-gradient(135deg, #0f172a 0%, #0f766e 55%, #082f49 100%)",
           color: "#e0f2fe",
@@ -1161,7 +868,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#7dd3fc" }}>
               Store
             </div>
-            <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.02, color: "#fff" }}>
+            <h1 style={opsStyles.heroTitle}>
               {uiMode === "EDIT" ? "Editar reserva" : uiMode === "FORMALIZE" ? "Formalizar reserva" : "Crear reserva"}
             </h1>
             <div style={{ fontSize: 14, color: "#bae6fd", maxWidth: 700 }}>
@@ -1188,24 +895,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         </div>
       </section>
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-        <div style={statCardStyle}>
-          <div style={summaryMetricLabel}>Disponibilidad</div>
-          <div style={summaryMetricValue}>{availabilityLoading ? "..." : availabilityError ? "Error" : "OK"}</div>
-        </div>
-        <div style={statCardStyle}>
-          <div style={summaryMetricLabel}>Precio actual</div>
-          <div style={summaryMetricValue}>{euros(shownFinalCentsWithManual)}</div>
-        </div>
-        <div style={statCardStyle}>
-          <div style={summaryMetricLabel}>Contratos</div>
-          <div style={summaryMetricValue}>{requiredUnits > 0 ? `${readyCount}/${requiredUnits}` : "No aplica"}</div>
-        </div>
-        <div style={statCardStyle}>
-          <div style={summaryMetricLabel}>Canal</div>
-          <div style={summaryMetricValue}>{channels.find((ch) => ch.id === channelId)?.name ?? "Sin canal"}</div>
-        </div>
-      </section>
+      <StoreCreateSummaryStrip cards={summaryCards} />
 
       {(isMigrateMode || showBoothBadge || showGiftBadge) ? (
         <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
@@ -1261,7 +951,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       ) : null}
 
       <section style={panelStyle}>
-        <div style={{ padding: 18, borderBottom: "1px solid #e2e8f0", background: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ padding: "18px clamp(18px, 3vw, 24px)", borderBottom: "1px solid #e2e8f0", background: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div>
             <div style={{ fontWeight: 900, fontSize: 16 }}>Datos principales</div>
             <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
@@ -1275,7 +965,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           ) : null}
         </div>
 
-        <form onSubmit={createReservation} style={{ padding: 18, display: "grid", gap: 16 }}>
+        <form onSubmit={createReservation} style={{ padding: "18px clamp(18px, 3vw, 24px) 24px", display: "grid", gap: 16 }}>
           {loadingCatalog ? <div style={{ color: "#64748b" }}>Cargando catálogo...</div> : null}
 
           {isVoucherFormalizeFlow ? (
@@ -1295,114 +985,16 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             onTimeSelect={setTimeStr}
           />
 
-            <div
-              style={{
-                border: "1px solid #dde4ee",
-                borderRadius: 16,
-                background: "#fff",
-                padding: 16,
-                display: "grid",
-                gap: 12,
-              }}
-            >
-              <div style={{ fontWeight: 900, fontSize: 18 }}>
-                Cliente repetidor / recuperar ficha
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
-                <input
-                  value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
-                  placeholder="Buscar por nombre o documento"
-                  style={{
-                    padding: 10,
-                    borderRadius: 10,
-                    border: "1px solid #d0d9e4",
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      searchCustomers(customerSearch);
-                    }
-                  }}
-                />
-              </div>
-
-              {customerSearchBusy ? (
-                <div style={{ fontSize: 12, opacity: 0.7 }}>Buscando coincidencias...</div>
-              ) : null}
-
-              {customerSearch.trim().length >= 2 && !customerSearchBusy && customerMatches.length === 0 ? (
-                <div style={{ fontSize: 12, opacity: 0.7 }}>
-                  No se encontraron clientes previos.
-                </div>
-              ) : null}
-
-              {customerSearchError ? (
-                <div
-                  style={{
-                    padding: 10,
-                    borderRadius: 10,
-                    border: "1px solid #fecaca",
-                    background: "#fff1f2",
-                    color: "#991b1b",
-                  }}
-                >
-                  {customerSearchError}
-                </div>
-              ) : null}
-
-              {customerMatches.length > 0 ? (
-                <div style={{ display: "grid", gap: 8 }}>
-                  {customerMatches.map((c) => (
-                    <div
-                      key={c.reservationId}
-                      style={{
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 12,
-                        padding: 12,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <div style={{ display: "grid", gap: 4 }}>
-                        <div style={{ fontWeight: 800 }}>{c.customerName || "Sin nombre"}</div>
-                        <div style={{ fontSize: 13, opacity: 0.75 }}>
-                          {c.customerDocNumber || "Sin documento"} · {c.phone || "Sin teléfono"} · {c.email || "Sin email"}
-                        </div>
-                        <div style={{ fontSize: 12, opacity: 0.65 }}>
-                          Última actividad:{" "}
-                          {c.lastActivityAt
-                            ? new Date(c.lastActivityAt).toLocaleDateString("es-ES")
-                            : "—"}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => applyCustomerProfile(c.reservationId)}
-                        style={{
-                          padding: "8px 12px",
-                          borderRadius: 10,
-                          border: "1px solid #e5e7eb",
-                          background: "#fff",
-                          fontWeight: 900,
-                        }}
-                      >
-                        Usar ficha
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div style={{ fontSize: 12, color: "#16a34a" }}>
-              Ficha recuperada de cliente previo
-            </div>
+          <StoreCreateCustomerProfileSection
+            customerSearch={customerSearch}
+            customerMatches={customerMatches}
+            customerSearchBusy={customerSearchBusy}
+            customerSearchError={customerSearchError}
+            appliedCustomerProfileName={appliedCustomerProfileName}
+            onCustomerSearchChange={setCustomerSearch}
+            onSearchSubmit={() => searchCustomers(customerSearch)}
+            onApplyCustomerProfile={applyCustomerProfile}
+          />
 
           {isContractsOnlyMode ? (
             <details
@@ -1507,17 +1099,3 @@ export default function StoreCreatePage() {
 function euros(cents: number) {
   return `${(Number(cents ?? 0) / 100).toFixed(2)} €`;
 }
-
-const summaryMetricLabel: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 900,
-  color: "#64748b",
-  textTransform: "uppercase",
-  letterSpacing: "0.04em",
-};
-
-const summaryMetricValue: React.CSSProperties = {
-  fontSize: 22,
-  fontWeight: 950,
-  color: "#0f172a",
-};

@@ -3,19 +3,20 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ExecutiveOpsSummarySection from "./_components/ExecutiveOpsSummarySection";
+import ExecutiveCommercialSection from "./_components/ExecutiveCommercialSection";
+import ExecutiveExpenseSection from "./_components/ExecutiveExpenseSection";
+import ExecutiveBarAccountingSection from "./_components/ExecutiveBarAccountingSection";
+import ExecutiveSalesTrendsSection from "./_components/ExecutiveSalesTrendsSection";
 import {
-  Area,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ComposedChart,
-  Legend,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+  ExecutiveBriefCard as BriefCard,
+  ExecutiveDataTable as DataTable,
+  ExecutiveHeroStat as HeroStat,
+  ExecutiveMetricCard as MetricCard,
+  ExecutiveMetaBadge as MetaBadge,
+  ExecutiveSection as Section,
+  executiveStyles,
+} from "@/components/executive-ui";
 
 type ExecutiveResponse = {
   ok: true;
@@ -191,7 +192,6 @@ type ExecutiveResponse = {
   };
 };
 
-const money0 = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 const money2 = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const ints = new Intl.NumberFormat("es-ES");
 
@@ -215,11 +215,6 @@ function fixText(value: string | null | undefined, fallback = "-") {
 function eur(cents: number | null | undefined) {
   if (cents == null) return "-";
   return money2.format(cents / 100);
-}
-
-function eurCompact(cents: number | null | undefined) {
-  if (cents == null) return "-";
-  return money0.format(cents / 100);
 }
 
 function fmtInt(value: number | null | undefined) {
@@ -470,6 +465,52 @@ export default function ExecutivePage() {
     [data]
   );
 
+  const hrMetrics = useMemo(
+    () =>
+      data
+        ? [
+            { title: "Hoy", value: fmtMinutes(data.hr.approvedMinutesToday) },
+            { title: "Semana", value: fmtMinutes(data.hr.approvedMinutesWeek) },
+            { title: "Mes", value: fmtMinutes(data.hr.approvedMinutesMonth) },
+            { title: "Payroll pendiente", value: eur(data.hr.pendingPayrollCents), warn: data.hr.pendingPayrollCents > 0 },
+            { title: "Coste del mes", value: eur(data.hr.monthPayrollCents) },
+            { title: "Prácticas activas", value: fmtInt(data.hr.activeInterns) },
+            { title: "Bolsa baja", value: fmtInt(data.hr.internshipLowBalance), warn: data.hr.internshipLowBalance > 0 },
+          ]
+        : [],
+    [data]
+  );
+
+  const mechanicsMetrics = useMemo(
+    () =>
+      data
+        ? [
+            { title: "Eventos abiertos", value: fmtInt(data.mechanics.openEvents), warn: data.mechanics.openEvents > 0 },
+            { title: "Eventos críticos", value: fmtInt(data.mechanics.criticalEvents), warn: data.mechanics.criticalEvents > 0 },
+            { title: "Coste total", value: eur(data.mechanics.monthCostCents) },
+            { title: "Piezas", value: eur(data.mechanics.monthPartsCostCents) },
+            { title: "Mano de obra", value: eur(data.mechanics.monthLaborCostCents) },
+            { title: "Stock bajo", value: fmtInt(data.mechanics.lowStockParts), warn: data.mechanics.lowStockParts > 0 },
+          ]
+        : [],
+    [data]
+  );
+
+  const expensesMetrics = useMemo(
+    () =>
+      data
+        ? [
+            { title: "Total mes", value: eur(data.expenses.monthTotalCents) },
+            { title: "Pagado", value: eur(data.expenses.monthPaidCents) },
+            { title: "Pendiente", value: eur(data.expenses.monthPendingCents), warn: data.expenses.monthPendingCents > 0 },
+            { title: "Número de gastos", value: fmtInt(data.expenses.monthCount) },
+            { title: "Margen estimado", value: eur(data.kpis.month.estimatedMarginCents), warn: data.kpis.month.estimatedMarginCents < 0 },
+            { title: "Margen caja", value: eur(data.kpis.month.cashMarginCents), warn: data.kpis.month.cashMarginCents < 0 },
+          ]
+        : [],
+    [data]
+  );
+
   const barVendorRows = useMemo(
     () =>
       data?.barAccounting.topVendors.map((row) => ({
@@ -500,6 +541,91 @@ export default function ExecutivePage() {
         margen: eur(row.marginCents),
         tickets: fmtInt(row.tickets),
       })) ?? [],
+    [data]
+  );
+
+  const marketingRows = useMemo(
+    () =>
+      data?.marketing.slice(0, 10).map((row) => ({
+        nombre: fixText(row.source, "Sin dato"),
+        reservas: fmtInt(row.reservations),
+        ventas: eur(row.salesCents),
+        ticket: eur(row.averageTicketCents),
+      })) ?? [],
+    [data]
+  );
+
+  const channelRows = useMemo(
+    () =>
+      data?.channels.slice(0, 8).map((row) => ({
+        nombre: fixText(row.channel, "Sin canal"),
+        reservas: fmtInt(row.reservations),
+        ventas: eur(row.salesCents),
+        ticket: eur(row.averageTicketCents),
+      })) ?? [],
+    [data]
+  );
+
+  const serviceRows = useMemo(
+    () =>
+      data?.services.slice(0, 8).map((row) => ({
+        nombre: fixText(row.service, "Sin servicio"),
+        reservas: fmtInt(row.reservations),
+        ventas: eur(row.salesCents),
+        ticket: eur(row.averageTicketCents),
+      })) ?? [],
+    [data]
+  );
+
+  const costCenterRows = useMemo(
+    () =>
+      data?.expenses.byCostCenter.map((row) => ({
+        centro: costCenterLabel(row.costCenter),
+        numero: fmtInt(row.count),
+        total: eur(row.totalCents),
+      })) ?? [],
+    [data]
+  );
+
+  const expenseVendorRows = useMemo(
+    () =>
+      data?.expenses.byVendor.slice(0, 10).map((row) => ({
+        nombre: fixText(row.vendor, "Sin proveedor"),
+        numero: fmtInt(row.count),
+        total: eur(row.totalCents),
+      })) ?? [],
+    [data]
+  );
+
+  const barAccountingMetrics = useMemo(
+    () =>
+      data
+        ? [
+            { title: "Ventas mes", value: eur(data.barAccounting.monthSalesCents) },
+            { title: "Ventas normales", value: eur(data.barAccounting.monthRegularSalesCents) },
+            { title: "Ventas staff", value: eur(data.barAccounting.monthStaffSalesCents) },
+            { title: "Compras mes", value: eur(data.barAccounting.monthPurchasesCents) },
+            { title: "Compras pagadas", value: eur(data.barAccounting.monthPurchasesPaidCents) },
+            { title: "Compras pendientes", value: eur(data.barAccounting.monthPurchasesPendingCents), warn: data.barAccounting.monthPurchasesPendingCents > 0 },
+            { title: "Coste teórico ventas", value: eur(data.barAccounting.costTheoreticalCents) },
+            { title: "Margen aprox.", value: eur(data.barAccounting.marginApproxCents), warn: data.barAccounting.marginApproxCents < 0 },
+            { title: "Margen bruto real", value: eur(data.barAccounting.marginRealCents), warn: data.barAccounting.marginRealCents < 0 },
+          ]
+        : [],
+    [data]
+  );
+
+  const todaySalesMetrics = useMemo(
+    () =>
+      data
+        ? {
+            sales: eur(data.kpis.today.salesCents),
+            collected: eur(data.kpis.today.collectedCents),
+            pending: eur(data.kpis.today.pendingCents),
+            reservations: fmtInt(data.kpis.today.reservations),
+            pendingWarn: data.kpis.today.pendingCents > 0,
+          }
+        : null,
     [data]
   );
 
@@ -557,74 +683,14 @@ export default function ExecutivePage() {
             ))}
           </div>
 
-          <Section title="Pulso comercial" subtitle="Ventas, cobro y reservas en los últimos 7 días.">
-            <div style={chartLarge}>
-              <ResponsiveContainer>
-                <ComposedChart data={sales7d}>
-                  <defs>
-                    <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0f766e" stopOpacity={0.28} />
-                      <stop offset="100%" stopColor="#0f766e" stopOpacity={0.04} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="eur" tickFormatter={(value) => eurCompact(value)} tickLine={false} axisLine={false} width={88} />
-                  <YAxis yAxisId="count" orientation="right" tickFormatter={(value) => fmtInt(value)} tickLine={false} axisLine={false} width={42} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Legend />
-                  <Area yAxisId="eur" dataKey="Ventas" stroke="#0f766e" fill="url(#salesGradient)" strokeWidth={3} />
-                  <Line yAxisId="eur" dataKey="Cobrado" stroke="#0f172a" strokeWidth={2.5} dot={false} />
-                  <Bar yAxisId="count" dataKey="Reservas" fill="#d97706" radius={[8, 8, 0, 0]} maxBarSize={26} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div style={metricsGrid}>
-              <MetricCard title="Ventas hoy" value={eur(data.kpis.today.salesCents)} />
-              <MetricCard title="Cobrado hoy" value={eur(data.kpis.today.collectedCents)} />
-              <MetricCard title="Pendiente hoy" value={eur(data.kpis.today.pendingCents)} warn={data.kpis.today.pendingCents > 0} />
-              <MetricCard title="Reservas hoy" value={fmtInt(data.kpis.today.reservations)} />
-            </div>
-          </Section>
-
-          <div style={twoCol}>
-            <Section title="Tendencia 30 dias" subtitle="Ritmo comercial reciente con ventas, cobro y reservas.">
-              <div style={chartMedium}>
-                <ResponsiveContainer>
-                  <ComposedChart data={sales30d}>
-                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={16} />
-                    <YAxis yAxisId="eur" tickFormatter={(value) => eurCompact(value)} tickLine={false} axisLine={false} width={88} />
-                    <YAxis yAxisId="count" orientation="right" tickFormatter={(value) => fmtInt(value)} tickLine={false} axisLine={false} width={42} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Legend />
-                    <Bar yAxisId="eur" dataKey="Ventas" fill="#2563eb" radius={[8, 8, 0, 0]} maxBarSize={18} />
-                    <Line yAxisId="eur" dataKey="Cobrado" stroke="#0f766e" strokeWidth={2.5} dot={false} />
-                    <Line yAxisId="count" dataKey="Reservas" stroke="#7c3aed" strokeWidth={2} dot={false} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </Section>
-
-            <Section title="Margen y costes" subtitle="Ventas, payroll, mantenimiento y margen en 6 meses.">
-              <div style={chartMedium}>
-                <ResponsiveContainer>
-                  <BarChart data={months6}>
-                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                    <YAxis tickFormatter={(value) => eurCompact(value)} tickLine={false} axisLine={false} width={88} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Legend />
-                    <Bar dataKey="Ventas" fill="#0f766e" radius={[8, 8, 0, 0]} maxBarSize={24} />
-                    <Bar dataKey="Payroll" fill="#0f172a" radius={[8, 8, 0, 0]} maxBarSize={24} />
-                    <Bar dataKey="Mantenimiento" fill="#dc2626" radius={[8, 8, 0, 0]} maxBarSize={24} />
-                    <Line dataKey="Margen" stroke="#d97706" strokeWidth={3} dot={{ r: 3 }} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </Section>
-          </div>
+          {todaySalesMetrics ? (
+            <ExecutiveSalesTrendsSection
+              sales7d={sales7d}
+              sales30d={sales30d}
+              months6={months6}
+              todayMetrics={todaySalesMetrics}
+            />
+          ) : null}
 
           <div style={twoCol}>
             <Section title="Salud operativa" subtitle="Estado actual y alertas activas.">
@@ -682,95 +748,19 @@ export default function ExecutivePage() {
             </Section>
           </div>
 
-          <Section title="Contabilidad Bar" subtitle="Ventas, compras y margen operativo aproximado del mes.">
-            <div style={metricsGrid}>
-              <MetricCard title="Ventas mes" value={eur(data.barAccounting.monthSalesCents)} />
-              <MetricCard title="Ventas normales" value={eur(data.barAccounting.monthRegularSalesCents)} />
-              <MetricCard title="Ventas staff" value={eur(data.barAccounting.monthStaffSalesCents)} />
-              <MetricCard title="Compras mes" value={eur(data.barAccounting.monthPurchasesCents)} />
-              <MetricCard title="Compras pagadas" value={eur(data.barAccounting.monthPurchasesPaidCents)} />
-              <MetricCard title="Compras pendientes" value={eur(data.barAccounting.monthPurchasesPendingCents)} warn={data.barAccounting.monthPurchasesPendingCents > 0} />
-              <MetricCard title="Coste teórico ventas" value={eur(data.barAccounting.costTheoreticalCents)} />
-              <MetricCard title="Margen aprox." value={eur(data.barAccounting.marginApproxCents)} warn={data.barAccounting.marginApproxCents < 0} />
-              <MetricCard title="Margen bruto real" value={eur(data.barAccounting.marginRealCents)} warn={data.barAccounting.marginRealCents < 0} />
-            </div>
+          <ExecutiveBarAccountingSection
+            metrics={barAccountingMetrics}
+            categoryRows={barCategoryRows}
+            vendorRows={barVendorRows}
+            marginRows={barMarginProductRows}
+          />
 
-            <div style={twoCol}>
-              <DataTable
-                columns={[
-                  { key: "categoria", label: "Categoría" },
-                  { key: "compras", label: "Compras", align: "right" },
-                  { key: "total", label: "Total", align: "right" },
-                ]}
-                rows={barCategoryRows}
-              />
-
-              <DataTable
-                columns={[
-                  { key: "proveedor", label: "Proveedor" },
-                  { key: "compras", label: "Compras", align: "right" },
-                  { key: "total", label: "Total", align: "right" },
-                ]}
-                rows={barVendorRows}
-              />
-
-              <DataTable
-                columns={[
-                  { key: "producto", label: "Producto" },
-                  { key: "categoria", label: "Categoría" },
-                  { key: "ventas", label: "Ventas", align: "right" },
-                  { key: "coste", label: "Coste", align: "right" },
-                  { key: "margen", label: "Margen", align: "right" },
-                  { key: "tickets", label: "Tickets", align: "right" },
-                ]}
-                rows={barMarginProductRows}
-              />
-            </div>
-          </Section>
-
-          <div style={threeCol}>
-            <Section title="RR. HH." subtitle="Horas aprobadas, payroll y prácticas.">
-              <div style={metricsGrid}>
-                <MetricCard title="Hoy" value={fmtMinutes(data.hr.approvedMinutesToday)} />
-                <MetricCard title="Semana" value={fmtMinutes(data.hr.approvedMinutesWeek)} />
-                <MetricCard title="Mes" value={fmtMinutes(data.hr.approvedMinutesMonth)} />
-                <MetricCard title="Payroll pendiente" value={eur(data.hr.pendingPayrollCents)} warn={data.hr.pendingPayrollCents > 0} />
-                <MetricCard title="Coste del mes" value={eur(data.hr.monthPayrollCents)} />
-                <MetricCard title="Prácticas activas" value={fmtInt(data.hr.activeInterns)} />
-                <MetricCard title="Bolsa baja" value={fmtInt(data.hr.internshipLowBalance)} warn={data.hr.internshipLowBalance > 0} />
-              </div>
-            </Section>
-
-            <Section title="Mecánica" subtitle="Carga abierta, criticidad y coste mensual.">
-              <div style={metricsGrid}>
-                <MetricCard title="Eventos abiertos" value={fmtInt(data.mechanics.openEvents)} warn={data.mechanics.openEvents > 0} />
-                <MetricCard title="Eventos criticos" value={fmtInt(data.mechanics.criticalEvents)} warn={data.mechanics.criticalEvents > 0} />
-                <MetricCard title="Coste total" value={eur(data.mechanics.monthCostCents)} />
-                <MetricCard title="Piezas" value={eur(data.mechanics.monthPartsCostCents)} />
-                <MetricCard title="Mano de obra" value={eur(data.mechanics.monthLaborCostCents)} />
-                <MetricCard title="Stock bajo" value={fmtInt(data.mechanics.lowStockParts)} warn={data.mechanics.lowStockParts > 0} />
-              </div>
-            </Section>
-
-            <Section title="Gasto operativo" subtitle="Resumen contable del mes y coste operativo base.">
-              <div style={metricsGrid}>
-                <MetricCard title="Total mes" value={eur(data.expenses.monthTotalCents)} />
-                <MetricCard title="Pagado" value={eur(data.expenses.monthPaidCents)} />
-                <MetricCard title="Pendiente" value={eur(data.expenses.monthPendingCents)} warn={data.expenses.monthPendingCents > 0} />
-                <MetricCard title="Número de gastos" value={fmtInt(data.expenses.monthCount)} />
-                <MetricCard title="Margen estimado" value={eur(data.kpis.month.estimatedMarginCents)} warn={data.kpis.month.estimatedMarginCents < 0} />
-                <MetricCard title="Margen caja" value={eur(data.kpis.month.cashMarginCents)} warn={data.kpis.month.cashMarginCents < 0} />
-              </div>
-
-              <DataTable
-                columns={[
-                  { key: "nombre", label: "Concepto" },
-                  { key: "total", label: "Importe", align: "right" },
-                ]}
-                rows={operationsCostRows}
-              />
-            </Section>
-          </div>
+          <ExecutiveOpsSummarySection
+            hrMetrics={hrMetrics}
+            mechanicsMetrics={mechanicsMetrics}
+            expensesMetrics={expensesMetrics}
+            operationsCostRows={operationsCostRows}
+          />
 
           <Section title="Caja por origen" subtitle="Cobro del día separado por Store, Booth y Bar.">
             <DataTable
@@ -782,255 +772,19 @@ export default function ExecutivePage() {
             />
           </Section>
 
-          <div style={twoCol}>
-            <Section title="Captación" subtitle="Origen declarado por el cliente en reservas del mes.">
-              <DataTable
-                columns={[
-                  { key: "nombre", label: "Cómo nos conoció" },
-                  { key: "reservas", label: "Reservas", align: "right" },
-                  { key: "ventas", label: "Ventas", align: "right" },
-                  { key: "ticket", label: "Ticket", align: "right" },
-                ]}
-                rows={data.marketing.slice(0, 10).map((row) => ({
-                  nombre: fixText(row.source, "Sin dato"),
-                  reservas: fmtInt(row.reservations),
-                  ventas: eur(row.salesCents),
-                  ticket: eur(row.averageTicketCents),
-                }))}
-              />
-            </Section>
+          <ExecutiveCommercialSection
+            marketingRows={marketingRows}
+            channelRows={channelRows}
+            serviceRows={serviceRows}
+          />
 
-            <Section title="Rendimiento comercial" subtitle="Top de canales y servicios por ventas.">
-              <div style={{ display: "grid", gap: 16 }}>
-                <DataTable
-                  columns={[
-                    { key: "nombre", label: "Canal" },
-                    { key: "reservas", label: "Reservas", align: "right" },
-                    { key: "ventas", label: "Ventas", align: "right" },
-                    { key: "ticket", label: "Ticket", align: "right" },
-                  ]}
-                  rows={data.channels.slice(0, 8).map((row) => ({
-                    nombre: fixText(row.channel, "Sin canal"),
-                    reservas: fmtInt(row.reservations),
-                    ventas: eur(row.salesCents),
-                    ticket: eur(row.averageTicketCents),
-                  }))}
-                />
-
-                <DataTable
-                  columns={[
-                    { key: "nombre", label: "Servicio" },
-                    { key: "reservas", label: "Reservas", align: "right" },
-                    { key: "ventas", label: "Ventas", align: "right" },
-                    { key: "ticket", label: "Ticket", align: "right" },
-                  ]}
-                  rows={data.services.slice(0, 8).map((row) => ({
-                    nombre: fixText(row.service, "Sin servicio"),
-                    reservas: fmtInt(row.reservations),
-                    ventas: eur(row.salesCents),
-                    ticket: eur(row.averageTicketCents),
-                  }))}
-                />
-              </div>
-            </Section>
-          </div>
-
-          <div style={twoCol}>
-            <Section title="Gastos por categoría" subtitle="Top de categorías de gasto del mes.">
-              <div style={chartMedium}>
-                <ResponsiveContainer>
-                  <BarChart data={expenseCategories} layout="vertical" margin={{ left: 8, right: 12 }}>
-                    <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                    <XAxis type="number" tickFormatter={(value) => eurCompact(value)} tickLine={false} axisLine={false} />
-                    <YAxis type="category" dataKey="label" width={150} tickLine={false} axisLine={false} />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Bar dataKey="Total" fill="#dc2626" radius={[0, 10, 10, 0]} maxBarSize={24} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </Section>
-
-            <Section title="Centros de coste" subtitle="Distribución por área operativa.">
-              <DataTable
-                columns={[
-                  { key: "centro", label: "Centro" },
-                  { key: "numero", label: "N.", align: "right" },
-                  { key: "total", label: "Total", align: "right" },
-                ]}
-                rows={data.expenses.byCostCenter.map((row) => ({
-                  centro: costCenterLabel(row.costCenter),
-                  numero: fmtInt(row.count),
-                  total: eur(row.totalCents),
-                }))}
-              />
-            </Section>
-
-            <Section title="Proveedores" subtitle="Top de proveedores por importe.">
-              <DataTable
-                columns={[
-                  { key: "nombre", label: "Proveedor" },
-                  { key: "numero", label: "N.", align: "right" },
-                  { key: "total", label: "Total", align: "right" },
-                ]}
-                rows={data.expenses.byVendor.slice(0, 10).map((row) => ({
-                  nombre: fixText(row.vendor, "Sin proveedor"),
-                  numero: fmtInt(row.count),
-                  total: eur(row.totalCents),
-                }))}
-              />
-            </Section>
-          </div>
+          <ExecutiveExpenseSection
+            expenseCategories={expenseCategories}
+            costCenterRows={costCenterRows}
+            vendorRows={expenseVendorRows}
+          />
         </>
       ) : null}
-    </div>
-  );
-}
-
-function Section(props: { title: string; subtitle: string; children: React.ReactNode }) {
-  return (
-    <section style={sectionCard}>
-      <div style={sectionHeaderStyle}>
-        <div style={{ display: "grid", gap: 4 }}>
-          <div style={sectionTitle}>{props.title}</div>
-          <div style={sectionSubtitle}>{props.subtitle}</div>
-        </div>
-      </div>
-      {props.children}
-    </section>
-  );
-}
-
-function HeroStat(props: { label: string; value: string; detail: string; danger?: boolean }) {
-  return (
-    <div
-      style={{
-        ...heroStatCard,
-        borderColor: props.danger ? "#fecaca" : "#dbe4ea",
-        background: props.danger ? "linear-gradient(180deg, #fff1f2 0%, #ffffff 100%)" : heroStatCard.background,
-      }}
-    >
-      <div style={labelStyle}>{props.label}</div>
-      <div style={{ ...heroValueStyle, color: props.danger ? "#b91c1c" : "#0f172a" }}>{props.value}</div>
-      <div style={detailStyle}>{props.detail}</div>
-    </div>
-  );
-}
-
-function MetricCard(props: { title: string; value: string; warn?: boolean }) {
-  return (
-    <div
-      style={{
-        ...metricCard,
-        borderColor: props.warn ? "#fde68a" : "#dbe4ea",
-        background: props.warn ? "linear-gradient(180deg, #fffbeb 0%, #ffffff 100%)" : metricCard.background,
-      }}
-    >
-      <div style={labelStyle}>{props.title}</div>
-      <div style={{ ...metricValueStyle, color: props.warn ? "#92400e" : "#0f172a" }}>{props.value}</div>
-    </div>
-  );
-}
-
-function BriefCard(props: {
-  title: string;
-  value: string;
-  detail: string;
-  warn?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        ...briefCard,
-        borderColor: props.warn ? "#fde68a" : "#dbe4ea",
-        background: props.warn
-          ? "linear-gradient(180deg, #fffbeb 0%, #ffffff 100%)"
-          : briefCard.background,
-      }}
-    >
-      <div style={labelStyle}>{props.title}</div>
-      <div style={{ ...metricValueStyle, color: props.warn ? "#92400e" : "#0f172a" }}>
-        {props.value}
-      </div>
-      <div style={detailStyle}>{props.detail}</div>
-    </div>
-  );
-}
-
-function MetaBadge(props: { label: string; value: string }) {
-  return (
-    <div style={metaBadge}>
-      <div style={metaLabel}>{props.label}</div>
-      <div style={metaValue}>{props.value}</div>
-    </div>
-  );
-}
-
-function DataTable(props: {
-  columns: Array<{ key: string; label: string; align?: "left" | "right" }>;
-  rows: Array<Record<string, string>>;
-}) {
-  return (
-    <div style={tableWrap}>
-      <table style={tableStyle}>
-        <thead>
-          <tr>
-            {props.columns.map((column) => (
-              <th key={column.key} style={{ ...thStyle, textAlign: column.align === "right" ? "right" : "left" }}>
-                {column.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {props.rows.length === 0 ? (
-            <tr>
-              <td colSpan={props.columns.length} style={emptyStyle}>Sin datos.</td>
-            </tr>
-          ) : (
-            props.rows.map((row, rowIndex) => (
-              <tr key={rowIndex}>
-                {props.columns.map((column) => (
-                  <td key={column.key} style={{ ...tdStyle, textAlign: column.align === "right" ? "right" : "left" }}>
-                    {row[column.key]}
-                  </td>
-                ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ChartTooltip(props: {
-  active?: boolean;
-  label?: string;
-  payload?: Array<{ name?: string; value?: number | string; color?: string }>;
-}) {
-  if (!props.active || !props.payload?.length) return null;
-  return (
-    <div style={tooltipStyle}>
-      {props.label ? <div style={{ fontWeight: 900, marginBottom: 6 }}>{props.label}</div> : null}
-      {props.payload.map((item, index) => {
-        const name = String(item.name ?? `Serie ${index + 1}`);
-        const value = item.value;
-        let rendered = String(value ?? "-");
-        if (typeof value === "number") {
-          rendered = ["Ventas", "Cobrado", "Payroll", "Mantenimiento", "Margen", "Total"].includes(name)
-            ? eur(value)
-            : fmtInt(value);
-        }
-        return (
-          <div key={`${name}-${index}`} style={tooltipRow}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ ...dotStyle, background: item.color ?? "#0f172a" }} />
-              <span>{name}</span>
-            </div>
-            <strong>{rendered}</strong>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -1127,216 +881,15 @@ const errorBox: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const heroStatsGrid: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 14,
-};
-
-const metaGrid: React.CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 10,
-};
-
-const metaBadge: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 16,
-  padding: "10px 12px",
-  background: "rgba(255,255,255,0.88)",
-  display: "grid",
-  gap: 4,
-  minWidth: 140,
-};
-
-const metaLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 900,
-  letterSpacing: "0.06em",
-  textTransform: "uppercase",
-  color: "#64748b",
-};
-
-const metaValue: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 800,
-  color: "#0f172a",
-};
-
-const heroStatCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 22,
-  padding: 16,
-  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-  boxShadow: "0 18px 40px rgba(15, 23, 42, 0.05)",
-  display: "grid",
-  gap: 6,
-  minHeight: 118,
-};
-
-const sectionCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 24,
-  padding: 18,
-  background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
-  boxShadow: "0 16px 38px rgba(15, 23, 42, 0.05)",
-  display: "grid",
-  gap: 14,
-  alignContent: "start",
-  height: "100%",
-};
-
-const sectionHeaderStyle: React.CSSProperties = {
-  paddingBottom: 12,
-  borderBottom: "1px solid #edf2f7",
-};
-
-const sectionTitle: React.CSSProperties = {
-  fontWeight: 950,
-  fontSize: 20,
-  color: "#0f172a",
-};
-
-const sectionSubtitle: React.CSSProperties = {
-  fontSize: 13,
-  color: "#64748b",
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 12,
-  color: "#64748b",
-  fontWeight: 900,
-  textTransform: "uppercase",
-  letterSpacing: "0.04em",
-};
-
-const heroValueStyle: React.CSSProperties = {
-  fontSize: 28,
-  fontWeight: 950,
-  lineHeight: 1.05,
-};
-
-const metricValueStyle: React.CSSProperties = {
-  fontSize: 22,
-  fontWeight: 950,
-  lineHeight: 1.1,
-};
-
-const detailStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: "#64748b",
-};
-
 const metricsGrid: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: 12,
+  ...executiveStyles.metricsGrid,
 };
 
-const briefGrid: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: 14,
-};
-
-const metricCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 18,
-  padding: 14,
-  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-  display: "grid",
-  gap: 6,
-  minHeight: 98,
-};
-
-const briefCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 20,
-  padding: 16,
-  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-  display: "grid",
-  gap: 8,
-  minHeight: 112,
-};
+const heroStatsGrid: React.CSSProperties = { ...executiveStyles.heroStatsGrid };
+const metaGrid: React.CSSProperties = { ...executiveStyles.metaGrid };
+const briefGrid: React.CSSProperties = { ...executiveStyles.briefGrid };
 
 const twoCol: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(460px, 1fr))",
-  gap: 20,
-  alignItems: "stretch",
+  ...executiveStyles.twoCol,
 };
 
-const threeCol: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-  gap: 20,
-  alignItems: "stretch",
-};
-
-const chartLarge: React.CSSProperties = {
-  width: "100%",
-  height: 360,
-};
-
-const chartMedium: React.CSSProperties = {
-  width: "100%",
-  height: 300,
-};
-
-const tableWrap: React.CSSProperties = {
-  overflowX: "auto",
-  border: "1px solid #e2e8f0",
-  borderRadius: 18,
-  background: "#fff",
-};
-
-const tableStyle: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse",
-};
-
-const thStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderBottom: "1px solid #e2e8f0",
-  background: "#f8fafc",
-  color: "#64748b",
-  fontSize: 12,
-  fontWeight: 900,
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderBottom: "1px solid #f1f5f9",
-  fontSize: 13,
-  color: "#0f172a",
-};
-
-const emptyStyle: React.CSSProperties = {
-  padding: 18,
-  textAlign: "center",
-  color: "#64748b",
-};
-
-const tooltipStyle: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 14,
-  background: "rgba(255, 255, 255, 0.96)",
-  boxShadow: "0 18px 40px rgba(15, 23, 42, 0.12)",
-  padding: 12,
-};
-
-const tooltipRow: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 12,
-  alignItems: "center",
-  marginTop: 6,
-  fontSize: 13,
-};
-
-const dotStyle: React.CSSProperties = {
-  width: 10,
-  height: 10,
-  borderRadius: 999,
-  display: "inline-block",
-};

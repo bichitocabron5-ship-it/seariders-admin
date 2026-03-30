@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
 
 type ApiGet = {
   ok: true;
@@ -11,44 +12,33 @@ type ApiGet = {
 };
 
 const pageShell: React.CSSProperties = {
-  maxWidth: 1280,
-  margin: "0 auto",
-  padding: 24,
-  display: "grid",
+  ...opsStyles.pageShell,
+  width: "min(1280px, 100%)",
   gap: 16,
 };
 
 const softCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.sectionCard,
   borderRadius: 22,
   background: "#fff",
   boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)",
 };
 
 const inputStyle: React.CSSProperties = {
+  ...opsStyles.field,
   width: "100%",
   padding: 10,
   borderRadius: 12,
-  border: "1px solid #d0d9e4",
-  background: "#fff",
 };
 
 const ghostBtn: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #d0d9e4",
-  background: "#fff",
+  ...opsStyles.ghostButton,
   color: "#111",
-  fontWeight: 900,
-  textDecoration: "none",
 };
 
 const darkBtn: React.CSSProperties = {
+  ...opsStyles.primaryButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
   fontWeight: 950,
 };
 
@@ -151,15 +141,15 @@ export default function AdminSlotsPage() {
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#0891b2" }}>
               Admin
             </div>
-            <div style={{ fontSize: 34, lineHeight: 1.02, fontWeight: 950, color: "#0f172a" }}>Slots y capacidad</div>
+            <div style={{ ...opsStyles.heroTitle, fontSize: "clamp(30px, 4vw, 38px)", lineHeight: 1.02, color: "#0f172a" }}>Slots y capacidad</div>
             <div style={{ fontSize: 14, color: "#475569" }}>
-              Politica horaria, intervalo de reserva y limites por categoria en una pantalla mas ordenada.
+              Política horaria, intervalo de reserva y límites por categoría en una pantalla más ordenada.
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={opsStyles.actionGrid}>
             <Link href="/admin" style={ghostBtn}>
-              Volver a admin
+              Volver a Admin
             </Link>
             <button type="button" onClick={() => void load()} disabled={loading || saving} style={ghostBtn}>
               {loading ? "Cargando..." : "Refrescar"}
@@ -171,7 +161,7 @@ export default function AdminSlotsPage() {
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <span style={pillStyle}>Categorias: {categories.length}</span>
+          <span style={pillStyle}>Categorías: {categories.length}</span>
           <span style={pillStyle}>Intervalo: {intervalMinutes} min</span>
           <span style={pillStyle}>Horario: {openTime} - {closeTime}</span>
           <span style={pillStyle}>Capacidad total: {totalCapacity}</span>
@@ -188,7 +178,7 @@ export default function AdminSlotsPage() {
       </div>
 
       <section style={{ ...softCard, padding: 16, display: "grid", gap: 12 }}>
-        <div style={{ fontWeight: 950, fontSize: 20 }}>Politica de slots</div>
+        <div style={{ fontWeight: 950, fontSize: 20 }}>Política de slots</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
           <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
             Intervalo (minutos)
@@ -214,8 +204,8 @@ export default function AdminSlotsPage() {
 
       <section style={{ ...softCard, padding: 16, display: "grid", gap: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-          <div style={{ fontWeight: 950, fontSize: 20 }}>Capacidad por categoria</div>
-          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 900 }}>{categories.length} categoria(s)</div>
+          <div style={{ fontWeight: 950, fontSize: 20 }}>Capacidad por categoría</div>
+          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 900 }}>{categories.length} categoría(s)</div>
         </div>
 
         {!data ? (
@@ -265,7 +255,7 @@ export default function AdminSlotsPage() {
       </section>
 
       <div style={{ fontSize: 12, color: "#64748b" }}>
-        Nota: si anades una categoria nueva en Catalogo, aparecera aqui automaticamente con un limite inicial por defecto.
+        Nota: si añades una categoría nueva en Catálogo, aparecerá aquí automáticamente con un límite inicial por defecto.
       </div>
     </div>
   );

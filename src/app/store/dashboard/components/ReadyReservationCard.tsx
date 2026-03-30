@@ -1,11 +1,12 @@
-// src/app/store/dashboard/components/ReadyReservationCard.tsx
 "use client";
 
 import { useRouter } from "next/navigation";
 import type React from "react";
+
 import type { ExtraUiMap, PayLine, PayMethod, ReservationRow, Service } from "../types";
 import { euros, hhmm, statusColor } from "../utils";
 import { ReservationOpsPanel } from "./ReservationOpsPanel";
+import { StoreReservationPaymentsHistory } from "./StoreReservationPaymentsHistory";
 
 type ReadyReservationCardProps = {
   r: ReservationRow;
@@ -91,6 +92,7 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
     completeReturn,
     cancelReservation,
   } = props;
+
   const router = useRouter();
 
   const paidDepositCents = Number(r.paidDepositCents ?? 0);
@@ -153,26 +155,26 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
         </div>
       </div>
 
-        {showReturnedBanner && r.arrivalAt ? (
-          <div
-            style={{
-              marginTop: 8,
-              padding: "6px 10px",
-              borderRadius: 10,
-              border: "1px solid #fde68a",
-              background: "#fffbeb",
-              color: "#92400e",
-              fontSize: 12,
-              fontWeight: 900,
-            }}
-          >
-            Devuelta ·{" "}
-            {new Date(r.arrivalAt).toLocaleTimeString("es-ES", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </div>
-        ) : null}
+      {showReturnedBanner && r.arrivalAt ? (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "6px 10px",
+            borderRadius: 10,
+            border: "1px solid #fde68a",
+            background: "#fffbeb",
+            color: "#92400e",
+            fontSize: 12,
+            fontWeight: 900,
+          }}
+        >
+          Devuelta ·{" "}
+          {new Date(r.arrivalAt).toLocaleTimeString("es-ES", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </div>
+      ) : null}
 
       <div style={{ fontSize: 13, opacity: 0.8, marginTop: 2 }}>
         {r.serviceName ?? "Servicio"}
@@ -182,7 +184,7 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
       {r.platformExtrasPendingCount ? (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
           <Badge label={`Extras plataforma: ${r.platformExtrasPendingCount}`} color="#93c5fd" />
-          <button type="button" onClick={() => applyPlatformExtras(r.id)} style={btnSecondary}>
+          <button type="button" onClick={() => void applyPlatformExtras(r.id)} style={btnSecondary}>
             Aplicar extras
           </button>
         </div>
@@ -223,58 +225,60 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
             <div style={{ fontSize: 12, opacity: 0.8 }}>Pendiente</div>
             <div style={{ fontWeight: 800 }}>{euros(pendingTotal)}</div>
           </div>
-          {isFullyPaid ? <div style={{ fontWeight: 800 }}>✅ Pagado</div> : null}
+          {isFullyPaid ? <div style={{ fontWeight: 800 }}>Pagado</div> : null}
         </div>
       </div>
 
-        {r.depositHeld ? (
-          <div
-            style={{
-              marginTop: 8,
-              padding: 10,
-              borderRadius: 10,
-              border: "1px solid #fecaca",
-              background: "#fff1f2",
-              color: "#991b1b",
-              display: "grid",
-              gap: 4,
-              fontSize: 13,
-            }}
-          >
-            <div style={{ fontWeight: 800 }}>⚠ Incidencia con fianza retenida</div>
-            <div>{r.depositHoldReason || "Retenida por incidencia registrada desde plataforma."}</div>
-          </div>
-        ) : null}
+      {r.depositHeld ? (
+        <div
+          style={{
+            marginTop: 8,
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #fecaca",
+            background: "#fff1f2",
+            color: "#991b1b",
+            display: "grid",
+            gap: 4,
+            fontSize: 13,
+          }}
+        >
+          <div style={{ fontWeight: 800 }}>Incidencia con fianza retenida</div>
+          <div>{r.depositHoldReason || "Retenida por incidencia registrada desde plataforma."}</div>
+        </div>
+      ) : null}
 
-        {showReturnedActions && r.status === "WAITING" && r.arrivalAt ? (
-          <div
+      {showReturnedActions && r.status === "WAITING" && r.arrivalAt ? (
+        <div
+          style={{
+            marginTop: 10,
+            paddingTop: 10,
+            borderTop: "1px dashed #ddd",
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => void completeReturn(r.id)}
             style={{
-              marginTop: 10,
-              paddingTop: 10,
-              borderTop: "1px dashed #ddd",
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 8,
-              flexWrap: "wrap",
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: "1px solid #111",
+              background: "#111",
+              color: "#fff",
+              fontWeight: 900,
+              cursor: "pointer",
             }}
           >
-            <button
-              type="button"
-              onClick={() => completeReturn(r.id)}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid #111",
-                background: "#111",
-                color: "#fff",
-                fontWeight: 900,
-                cursor: "pointer",
-              }}
-            >
-              Cerrar devolución
-            </button>
-          </div>
-        ) : null}
+            Cerrar devolución
+          </button>
+        </div>
+      ) : null}
+
+      <StoreReservationPaymentsHistory payments={r.payments ?? []} />
 
       {isOpen ? (
         <div style={{ marginTop: 12 }}>

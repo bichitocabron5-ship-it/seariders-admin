@@ -117,7 +117,7 @@ export async function PATCH(req: Request) {
 
   const json = await req.json().catch(() => null);
   const parsed = PatchBody.safeParse(json);
-  if (!parsed.success) return new NextResponse("Body invÃ¡lido", { status: 400 });
+  if (!parsed.success) return new NextResponse("Body inválido", { status: 400 });
 
   const code = parsed.data.code.trim().toUpperCase();
 

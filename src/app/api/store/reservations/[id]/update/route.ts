@@ -58,7 +58,7 @@ function capManual30(totalBeforeDiscountsCents: number, manualDiscountCents: num
   return Math.max(0, Math.min(Math.max(0, manualDiscountCents || 0), maxManual));
 }
 
-// âœ… mismo contrato que formalize
+// mismo contrato que formalize
 const NullableStr = z.string().optional().nullable();
 
 const ItemBody = z.object({
@@ -76,7 +76,7 @@ const Body = z.object({
   time: z.string().min(5).max(5).nullable().optional(),
   
 
-  // opcionales cliente/licencia (tu semÃ¡ntica undefined/no tocar)
+  // opcionales cliente/licencia (tu semántica undefined/no tocar)
   customerPhone: NullableStr,
   customerEmail: NullableStr,
   customerCountry: NullableStr,
@@ -90,7 +90,7 @@ const Body = z.object({
   licenseType: NullableStr,
   licenseNumber: NullableStr,
 
-  // âœ… NUEVO PRO
+  // NUEVO PRO
   items: z.array(ItemBody).optional(),
   companionsCount: z.number().int().min(0).max(20).optional(),
 
@@ -99,12 +99,12 @@ const Body = z.object({
   optionId: z.string().min(1).optional(),
   quantity: z.number().int().min(1).max(99).optional(),
 
-  // (opcional) si quieres permitir actualizar descuento manual aquÃ­
+  // (opcional) si quieres permitir actualizar descuento manual aquí
   manualDiscountCents: z.number().int().min(0).max(1_000_000).optional(),
   manualDiscountReason: z.string().max(200).nullable().optional(),
 });
 
-// âœ… igual que formalize
+// igual que formalize
 function normalizeOptionalString(v: string | null | undefined) {
   if (v === undefined) return undefined; // no tocar
   if (v === null) return null;          // borrar
@@ -126,7 +126,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
   
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const b = parsed.data;
 
@@ -143,7 +143,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       scheduledTime: true,
       customerCountry: true,
 
-      // âœ… para merge correcto
+      // para merge correcto
       customerPhone: true,
       customerEmail: true,
       customerAddress: true,
@@ -153,7 +153,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       customerDocNumber: true,
       marketing: true,
 
-      // âœ… licencia actual
+      // licencia actual
       licenseSchool: true,
       licenseType: true,
       licenseNumber: true,
@@ -167,14 +167,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 const hasProItems = Array.isArray(b.items) && b.items.length > 0;
 
 if (hasProItems) {
-  // âš ï¸ Si es pack padre, yo NO permitirÃ­a editar items aquÃ­:
+  // Si es pack padre, no debería permitir editar items aquí.
   const existingPack = await prisma.reservation.findUnique({
     where: { id },
     select: { isPackParent: true, packId: true, manualDiscountCents: true, customerCountry: true },
   });
   if (!existingPack) return new NextResponse("Reserva no existe", { status: 404 });
   if (existingPack.isPackParent && existingPack.packId) {
-    return new NextResponse("Los packs se editan como pack (no se puede cambiar composiciÃ³n aquÃ­).", { status: 400 });
+    return new NextResponse("Los packs se editan como pack (no se puede cambiar composición aquí).", { status: 400 });
   }
 
   const now = new Date();
@@ -203,30 +203,30 @@ if (hasProItems) {
     if (!svc) return new NextResponse("Servicio no existe", { status: 400 });
 
     const opt = optById.get(it.optionId);
-    if (!opt) return new NextResponse("OpciÃ³n no existe", { status: 400 });
+    if (!opt) return new NextResponse("Opción no existe", { status: 400 });
 
     if (opt.serviceId !== svc.id) {
-      return new NextResponse("La opciÃ³n no pertenece al servicio", { status: 400 });
+      return new NextResponse("La opción no pertenece al servicio", { status: 400 });
     }
   }
 
   // Recalcular totales, descuentos, fianza
-  // (precio por lÃ­nea por servicePrice vigente)
+  // (precio por línea por servicePrice vigente)
   const priced = [];
   for (const it of b.items!) {
     const opt = optById.get(it.optionId)!;
-    const price = await findVigentePrice(prisma, { // ðŸ‘ˆ lo cambiamos dentro tx abajo
+    const price = await findVigentePrice(prisma, { // lo cambiamos dentro de la tx más abajo
       serviceId: it.serviceId,
       optionId: it.optionId,
       durationMinutes: Number(opt.durationMinutes ?? 30),
       now,
     });
-    // OJO: en PRO, lo correcto es hacerlo dentro de tx. Lo hago en tx mÃ¡s abajo.
+    // En PRO, lo correcto es hacerlo dentro de la tx. Lo recalculo más abajo.
     priced.push({ it, durationMinutes: Number(opt.durationMinutes ?? 30), price });
   }
 
   const result = await prisma.$transaction(async (tx) => {
-    // âœ… recalcular dentro tx
+    // recalcular dentro de la tx
     const lineCreates: Array<{
       serviceId: string;
       optionId: string;
@@ -249,7 +249,7 @@ if (hasProItems) {
         now,
       });
 
-      if (!price) throw new Error("Este servicio/opciÃ³n no tiene precio vigente (Admin > Precios).");
+      if (!price) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
 
       const unitPriceCents = Number(price.basePriceCents) || 0;
       const qty = Math.max(1, Number(it.quantity || 1));
@@ -288,7 +288,7 @@ if (hasProItems) {
     // Totales
     const serviceSubtotal = lineCreates.reduce((s, l) => s + l.totalPriceCents, 0);
 
-    // Extras NO se tocan pero sÃ­ cuentan en total vendible
+    // Los extras no se tocan, pero sí cuentan en el total vendible
     const extrasSum = await tx.reservationItem.aggregate({
       where: { reservationId: id, isExtra: true },
       _sum: { totalPriceCents: true },
@@ -381,7 +381,7 @@ if (hasProItems) {
 
     const isMultiOrPack = mainCount > 1 || Boolean(existing.isPackParent);
 
-  // âœ… normalizar opcionales (misma semÃ¡ntica)
+  // normalizar opcionales (misma semántica)
   const customerPhone = normalizeOptionalString(b.customerPhone);
   const customerEmail = normalizeOptionalString(b.customerEmail);
   const customerCountry = normalizeOptionalString(b.customerCountry);
@@ -396,17 +396,17 @@ if (hasProItems) {
   const licenseType = normalizeOptionalString(b.licenseType);
   const licenseNumber = normalizeOptionalString(b.licenseNumber);
 
-  // âœ… calcular valores finales (merge): undefined => keep existing
+  // calcular valores finales (merge): undefined => keep existing
   const finalLicenseSchool = licenseSchool === undefined ? existing.licenseSchool : licenseSchool;
   const finalLicenseType = licenseType === undefined ? existing.licenseType : licenseType;
   const finalLicenseNumber = licenseNumber === undefined ? existing.licenseNumber : licenseNumber;
 
-  // âœ… regla negocio recomendada:
-  // - si isLicense=true => deben existir (despuÃ©s del merge)
+  // regla de negocio recomendada:
+  // - si isLicense=true => deben existir (después del merge)
   // - si isLicense=false => limpiamos (evita datos basura)
   if (b.isLicense) {
     if (!finalLicenseSchool || !finalLicenseType || !finalLicenseNumber) {
-      return new NextResponse("Faltan datos de licencia (escuela, tipo y nÃºmero).", { status: 400 });
+      return new NextResponse("Faltan datos de licencia (escuela, tipo y número).", { status: 400 });
     }
   }
 
@@ -433,7 +433,7 @@ if (hasProItems) {
     return data;
   }
 
-  // Si no hay cambio â€œde precioâ€, solo update de campos
+  // Si no hay cambio de precio, solo update de campos
   if (!priceSensitiveChanged) {
     const data: Prisma.ReservationUncheckedUpdateInput = {
       pax: b.pax,
@@ -448,7 +448,7 @@ if (hasProItems) {
 
     Object.assign(data, buildOptionalData());
 
-    // âœ… si se desmarca licencia, limpiamos siempre
+    // Si se desmarca licencia, limpiamos siempre
     if (!b.isLicense) {
       data.licenseSchool = null;
       data.licenseType = null;
@@ -465,9 +465,9 @@ if (hasProItems) {
   }
 
   if (priceSensitiveChanged && isMultiOrPack) {
-    // âœ… evita convertir una multi-actividad en single
+    // Evita convertir una multi-actividad en single
     return new NextResponse(
-      "Esta reserva tiene varias actividades (o es un pack). No se puede cambiar servicio/duraciÃ³n/cantidad desde aquÃ­.",
+      "Esta reserva tiene varias actividades (o es un pack). No se puede cambiar servicio/duración/cantidad desde aquí.",
       { status: 400 }
     );
   }
@@ -485,8 +485,8 @@ if (hasProItems) {
     where: { id: b.optionId },
     select: { id: true, serviceId: true, durationMinutes: true },
   });
-  if (!opt) return new NextResponse("OpciÃ³n no existe", { status: 400 });
-  if (opt.serviceId !== svc.id) return new NextResponse("La opciÃ³n no pertenece al servicio", { status: 400 });
+  if (!opt) return new NextResponse("Opción no existe", { status: 400 });
+  if (opt.serviceId !== svc.id) return new NextResponse("La opción no pertenece al servicio", { status: 400 });
 
   let price = await prisma.servicePrice.findFirst({
     where: {
@@ -515,7 +515,7 @@ if (hasProItems) {
     });
   }
 
-  if (!price) return new NextResponse("No hay precio vigente para este servicio/duraciÃ³n.", { status: 400 });
+  if (!price) return new NextResponse("No hay precio vigente para este servicio/duración.", { status: 400 });
 
   const unitPriceCents = Number(price.basePriceCents) || 0;
   const principalCents = unitPriceCents * Number(b.quantity);
@@ -539,7 +539,7 @@ if (hasProItems) {
 
     Object.assign(data, buildOptionalData());
 
-    // âœ… si se desmarca licencia, limpiamos siempre
+    // Si se desmarca licencia, limpiamos siempre
     if (!b.isLicense) {
       data.licenseSchool = null;
       data.licenseType = null;

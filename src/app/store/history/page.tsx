@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { Alert, Button, Card, Input, Pill, Select, Stat, styles } from "@/components/ui";
+import { opsStyles } from "@/components/ops-ui";
+import { StoreMetricCard, StoreMetricGrid, storeStyles } from "@/components/store-ui";
+import { Button, Card, Input, Pill, Select, styles } from "@/components/ui";
+import StoreHistoryResultsSection from "./_components/StoreHistoryResultsSection";
 
 type HistoryIncident = {
   id: string;
@@ -179,7 +182,7 @@ export default function StoreHistoryPage() {
       const data = await res.json();
       setRows(data.rows ?? []);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error cargando historico");
+      setError(e instanceof Error ? e.message : "Error cargando histórico");
     } finally {
       setLoading(false);
     }
@@ -229,14 +232,14 @@ export default function StoreHistoryPage() {
         <div style={heroHeader}>
           <div style={{ display: "grid", gap: 8 }}>
             <div style={eyebrow}>Store</div>
-            <h1 style={heroTitle}>Historico de reservas</h1>
+            <h1 style={heroTitle}>Histórico de reservas</h1>
             <div style={heroSubtitle}>
               Consulta devoluciones, incidencias, cobros y retenciones en una vista ordenada y alineada con la operativa
               de tienda.
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={opsStyles.actionGrid}>
             <a href="/store" style={secondaryLink}>
               Volver a Store
             </a>
@@ -246,13 +249,13 @@ export default function StoreHistoryPage() {
           </div>
         </div>
 
-        <div style={statsGrid}>
-          <Stat label="Reservas listadas" value={summary.total} />
-          <Stat label="Con incidencia" value={summary.withIncidents} />
-          <Stat label="Fianza retenida" value={summary.depositHeld} />
-          <Stat label="Servicio cobrado" value={euros(summary.serviceChargedCents)} />
-          <Stat label="Pendiente total" value={euros(summary.pendingCents)} />
-        </div>
+        <StoreMetricGrid>
+          <StoreMetricCard label="Reservas listadas" value={summary.total} />
+          <StoreMetricCard label="Con incidencia" value={summary.withIncidents} />
+          <StoreMetricCard label="Fianza retenida" value={summary.depositHeld} />
+          <StoreMetricCard label="Servicio cobrado" value={euros(summary.serviceChargedCents)} />
+          <StoreMetricCard label="Pendiente total" value={euros(summary.pendingCents)} />
+        </StoreMetricGrid>
       </section>
 
       <Card
@@ -314,230 +317,54 @@ export default function StoreHistoryPage() {
           </label>
         </div>
       </Card>
-
-      {error ? <Alert kind="error">{error}</Alert> : null}
-
-      <Card
-        title="Resultados"
-        right={
-          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
-            {loading ? "Cargando..." : `${rows.length} reservas`}
-          </div>
-        }
-      >
-        {loading ? (
-          <div style={emptyState}>Cargando historico...</div>
-        ) : rows.length === 0 ? (
-          <div style={emptyState}>No hay resultados para los filtros actuales.</div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ ...styles.table, minWidth: 1400 }}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Reserva</th>
-                  <th style={styles.th}>Servicio</th>
-                  <th style={styles.th}>Estado</th>
-                  <th style={styles.th}>Cobro</th>
-                  <th style={styles.th}>Fianza</th>
-                  <th style={styles.th}>Incidencias</th>
-                  <th style={styles.th}>Canal</th>
-                  <th style={styles.th}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const statusUi = statusTone(row.status);
-                  const incidentCount = row.incidents.length;
-
-                  return (
-                    <tr key={row.id} style={{ verticalAlign: "top" }}>
-                      <td style={cell}>
-                        <div style={{ display: "grid", gap: 8 }}>
-                          <div style={{ fontWeight: 900, color: "#0f172a" }}>{row.customerName || "Sin nombre"}</div>
-                          <div style={mutedStack}>
-                            <span>{row.customerCountry || "-"}</span>
-                            <span>{row.source || "Origen no indicado"}</span>
-                          </div>
-                          <div style={detailBlock}>
-                            <div>
-                              <strong>Actividad</strong>
-                              <div>{dt(row.scheduledTime || row.activityDate)}</div>
-                            </div>
-                            <div>
-                              <strong>Devuelta</strong>
-                              <div>{dt(row.arrivalAt)}</div>
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td style={cell}>
-                        <div style={{ display: "grid", gap: 8 }}>
-                          <div style={{ fontWeight: 800 }}>{row.serviceName || "Servicio"}</div>
-                          <div style={mutedText}>{row.serviceCategory || "Categoria sin indicar"}</div>
-                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            <Pill>{row.durationMinutes ? `${row.durationMinutes} min` : "Sin duracion"}</Pill>
-                            <Pill>Cant {row.quantity ?? 0}</Pill>
-                            <Pill>PAX {row.pax ?? 0}</Pill>
-                            {row.isLicense ? <Pill>Licencia</Pill> : null}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td style={cell}>
-                        <div style={{ display: "grid", gap: 8 }}>
-                          <span
-                            style={{
-                              ...badgeBase,
-                              background: statusUi.bg,
-                              borderColor: statusUi.border,
-                              color: statusUi.color,
-                            }}
-                          >
-                            {row.status}
-                          </span>
-                          <div style={mutedText}>
-                            Formalizada: {row.formalizedAt ? dt(row.formalizedAt) : "No"}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td style={cell}>
-                        <div style={{ display: "grid", gap: 6 }}>
-                          <div style={moneyValue}>{euros(countPaidServiceCents(row))}</div>
-                          <div style={mutedText}>Total servicio {euros(row.totalToChargeCents)}</div>
-                          <div style={{ color: countPendingServiceCents(row) > 0 ? "#b45309" : "#166534", fontWeight: 800 }}>
-                            Pendiente {euros(countPendingServiceCents(row))}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td style={cell}>
-                        <div style={{ display: "grid", gap: 6 }}>
-                          <div style={moneyValue}>
-                            {euros(row.paidDepositCents)} / {euros(row.depositCents)}
-                          </div>
-                          <div style={{ color: row.depositHeld ? "#b91c1c" : "#166534", fontWeight: 900 }}>
-                            {row.depositHeld ? "Retenida" : "Sin bloqueo"}
-                          </div>
-                          {row.depositHoldReason ? <div style={mutedText}>{row.depositHoldReason}</div> : null}
-                        </div>
-                      </td>
-
-                      <td style={cell}>
-                        {incidentCount === 0 ? (
-                          <div style={mutedText}>Sin incidencias</div>
-                        ) : (
-                          <div style={{ display: "grid", gap: 10, minWidth: 260 }}>
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                              <Pill bg="#fff7ed" border="#fed7aa">{incidentCount} incidencias</Pill>
-                              {row.depositHeld ? <Pill bg="#fff1f2" border="#fecdd3">Fianza retenida</Pill> : null}
-                            </div>
-
-                            {row.incidents.map((incident) => {
-                              const tone = incidentTone(incident.level);
-                              return (
-                                <details key={incident.id} style={incidentCard}>
-                                  <summary style={incidentSummary}>
-                                    <span
-                                      style={{
-                                        ...badgeBase,
-                                        background: tone.bg,
-                                        borderColor: tone.border,
-                                        color: tone.color,
-                                      }}
-                                    >
-                                      {incident.level}
-                                    </span>
-                                    <span style={{ fontWeight: 800 }}>{incident.type}</span>
-                                    <span style={mutedText}>{incident.status}</span>
-                                  </summary>
-
-                                  <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-                                    {incident.description ? <div style={{ color: "#0f172a" }}>{incident.description}</div> : null}
-                                    {incident.notes ? <div style={mutedText}>Notas: {incident.notes}</div> : null}
-                                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                      {incident.isOpen ? <Pill bg="#eff6ff" border="#bfdbfe">Abierta</Pill> : <Pill>Cerrada</Pill>}
-                                      {incident.retainDeposit ? (
-                                        <Pill bg="#fff1f2" border="#fecdd3">
-                                          Retiene {euros(incident.retainDepositCents)}
-                                        </Pill>
-                                      ) : null}
-                                    </div>
-                                    <div style={mutedText}>Registrada: {dt(incident.createdAt)}</div>
-                                  </div>
-                                </details>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </td>
-
-                      <td style={cell}>
-                        <div style={{ display: "grid", gap: 6 }}>
-                          <div style={{ fontWeight: 800 }}>{row.channelName || "-"}</div>
-                        </div>
-                      </td>
-
-                      <td style={cell}>
-                        <div style={{ display: "grid", gap: 8, minWidth: 150 }}>
-                          <a href={reservationHref(row.id)} style={actionLink}>
-                            Ver ficha
-                          </a>
-
-                          {row.incidents.some((incident) => incident.maintenanceEventId) ? (
-                            <a
-                              href={mechanicsEventHref(row.incidents.find((incident) => incident.maintenanceEventId)!)}
-                              style={actionLink}
-                            >
-                              Ver evento
-                            </a>
-                          ) : null}
-
-                          {row.incidents.length > 0 ? (
-                            <a href={mechanicsDetailHref(row.incidents[0])} style={actionLink}>
-                              Ver mecanica
-                            </a>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+      <StoreHistoryResultsSection
+        rows={rows}
+        loading={loading}
+        error={error}
+        euros={euros}
+        dt={dt}
+        statusTone={statusTone}
+        incidentTone={incidentTone}
+        countPaidServiceCents={countPaidServiceCents}
+        countPendingServiceCents={countPendingServiceCents}
+        mechanicsDetailHref={mechanicsDetailHref}
+        mechanicsEventHref={mechanicsEventHref}
+        reservationHref={reservationHref}
+        cell={cell}
+        mutedText={mutedText}
+        mutedStack={mutedStack}
+        detailBlock={detailBlock}
+        badgeBase={badgeBase}
+        moneyValue={moneyValue}
+        incidentCard={incidentCard}
+        incidentSummary={incidentSummary}
+        actionLink={actionLink}
+        emptyState={emptyState}
+      />
     </div>
   );
 }
 
 const page: CSSProperties = {
-  padding: 20,
-  maxWidth: 1760,
-  margin: "0 auto",
+  ...storeStyles.shell,
+  width: "min(1760px, 100%)",
   display: "grid",
   gap: 18,
-  fontFamily: "system-ui",
 };
 
 const heroCard: CSSProperties = {
-  border: "1px solid #d8e0ea",
+  ...storeStyles.panel,
   background: "linear-gradient(135deg, #ffffff 0%, #f4f7fb 100%)",
   borderRadius: 26,
   padding: 22,
   display: "grid",
   gap: 18,
-  boxShadow: "0 18px 40px rgba(20, 32, 51, 0.08)",
 };
 
 const heroHeader: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 16,
-  flexWrap: "wrap",
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr)",
+  gap: 18,
 };
 
 const eyebrow: CSSProperties = {
@@ -549,10 +376,10 @@ const eyebrow: CSSProperties = {
 };
 
 const heroTitle: CSSProperties = {
+  ...opsStyles.heroTitle,
   margin: 0,
-  fontSize: 34,
+  fontSize: "clamp(2rem, 4vw, 3rem)",
   lineHeight: 1,
-  fontWeight: 950,
   color: "#142033",
 };
 
@@ -562,28 +389,17 @@ const heroSubtitle: CSSProperties = {
   maxWidth: 760,
 };
 
-const statsGrid: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 16,
-};
-
 const secondaryLink: CSSProperties = {
+  ...storeStyles.secondaryButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #e5e7eb",
-  background: "#fff",
   color: "#111",
   fontWeight: 900,
   textDecoration: "none",
 };
 
 const primaryButton: CSSProperties = {
+  ...storeStyles.primaryButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
   fontWeight: 900,
   cursor: "pointer",
 };

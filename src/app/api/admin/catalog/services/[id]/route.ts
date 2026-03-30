@@ -32,11 +32,11 @@ export async function PATCH(
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const { id } = await Promise.resolve(ctx.params); // âœ… aquÃ­ estÃ¡ el fix
+  const { id } = await Promise.resolve(ctx.params); // aquí está el fix
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const p = parsed.data;
   const data: Prisma.ServiceUpdateInput = {};
@@ -49,7 +49,7 @@ export async function PATCH(
   if (p.isLicense !== undefined) data.isLicense = p.isLicense;
 
   const updated = await prisma.service.update({
-    where: { id }, // âœ… ya no es undefined
+    where: { id }, // ya no es undefined
     data,
     select: {
       id: true,

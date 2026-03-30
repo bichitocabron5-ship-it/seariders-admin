@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, Input, Page, Select, Stat, styles } from "@/components/ui";
+import { Alert, Button, Card, Page, Select, styles } from "@/components/ui";
+import { BarOverviewSection } from "./_components/BarOverviewSection";
+import { BarPendingDeliveriesSection } from "./_components/BarPendingDeliveriesSection";
+import { BarPendingReturnsSection } from "./_components/BarPendingReturnsSection";
+import { BarQuickSellProductCard } from "./_components/BarQuickSellProductCard";
+import { BarRentalIncidentsSection } from "./_components/BarRentalIncidentsSection";
 import {
   createBarPayment,
   createRentalAssetIncident,
@@ -22,7 +27,7 @@ import {
   type BarRentalAsset,
   type PendingTask,
 } from "./services/bar";
-import { calculateBarLineTotal, getBarPromotionBadge } from "@/lib/bar-pricing";
+import { calculateBarLineTotal } from "@/lib/bar-pricing";
 
 type Method = "CASH" | "CARD" | "BIZUM" | "TRANSFER" | "VOUCHER";
 
@@ -99,7 +104,7 @@ function labelAssetStatus(status: BarRentalAsset["status"]) {
     case "MAINTENANCE":
       return "Mantenimiento";
     case "DAMAGED":
-      return "Danado";
+      return "Dañado";
     case "LOST":
       return "Perdido";
     case "INACTIVE":
@@ -137,7 +142,7 @@ export default function BarPage() {
       const data = await getAvailableAssetsForTask(taskId);
       setTaskAssets((prev) => ({ ...prev, [taskId]: data.rows ?? [] }));
     } catch {
-      // El error ya se mostrara al intentar entregar.
+      // El error ya se mostrará al intentar entregar.
     }
   }
 
@@ -228,7 +233,7 @@ export default function BarPage() {
         shift,
         label: product.name,
         staffMode,
-        note: `BAR - Venta rapida${staffMode ? " - STAFF" : ""} - ${product.name} - x${quantity}`,
+        note: `BAR - Venta rápida${staffMode ? " - STAFF" : ""} - ${product.name} - x${quantity}`,
       });
 
       setQuantities((prev) => ({ ...prev, [product.id]: 1 }));
@@ -281,7 +286,7 @@ export default function BarPage() {
       await returnBarFulfillmentTask(taskId);
       await load();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "No se pudo registrar la devolucion");
+      setError(e instanceof Error ? e.message : "No se pudo registrar la devolución");
     } finally {
       setActionBusy(null);
     }
@@ -345,7 +350,7 @@ export default function BarPage() {
   const headerRight = (
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
       <Select value={shift} onChange={(e) => setShift(e.target.value as "MORNING" | "AFTERNOON")}>
-        <option value="MORNING">Manana</option>
+        <option value="MORNING">Mañana</option>
         <option value="AFTERNOON">Tarde</option>
       </Select>
       <Link href="/bar/cash-closures" style={{ ...styles.btn, textDecoration: "none" }}>
@@ -359,64 +364,24 @@ export default function BarPage() {
     <Page title="Bar - Operativa" right={headerRight}>
       {error ? <Alert kind="error">{error}</Alert> : null}
 
-      <Card>
-        <div style={{ display: "grid", gap: 18, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
-          <div
-            style={{
-              borderRadius: 24,
-              padding: 22,
-              color: "#e2e8f0",
-              background:
-                "radial-gradient(circle at top left, rgba(134, 239, 172, 0.18), transparent 34%), linear-gradient(135deg, #052e2b 0%, #0f766e 50%, #082f49 100%)",
-              display: "grid",
-              gap: 14,
-            }}
-          >
-            <div style={{ display: "grid", gap: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#a7f3d0" }}>
-                Operativa de punto
-              </span>
-              <div style={{ fontSize: 28, fontWeight: 950, color: "#fff", lineHeight: 1.05 }}>Bar</div>
-              <div style={{ fontSize: 14, color: "#d1fae5", maxWidth: 620 }}>
-                Ventas rapidas y seguimiento de entregas del punto BAR durante el turno.
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ ...styles.pill, background: "rgba(15, 23, 42, 0.2)", border: "1px solid rgba(148, 163, 184, 0.3)", color: "#fff" }}>
-                Origen: BAR
-              </span>
-              <span style={{ ...styles.pill, background: "rgba(15, 23, 42, 0.2)", border: "1px solid rgba(148, 163, 184, 0.3)", color: "#fff" }}>
-                Fecha: {today}
-              </span>
-              <span style={{ ...styles.pill, background: "rgba(15, 23, 42, 0.2)", border: "1px solid rgba(148, 163, 184, 0.3)", color: "#fff" }}>
-                Ventana: {summary?.ok ? `${hhmm(summary.computed?.meta?.windowFrom)} - ${hhmm(summary.computed?.meta?.windowTo)}` : "--"}
-              </span>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 12 }}>
-            <Stat label="Sistema neto" value={euros(systemNet)} />
-            <Stat label="Pendientes de entrega" value={pendingTasks.length} />
-            <Stat label="Cierre" value={summary?.isClosed ? "Cerrado" : "Abierto"} />
-          </div>
-        </div>
-      </Card>
-
-      <div style={styles.grid3}>
-        <Stat label="Catering pendiente" value={cateringCount} />
-        <Stat label="Extras pendientes" value={extrasCount} />
-        <Stat label="Extras pendientes de devolucion" value={returnTasks.length} />
-        <Stat label="Ventas del turno" value={euros(systemNet)} />
-      </div>
+      <BarOverviewSection
+        today={today}
+        summary={summary}
+        systemNet={euros(systemNet)}
+        pendingTasksCount={pendingTasks.length}
+        cateringCount={cateringCount}
+        extrasCount={extrasCount}
+        returnTasksCount={returnTasks.length}
+        hhmm={hhmm}
+      />
       <Card
-        title="TPV rapido"
-        right={<div style={{ fontSize: 12, color: "#64748b" }}>Cada venta entra en BAR y en el cierre comun.</div>}
+        title="TPV rápido"
+        right={<div style={{ fontSize: 12, color: "#64748b" }}>Cada venta entra en BAR y en el cierre común.</div>}
       >
         {loading ? (
-          <Alert kind="info">Cargando resumen y catalogo del turno...</Alert>
+          <Alert kind="info">Cargando resumen y catálogo del turno...</Alert>
         ) : catalog.length === 0 ? (
-          <Alert kind="info">No hay categorias o productos activos en BAR.</Alert>
+          <Alert kind="info">No hay categorías o productos activos en BAR.</Alert>
         ) : (
           <div style={{ display: "grid", gap: 18 }}>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800, color: "#334155" }}>
@@ -432,86 +397,30 @@ export default function BarPage() {
                 </div>
 
                 {category.products.length === 0 ? (
-                  <Alert kind="info">No hay productos activos en esta categoria.</Alert>
+                  <Alert kind="info">No hay productos activos en esta categoría.</Alert>
                 ) : (
                   <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
                     {category.products.map((product) => {
                       const quantity = getQuantity(product.id);
-                      const stockValue = Number(product.currentStock ?? 0);
-                      const minStockValue = Number(product.minStock ?? 0);
-                      const lowStock = product.controlsStock && stockValue <= minStockValue;
-                      const unitPriceCents =
-                        staffMode && product.staffEligible && product.staffPriceCents != null
-                          ? Number(product.staffPriceCents)
-                          : Number(product.salePriceCents);
-                      const pricing = calculateBarLineTotal({
-                        unitPriceCents,
-                        quantity,
-                        promotions: product.promotions,
-                        staffMode,
-                        staffPriceCents: product.staffPriceCents,
-                      });
-                      const promoBadge = !staffMode && product.promotions?.length ? getBarPromotionBadge(product.promotions) : null;
-
                       return (
-                        <div key={product.id} style={{ display: "grid", gap: 12, border: "1px solid #e2e8f0", borderRadius: 16, padding: 14, background: lowStock ? "#fff7ed" : "#f8fafc" }}>
-                          <div style={{ display: "grid", gap: 4 }}>
-                            {promoBadge ? (
-                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                <span style={{ ...styles.pill, background: "#ecfdf5", border: "1px solid #bbf7d0", color: "#166534", fontWeight: 900 }}>
-                                  {promoBadge}
-                                </span>
-                              </div>
-                            ) : null}
-                            <div style={{ fontSize: 17, fontWeight: 900 }}>{product.name}</div>
-                            <div style={{ fontSize: 13, color: "#64748b" }}>
-                              {(unitPriceCents / 100).toFixed(2)} EUR - IVA {String(product.vatRate)}%
-                              {staffMode && product.staffEligible ? " - STAFF" : ""}
-                            </div>
-                            {!staffMode && pricing.appliedPromotion ? (
-                              <div style={{ fontSize: 12, fontWeight: 900, color: "#166534" }}>{pricing.label}</div>
-                            ) : null}
-                            {product.controlsStock ? (
-                              <div style={{ fontSize: 12, color: lowStock ? "#c2410c" : "#475569", fontWeight: lowStock ? 800 : 500 }}>
-                                Stock: {String(product.currentStock)} {product.unitLabel ?? "ud"}
-                                {lowStock ? " - stock bajo" : ""}
-                              </div>
-                            ) : (
-                              <div style={{ fontSize: 12, color: "#475569" }}>Sin control de stock</div>
-                            )}
-                          </div>
-
-                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                            <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Cantidad</div>
-                            <button type="button" onClick={() => setQuantities((prev) => ({ ...prev, [product.id]: Math.max(1, quantity - 1) }))} style={{ width: 32, height: 32, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 900 }}>-</button>
-                            <input value={String(quantity)} onChange={(e) => {
-                              const raw = Number(e.target.value);
-                              setQuantities((prev) => ({ ...prev, [product.id]: Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 1 }));
-                            }} style={{ width: 70, padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 800, textAlign: "center" }} />
-                            <button type="button" onClick={() => setQuantities((prev) => ({ ...prev, [product.id]: quantity + 1 }))} style={{ width: 32, height: 32, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 900 }}>+</button>
-                            <div style={{ display: "grid", gap: 2 }}>
-                              {!staffMode && pricing.appliedPromotion ? (
-                                <div style={{ fontSize: 12, color: "#94a3b8", textDecoration: "line-through", fontWeight: 700 }}>
-                                  Normal: {((unitPriceCents * quantity) / 100).toFixed(2)} EUR
-                                </div>
-                              ) : null}
-                              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
-                                Total: {(pricing.totalCents / 100).toFixed(2)} EUR
-                              </div>
-                            </div>
-                          </div>
-
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            {(["CASH", "CARD", "BIZUM", "TRANSFER"] as BarMethod[]).map((method) => {
-                              const busy = actionBusy === `${product.id}-${method}`;
-                              return (
-                                <button key={method} type="button" onClick={() => void handleQuickSell(product, method)} disabled={busy} style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", ...methodPill(method) }}>
-                                  {busy ? "Guardando..." : `${method} - ${(pricing.totalCents / 100).toFixed(2)} EUR`}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
+                        <BarQuickSellProductCard
+                          key={product.id}
+                          product={product}
+                          quantity={quantity}
+                          staffMode={staffMode}
+                          actionBusy={actionBusy}
+                          onDecreaseQuantity={() =>
+                            setQuantities((prev) => ({ ...prev, [product.id]: Math.max(1, quantity - 1) }))
+                          }
+                          onSetQuantity={(value) =>
+                            setQuantities((prev) => ({ ...prev, [product.id]: value }))
+                          }
+                          onIncreaseQuantity={() =>
+                            setQuantities((prev) => ({ ...prev, [product.id]: quantity + 1 }))
+                          }
+                          onQuickSell={(method) => void handleQuickSell(product, method)}
+                          methodPill={methodPill}
+                        />
                       );
                     })}
                   </div>
@@ -522,187 +431,46 @@ export default function BarPage() {
         )}
       </Card>
 
-      <Card title="Pendientes de entrega">
-        <div style={{ display: "grid", gap: 12 }}>
-          {pendingTasks.length === 0 ? (
-            <Alert kind="info">No hay pendientes de entrega.</Alert>
-          ) : (
-            pendingTasks.map((task) => {
-              const hasUnmappedItems = task.items.some((item) => !item.barProductId);
-              const deliverBusy = actionBusy === `deliver-${task.id}`;
-              const incidentBusy = actionBusy === `incident-${task.id}`;
+      <BarPendingDeliveriesSection
+        pendingTasks={pendingTasks}
+        taskAssets={taskAssets}
+        taskSelections={taskSelections}
+        actionBusy={actionBusy}
+        hhmm={hhmm}
+        labelTaskKind={labelTaskKind}
+        onIncidentTask={(taskId) => void handleIncidentTask(taskId)}
+        onDeliverTask={(task) => void handleDeliverTask(task)}
+        onSelectTaskAsset={(taskId, taskItemId, rentalAssetId) => {
+          setTaskSelections((prev) => ({
+            ...prev,
+            [taskId]: { ...(prev[taskId] ?? {}), [taskItemId]: rentalAssetId },
+          }));
+        }}
+      />
+      <BarRentalIncidentsSection
+        rentalAssets={rentalAssets}
+        incidentAssetId={incidentAssetId}
+        incidentType={incidentType}
+        incidentNote={incidentNote}
+        reactivateNote={reactivateNote}
+        actionBusy={actionBusy}
+        labelAssetType={labelAssetType}
+        labelAssetStatus={labelAssetStatus}
+        onIncidentAssetChange={setIncidentAssetId}
+        onIncidentTypeChange={setIncidentType}
+        onIncidentNoteChange={setIncidentNote}
+        onReactivateNoteChange={setReactivateNote}
+        onCreateIncident={() => void handleCreateIncident()}
+        onReactivateAsset={(rentalAssetId) => void handleReactivateAsset(rentalAssetId)}
+      />
 
-              return (
-                <div key={task.id} style={{ display: "grid", gap: 10, border: "1px solid #e2e8f0", borderRadius: 18, padding: 16, background: "#fff" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                    <div style={{ display: "grid", gap: 4 }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                        <span style={{ ...styles.pill, background: task.kind === "CATERING" ? "#eff6ff" : "#f5f3ff", border: `1px solid ${task.kind === "CATERING" ? "#bfdbfe" : "#ddd6fe"}`, color: task.kind === "CATERING" ? "#1d4ed8" : "#6d28d9", fontWeight: 900 }}>
-                          {labelTaskKind(task.kind)}
-                        </span>
-                        <span style={{ fontWeight: 900 }}>{task.reservationLabel}</span>
-                      </div>
-                      <div style={{ fontSize: 14, fontWeight: 800 }}>{task.customerName}</div>
-                      <div style={{ fontSize: 12, color: "#64748b" }}>Hora {hhmm(task.time)} - {task.paid ? "Pagado" : "Pendiente de pago"}</div>
-                      {hasUnmappedItems ? <div style={{ fontSize: 12, color: "#b45309", fontWeight: 800 }}>Hay items sin producto BAR vinculado. Revisa catalogo antes de entregar.</div> : null}
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <Button onClick={() => void handleIncidentTask(task.id)} disabled={incidentBusy}>{incidentBusy ? "Guardando..." : "Incidencia"}</Button>
-                      <Button variant="primary" onClick={() => void handleDeliverTask(task)} disabled={deliverBusy || hasUnmappedItems}>{deliverBusy ? "Entregando..." : "Entregado"}</Button>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {task.items.map((item, idx) => (
-                      <span key={`${task.id}-${idx}`} style={{ ...styles.pill, background: item.barProductId ? "#f8fafc" : "#fff7ed", border: `1px solid ${item.barProductId ? "#e2e8f0" : "#fed7aa"}`, color: "#0f172a" }}>
-                        {item.name} - {item.quantity}
-                        {!item.barProductId ? " - sin mapping" : ""}
-                      </span>
-                    ))}
-                  </div>
-
-                  {task.kind === "EXTRA" ? (
-                    <div style={{ display: "grid", gap: 10, padding: 12, borderRadius: 12, border: "1px solid #e2e8f0", background: "#f8fafc" }}>
-                      <div style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>Asignacion de unidad fisica</div>
-                      {(taskAssets[task.id] ?? []).map((group) => (
-                        <div key={group.taskItemId} style={{ display: "grid", gap: 6, gridTemplateColumns: "1.2fr 1fr", alignItems: "center" }}>
-                          <div style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>{group.itemName} - {group.quantity}</div>
-                          <Select value={taskSelections[task.id]?.[group.taskItemId] ?? ""} onChange={(e) => {
-                            const value = e.target.value;
-                            setTaskSelections((prev) => ({ ...prev, [task.id]: { ...(prev[task.id] ?? {}), [group.taskItemId]: value } }));
-                          }}>
-                            <option value="">Selecciona unidad</option>
-                            {group.assets.map((asset) => (
-                              <option key={asset.id} value={asset.id}>{asset.code ?? asset.name}{asset.size ? ` - ${asset.size}` : ""}</option>
-                            ))}
-                          </Select>
-                        </div>
-                      ))}
-                      {(taskAssets[task.id] ?? []).length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>No hay unidades disponibles para esta tarea.</div> : null}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </Card>
-      <Card title="Incidencias de equipos reutilizables">
-        <div style={{ display: "grid", gap: 14 }}>
-          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", alignItems: "end" }}>
-            <label style={{ display: "grid", gap: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Unidad</div>
-              <Select value={incidentAssetId} onChange={(e) => setIncidentAssetId(e.target.value)}>
-                <option value="">Selecciona unidad</option>
-                {rentalAssets.filter((asset) => asset.status === "AVAILABLE" || asset.status === "DELIVERED").map((asset) => (
-                  <option key={asset.id} value={asset.id}>{asset.code ?? asset.name}{asset.size ? ` - ${asset.size}` : ""}{asset.status ? ` - ${labelAssetStatus(asset.status)}` : ""}</option>
-                ))}
-              </Select>
-            </label>
-
-            <label style={{ display: "grid", gap: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Tipo de incidencia</div>
-              <Select value={incidentType} onChange={(e) => setIncidentType(e.target.value as "DAMAGED" | "MAINTENANCE" | "LOST" | "OTHER")}>
-                <option value="DAMAGED">Danado</option>
-                <option value="MAINTENANCE">Mantenimiento</option>
-                <option value="LOST">Perdido</option>
-                <option value="OTHER">Otro</option>
-              </Select>
-            </label>
-
-            <label style={{ display: "grid", gap: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Nota</div>
-              <Input value={incidentNote} onChange={(e) => setIncidentNote(e.target.value)} placeholder="Describe la incidencia" />
-            </label>
-
-            <Button variant="primary" onClick={() => void handleCreateIncident()} disabled={!incidentAssetId || actionBusy === `asset-incident-${incidentAssetId}`}>
-              {actionBusy === `asset-incident-${incidentAssetId}` ? "Guardando..." : "Registrar incidencia"}
-            </Button>
-          </div>
-
-          <label style={{ display: "grid", gap: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Nota al reactivar (opcional)</div>
-            <Input value={reactivateNote} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReactivateNote(e.target.value)} placeholder="Ej: neopreno lavado y revisado / GoPro probada OK" />
-          </label>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            {rentalAssets.length === 0 ? (
-              <Alert kind="info">No hay unidades registradas.</Alert>
-            ) : (
-              rentalAssets.map((asset) => (
-                <div key={asset.id} style={{ display: "grid", gap: 8, border: "1px solid #e2e8f0", borderRadius: 14, padding: 12, background: asset.status === "DAMAGED" ? "#fff1f2" : asset.status === "MAINTENANCE" ? "#fff7ed" : asset.status === "LOST" ? "#f8fafc" : "#fff" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                    <div style={{ display: "grid", gap: 4 }}>
-                      <div style={{ fontWeight: 900 }}>{asset.code ?? asset.name}{asset.size ? ` - ${asset.size}` : ""}</div>
-                      <div style={{ fontSize: 12, color: "#64748b" }}>{labelAssetType(asset.type)} - {labelAssetStatus(asset.status)}</div>
-                    </div>
-
-                    {asset.assignments?.[0]?.task?.reservation ? (
-                      <div style={{ fontSize: 12, color: "#475569", fontWeight: 700 }}>
-                        Asignada a reserva #{asset.assignments[0].task.reservation.id.slice(-6)}
-                        {asset.assignments[0].task.reservation.customerName ? ` - ${asset.assignments[0].task.reservation.customerName}` : ""}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {asset.notes ? <div style={{ fontSize: 12, color: "#475569" }}>Nota: {asset.notes}</div> : null}
-
-                  {asset.status !== "AVAILABLE" && asset.status !== "DELIVERED" && asset.status !== "INACTIVE" ? (
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <Button onClick={() => void handleReactivateAsset(asset.id)} disabled={actionBusy === `reactivate-${asset.id}`}>{actionBusy === `reactivate-${asset.id}` ? "Reactivando..." : "Reactivar"}</Button>
-                    </div>
-                  ) : null}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </Card>
-
-      <Card title="Pendientes de devolucion">
-        <div style={{ display: "grid", gap: 12 }}>
-          {returnTasks.length === 0 ? (
-            <Alert kind="info">No hay extras pendientes de devolucion.</Alert>
-          ) : (
-            returnTasks.map((task) => {
-              const hasUnmappedItems = task.items.some((item) => !item.barProductId);
-              const returnBusy = actionBusy === `return-${task.id}`;
-              const incidentBusy = actionBusy === `incident-${task.id}`;
-
-              return (
-                <div key={task.id} style={{ display: "grid", gap: 10, border: "1px solid #e2e8f0", borderRadius: 18, padding: 16, background: "#fff" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                    <div style={{ display: "grid", gap: 4 }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                        <span style={{ ...styles.pill, background: "#fef3c7", border: "1px solid #fcd34d", color: "#92400e", fontWeight: 900 }}>Devolucion</span>
-                        <span style={{ fontWeight: 900 }}>{task.reservationLabel}</span>
-                      </div>
-                      <div style={{ fontSize: 14, fontWeight: 800 }}>{task.customerName}</div>
-                      <div style={{ fontSize: 12, color: "#64748b" }}>Hora {hhmm(task.time)} - {task.paid ? "Pagado" : "Pendiente de pago"}</div>
-                      {hasUnmappedItems ? <div style={{ fontSize: 12, color: "#b45309", fontWeight: 800 }}>Hay items heredados sin mapping. No se puede registrar la devolucion automatica.</div> : null}
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <Button onClick={() => void handleIncidentTask(task.id)} disabled={incidentBusy}>{incidentBusy ? "Guardando..." : "Incidencia"}</Button>
-                      <Button variant="primary" onClick={() => void handleReturnTask(task.id)} disabled={returnBusy || hasUnmappedItems}>{returnBusy ? "Registrando..." : "Devuelto"}</Button>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {task.items.map((item, idx) => (
-                      <span key={`${task.id}-${idx}`} style={{ ...styles.pill, background: item.barProductId ? "#f8fafc" : "#fff7ed", border: `1px solid ${item.barProductId ? "#e2e8f0" : "#fed7aa"}`, color: "#0f172a" }}>
-                        {item.name} - {item.quantity}
-                        {!item.barProductId ? " - sin mapping" : ""}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </Card>
+      <BarPendingReturnsSection
+        returnTasks={returnTasks}
+        actionBusy={actionBusy}
+        hhmm={hhmm}
+        onIncidentTask={(taskId) => void handleIncidentTask(taskId)}
+        onReturnTask={(taskId) => void handleReturnTask(taskId)}
+      />
     </Page>
   );
 }

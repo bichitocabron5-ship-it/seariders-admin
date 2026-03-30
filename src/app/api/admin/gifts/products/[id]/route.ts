@@ -17,16 +17,16 @@ async function requireAdmin() {
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// âœ… Para el toggle rÃ¡pido (lo que ya tienes)
+// Para el toggle rápido (lo que ya tienes)
 const ToggleBody = z.object({ isActive: z.boolean() });
 
-// âœ… Para â€œEditarâ€
+// Para "Editar"
 const UpdateBody = z.object({
   name: z.string().nullable().optional(),
   priceCents: z.number().int().min(0).optional(),
   validDays: z.number().int().min(1).nullable().optional(),
   // opcional: permitir cambiar service/option desde edit
-  // (yo lo dejarÃ­a bloqueado al principio para evitar lÃ­os)
+  // (yo lo dejaría bloqueado al principio para evitar líos)
   // serviceId: z.string().min(1).optional(),
   // optionId: z.string().min(1).optional(),
 });
@@ -50,7 +50,7 @@ export async function GET(req: Request, { params }: Ctx) {
   return NextResponse.json({ ok: true, row });
 }
 
-// MantÃ©n tu POST para toggle (compatibilidad con tu UI actual)
+// Mantén tu POST para toggle (compatibilidad con tu UI actual)
 export async function POST(req: Request, { params }: Ctx) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -59,7 +59,7 @@ export async function POST(req: Request, { params }: Ctx) {
 
   const json = await req.json().catch(() => null);
   const parsed = ToggleBody.safeParse(json);
-  if (!parsed.success) return NextResponse.json({ error: "Body invÃ¡lido" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
 
   await prisma.giftProduct.update({
     where: { id },
@@ -69,7 +69,7 @@ export async function POST(req: Request, { params }: Ctx) {
   return NextResponse.json({ ok: true });
 }
 
-// âœ… Edit real
+// Edit real
 export async function PATCH(req: Request, { params }: Ctx) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -78,7 +78,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   const json = await req.json().catch(() => null);
   const parsed = UpdateBody.safeParse(json);
-  if (!parsed.success) return NextResponse.json({ error: "Body invÃ¡lido" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
 
   await prisma.giftProduct.update({
     where: { id },

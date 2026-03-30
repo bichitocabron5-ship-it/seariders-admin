@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
+import UserModal from "@/app/admin/users/_components/UserModal";
 
 type RoleName = "ADMIN" | "STORE" | "PLATFORM" | "BOOTH" | "BAR" | "MECHANIC" | "HR";
 type EmployeeLite = { id: string; code: string | null; fullName: string; kind: string; isActive: boolean };
@@ -18,26 +20,15 @@ type UserRow = {
   employee?: EmployeeLite | null;
   roles: Array<{ userId: string; roleId: string; role: { id: string; name: RoleName } }>;
 };
-type UserUpsertBody = {
-  employeeId: string | null;
-  fullName: string;
-  username: string;
-  email: string | null;
-  passportCode: string | null;
-  isActive: boolean;
-  roles: RoleName[];
-  password?: string;
-};
 
-const ROLE_NAMES: RoleName[] = ["ADMIN", "STORE", "PLATFORM", "BOOTH", "BAR", "MECHANIC", "HR"];
 const ROLE_LABEL: Record<RoleName, string> = {
   ADMIN: "Administrador",
   STORE: "Tienda",
   PLATFORM: "Plataforma",
   BOOTH: "Carpa",
   BAR: "Bar",
-  MECHANIC: "Mecanica",
-  HR: "RRHH",
+  MECHANIC: "Mecánica",
+  HR: "RR. HH.",
 };
 
 function fmtDateTime(iso: string) {
@@ -49,44 +40,35 @@ function fmtDateTime(iso: string) {
 }
 
 const pageShell: React.CSSProperties = {
-  maxWidth: 1360,
-  margin: "0 auto",
-  padding: 24,
+  ...opsStyles.pageShell,
+  width: "min(1360px, 100%)",
   display: "grid",
   gap: 16,
 };
 
 const softCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.sectionCard,
   borderRadius: 22,
-  background: "#fff",
-  boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)",
 };
 
 const inputStyle: React.CSSProperties = {
+  ...opsStyles.field,
   width: "100%",
   padding: 10,
   borderRadius: 12,
-  border: "1px solid #d0d9e4",
-  background: "#fff",
 };
 
 const ghostBtn: React.CSSProperties = {
+  ...opsStyles.ghostButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #d0d9e4",
-  background: "#fff",
   fontWeight: 900,
   color: "#111",
   textDecoration: "none",
 };
 
 const darkBtn: React.CSSProperties = {
+  ...opsStyles.primaryButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
   fontWeight: 950,
 };
 
@@ -107,35 +89,42 @@ export default function AdminUsersPage() {
     return p.toString();
   }, [q, active]);
 
-  const load = useCallback(async (opts?: { showLoading?: boolean }) => {
-    const showLoading = opts?.showLoading ?? true;
-    if (showLoading) setLoading(true);
-    setError(null);
-    try {
-      const [uRes, eRes] = await Promise.all([
-        fetch(`/api/admin/users?${params}`, { cache: "no-store" }),
-        fetch("/api/admin/hr?active=true", { cache: "no-store" }),
-      ]);
-      if (!uRes.ok) throw new Error(await uRes.text());
-      if (!eRes.ok) throw new Error(await eRes.text());
-      const uJson = await uRes.json();
-      const eJson = await eRes.json();
-      setRows(uJson.rows ?? []);
-      setEmployees(
-        (eJson.rows ?? []).map((e: EmployeeLite) => ({
-          id: e.id,
-          code: e.code,
-          fullName: e.fullName,
-          kind: e.kind,
-          isActive: e.isActive,
-        }))
-      );
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error cargando usuarios");
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, [params]);
+  const load = useCallback(
+    async (opts?: { showLoading?: boolean }) => {
+      const showLoading = opts?.showLoading ?? true;
+      if (showLoading) setLoading(true);
+      setError(null);
+
+      try {
+        const [usersRes, employeesRes] = await Promise.all([
+          fetch(`/api/admin/users?${params}`, { cache: "no-store" }),
+          fetch("/api/admin/hr?active=true", { cache: "no-store" }),
+        ]);
+
+        if (!usersRes.ok) throw new Error(await usersRes.text());
+        if (!employeesRes.ok) throw new Error(await employeesRes.text());
+
+        const usersJson = await usersRes.json();
+        const employeesJson = await employeesRes.json();
+
+        setRows(usersJson.rows ?? []);
+        setEmployees(
+          (employeesJson.rows ?? []).map((employee: EmployeeLite) => ({
+            id: employee.id,
+            code: employee.code,
+            fullName: employee.fullName,
+            kind: employee.kind,
+            isActive: employee.isActive,
+          }))
+        );
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Error cargando usuarios");
+      } finally {
+        if (showLoading) setLoading(false);
+      }
+    },
+    [params]
+  );
 
   useEffect(() => {
     void load({ showLoading: true });
@@ -150,15 +139,15 @@ export default function AdminUsersPage() {
       });
       if (!res.ok) throw new Error(await res.text());
       await load({ showLoading: false });
-    } catch (e) {
+    } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Error actualizando estado");
     }
   }
 
-  const activeCount = rows.filter((r) => r.isActive).length;
-  const linkedCount = rows.filter((r) => !!r.employee).length;
-  const adminCount = rows.filter((r) => r.roles.some((x) => x.role.name === "ADMIN")).length;
-  const platformCount = rows.filter((r) => r.roles.some((x) => x.role.name === "PLATFORM")).length;
+  const activeCount = rows.filter((row) => row.isActive).length;
+  const linkedCount = rows.filter((row) => !!row.employee).length;
+  const adminCount = rows.filter((row) => row.roles.some((role) => role.role.name === "ADMIN")).length;
+  const platformCount = rows.filter((row) => row.roles.some((role) => role.role.name === "PLATFORM")).length;
 
   return (
     <div style={pageShell}>
@@ -171,20 +160,39 @@ export default function AdminUsersPage() {
           gap: 16,
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
+        <div
+          style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}
+        >
           <div style={{ display: "grid", gap: 6, maxWidth: 760 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#4f46e5" }}>
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 900,
+                letterSpacing: 1.1,
+                textTransform: "uppercase",
+                color: "#4f46e5",
+              }}
+            >
               Admin
             </div>
-            <div style={{ fontSize: 34, lineHeight: 1.02, fontWeight: 950, color: "#0f172a" }}>Usuarios y accesos</div>
+            <div
+              style={{
+                ...opsStyles.heroTitle,
+                fontSize: "clamp(2rem, 4vw, 3rem)",
+                lineHeight: 1.02,
+                color: "#0f172a",
+              }}
+            >
+              Usuarios y accesos
+            </div>
             <div style={{ fontSize: 14, color: "#475569" }}>
-              Credenciales, roles y vinculacion con empleado en una vista mas limpia y operativa.
+              Credenciales, roles y vinculación con empleado en una vista más limpia y operativa.
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={opsStyles.actionGrid}>
             <Link href="/admin" style={ghostBtn}>
-              Volver a admin
+              Volver a Admin
             </Link>
             <button type="button" onClick={() => void load({ showLoading: true })} style={ghostBtn}>
               Refrescar
@@ -207,7 +215,7 @@ export default function AdminUsersPage() {
         <SummaryCard title="Usuarios" value={rows.length} tone="neutral" />
         <SummaryCard title="Activos" value={activeCount} tone="success" />
         <SummaryCard title="Con empleado" value={linkedCount} tone="info" />
-        <SummaryCard title="Platform" value={platformCount} tone="warning" />
+        <SummaryCard title="Plataforma" value={platformCount} tone="warning" />
       </div>
 
       <section style={{ ...softCard, padding: 16, display: "grid", gap: 12 }}>
@@ -218,7 +226,7 @@ export default function AdminUsersPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Nombre, username, email o codigo"
+              placeholder="Nombre, username, email o código"
               style={inputStyle}
             />
           </label>
@@ -234,7 +242,15 @@ export default function AdminUsersPage() {
       </section>
 
       <section style={{ ...softCard, padding: 16, display: "grid", gap: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 10,
+            alignItems: "baseline",
+            flexWrap: "wrap",
+          }}
+        >
           <div style={{ fontWeight: 950, fontSize: 20 }}>Listado</div>
           <div style={{ fontSize: 12, color: "#64748b", fontWeight: 900 }}>{rows.length} registro(s)</div>
         </div>
@@ -244,9 +260,9 @@ export default function AdminUsersPage() {
         {!loading && !error && rows.length === 0 ? <div style={{ opacity: 0.7 }}>No hay usuarios.</div> : null}
 
         <div style={{ display: "grid", gap: 10 }}>
-          {rows.map((r) => (
+          {rows.map((row) => (
             <article
-              key={r.id}
+              key={row.id}
               style={{
                 border: "1px solid #e5edf4",
                 borderRadius: 18,
@@ -256,46 +272,54 @@ export default function AdminUsersPage() {
                 gap: 10,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  alignItems: "start",
+                }}
+              >
                 <div style={{ display: "grid", gap: 6 }}>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <div style={{ fontSize: 18, fontWeight: 950 }}>{r.username}</div>
-                    <span style={r.isActive ? okBadge : mutedBadge}>{r.isActive ? "Activo" : "Inactivo"}</span>
-                    {r.passportCode ? <span style={mutedBadge}>{r.passportCode}</span> : null}
+                    <div style={{ fontSize: 18, fontWeight: 950 }}>{row.username}</div>
+                    <span style={row.isActive ? okBadge : mutedBadge}>{row.isActive ? "Activo" : "Inactivo"}</span>
+                    {row.passportCode ? <span style={mutedBadge}>{row.passportCode}</span> : null}
                   </div>
                   <div style={{ fontSize: 14, color: "#334155" }}>
-                    <b>{r.fullName}</b>
-                    {r.email ? ` · ${r.email}` : ""}
+                    <b>{row.fullName}</b>
+                    {row.email ? ` · ${row.email}` : ""}
                   </div>
                   <div style={{ fontSize: 13, color: "#64748b" }}>
-                    {r.employee
-                      ? `Empleado: ${r.employee.fullName}${r.employee.code ? ` (${r.employee.code})` : ""} · ${r.employee.kind}`
+                    {row.employee
+                      ? `Empleado: ${row.employee.fullName}${row.employee.code ? ` (${row.employee.code})` : ""} · ${row.employee.kind}`
                       : "Sin empleado vinculado"}
                   </div>
                 </div>
 
                 <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
                   <div style={{ fontSize: 12, color: "#64748b" }}>
-                    Actualizado: <b>{fmtDateTime(r.updatedAt)}</b>
+                    Actualizado: <b>{fmtDateTime(row.updatedAt)}</b>
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button type="button" onClick={() => setEditing(r)} style={ghostBtn}>
+                    <button type="button" onClick={() => setEditing(row)} style={ghostBtn}>
                       Editar
                     </button>
                     <button
                       type="button"
-                      onClick={() => void toggleActive(r)}
-                      style={r.isActive ? ghostBtn : darkBtn}
+                      onClick={() => void toggleActive(row)}
+                      style={row.isActive ? ghostBtn : darkBtn}
                     >
-                      {r.isActive ? "Desactivar" : "Reactivar"}
+                      {row.isActive ? "Desactivar" : "Reactivar"}
                     </button>
                   </div>
                 </div>
               </div>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {r.roles.length === 0 ? <span style={mutedBadge}>Sin roles</span> : null}
-                {r.roles.map((role) => (
+                {row.roles.length === 0 ? <span style={mutedBadge}>Sin roles</span> : null}
+                {row.roles.map((role) => (
                   <span key={role.roleId} style={roleBadge}>
                     {ROLE_LABEL[role.role.name]}
                   </span>
@@ -311,6 +335,12 @@ export default function AdminUsersPage() {
           title="Nuevo usuario"
           employees={employees}
           existingUsers={rows}
+          inputStyle={inputStyle}
+          ghostBtn={ghostBtn}
+          darkBtn={darkBtn}
+          errorBox={errorBox}
+          overlayStyle={overlayStyle}
+          modalStyle={modalStyle}
           onClose={() => setOpenCreate(false)}
           onSaved={async () => {
             setOpenCreate(false);
@@ -325,6 +355,12 @@ export default function AdminUsersPage() {
           initial={editing}
           employees={employees}
           existingUsers={rows}
+          inputStyle={inputStyle}
+          ghostBtn={ghostBtn}
+          darkBtn={darkBtn}
+          errorBox={errorBox}
+          overlayStyle={overlayStyle}
+          modalStyle={modalStyle}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
@@ -353,191 +389,9 @@ function SummaryCard({
   };
 
   return (
-    <div style={{ ...softCard, ...toneStyles[tone], padding: 14, boxShadow: "none" }}>
+    <div style={{ ...opsStyles.metricCard, ...toneStyles[tone], padding: 14, boxShadow: "none" }}>
       <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.82 }}>{title}</div>
       <div style={{ marginTop: 6, fontSize: 28, fontWeight: 950 }}>{value}</div>
-    </div>
-  );
-}
-
-function UserModal({
-  title,
-  initial,
-  employees,
-  existingUsers,
-  onClose,
-  onSaved,
-}: {
-  title: string;
-  initial?: UserRow | null;
-  employees: EmployeeLite[];
-  existingUsers: UserRow[];
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const [employeeId, setEmployeeId] = useState(initial?.employeeId ?? "");
-  const [fullName, setFullName] = useState(initial?.fullName ?? "");
-  const [username, setUsername] = useState(initial?.username ?? "");
-  const [password, setPassword] = useState("");
-  const [email, setEmail] = useState(initial?.email ?? "");
-  const [passportCode, setPassportCode] = useState(initial?.passportCode ?? "");
-  const [isActive, setIsActive] = useState(initial?.isActive ?? true);
-  const [roles, setRoles] = useState<RoleName[]>(initial?.roles.map((r) => r.role.name) ?? []);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const availableEmployees = useMemo(
-    () =>
-      !initial
-        ? employees.filter((e) => !existingUsers.some((u) => u.employeeId === e.id))
-        : employees.filter(
-            (e) => e.id === initial.employeeId || !existingUsers.some((u) => u.employeeId === e.id && u.id !== initial.id)
-          ),
-    [employees, existingUsers, initial]
-  );
-
-  function toggleRole(role: RoleName) {
-    setRoles((prev) => (prev.includes(role) ? prev.filter((x) => x !== role) : [...prev, role]));
-  }
-
-  async function save() {
-    setError(null);
-    if (!fullName.trim()) return setError("Nombre obligatorio.");
-    if (!username.trim()) return setError("Username obligatorio.");
-    if (!initial && !password.trim()) return setError("Password obligatoria.");
-    if (roles.length === 0) return setError("Selecciona al menos un rol.");
-    setBusy(true);
-    try {
-      const body: UserUpsertBody = {
-        employeeId: employeeId || null,
-        fullName: fullName.trim(),
-        username: username.trim(),
-        email: email.trim() || null,
-        passportCode: passportCode.trim() || null,
-        isActive,
-        roles,
-      };
-      if (password.trim()) body.password = password.trim();
-      const res = await fetch(initial ? `/api/admin/users/${initial.id}` : "/api/admin/users", {
-        method: initial ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      await onSaved();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error guardando usuario");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div style={overlayStyle} onClick={() => (busy ? null : onClose())}>
-      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "start" }}>
-          <div style={{ display: "grid", gap: 4 }}>
-            <div style={{ fontSize: 24, fontWeight: 950 }}>{title}</div>
-            <div style={{ fontSize: 13, color: "#64748b" }}>Acceso, empleado y roles del usuario.</div>
-          </div>
-          <button type="button" onClick={() => (busy ? null : onClose())} style={ghostBtn}>
-            Cerrar
-          </button>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Empleado vinculado
-            <select
-              value={employeeId}
-              onChange={(e) => {
-                const id = e.target.value;
-                setEmployeeId(id);
-                const emp = availableEmployees.find((x) => x.id === id);
-                if (emp && !initial) setFullName((prev) => prev || emp.fullName);
-              }}
-              style={inputStyle}
-            >
-              <option value="">Sin vincular</option>
-              {availableEmployees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.fullName}
-                  {e.code ? ` · ${e.code}` : ""}
-                  {` · ${e.kind}`}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Nombre visible
-            <input value={fullName} onChange={(e) => setFullName(e.target.value)} style={inputStyle} />
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Username
-            <input value={username} onChange={(e) => setUsername(e.target.value)} style={inputStyle} />
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            {initial ? "Nueva password" : "Password temporal"}
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={initial ? "Dejar vacio para mantenerla" : "Temporal"}
-              style={inputStyle}
-            />
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Email
-            <input value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Codigo interno
-            <input value={passportCode} onChange={(e) => setPassportCode(e.target.value)} style={inputStyle} />
-          </label>
-        </div>
-
-        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-          <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-          Usuario activo
-        </label>
-
-        <div style={{ display: "grid", gap: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 900 }}>Roles</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
-            {ROLE_NAMES.map((r) => (
-              <label
-                key={r}
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
-                  border: "1px solid #dbe4ea",
-                  borderRadius: 12,
-                  padding: "10px 12px",
-                  background: roles.includes(r) ? "#f8fafc" : "#fff",
-                  fontSize: 13,
-                  fontWeight: 800,
-                }}
-              >
-                <input type="checkbox" checked={roles.includes(r)} onChange={() => toggleRole(r)} />
-                {ROLE_LABEL[r]}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {error ? <div style={errorBox}>{error}</div> : null}
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button type="button" onClick={() => void save()} disabled={busy} style={{ ...darkBtn, background: busy ? "#9ca3af" : "#111" }}>
-            {busy ? "Guardando..." : "Guardar"}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

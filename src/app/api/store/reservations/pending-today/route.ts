@@ -103,9 +103,9 @@ export async function GET() {
       formalizedAt: null,
 
       OR: [
-        // âœ… scheduledTime dentro del dÃ­a de Madrid (en UTC)
+        // scheduledTime dentro del día de Madrid (en UTC)
         { scheduledTime: { gte: start, lt: endExclusive } },
-        // âœ… si no tiene hora, activityDate dentro del dÃ­a de Madrid
+        // si no tiene hora, activityDate dentro del día de Madrid
         { scheduledTime: null, activityDate: { gte: start, lt: endExclusive } },
       ],
 

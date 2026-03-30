@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import React, { useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
 
 type Row = {
   id: string;
@@ -179,10 +180,10 @@ export default function AdminCashClosuresPage() {
           <div style={eyebrowStyle}>Operativa</div>
           <h1 style={titleStyle}>Cierres de caja</h1>
           <p style={subtitleStyle}>
-            Revision operativa de cierres, diferencias declaradas frente al sistema y comisiones estimadas por canal.
+            Revisión operativa de cierres, diferencias declaradas frente al sistema y comisiones estimadas por canal.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={opsStyles.actionGrid}>
           <Link href="/admin" style={ghostBtn}>
             Volver a Admin
           </Link>
@@ -215,7 +216,7 @@ export default function AdminCashClosuresPage() {
 
       <section style={filtersPanel}>
         <select value={origin} onChange={(e) => setOrigin(e.target.value)} style={inputStyle}>
-          <option value="">(Todos los origins)</option>
+          <option value="">(Todos los orígenes)</option>
           <option value="STORE">STORE</option>
           <option value="BOOTH">BOOTH</option>
           <option value="BAR">BAR</option>
@@ -502,19 +503,15 @@ export default function AdminCashClosuresPage() {
 }
 
 const pageStyle: React.CSSProperties = {
-  maxWidth: 1200,
-  margin: "0 auto",
-  padding: 24,
-  display: "grid",
+  ...opsStyles.pageShell,
+  width: "min(1200px, 100%)",
   gap: 14,
   background:
     "radial-gradient(circle at top left, rgba(20, 184, 166, 0.08), transparent 34%), radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 30%)",
 };
 
 const heroStyle: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 26,
-  padding: 20,
+  ...opsStyles.heroCard,
   background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 48%, #ecfeff 100%)",
   boxShadow: "0 20px 45px rgba(15, 23, 42, 0.08)",
   display: "flex",
@@ -533,10 +530,8 @@ const eyebrowStyle: React.CSSProperties = {
 };
 
 const titleStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 34,
+  ...opsStyles.heroTitle,
   lineHeight: 1,
-  fontWeight: 950,
   color: "#0f172a",
 };
 
@@ -555,7 +550,7 @@ const summaryGrid: React.CSSProperties = {
 };
 
 const summaryCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.metricCard,
   borderRadius: 16,
   padding: 12,
   background: "linear-gradient(180deg, #fff 0%, #f8fafc 100%)",
@@ -577,26 +572,22 @@ const summaryValue: React.CSSProperties = {
 };
 
 const ghostBtn: React.CSSProperties = {
+  ...opsStyles.ghostButton,
   padding: "10px 12px",
-  borderRadius: 12,
   border: "1px solid #dbe4ea",
-  background: "#fff",
-  fontWeight: 900,
-  textDecoration: "none",
   color: "#0f172a",
 };
 
 const darkBtn: React.CSSProperties = {
+  ...opsStyles.primaryButton,
   padding: "10px 12px",
-  borderRadius: 12,
   border: "1px solid #0f172a",
   background: "#0f172a",
-  color: "#fff",
-  fontWeight: 900,
   cursor: "pointer",
 };
 
 const filtersPanel: React.CSSProperties = {
+  ...opsStyles.sectionCard,
   border: "1px solid #dbe4ea",
   borderRadius: 18,
   background: "#fff",
@@ -609,6 +600,7 @@ const filtersPanel: React.CSSProperties = {
 };
 
 const panelStyle: React.CSSProperties = {
+  ...opsStyles.sectionCard,
   border: "1px solid #dbe4ea",
   borderRadius: 18,
   background: "#fff",
@@ -617,7 +609,7 @@ const panelStyle: React.CSSProperties = {
 };
 
 const detailStatStyle: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.metricCard,
   borderRadius: 16,
   padding: 14,
   background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",

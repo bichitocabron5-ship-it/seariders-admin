@@ -1,7 +1,8 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
 
 type Row = {
   id: string;
@@ -311,27 +312,21 @@ function StatCard(props: { label: string; value: string }) {
 }
 
 const pageStyle: React.CSSProperties = {
-  maxWidth: 1320,
-  margin: "0 auto",
-  padding: 24,
+  ...opsStyles.pageShell,
+  width: "min(1320px, 100%)",
   display: "grid",
   gap: 18,
-  fontFamily: "system-ui",
   background:
     "radial-gradient(circle at top left, rgba(37, 99, 235, 0.06), transparent 28%), radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 24%)",
 };
 
 const heroStyle: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.heroCard,
   borderRadius: 28,
   padding: 20,
   background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 45%, #eef2ff 100%)",
-  boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 16,
-  alignItems: "flex-end",
-  flexWrap: "wrap",
+  display: "grid",
+  gap: 18,
 };
 
 const eyebrowStyle: React.CSSProperties = {
@@ -343,10 +338,10 @@ const eyebrowStyle: React.CSSProperties = {
 };
 
 const titleStyle: React.CSSProperties = {
+  ...opsStyles.heroTitle,
   margin: 0,
-  fontSize: 30,
+  fontSize: "clamp(2rem, 4vw, 3rem)",
   lineHeight: 1.05,
-  fontWeight: 950,
   color: "#0f172a",
 };
 
@@ -359,26 +354,21 @@ const subtitleStyle: React.CSSProperties = {
 };
 
 const actionsStyle: React.CSSProperties = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
+  ...opsStyles.actionGrid,
 };
 
 const primaryBtn: React.CSSProperties = {
+  ...opsStyles.primaryButton,
   padding: "10px 14px",
   borderRadius: 14,
-  border: "1px solid #0f172a",
-  background: "#0f172a",
-  color: "#fff",
   fontWeight: 950,
   cursor: "pointer",
 };
 
 const ghostBtn: React.CSSProperties = {
+  ...opsStyles.ghostButton,
   padding: "10px 14px",
   borderRadius: 14,
-  border: "1px solid #d0d9e4",
-  background: "#fff",
   color: "#0f172a",
   fontWeight: 900,
   textDecoration: "none",
@@ -391,7 +381,7 @@ const statsGrid: React.CSSProperties = {
 };
 
 const statCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.metricCard,
   borderRadius: 18,
   padding: 14,
   background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
@@ -414,11 +404,9 @@ const statValue: React.CSSProperties = {
 };
 
 const filterCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.sectionCard,
   borderRadius: 20,
   padding: 16,
-  background: "#fff",
-  boxShadow: "0 18px 40px rgba(15, 23, 42, 0.05)",
   display: "grid",
   gridTemplateColumns: "minmax(240px, 1fr) minmax(280px, 1.2fr) auto",
   gap: 12,
@@ -433,9 +421,9 @@ const fieldStyle: React.CSSProperties = {
 };
 
 const inputStyle: React.CSSProperties = {
+  ...opsStyles.field,
   padding: "12px 14px",
   borderRadius: 12,
-  border: "1px solid #d0d9e4",
   background: "#fff",
 };
 
@@ -449,10 +437,8 @@ const errorBox: React.CSSProperties = {
 };
 
 const tableCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.sectionCard,
   borderRadius: 22,
-  background: "#fff",
-  boxShadow: "0 18px 40px rgba(15, 23, 42, 0.05)",
   overflow: "hidden",
 };
 
@@ -506,3 +492,4 @@ const statusPill: React.CSSProperties = {
   fontWeight: 900,
   minWidth: 84,
 };
+

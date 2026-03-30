@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 
 const CreateBody = z.object({
   name: z.string().min(1).max(200),
-  code: z.string().trim().min(1).max(50).nullable().optional(), // null/undefined = automÃ¡tico
+  code: z.string().trim().min(1).max(50).nullable().optional(), // null/undefined = automático
   isActive: z.boolean().default(true),
 
   kind: z.enum(["PERCENT", "FIXED"]),
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
 
   const json = await req.json().catch(() => null);
   const parsed = CreateBody.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const data = parsed.data;
 
@@ -102,7 +102,7 @@ export async function POST(req: Request) {
   const validFrom = data.validFrom ? new Date(data.validFrom) : new Date();
   const validTo = data.validTo ? new Date(data.validTo) : null;
 
-  // Reglas de coherencia (mÃ­nimo)
+  // Reglas de coherencia (mínimo)
   if (data.scope === "CATEGORY" && !data.category) {
     return new NextResponse("Si scope=CATEGORY, category es obligatorio", { status: 400 });
   }
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
     return new NextResponse("Si scope=OPTION, optionId es obligatorio", { status: 400 });
   }
 
-  // Si hay horario parcial, exigimos ambos (mÃ¡s claro)
+  // Si hay horario parcial, exigimos ambos (más claro)
   const hasStart = data.startTimeMin != null;
   const hasEnd = data.endTimeMin != null;
   if (hasStart !== hasEnd) {
@@ -123,7 +123,7 @@ export async function POST(req: Request) {
     return new NextResponse("endTimeMin debe ser mayor que startTimeMin", { status: 400 });
   }
 
-  // PaÃ­s: evita contradicciÃ³n absurda
+  // País: evita contradicción absurda
   const reqC = (data.requiresCountry ?? null)?.toUpperCase() ?? null;
   const excC = (data.excludeCountry ?? null)?.toUpperCase() ?? null;
   if (reqC && excC && reqC === excC) {

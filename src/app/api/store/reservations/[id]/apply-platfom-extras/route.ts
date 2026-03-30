@@ -6,7 +6,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 
-// Si tu enum se llama distinto, ajusta aquÃ­:
+// Si tu enum se llama distinto, ajusta aquí:
 import { ExtraTimeStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -32,7 +32,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const json = await req.json().catch(() => ({}));
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return new NextResponse("Body invÃ¡lido", { status: 400 });
+  if (!parsed.success) return new NextResponse("Body inválido", { status: 400 });
 
   const { dryRun } = parsed.data;
 
@@ -70,7 +70,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         };
       }
 
-      // 2) Agrupar por serviceCode (qty = nÂº de eventos por code)
+      // 2) Agrupar por serviceCode (qty = n.º de eventos por code)
       const grouped = new Map<string, { qty: number; minutesTotal: number; eventIds: string[] }>();
       for (const e of events) {
         const key = String(e.serviceCode);
@@ -160,7 +160,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           },
         });
       } else {
-        // Dry run: solo devolvemos lo que harÃ­amos
+        // Dry run: solo devolvemos lo que haríamos
         for (const [code, info] of grouped.entries()) {
           const svc = byCode.get(code)!;
           createdItems.push({

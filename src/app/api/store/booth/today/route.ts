@@ -32,7 +32,7 @@ type BoothRow = {
 };
 
 export async function GET() {
-  // âœ… Seguridad: SOLO STORE o ADMIN
+  // Seguridad: solo STORE o ADMIN
   const cookieStore = await cookies();
   const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
   if (!session?.userId || !["STORE", "ADMIN"].includes(session.role as string)) {
@@ -41,7 +41,7 @@ export async function GET() {
 
   const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
 
-  // 1) Traer reservas BOOTH del dÃ­a + info del viaje
+  // 1) Traer reservas BOOTH del día + info del viaje
   const rowsDb = await prisma.reservation.findMany({
     where: {
       source: "BOOTH",
@@ -66,7 +66,7 @@ export async function GET() {
       taxiboatAssignedAt: true,
       taxiboatTripId: true,
 
-      // âœ… esto es la clave para boat + tripNo + departedAt
+      // Esto es la clave para boat + tripNo + departedAt
       taxiboatTrip: {
         select: {
           id: true,
@@ -134,7 +134,7 @@ export async function GET() {
 
   const recibidas = mapped.filter((r) => r.statusLabel === "RECIBIDO");
 
-  // âœ… Respuesta final (SIN returns intermedios)
+  // Respuesta final sin returns intermedios
   return NextResponse.json({
     rows: mapped,      // tu page.tsx ya puede leer taxiboatTripNo
     enCaminoTrips,     // por si lo usas

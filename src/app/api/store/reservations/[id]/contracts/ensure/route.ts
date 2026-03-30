@@ -98,7 +98,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       if (toCreate.length) {
         await tx.reservationContract.createMany({
           data: toCreate,
-          skipDuplicates: true, // âœ… idempotente
+          skipDuplicates: true, // idempotente
         });
       }
 

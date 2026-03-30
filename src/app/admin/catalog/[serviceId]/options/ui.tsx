@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import OptionsCreateSection from "@/app/admin/catalog/[serviceId]/options/_components/OptionsCreateSection";
+import OptionsListSection from "@/app/admin/catalog/[serviceId]/options/_components/OptionsListSection";
 
 type OptionRow = {
   id: string;
@@ -38,25 +40,25 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
     setLoading(true);
     setError(null);
 
-    const r = await fetch(`/api/admin/catalog/services/${serviceId}/options`, { cache: "no-store" });
-    if (!r.ok) {
-      setError(await r.text());
+    const optionsRes = await fetch(`/api/admin/catalog/services/${serviceId}/options`, { cache: "no-store" });
+    if (!optionsRes.ok) {
+      setError(await optionsRes.text());
       setLoading(false);
       return;
     }
 
-    const data = await r.json();
-    setRows(data.options ?? []);
+    const optionsJson = await optionsRes.json();
+    setRows(optionsJson.options ?? []);
 
-    const r2 = await fetch("/api/admin/catalog/services", { cache: "no-store" });
-    if (r2.ok) {
-      const d2 = await r2.json();
-      const svc = ((d2.services ?? []) as Array<{ id: string; name: string; category: string }>).find(
-        (service) => service.id === serviceId
+    const servicesRes = await fetch("/api/admin/catalog/services", { cache: "no-store" });
+    if (servicesRes.ok) {
+      const servicesJson = await servicesRes.json();
+      const service = ((servicesJson.services ?? []) as Array<{ id: string; name: string; category: string }>).find(
+        (row) => row.id === serviceId
       );
-      if (svc) {
-        setServiceName(svc.name);
-        setServiceCategory(svc.category);
+      if (service) {
+        setServiceName(service.name);
+        setServiceCategory(service.category);
       }
     }
 
@@ -95,21 +97,19 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
         basePriceCents: 0,
       };
 
-      const r = await fetch(`/api/admin/catalog/services/${serviceId}/options`, {
+      const res = await fetch(`/api/admin/catalog/services/${serviceId}/options`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      if (!r.ok) {
-        throw new Error(await r.text());
-      }
+      if (!res.ok) throw new Error(await res.text());
 
       await load();
       setEditingId(null);
       setDraft(null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error creando opcion");
+      setError(e instanceof Error ? e.message : "Error creando opción");
     } finally {
       setCreating(false);
     }
@@ -119,21 +119,20 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
     setSavingId(optionId);
     setError(null);
 
-    const r = await fetch(`/api/admin/catalog/options/${optionId}`, {
+    const res = await fetch(`/api/admin/catalog/options/${optionId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
 
-    if (!r.ok) {
-      setError(await r.text());
+    if (!res.ok) {
+      setError(await res.text());
       setSavingId(null);
       return false;
     }
 
-    const data = await r.json();
+    const data = await res.json();
     const updated: OptionRow = data.option;
-
     setRows((prev) => prev.map((row) => (row.id === optionId ? updated : row)));
     setSavingId(null);
     return true;
@@ -169,18 +168,18 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
     <div style={pageStyle}>
       <section style={heroStyle}>
         <div style={{ display: "grid", gap: 8 }}>
-          <div style={eyebrowStyle}>Catalogo</div>
+          <div style={eyebrowStyle}>Catálogo</div>
           <h1 style={titleStyle}>Opciones</h1>
           <p style={subtitleStyle}>
             {serviceName}
-            {serviceCategory ? ` · ${serviceCategory}` : ""}. Aqui defines duracion, pax y minutos contratados del
-            catalogo. El precio se gestiona despues desde precios versionados.
+            {serviceCategory ? ` · ${serviceCategory}` : ""}. Aquí defines duración, PAX y minutos contratados del
+            catálogo. El precio se gestiona después desde precios versionados.
           </p>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link href="/admin/catalog" style={ghostBtn}>
-            Volver al catalogo
+            Volver al catálogo
           </Link>
           <button type="button" onClick={() => void load()} style={darkBtn} disabled={loading}>
             {loading ? "Cargando..." : "Refrescar"}
@@ -198,227 +197,61 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
           <div style={summaryValue}>{stats.active}</div>
         </article>
         <article style={summaryCard}>
-          <div style={summaryLabel}>Pax maximo</div>
+          <div style={summaryLabel}>PAX máximo</div>
           <div style={summaryValue}>{stats.maxPax}</div>
         </article>
       </section>
 
       {error ? <div style={errorStyle}>{error}</div> : null}
 
-      <section style={panelStyle}>
-        <div style={panelHeader}>
-          <div style={{ fontWeight: 950 }}>Crear opcion</div>
-          <div style={{ fontSize: 12, color: "#64748b" }}>
-            Define la ficha operativa base. El precio se edita en la pantalla de precios.
-          </div>
-        </div>
+      <OptionsCreateSection
+        panelStyle={panelStyle}
+        panelHeader={panelHeader}
+        formGrid={formGrid}
+        fieldStyle={fieldStyle}
+        inputStyle={inputStyle}
+        darkBtn={darkBtn}
+        dur={dur}
+        pax={pax}
+        contracted={contracted}
+        creating={creating}
+        onDurChange={setDur}
+        onPaxChange={setPax}
+        onContractedChange={setContracted}
+        onCreate={createOption}
+      />
 
-        <div style={{ padding: 14, display: "grid", gap: 10 }}>
-          <div style={formGrid}>
-            <label style={fieldStyle}>
-              Duracion (min)
-              <input
-                type="number"
-                min={1}
-                max={600}
-                value={dur}
-                onChange={(e) => setDur(Number(e.target.value || 0))}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={fieldStyle}>
-              PAX max
-              <input
-                type="number"
-                min={1}
-                max={30}
-                value={pax}
-                onChange={(e) => setPax(Number(e.target.value || 0))}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={fieldStyle}>
-              Minutos contratados
-              <input
-                type="number"
-                min={1}
-                max={600}
-                value={contracted}
-                onChange={(e) => setContracted(Number(e.target.value || 0))}
-                style={inputStyle}
-              />
-            </label>
-
-            <div style={{ display: "grid", alignItems: "end" }}>
-              <button type="button" onClick={() => void createOption()} style={darkBtn} disabled={creating}>
-                {creating ? "Creando..." : "Anadir opcion"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {loading ? (
-        <section style={panelStyle}>
-          <div style={{ padding: 18, opacity: 0.7 }}>Cargando...</div>
-        </section>
-      ) : (
-        <section style={panelStyle}>
-          <div style={panelHeader}>
-            <div style={{ fontWeight: 950 }}>Opciones configuradas</div>
-            <div style={{ fontSize: 12, color: "#64748b" }}>
-              Las opciones inactivas quedan al final para priorizar la configuracion vigente.
-            </div>
-          </div>
-
-          <div style={{ padding: 14, display: "grid", gap: 12 }}>
-            {sorted.map((option) => {
-              const busy = savingId === option.id;
-              const isEditing = editingId === option.id;
-              const currentDraft = isEditing ? draft : null;
-
-              return (
-                <article key={option.id} style={{ ...rowCard, opacity: busy ? 0.65 : 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                    <div style={{ display: "grid", gap: 4 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 950, fontSize: 17, color: "#0f172a" }}>
-                          {option.durationMinutes} min · hasta {option.paxMax} pax
-                        </div>
-                        <span style={{ ...statusPill, ...(option.isActive ? statusOn : statusOff) }}>
-                          {option.isActive ? "Activa" : "Inactiva"}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 12, color: "#64748b" }}>
-                        Tiempo contratado actual: {option.contractedMinutes} min
-                      </div>
-                    </div>
-
-                    <button type="button" disabled={busy} onClick={() => (isEditing ? cancelEdit() : startEdit(option))} style={ghostButtonElement}>
-                      {isEditing ? "Cancelar" : "Editar"}
-                    </button>
-                  </div>
-
-                  {isEditing ? (
-                    <div style={editGrid}>
-                      <label style={fieldStyle}>
-                        Duracion
-                        <input
-                          type="number"
-                          min={1}
-                          max={600}
-                          value={currentDraft?.durationMinutes ?? option.durationMinutes}
-                          disabled={busy}
-                          onChange={(e) =>
-                            setDraft((prev) => ({
-                              durationMinutes: Number(e.target.value || 0),
-                              paxMax: prev?.paxMax ?? option.paxMax,
-                              contractedMinutes: prev?.contractedMinutes ?? option.contractedMinutes,
-                              isActive: prev?.isActive ?? option.isActive,
-                            }))
-                          }
-                          style={inputStyle}
-                        />
-                      </label>
-
-                      <label style={fieldStyle}>
-                        PAX max
-                        <input
-                          type="number"
-                          min={1}
-                          max={30}
-                          value={currentDraft?.paxMax ?? option.paxMax}
-                          disabled={busy}
-                          onChange={(e) =>
-                            setDraft((prev) => ({
-                              durationMinutes: prev?.durationMinutes ?? option.durationMinutes,
-                              paxMax: Number(e.target.value || 0),
-                              contractedMinutes: prev?.contractedMinutes ?? option.contractedMinutes,
-                              isActive: prev?.isActive ?? option.isActive,
-                            }))
-                          }
-                          style={inputStyle}
-                        />
-                      </label>
-
-                      <label style={fieldStyle}>
-                        Minutos contratados
-                        <input
-                          type="number"
-                          min={1}
-                          max={600}
-                          value={currentDraft?.contractedMinutes ?? option.contractedMinutes}
-                          disabled={busy}
-                          onChange={(e) =>
-                            setDraft((prev) => ({
-                              durationMinutes: prev?.durationMinutes ?? option.durationMinutes,
-                              paxMax: prev?.paxMax ?? option.paxMax,
-                              contractedMinutes: Number(e.target.value || 0),
-                              isActive: prev?.isActive ?? option.isActive,
-                            }))
-                          }
-                          style={inputStyle}
-                        />
-                      </label>
-
-                      <label style={{ ...fieldStyle, justifyContent: "end" }}>
-                        Estado
-                        <span style={toggleRow}>
-                          <input
-                            type="checkbox"
-                            checked={currentDraft?.isActive ?? option.isActive}
-                            disabled={busy}
-                            onChange={(e) =>
-                              setDraft((prev) => ({
-                                durationMinutes: prev?.durationMinutes ?? option.durationMinutes,
-                                paxMax: prev?.paxMax ?? option.paxMax,
-                                contractedMinutes: prev?.contractedMinutes ?? option.contractedMinutes,
-                                isActive: e.target.checked,
-                              }))
-                            }
-                          />
-                          Opcion activa
-                        </span>
-                      </label>
-
-                      <div style={editActions}>
-                        <button type="button" onClick={cancelEdit} disabled={busy} style={ghostButtonElement}>
-                          Cancelar
-                        </button>
-                        <button type="button" onClick={() => void saveEdit(option.id)} disabled={busy} style={darkBtn}>
-                          {busy ? "Guardando..." : "Guardar"}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={metaGrid}>
-                      <div style={metaItem}>
-                        <div style={metaLabel}>Duracion</div>
-                        <div style={metaValue}>{option.durationMinutes} min</div>
-                      </div>
-                      <div style={metaItem}>
-                        <div style={metaLabel}>PAX max</div>
-                        <div style={metaValue}>{option.paxMax}</div>
-                      </div>
-                      <div style={metaItem}>
-                        <div style={metaLabel}>Contratado</div>
-                        <div style={metaValue}>{option.contractedMinutes} min</div>
-                      </div>
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-
-            {sorted.length === 0 ? <div style={{ opacity: 0.7 }}>No hay opciones para este servicio.</div> : null}
-          </div>
-        </section>
-      )}
+      <OptionsListSection
+        loading={loading}
+        sorted={sorted}
+        savingId={savingId}
+        editingId={editingId}
+        draft={draft}
+        panelStyle={panelStyle}
+        panelHeader={panelHeader}
+        rowCard={rowCard}
+        editGrid={editGrid}
+        fieldStyle={fieldStyle}
+        inputStyle={inputStyle}
+        ghostButtonElement={ghostButtonElement}
+        darkBtn={darkBtn}
+        metaGrid={metaGrid}
+        metaItem={metaItem}
+        metaLabel={metaLabel}
+        metaValue={metaValue}
+        statusPill={statusPill}
+        statusOn={statusOn}
+        statusOff={statusOff}
+        toggleRow={toggleRow}
+        editActions={editActions}
+        onStartEdit={startEdit}
+        onCancelEdit={cancelEdit}
+        onSaveEdit={saveEdit}
+        setDraft={setDraft}
+      />
 
       <div style={footerNoteStyle}>
-        Siguiente paso: revisar <strong>Precios versionados</strong> para asignar PVP base a cada opcion activa.
+        Siguiente paso: revisar <strong>Precios versionados</strong> para asignar PVP base a cada opción activa.
       </div>
     </div>
   );

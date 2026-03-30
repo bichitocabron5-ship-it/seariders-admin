@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PlatformBoard from "./_components/PlatformBoard";
+import { opsStyles } from "@/components/ops-ui";
 
 type BoardOption = {
   key: "JETSKI" | "NAUTICA";
@@ -31,7 +32,7 @@ const BOARD_OPTIONS: BoardOption[] = [
   },
   {
     key: "NAUTICA",
-    title: "Plataforma - Nautica",
+    title: "Plataforma - Náutica",
     kind: "NAUTICA",
     categories: ["TOWABLE", "WAKEBOARD", "FLYBOARD", "PARASAILING", "JETCAR", "BOAT"],
   },
@@ -100,18 +101,14 @@ export default function PlatformPage() {
   }, []);
 
   return (
-    <div style={{ padding: 24, maxWidth: 1480, margin: "0 auto", display: "grid", gap: 18 }}>
+    <div style={{ ...opsStyles.pageShell, width: "min(1480px, 100%)" }}>
       <section
         style={{
-          border: "1px solid #dbe4ea",
-          borderRadius: 28,
-          padding: 24,
+          ...opsStyles.heroCard,
           background:
             "radial-gradient(circle at top left, rgba(125, 211, 252, 0.22), transparent 28%), radial-gradient(circle at right bottom, rgba(99, 102, 241, 0.16), transparent 24%), linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #312e81 100%)",
           color: "#e0e7ff",
           boxShadow: "0 24px 60px rgba(15, 23, 42, 0.12)",
-          display: "grid",
-          gap: 18,
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
@@ -119,13 +116,13 @@ export default function PlatformPage() {
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#93c5fd" }}>
               Platform
             </div>
-            <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.02, color: "#fff" }}>Operativa de plataforma</h1>
+            <h1 style={opsStyles.heroTitle}>Operativa de plataforma</h1>
             <div style={{ fontSize: 14, color: "#c7d2fe" }}>
               Cola operativa, asignaciones, salidas, cierre de actividades e incidencias de flota en una sola vista.
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ ...opsStyles.actionGrid, width: "min(100%, 340px)" }}>
             <Link href="/operations" style={ghostLink}>
               Centro operativo
             </Link>
@@ -135,7 +132,7 @@ export default function PlatformPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
           {BOARD_OPTIONS.map((option) => {
             const active = option.key === selected;
             return (
@@ -151,17 +148,19 @@ export default function PlatformPage() {
                   color: active ? "#111827" : "#fff",
                   fontWeight: 900,
                   cursor: "pointer",
+                  width: "100%",
                 }}
               >
-                {option.key === "JETSKI" ? "Jetski" : "Nautica"}
+                {option.key === "JETSKI" ? "Jetski" : "Náutica"}
               </button>
             );
           })}
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <span style={heroPillStyle}>Vista: {board.key === "JETSKI" ? "Jetski" : "Nautica"}</span>
-          <span style={heroPillStyle}>Categorias: {board.categories.length}</span>
+          <span style={heroPillStyle}>Vista: {board.key === "JETSKI" ? "Jetski" : "Náutica"}</span>
+          <span style={heroPillStyle}>Categorías: {board.categories.length}</span>
+          <span style={heroPillStyle}>Taxiboats: {taxiboatOps.length}</span>
         </div>
       </section>
 
@@ -170,7 +169,7 @@ export default function PlatformPage() {
           style={{
             border: "1px solid #dbe4ea",
             borderRadius: 24,
-            padding: 20,
+            padding: "clamp(18px, 3vw, 24px)",
             background: "#fff",
             boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)",
             display: "grid",
@@ -186,7 +185,7 @@ export default function PlatformPage() {
                 Retorno Platform {"->"} Booth
               </div>
               <div style={{ fontSize: 13, color: "#64748b" }}>
-                Estado operativo por barco para que Booth sepa si ya salio de Platform.
+                Estado operativo por barco para que Booth sepa si ya salió de Platform.
               </div>
             </div>
 
@@ -202,7 +201,7 @@ export default function PlatformPage() {
           {taxiboatLoading ? (
             <div style={{ color: "#475569", fontWeight: 800 }}>Cargando taxiboats...</div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
               {taxiboatOps.map((row) => (
                 <TaxiboatOpsCard
                   key={row.id}
@@ -262,7 +261,7 @@ function TaxiboatOpsCard({
         gap: 12,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, alignItems: "center" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <div style={{ fontSize: 18, fontWeight: 950, color: "#0f172a" }}>
             {row.boat === "TAXIBOAT_1" ? "Taxiboat 1" : "Taxiboat 2"}
@@ -287,15 +286,20 @@ function TaxiboatOpsCard({
         </span>
       </div>
 
-      <div style={{ fontSize: 14, color: "#0f172a", fontWeight: 800 }}>
-        {isToBooth
-          ? `Salio hacia Booth hace ${elapsedMin ?? 0} min`
-          : isAtBooth
-            ? `Llegada a Booth: ${fmtDateTime(row.arrivedBoothAt ?? row.updatedAt)}`
-          : `Ultima llegada a platform: ${fmtDateTime(row.arrivedPlatformAt ?? row.updatedAt)}`}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        <div style={{ fontSize: 14, color: "#0f172a", fontWeight: 800 }}>
+          {isToBooth
+            ? `Salió hacia Booth hace ${elapsedMin ?? 0} min`
+            : isAtBooth
+              ? `Llegada a Booth: ${fmtDateTime(row.arrivedBoothAt ?? row.updatedAt)}`
+              : `Última llegada a Platform: ${fmtDateTime(row.arrivedPlatformAt ?? row.updatedAt)}`}
+        </div>
+        <div style={{ padding: "10px 12px", borderRadius: 12, border: `1px solid ${colors.bd}`, background: "#fff", color: colors.fg, fontWeight: 900, fontSize: 13 }}>
+          {isToBooth ? `Trayecto activo${elapsedMin != null ? ` · ${elapsedMin} min` : ""}` : isAtBooth ? "Barco en Booth" : "Listo en Platform"}
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
         <button
           type="button"
           onClick={() => void onAction(row.boat, "MARK_AT_PLATFORM")}
@@ -303,6 +307,7 @@ function TaxiboatOpsCard({
           style={{
             ...taxiboatActionBtn,
             opacity: busyAction !== null ? 0.6 : 1,
+            width: "100%",
           }}
         >
           {busyAction === `${row.boat}:MARK_AT_PLATFORM` ? "Guardando..." : "En plataforma"}
@@ -314,6 +319,7 @@ function TaxiboatOpsCard({
           style={{
             ...taxiboatPrimaryBtn,
             opacity: busyAction !== null ? 0.6 : 1,
+            width: "100%",
           }}
         >
           {busyAction === `${row.boat}:DEPART_TO_BOOTH` ? "Guardando..." : "Salida a Booth"}
@@ -343,16 +349,13 @@ const ghostLink: React.CSSProperties = {
   color: "#0f172a",
   textDecoration: "none",
   fontWeight: 900,
+  textAlign: "center",
 };
 
 const heroPillStyle: React.CSSProperties = {
-  padding: "6px 12px",
-  borderRadius: 999,
+  ...opsStyles.heroPill,
   border: "1px solid rgba(125, 211, 252, 0.35)",
   background: "rgba(15, 23, 42, 0.24)",
-  color: "#fff",
-  fontWeight: 900,
-  fontSize: 12,
 };
 
 const refreshBtn: React.CSSProperties = {
@@ -363,6 +366,7 @@ const refreshBtn: React.CSSProperties = {
   color: "#0f172a",
   fontWeight: 900,
   cursor: "pointer",
+  width: "100%",
 };
 
 const taxiboatActionBtn: React.CSSProperties = {

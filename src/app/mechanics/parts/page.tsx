@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
 import type { PartRow } from "./_components/types";
 import { PART_CATEGORIES, normalizePartCategory } from "./_components/categories";
 import PartModal from "./_components/PartModal";
@@ -12,35 +13,28 @@ import AdjustPartModal from "./_components/AdjustPartModal";
 import PartHistoryModal from "./_components/PartHistoryModal";
 
 const pageShell: React.CSSProperties = {
-  maxWidth: 1440,
-  margin: "0 auto",
-  padding: 28,
+  ...opsStyles.pageShell,
+  width: "min(1440px, 100%)",
   display: "grid",
   gap: 18,
-  fontFamily: "system-ui",
 };
 
 const softCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.sectionCard,
   borderRadius: 20,
-  background: "#fff",
-  boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)",
 };
 
-const inputStyle = { padding: 10, borderRadius: 12, border: "1px solid #d0d9e4" };
+const inputStyle = { ...opsStyles.field, padding: 10, borderRadius: 12 };
 const ghostBtn = {
+  ...opsStyles.ghostButton,
   padding: "8px 10px",
   borderRadius: 10,
-  border: "1px solid #d0d9e4",
-  background: "#fff",
   fontWeight: 900,
 };
 const primaryBtn = {
+  ...opsStyles.primaryButton,
   padding: "10px 12px",
   borderRadius: 12,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
   fontWeight: 950,
 };
 
@@ -141,23 +135,20 @@ export default function MechanicsPartsPage() {
     <div style={pageShell}>
       <div
         style={{
-          ...softCard,
+          ...opsStyles.heroCard,
           padding: 16,
           background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 45%, #ecfeff 100%)",
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-          alignItems: "baseline",
+          display: "grid",
+          gap: 18,
         }}
       >
         <div>
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#0f766e" }}>Mechanics</div>
-          <div style={{ fontWeight: 950, fontSize: 34, lineHeight: 1.02 }}>Recambios</div>
+          <div style={{ ...opsStyles.heroTitle, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.02 }}>Recambios</div>
           <div style={{ opacity: 0.76, fontSize: 14 }}>Inventario, stock, compras pendientes y consumo en mantenimiento.</div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={opsStyles.actionGrid}>
           <button onClick={() => load()} style={ghostBtn}>Refrescar</button>
           <button onClick={() => { setEditing(null); setOpen(true); }} style={primaryBtn}>Nuevo recambio</button>
         </div>
@@ -184,15 +175,15 @@ export default function MechanicsPartsPage() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-        <div style={{ border: "1px solid #fde68a", background: "#fffbeb", borderRadius: 16, padding: 14 }}>
+        <div style={{ ...opsStyles.metricCard, border: "1px solid #fde68a", background: "#fffbeb", borderRadius: 16, padding: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 900, color: "#92400e" }}>Stock bajo</div>
           <div style={{ marginTop: 4, fontSize: 26, fontWeight: 950, color: "#78350f" }}>{lowStockRows.length}</div>
         </div>
-        <div style={{ border: "1px solid #fecaca", background: "#fff1f2", borderRadius: 16, padding: 14 }}>
+        <div style={{ ...opsStyles.metricCard, border: "1px solid #fecaca", background: "#fff1f2", borderRadius: 16, padding: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 900, color: "#b91c1c" }}>Sin stock</div>
           <div style={{ marginTop: 4, fontSize: 26, fontWeight: 950, color: "#7f1d1d" }}>{zeroStockRows.length}</div>
         </div>
-        <div style={{ border: "1px solid #e5e7eb", background: "#fff", borderRadius: 16, padding: 14 }}>
+        <div style={{ ...opsStyles.metricCard, border: "1px solid #e5e7eb", background: "#fff", borderRadius: 16, padding: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7 }}>Total recambios</div>
           <div style={{ marginTop: 4, fontSize: 26, fontWeight: 950 }}>{filteredRows.length}</div>
         </div>

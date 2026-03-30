@@ -41,7 +41,7 @@ export async function POST(req: Request) {
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return new NextResponse("Body invÃ¡lido", { status: 400 });
+  if (!parsed.success) return new NextResponse("Body inválido", { status: 400 });
 
   const code = parsed.data.code.trim().toUpperCase();
   const minutesToUse =
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   const activityDate = utcDateFromYmdInTz(tz, parsed.data.activityDate);
   const scheduledTime = utcDateTimeFromYmdHmInTz(tz, parsed.data.activityDate, parsed.data.time);
 
-  if (!scheduledTime) return new NextResponse("Hora invÃ¡lida", { status: 400 });
+  if (!scheduledTime) return new NextResponse("Hora inválida", { status: 400 });
 
   try {
     const out = await prisma.$transaction(async (tx) => {
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
           buyerPhone: true,
           buyerEmail: true,
 
-          // âœ… PRO contrato
+          // PRO contrato
           customerCountry: true,
           customerAddress: true,
           customerDocType: true,
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
         },
       });
 
-      if (!v) throw new Error("CÃ³digo no existe");
+      if (!v) throw new Error("Código no existe");
       if (v.isVoided) throw new Error("Bono anulado");
       if (v.expiresAt && new Date(v.expiresAt).getTime() < Date.now()) throw new Error("Bono caducado");
 
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
       });
 
       // 2) crear reserva draft (NO formalizada)
-     // âœ… Resolver optionId (si el PassProduct no lo fija, lo resolvemos por minutos)
+     // Resolver optionId (si el PassProduct no lo fija, lo resolvemos por minutos)
     let optionId = v.product.optionId ?? null;
 
     if (!optionId) {
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
 
       if (!opt) {
         throw new Error(
-          `No existe una opciÃ³n activa de ${minutesToUse} min para este servicio (configura ServiceOption o ajusta los minutos).`
+          `No existe una opción activa de ${minutesToUse} min para este servicio (configura ServiceOption o ajusta los minutos).`
         );
       }
 
@@ -141,7 +141,7 @@ export async function POST(req: Request) {
           formalizedAt: null,
           formalizedByUserId: null,
 
-          channelId: null, // ðŸ‘ˆ tÃº dijiste que lo desactivas aquÃ­
+          channelId: null, // tú dijiste que lo desactivas aquí
 
           serviceId: v.product.serviceId,
           optionId: optionId, // usar option resuelta por minutos si el producto no fija una
@@ -154,7 +154,7 @@ export async function POST(req: Request) {
           totalPriceCents: 0,
           depositCents: 0,
 
-          // âœ… Cliente (copia PRO)
+          // Cliente (copia PRO)
           customerName: (v.buyerName?.trim() ? v.buyerName.trim() : "Bono"),
           customerCountry: (v.customerCountry?.trim() ? v.customerCountry.trim().toUpperCase() : "ES"),
 
@@ -171,7 +171,7 @@ export async function POST(req: Request) {
         select: { id: true },
       });
 
-      // 3) item real a 0â‚¬
+      // 3) item real a 0 EUR
       await tx.reservationItem.create({
         data: {
           reservationId: reservation.id,

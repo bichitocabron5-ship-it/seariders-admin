@@ -2,8 +2,11 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import Select from "react-select";
-import { getCountryOptionsEs, type CountryOption } from "@/lib/countries";
+import { getCountryOptionsEs } from "@/lib/countries";
+import { opsStyles } from "@/components/ops-ui";
+import BoothPreReservationFormSection from "./_components/BoothPreReservationFormSection";
+import BoothPreReservationsSection from "./_components/BoothPreReservationsSection";
+import BoothTripsSection from "./_components/BoothTripsSection";
 
 type Service = { id: string; name: string; category: string; code?: string | null };
 type Option = { id: string; serviceId: string; durationMinutes: number; paxMax: number; basePriceCents: number };
@@ -92,7 +95,7 @@ function getTaxiboatWaitMeta(assignedAt?: string | null, departedAt?: string | n
     fg: isCritical ? "#b91c1c" : isWarn ? "#92400e" : "#0f766e",
     bd: isCritical ? "#fecaca" : isWarn ? "#fde68a" : "#bae6fd",
     label: isCritical
-      ? `ALERTA CRITICA (${TAXIBOAT_QUEUE_CRITICAL_MINUTES}+ min)`
+      ? `ALERTA CRÍTICA (${TAXIBOAT_QUEUE_CRITICAL_MINUTES}+ min)`
       : isWarn
         ? `Alerta de espera (${TAXIBOAT_QUEUE_WARN_MINUTES}+ min)`
         : `Espera ${msToClock(waitMs)}`,
@@ -125,7 +128,7 @@ function getTaxiboatReturnMeta(
     const elapsedMs = Math.max(0, (nowMs ?? Date.now()) - departedMs);
     return {
       statusLabel: "EN CAMINO",
-      detail: `Salio de platform hace ${msToClock(elapsedMs)}`,
+      detail: `Salió de Platform hace ${msToClock(elapsedMs)}`,
       bg: "#fffbeb",
       fg: "#92400e",
       bd: "#fde68a",
@@ -141,7 +144,7 @@ function getTaxiboatReturnMeta(
 
   return {
     statusLabel: "EN PLATAFORMA",
-    detail: `Disponible en platform desde ${arrivedLabel}`,
+    detail: `Disponible en Platform desde ${arrivedLabel}`,
     bg: "#ecfeff",
     fg: "#155e75",
     bd: "#a5f3fc",
@@ -204,7 +207,7 @@ export default function Booth() {
   const [channelId, setChannelId] = useState<string>(""); // opcional
   const [category, setCategory] = useState<string>("");
 
-// categorias disponibles (desde services)
+// categorías disponibles (desde services)
 const categories = useMemo(() => {
   const set = new Set<string>();
   for (const s of services) {
@@ -223,7 +226,7 @@ const CashClosedBanner = () =>
   ) : null;
 
 
-// servicios filtrados por categoria
+// servicios filtrados por categoría
 const servicesFiltered = useMemo(() => {
   if (!category) return services;
   return services.filter((s) => s.category === category);
@@ -251,7 +254,7 @@ const selectedCountryOpt = useMemo(() => {
 
 const isJetski = useMemo(() => {
   const key = normalize(selectedService?.code ?? selectedService?.name ?? "");
-  // Ajusta los hints a tus codigos/nombres reales
+  // Ajusta los hints a tus códigos/nombres reales
   return key.includes("jetski") || key.includes("jet") || key.includes("moto");
 }, [selectedService]);
 
@@ -545,18 +548,18 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
   }
 }
 
-  const shellStyle: React.CSSProperties = { padding: 24, fontFamily: "system-ui", maxWidth: 1380, margin: "0 auto", display: "grid", gap: 18 };
-  const cardStyle: React.CSSProperties = { padding: 20, border: "1px solid #dbe4ea", borderRadius: 24, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)" };
-  const fieldStyle: React.CSSProperties = { width: "100%", padding: 12, borderRadius: 14, border: "1px solid #d0d9e4", background: "#fff" };
-  const ghostBtn: React.CSSProperties = { padding: "10px 14px", fontWeight: 900, border: "1px solid #d0d9e4", borderRadius: 12, background: "#fff", textDecoration: "none", color: "#111" };
-  const darkBtn: React.CSSProperties = { padding: "10px 14px", fontWeight: 900, border: "1px solid #111", borderRadius: 12, background: "#111", color: "#fff" };
-  const metricCard: React.CSSProperties = { border: "1px solid #dbe4ea", borderRadius: 18, padding: 14, background: "#fff", display: "grid", gap: 4 };
+  const shellStyle: React.CSSProperties = { ...opsStyles.pageShell, width: "min(1380px, 100%)" };
+  const cardStyle: React.CSSProperties = { ...opsStyles.sectionCard, padding: 20 };
+  const fieldStyle: React.CSSProperties = opsStyles.field;
+  const ghostBtn: React.CSSProperties = opsStyles.ghostButton;
+  const darkBtn: React.CSSProperties = opsStyles.primaryButton;
+  const metricCard: React.CSSProperties = opsStyles.metricCard;
 
   return (
     <div style={shellStyle}>
       <section
         style={{
-          ...cardStyle,
+          ...opsStyles.heroCard,
           background:
             "radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 30%), radial-gradient(circle at right bottom, rgba(45, 212, 191, 0.12), transparent 28%), linear-gradient(135deg, #082f49 0%, #0f766e 55%, #052e2b 100%)",
           color: "#ecfeff",
@@ -569,29 +572,29 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#99f6e4" }}>
               Operativa de carpa
             </div>
-            <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.02, color: "#fff" }}>Booth</h1>
+            <h1 style={opsStyles.heroTitle}>Booth</h1>
             <div style={{ fontSize: 14, color: "#ccfbf1" }}>
               Pre-reservas, cobro parcial, agrupación por taxiboat y control de caja del punto en una sola vista.
             </div>
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ ...opsStyles.actionGrid, width: "min(100%, 380px)" }}>
             <a href="/booth/cash-closures" style={{ ...ghostBtn, background: "rgba(255,255,255,0.9)" }}>
               Cierre de caja
             </a>
-            <button onClick={load} style={{ ...darkBtn, border: "1px solid rgba(255,255,255,0.24)", background: "#0f172a" }}>
+            <button onClick={load} style={{ ...darkBtn, border: "1px solid rgba(255,255,255,0.24)", background: "#0f172a", width: "100%" }}>
               Refrescar
             </button>
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ padding: "6px 12px", borderRadius: 999, border: "1px solid rgba(153, 246, 228, 0.35)", background: "rgba(15, 23, 42, 0.24)", fontWeight: 900 }}>
+          <span style={opsStyles.heroPill}>
             Reservas hoy: {rows.length}
           </span>
-          <span style={{ padding: "6px 12px", borderRadius: 999, border: "1px solid rgba(153, 246, 228, 0.35)", background: "rgba(15, 23, 42, 0.24)", fontWeight: 900 }}>
+          <span style={opsStyles.heroPill}>
             Viajes OPEN: {openTrips}
           </span>
-          <span style={{ padding: "6px 12px", borderRadius: 999, border: "1px solid rgba(153, 246, 228, 0.35)", background: "rgba(15, 23, 42, 0.24)", fontWeight: 900 }}>
+          <span style={opsStyles.heroPill}>
             Caja: {isCashClosed ? "Cerrada" : "Abierta"}
           </span>
         </div>
@@ -635,132 +638,94 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
         </section>
       ) : null}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 18, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 18, alignItems: "start" }}>
         <div style={{ display: "grid", gap: 16 }}>
-          <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 22 }}>Pre-reserva</h2>
-              <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>Alta rápida para carpa con precio, descuento y canal.</div>
-            </div>
-            <form onSubmit={createPre} style={{ display: "grid", gap: 12 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <label>Nombre<input value={firstName} onChange={(e) => setFirstName(e.target.value)} required style={fieldStyle} /></label>
-                <label>Apellidos<input value={lastName} onChange={(e) => setLastName(e.target.value)} required style={fieldStyle} /></label>
-              </div>
-              <div style={{ display: "grid", gap: 6 }}>
-                <div>País</div>
-                <Select<CountryOption, false>
-                  instanceId="booth-country"
-                  inputId="booth-country"
-                  options={countryOptions}
-                  value={selectedCountryOpt}
-                  onChange={(opt) => setCustomerCountry((opt?.value ?? "").toUpperCase())}
-                  placeholder="Escribe para buscar..."
-                />
-              </div>
-              <label>Categoría<select value={category} onChange={(e) => { const next = e.target.value; setCategory(next); const list = next ? services.filter((s) => s.category === next) : services; const s0 = list[0] ?? null; setServiceId(s0?.id ?? ""); const o0 = options.find((o) => o.serviceId === (s0?.id ?? "")) ?? null; setOptionId(o0?.id ?? ""); }} style={fieldStyle}><option value="">(todas)</option>{categories.map((c) => <option key={c} value={c}>{c}</option>)}</select></label>
-              <label>Servicio<select value={serviceId} onChange={(e) => setServiceId(e.target.value)} style={fieldStyle}>{servicesFiltered.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-              <label>Duración<select value={optionId} onChange={(e) => setOptionId(e.target.value)} style={fieldStyle}>{optionsForService.map((o) => <option key={o.id} value={o.id}>{o.durationMinutes} min · máx {o.paxMax} pax · {euros(o.basePriceCents)}</option>)}</select></label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <label>Cantidad (motos)<input type="number" min={1} max={4} value={quantity} disabled={!isJetski} onChange={(e) => setQuantity(Number(e.target.value))} style={fieldStyle} /></label>
-                <label>PAX<input type="number" min={1} max={20} value={pax} onChange={(e) => setPax(Number(e.target.value))} style={fieldStyle} /></label>
-              </div>
-              <label>Descuento opcional (EUR)<input value={discountEuros} onChange={(e) => setDiscountEuros(e.target.value)} placeholder="0" style={fieldStyle} /></label>
-              <div style={{ fontSize: 12, opacity: 0.85 }}>Máx descuento manual: <b>{euros(maxManualDiscountCents)}</b> (30% sobre {euros(baseTotalCents)}){discountCentsRaw > maxManualDiscountCents ? <span style={{ marginLeft: 8, color: "#b91c1c" }}>limitado a {euros(maxManualDiscountCents)}</span> : null}</div>
-              <label>Canal opcional<select value={channelId} onChange={(e) => setChannelId(e.target.value)} style={fieldStyle}><option value="">(ninguno)</option>{channels.map((ch) => <option key={ch.id} value={ch.id}>{ch.name}</option>)}</select></label>
-              <button type="submit" style={darkBtn}>Crear y generar código</button>
-            </form>
-          </section>
+          <BoothPreReservationFormSection
+            cardStyle={cardStyle}
+            darkBtn={darkBtn}
+            fieldStyle={fieldStyle}
+            firstName={firstName}
+            lastName={lastName}
+            customerCountry={customerCountry}
+            serviceId={serviceId}
+            optionId={optionId}
+            quantity={quantity}
+            pax={pax}
+            channelId={channelId}
+            category={category}
+            categories={categories}
+            services={services}
+            servicesFiltered={servicesFiltered}
+            options={options}
+            optionsForService={optionsForService}
+            channels={channels}
+            selectedCountryOpt={selectedCountryOpt}
+            countryOptions={countryOptions}
+            isJetski={isJetski}
+            discountEuros={discountEuros}
+            maxManualDiscountCents={maxManualDiscountCents}
+            baseTotalCents={baseTotalCents}
+            discountCentsRaw={discountCentsRaw}
+            euros={euros}
+            onSubmit={createPre}
+            setFirstName={setFirstName}
+            setLastName={setLastName}
+            setCustomerCountry={setCustomerCountry}
+            setServiceId={setServiceId}
+            setOptionId={setOptionId}
+            setQuantity={setQuantity}
+            setPax={setPax}
+            setChannelId={setChannelId}
+            setCategory={setCategory}
+            setDiscountEuros={setDiscountEuros}
+          />
 
-          <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 22 }}>Pre-reservas de hoy</h2>
-              <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>Pendientes de asignación a viaje y cobro parcial antes de salir.</div>
-            </div>
-            <div style={{ display: "grid", gap: 10 }}>
-              {preReservationRows.map((r) => {
-                const received = !!r.arrivedStoreAt;
-                const assigned = !!r.taxiboatTripId;
-                const departed = !!r.taxiboatDepartedAt;
-                const preparing = assigned && !departed && !received;
-                const enCamino = assigned && departed && !received;
-                const waitMeta = getTaxiboatWaitMeta(r.taxiboatAssignedAt, r.taxiboatDepartedAt, r.arrivedStoreAt, nowMs);
-                const label = received ? "RECIBIDO" : enCamino ? "EN CAMINO" : preparing ? "PREPARANDO" : "";
-                const bg = received ? "#dcfce7" : enCamino ? "#fef9c3" : preparing ? "#e0f2fe" : "transparent";
-                return <div key={r.id} style={{ padding: 16, border: "1px solid #e5e7eb", borderRadius: 18, background: "#fff", boxShadow: "0 10px 24px rgba(15, 23, 42, 0.04)" }}><div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}><strong>{r.customerName}</strong><span style={{ fontWeight: 800 }}>{r.boothCode}</span></div><div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>{formatReservationLine(r, { showCountry: true })}</div><div style={{ marginTop: 8, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}><div style={{ fontSize: 13 }}>Total: <strong>{euros(r.totalPriceCents ?? 0)}</strong></div><div style={{ fontSize: 13, opacity: 0.85 }}>Pagado: <strong>{euros(r.paidCents ?? 0)}</strong></div><div style={{ fontSize: 13, opacity: 0.85 }}>Pendiente: <strong>{euros(r.pendingCents ?? 0)}</strong></div></div>
-                {waitMeta ? <div style={{ marginTop: 8, display: "inline-flex", gap: 8, alignItems: "center", padding: "6px 10px", borderRadius: 999, border: `1px solid ${waitMeta.bd}`, background: waitMeta.bg, color: waitMeta.fg, fontSize: 12, fontWeight: 900 }}>{waitMeta.label}</div> : null}
-                {!received && activeTripId ? <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>{!assigned ? <button onClick={() => assignToActiveTrip(r.id)} style={darkBtn}>Añadir al viaje</button> : <span style={{ padding: "4px 8px", borderRadius: 999, background: "#e0f2fe" }}>Asignado a viaje</span>}<div style={{ fontSize: 12, opacity: 0.75 }}>Viaje activo: {activeTripLabel || activeTripId}</div></div> : null}
-                {!received && (r.pendingCents ?? 0) > 0 ? <div style={{ marginTop: 10, display: "grid", gap: 10 }}><div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}><input disabled={isCashClosed} placeholder="Importe EUR (1)" value={getSplit(r.id)[0].amount} onChange={(e) => setSplitLine(r.id, 0, { amount: e.target.value })} style={{ ...fieldStyle, width: 160 }} /><select disabled={isCashClosed} value={getSplit(r.id)[0].method} onChange={(e) => setSplitLine(r.id, 0, { method: e.target.value as PayMethod })} style={{ ...fieldStyle, width: 180 }}><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="BIZUM">Bizum</option><option value="TRANSFER">Transfer</option></select></div><div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}><input disabled={isCashClosed} placeholder="Importe EUR (2)" value={getSplit(r.id)[1].amount} onChange={(e) => setSplitLine(r.id, 1, { amount: e.target.value })} style={{ ...fieldStyle, width: 160 }} /><select disabled={isCashClosed} value={getSplit(r.id)[1].method} onChange={(e) => setSplitLine(r.id, 1, { method: e.target.value as PayMethod })} style={{ ...fieldStyle, width: 180 }}><option value="CASH">Efectivo</option><option value="CARD">Tarjeta</option><option value="BIZUM">Bizum</option><option value="TRANSFER">Transfer</option></select><button onClick={() => paySplitNow(r.id, r.pendingCents ?? 0)} disabled={payingId === r.id || isCashClosed} style={{ ...darkBtn, opacity: payingId === r.id || isCashClosed ? 0.5 : 1, cursor: isCashClosed ? "not-allowed" : "pointer" }}>{isCashClosed ? "Caja cerrada" : payingId === r.id ? "Cobrando..." : "Cobrar (split)"}</button></div><div style={{ fontSize: 12, opacity: 0.7 }}>Pendiente: <strong>{euros(r.pendingCents ?? 0)}</strong> · Se pueden usar 1 o 2 líneas.</div></div> : null}
-                <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>{label ? <span style={{ padding: "4px 8px", borderRadius: 999, background: bg, fontSize: 12 }}>{label}</span> : <span />}</div></div>;
-              })}
-              {preReservationRows.length === 0 ? <div style={{ opacity: 0.7 }}>No hay pre-reservas pendientes de asignación.</div> : null}
-            </div>
-          </section>
+          <BoothPreReservationsSection
+            cardStyle={cardStyle}
+            darkBtn={darkBtn}
+            fieldStyle={fieldStyle}
+            preReservationRows={preReservationRows}
+            activeTripId={activeTripId}
+            activeTripLabel={activeTripLabel}
+            payingId={payingId}
+            isCashClosed={isCashClosed}
+            getSplit={getSplit}
+            setSplitLine={setSplitLine}
+            assignToActiveTrip={assignToActiveTrip}
+            paySplitNow={paySplitNow}
+            euros={euros}
+            formatReservationLine={formatReservationLine}
+            getWaitMeta={(reservation) =>
+              getTaxiboatWaitMeta(
+                reservation.taxiboatAssignedAt,
+                reservation.taxiboatDepartedAt,
+                reservation.arrivedStoreAt,
+                nowMs
+              )
+            }
+          />
         </div>
 
-        <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
-          <div>
-            <div style={{ fontWeight: 900, fontSize: 22 }}>Taxiboat · Viajes</div>
-            <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>Crea, prepara y despacha viajes del día. El retorno desde Platform se muestra por barco.</div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-            {(["TAXIBOAT_1", "TAXIBOAT_2"] as const).map((boat) => {
-              const op = taxiboatOpsByBoat.get(boat);
-              const meta = op ? getTaxiboatReturnMeta(op, nowMs) : null;
-
-              return (
-                <div
-                  key={boat}
-                  style={{
-                    border: `1px solid ${meta?.bd ?? "#e5e7eb"}`,
-                    background: meta?.bg ?? "#fff",
-                    borderRadius: 16,
-                    padding: 14,
-                    display: "grid",
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                    <div style={{ fontWeight: 900 }}>{boatLabel(boat)}</div>
-                    <span
-                      style={{
-                        padding: "4px 8px",
-                        borderRadius: 999,
-                        border: `1px solid ${meta?.bd ?? "#e5e7eb"}`,
-                        background: "#fff",
-                        color: meta?.fg ?? "#475569",
-                        fontSize: 12,
-                        fontWeight: 900,
-                      }}
-                    >
-                      {meta?.statusLabel ?? "SIN DATO"}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 13, color: meta?.fg ?? "#475569", fontWeight: 800 }}>
-                    {meta?.detail ?? "Sin estado operativo todavía."}
-                  </div>
-                  {op?.status === "TO_BOOTH" ? (
-                    <button
-                      type="button"
-                      onClick={() => void markArrivedBooth(boat)}
-                      style={darkBtn}
-                    >
-                      Marcar llegada a Booth
-                    </button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, alignItems: "end" }}>
-            <select value={activeBoat} onChange={(e) => setActiveBoat(e.target.value as "TAXIBOAT_1" | "TAXIBOAT_2")} style={fieldStyle}><option value="TAXIBOAT_1">Taxiboat 1</option><option value="TAXIBOAT_2">Taxiboat 2</option></select>
-            <button onClick={createTrip} style={darkBtn}>Crear viaje</button>
-            <select value={activeTripId} onChange={(e) => setActiveTripId(e.target.value)} style={{ ...fieldStyle, minWidth: 260 }}><option value="">(selecciona viaje OPEN)</option>{trips.map((t) => <option key={t.id} value={t.id}>{boatLabel(t.boat)}{t.tripNo ? ` · Viaje ${t.tripNo}` : ""} · {t.status} · PAX {t.paxTotal}</option>)}</select>
-          </div>
-          <div style={{ display: "grid", gap: 10 }}>
-            {trips.map((t) => <div key={t.id} style={{ padding: 14, border: "1px solid #e5e7eb", borderRadius: 16, background: "#fff" }}><div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}><div style={{ fontWeight: 900 }}>{boatLabel(t.boat)} · Viaje {t.tripNo} · PAX {t.paxTotal}</div>{t.status === "OPEN" ? <button onClick={() => departTrip(t.id)} style={ghostBtn}>Marcar salida</button> : <div style={{ fontSize: 12, opacity: 0.75 }}>Salió: {t.departedAt ? new Date(t.departedAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "-"}</div>}</div><div style={{ marginTop: 10, display: "grid", gap: 8 }}>{(t.reservations ?? []).map((r) => { const grouped = !!r.taxiboatAssignedAt && !t.departedAt && !r.arrivedStoreAt; const enCamino = !!t.departedAt && !r.arrivedStoreAt; const received = !!r.arrivedStoreAt; const waitMeta = getTaxiboatWaitMeta(r.taxiboatAssignedAt, t.departedAt ?? r.taxiboatDepartedAt, r.arrivedStoreAt, nowMs); const label = received ? "RECIBIDO" : enCamino ? "EN CAMINO" : grouped ? "AGRUPADO" : "PREPARANDO"; const bg = received ? "#dcfce7" : enCamino ? "#fef9c3" : grouped ? "#e0f2fe" : "#f3f4f6"; return <div key={r.id} style={{ padding: 10, border: "1px solid #eee", borderRadius: 12 }}><div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}><div style={{ fontWeight: 800 }}>{r.customerName} · <span style={{ fontWeight: 900 }}>{r.boothCode}</span></div><span style={{ padding: "2px 8px", borderRadius: 999, background: bg, fontSize: 12 }}>{label}</span></div><div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>{formatReservationLine(r, { showCountry: true })}</div>{waitMeta ? <div style={{ marginTop: 8, display: "inline-flex", gap: 8, alignItems: "center", padding: "6px 10px", borderRadius: 999, border: `1px solid ${waitMeta.bd}`, background: waitMeta.bg, color: waitMeta.fg, fontSize: 12, fontWeight: 900 }}>{waitMeta.label}</div> : null}</div>; })}{(t.reservations ?? []).length === 0 ? <div style={{ opacity: 0.7 }}>Sin reservas asignadas.</div> : null}</div></div>)}
-          </div>
-        </section>
+        <BoothTripsSection
+          cardStyle={cardStyle}
+          darkBtn={darkBtn}
+          ghostBtn={ghostBtn}
+          fieldStyle={fieldStyle}
+          activeBoat={activeBoat}
+          activeTripId={activeTripId}
+          trips={trips}
+          taxiboatOpsByBoat={taxiboatOpsByBoat}
+          nowMs={nowMs}
+          setActiveBoat={setActiveBoat}
+          setActiveTripId={setActiveTripId}
+          createTrip={createTrip}
+          departTrip={departTrip}
+          markArrivedBooth={markArrivedBooth}
+          boatLabel={boatLabel}
+          formatReservationLine={formatReservationLine}
+          getTaxiboatReturnMeta={getTaxiboatReturnMeta}
+          getTaxiboatWaitMeta={getTaxiboatWaitMeta}
+        />
       </div>
     </div>
   );

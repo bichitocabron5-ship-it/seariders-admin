@@ -2,6 +2,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
+import { StoreHero, StoreMetricCard, StoreMetricGrid, storeStyles } from "@/components/store-ui";
 
 type LiteRow = {
   id: string;
@@ -173,39 +175,17 @@ function statusBadgeStyle(status: string): React.CSSProperties {
   return { background: "#f3f4f6", color: "#111827", border: "1px solid #e5e7eb" };
 }
 
-const shellStyle: React.CSSProperties = { padding: 24, maxWidth: 1380, margin: "0 auto", display: "grid", gap: 18 };
-const panelStyle: React.CSSProperties = { border: "1px solid #dbe4ea", borderRadius: 22, background: "#fff", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)" };
-const actionStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "10px 14px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", color: "#111827", fontWeight: 800, textDecoration: "none" };
-const heroPillStyle: React.CSSProperties = {
-  padding: "6px 12px",
-  borderRadius: 999,
-  border: "1px solid rgba(125, 211, 252, 0.35)",
-  background: "rgba(15, 23, 42, 0.24)",
-  color: "#fff",
-  fontWeight: 900,
-  fontSize: 12,
+const shellStyle: React.CSSProperties = { ...storeStyles.shell, width: "min(1380px, 100%)" };
+const panelStyle: React.CSSProperties = { ...storeStyles.panel, borderRadius: 22 };
+const actionStyle: React.CSSProperties = {
+  ...storeStyles.secondaryButton,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "10px 14px",
+  textDecoration: "none",
 };
-const metricCardStyle: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 18,
-  padding: 14,
-  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-  display: "grid",
-  gap: 4,
-};
-const metricLabelStyle: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 900,
-  color: "#64748b",
-  textTransform: "uppercase",
-  letterSpacing: "0.04em",
-};
-const metricValueStyle: React.CSSProperties = {
-  fontSize: 24,
-  fontWeight: 950,
-  color: "#0f172a",
-};
-
+const heroPillStyle: React.CSSProperties = { ...opsStyles.heroPill, background: "rgba(15, 23, 42, 0.24)", color: "#fff" };
 function RowCard({
   r,
   onCancel,
@@ -418,55 +398,33 @@ export default function StoreCalendarPage() {
 
   return (
     <div style={shellStyle}>
-      <section
-        style={{
-          ...panelStyle,
-          padding: 24,
-          display: "grid",
-          gap: 18,
-          background:
-            "radial-gradient(circle at top left, rgba(125, 211, 252, 0.22), transparent 28%), radial-gradient(circle at right bottom, rgba(15, 118, 110, 0.14), transparent 24%), linear-gradient(135deg, #0f172a 0%, #0f766e 55%, #082f49 100%)",
-          color: "#e0f2fe",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
-          <div style={{ display: "grid", gap: 8, maxWidth: 760 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#7dd3fc" }}>Store</div>
-            <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.02, color: "#fff" }}>Calendario</h1>
-            <div style={{ color: "#bae6fd" }}>Vista mensual de reservas con acceso directo a edición, apertura y formalización.</div>
-          </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <StoreHero
+        title="Calendario"
+        description="Vista mensual de reservas con acceso directo a edición, apertura y formalización."
+        titleColor="#fff"
+        eyebrowColor="#7dd3fc"
+        background="radial-gradient(circle at top left, rgba(125, 211, 252, 0.22), transparent 28%), radial-gradient(circle at right bottom, rgba(15, 118, 110, 0.14), transparent 24%), linear-gradient(135deg, #0f172a 0%, #0f766e 55%, #082f49 100%)"
+        actions={
+          <>
             <a href="/store" style={{ ...actionStyle, background: "rgba(255,255,255,0.92)" }}>Volver a tienda</a>
             <button onClick={load} disabled={loading} style={{ ...actionStyle, border: "1px solid rgba(255,255,255,0.24)", background: "#0f172a", color: "#fff" }}>{loading ? "Cargando..." : "Refrescar"}</button>
-          </div>
-        </div>
-
+          </>
+        }
+      >
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <span style={heroPillStyle}>Mes: {monthTitle(monthDate)}</span>
           <span style={heroPillStyle}>Reservas: {monthReservations}</span>
           <span style={heroPillStyle}>Pendientes: {monthPending}</span>
           <span style={heroPillStyle}>Día seleccionado: {selectedDay || "Ninguno"}</span>
         </div>
-      </section>
+      </StoreHero>
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-        <article style={metricCardStyle}>
-          <div style={metricLabelStyle}>Reservas del mes</div>
-          <div style={metricValueStyle}>{monthReservations}</div>
-        </article>
-        <article style={metricCardStyle}>
-          <div style={metricLabelStyle}>Pendientes</div>
-          <div style={metricValueStyle}>{monthPending}</div>
-        </article>
-        <article style={metricCardStyle}>
-          <div style={metricLabelStyle}>Operativas del día</div>
-          <div style={metricValueStyle}>{selectedGroups.ops.length}</div>
-        </article>
-        <article style={metricCardStyle}>
-          <div style={metricLabelStyle}>Históricas del día</div>
-          <div style={metricValueStyle}>{selectedGroups.hist.length}</div>
-        </article>
-      </section>
+      <StoreMetricGrid>
+        <StoreMetricCard label="Reservas del mes" value={monthReservations} />
+        <StoreMetricCard label="Pendientes" value={monthPending} />
+        <StoreMetricCard label="Operativas del día" value={selectedGroups.ops.length} />
+        <StoreMetricCard label="Históricas del día" value={selectedGroups.hist.length} />
+      </StoreMetricGrid>
 
       {err ? <div style={{ padding: 12, borderRadius: 14, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 700 }}>{err}</div> : null}
 

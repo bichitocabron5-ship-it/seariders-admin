@@ -15,7 +15,7 @@ const CreateBody = z.object({
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(-9999).max(9999).optional(),
 
-  // flags (solo si existen en tu Prisma; si alguno no existe, bÃ³rralo del schema y del select)
+  // flags (solo si existen en tu Prisma; si alguno no existe, bórralo del schema y del select)
   requiresPlatform: z.boolean().optional(),
   requiresJetski: z.boolean().optional(),
   requiresMonitor: z.boolean().optional(),
@@ -27,7 +27,7 @@ function makeServiceCode(name: string) {
   return name
     .trim()
     .toUpperCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "_") // letras/nÃºmeros -> _
+    .replace(/[^\p{L}\p{N}]+/gu, "_") // letras/números -> _
     .replace(/^_+|_+$/g, "")
     .slice(0, 40); // por si quieres limitar
 }
@@ -53,7 +53,7 @@ export async function GET() {
       category: true,
       isActive: true,
 
-      // âš ï¸ quita los que no existan en tu modelo
+      // quita los que no existan en tu modelo
       requiresPlatform: true,
       requiresJetski: true,
       requiresMonitor: true,
@@ -70,16 +70,16 @@ export async function POST(req: Request) {
 
   const json = await req.json().catch(() => null);
   const parsed = CreateBody.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 if (parsed.data.category === "EXTRA") {
-  // Extras: sin reglas â€œoperativasâ€ (si quieres, fuerza todo a false)
+  // Extras: sin reglas "operativas" (si quieres, fuerza todo a false)
   // y cualquier maxPax/sortOrder si no los usas, lo ignoras.
 }
 
 const baseCode = makeServiceCode(parsed.data.name);
 let code = baseCode || `SVC_${Date.now()}`;
 
-// si ya existe, le aÃ±adimos sufijo incremental
+// si ya existe, le añadimos sufijo incremental
 for (let i = 2; i < 50; i++) {
   const exists = await prisma.service.findUnique({ where: { code }, select: { id: true } });
   if (!exists) break;
@@ -87,7 +87,7 @@ for (let i = 2; i < 50; i++) {
 }
   
   const createData: Prisma.ServiceCreateInput = {
-    code, // âœ… imprescindible
+    code, // imprescindible
     name: parsed.data.name,
     category: parsed.data.category,
     isActive: parsed.data.isActive ?? true,

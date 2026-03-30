@@ -46,11 +46,11 @@ const Body = z.object({
   manualDiscountCents: z.number().int().min(0).max(1_000_000).optional(),
   manualDiscountReason: z.string().max(200).nullable().optional(),
 
-  // âœ… Siempre items (carrito / pack / normal)
+  // Siempre items (carrito / pack / normal)
   items: z.array(
     z.object({
       serviceId: z.string().min(1), // id o code si quieres, pero ahora mismo es id
-      optionId: z.string().min(1),  // id o code si quieres, pero ahora mismo es id
+      optionId: z.string().min(1), // id o code si quieres, pero ahora mismo es id
       quantity: z.number().int().min(1).max(99),
       pax: z.number().int().min(1).max(50),
     })
@@ -60,7 +60,7 @@ const Body = z.object({
   packId: z.string().min(1).nullable().optional(),
   companionsCount: z.number().int().min(0).max(20).optional(),
 
-  // âœ… Para multi-item (packs y futuro carrito real)
+  // Para multi-item (packs y futuro carrito real)
   totalBeforeDiscountsCents: z.number().int().min(0).max(50_000_000).optional(),
 });
 
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
 
     const json = await req.json().catch(() => null);
     const parsed = Body.safeParse(json);
-    if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+    if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
     const b = parsed.data;
 

@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   const codeRaw = searchParams.get("code");
 
   if (!codeRaw || codeRaw.trim().length < 3) {
-    return new NextResponse("CÃ³digo invÃ¡lido", { status: 400 });
+    return new NextResponse("Código inválido", { status: 400 });
   }
 
   const code = codeRaw.trim().toUpperCase();
@@ -62,7 +62,7 @@ export async function GET(req: Request) {
     });
 
     if (!voucher) {
-      return new NextResponse("CÃ³digo no existe", { status: 404 });
+      return new NextResponse("Código no existe", { status: 404 });
     }
 
     const now = new Date();

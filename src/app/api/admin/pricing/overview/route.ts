@@ -38,7 +38,7 @@ export async function GET() {
 
   // Normalizamos "durations" por servicio:
   // - EXTRAs: [null]
-  // - resto: duraciones Ãºnicas de ServiceOption
+  // - resto: duraciones únicas de ServiceOption
   const normalized = services.map((s) => {
     const durationSet = new Set<number>();
     for (const o of s.options) durationSet.add(o.durationMinutes);
@@ -48,7 +48,7 @@ export async function GET() {
         ? [null]
         : Array.from(durationSet).sort((a, b) => a - b);
 
-    // Mapa de precio activo por duraciÃ³n
+    // Mapa de precio activo por duración
     const priceByDuration: Record<string, unknown> = {};
     for (const p of s.servicePrices) {
       const key = p.durationMin === null ? "null" : String(p.durationMin);

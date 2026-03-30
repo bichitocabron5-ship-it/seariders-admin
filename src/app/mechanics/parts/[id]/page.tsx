@@ -9,14 +9,7 @@ import ConsumePartModal from "../_components/ConsumePartModal";
 import AdjustPartModal from "../_components/AdjustPartModal";
 import type { PartRow } from "../_components/types";
 import PartHistoryModal from "../_components/PartHistoryModal";
-
-type MovementType =
-  | "PURCHASE"
-  | "CONSUMPTION"
-  | "ADJUSTMENT_IN"
-  | "ADJUSTMENT_OUT"
-  | "INITIAL_STOCK"
-  | "RETURN";
+import PartUsagePanels from "./_components/PartUsagePanels";
 
 type PartDetailResponse = {
   ok: true;
@@ -53,7 +46,7 @@ type PartDetail = {
   updatedAt: string;
   movements: Array<{
     id: string;
-    type: MovementType;
+    type: "PURCHASE" | "CONSUMPTION" | "ADJUSTMENT_IN" | "ADJUSTMENT_OUT" | "INITIAL_STOCK" | "RETURN";
     qty: number;
     unitCostCents: number | null;
     totalCostCents: number | null;
@@ -140,92 +133,6 @@ const primaryBtn: React.CSSProperties = {
 function eur(cents: number | null) {
   if (cents === null || cents === undefined) return "—";
   return `${(cents / 100).toFixed(2)} EUR`;
-}
-
-function fmtDateTime(iso: string | null) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString("es-ES", {
-      dateStyle: "short",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function movementLabel(type: MovementType) {
-  switch (type) {
-    case "PURCHASE":
-      return "Compra";
-    case "CONSUMPTION":
-      return "Consumo";
-    case "ADJUSTMENT_IN":
-      return "Ajuste +";
-    case "ADJUSTMENT_OUT":
-      return "Ajuste -";
-    case "INITIAL_STOCK":
-      return "Stock inicial";
-    case "RETURN":
-      return "Devolución";
-    default:
-      return type;
-  }
-}
-
-function movementStyle(type: MovementType): React.CSSProperties {
-  const base: React.CSSProperties = {
-    padding: "6px 10px",
-    borderRadius: 999,
-    fontWeight: 900,
-    fontSize: 12,
-    border: "1px solid #e5e7eb",
-  };
-
-  if (type === "PURCHASE" || type === "ADJUSTMENT_IN" || type === "INITIAL_STOCK" || type === "RETURN") {
-    return { ...base, borderColor: "#bbf7d0", background: "#f0fdf4", color: "#166534" };
-  }
-
-  if (type === "CONSUMPTION" || type === "ADJUSTMENT_OUT") {
-    return { ...base, borderColor: "#fecaca", background: "#fff1f2", color: "#b91c1c" };
-  }
-
-  return base;
-}
-
-function movementSign(type: MovementType) {
-  if (type === "PURCHASE" || type === "ADJUSTMENT_IN" || type === "INITIAL_STOCK" || type === "RETURN") {
-    return "+";
-  }
-  return "-";
-}
-
-function actorLabel(
-  user: { username: string | null; fullName: string | null; email: string | null } | null
-) {
-  if (!user) return "—";
-  return user.fullName || user.username || user.email || "—";
-}
-
-function usageEntityLabel(
-  maintenanceEvent:
-    | {
-        entityType: "JETSKI" | "ASSET";
-        jetski: { number: number } | null;
-        asset: { name: string; code: string | null } | null;
-      }
-    | null
-) {
-  if (!maintenanceEvent) return "—";
-  if (maintenanceEvent.entityType === "JETSKI") {
-    return maintenanceEvent.jetski ? `Jetski ${maintenanceEvent.jetski.number}` : "Jetski";
-  }
-  if (maintenanceEvent.asset) {
-    return maintenanceEvent.asset.code
-      ? `${maintenanceEvent.asset.name} (${maintenanceEvent.asset.code})`
-      : maintenanceEvent.asset.name;
-  }
-  return "Asset";
 }
 
 export default function MechanicsPartDetailPage() {
@@ -442,139 +349,7 @@ export default function MechanicsPartDetailPage() {
             <Kpi title="Activo" value={row.isActive ? "Sí" : "No"} />
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1.2fr 0.8fr",
-              gap: 16,
-              alignItems: "start",
-            }}
-          >
-            <div
-              style={{
-                ...softCard,
-                padding: 16,
-                display: "grid",
-                gap: 12,
-              }}
-            >
-              <div style={{ fontWeight: 950, fontSize: 20 }}>Historial de movimientos</div>
-
-              {row.movements.length === 0 ? (
-                <div style={{ opacity: 0.72 }}>Sin movimientos todavía.</div>
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {row.movements.map((m) => (
-                    <div
-                      key={m.id}
-                      style={{
-                        border: "1px solid #eee",
-                        borderRadius: 14,
-                        padding: 12,
-                        background: "#fafafa",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                          <div style={movementStyle(m.type)}>{movementLabel(m.type)}</div>
-                          <div style={{ fontWeight: 900 }}>
-                            {movementSign(m.type)}
-                            {m.qty}
-                          </div>
-                          {m.unitCostCents != null ? (
-                            <div style={{ opacity: 0.85 }}>Unitario: {eur(m.unitCostCents)}</div>
-                          ) : null}
-                          {m.totalCostCents != null ? (
-                            <div style={{ opacity: 0.85 }}>Total: {eur(m.totalCostCents)}</div>
-                          ) : null}
-                        </div>
-                        <div style={{ fontSize: 12, opacity: 0.75 }}>{fmtDateTime(m.createdAt)}</div>
-                      </div>
-
-                      <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>
-                        Usuario: <b>{actorLabel(m.createdByUser)}</b>
-                        {m.vendor ? ` · Proveedor movimiento: ${m.vendor.name}` : ""}
-                        {m.expense ? ` · Gasto: ${m.expense.status}` : ""}
-                        {m.maintenanceEvent
-                          ? ` · Evento: ${m.maintenanceEvent.type} · ${usageEntityLabel(m.maintenanceEvent)}`
-                          : ""}
-                      </div>
-
-                      {m.note ? (
-                        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.88 }}>
-                          Nota: {m.note}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: "grid", gap: 16 }}>
-              <div
-                style={{
-                  ...softCard,
-                  padding: 16,
-                  display: "grid",
-                  gap: 12,
-                }}
-              >
-                <div style={{ fontWeight: 950, fontSize: 20 }}>Ficha</div>
-
-                <Metric label="SKU" value={row.sku ?? "—"} />
-                <Metric label="Categoría" value={row.category ?? "—"} />
-                <Metric label="Marca" value={row.brand ?? "—"} />
-                <Metric label="Modelo" value={row.model ?? "—"} />
-                <Metric label="Unidad" value={row.unit ?? "—"} />
-                <Metric label="Proveedor" value={row.supplierName ?? "—"} />
-                <Metric label="Creado" value={fmtDateTime(row.createdAt)} />
-                <Metric label="Actualizado" value={fmtDateTime(row.updatedAt)} />
-              </div>
-
-              <div
-                style={{
-                  ...softCard,
-                  padding: 16,
-                  display: "grid",
-                  gap: 12,
-                }}
-              >
-                <div style={{ fontWeight: 950, fontSize: 20 }}>Uso en mantenimiento</div>
-
-                {row.maintenanceUsages.length === 0 ? (
-                  <div style={{ opacity: 0.72 }}>Este recambio todavía no tiene consumos registrados en eventos.</div>
-                ) : (
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {row.maintenanceUsages.map((u) => (
-                      <div
-                        key={u.id}
-                        style={{
-                          border: "1px solid #eee",
-                          borderRadius: 14,
-                          padding: 12,
-                          background: "#fafafa",
-                        }}
-                      >
-                        <div style={{ fontWeight: 900 }}>
-                          {usageEntityLabel(u.maintenanceEvent)} · {u.maintenanceEvent.type}
-                        </div>
-                        <div style={{ marginTop: 4, fontSize: 13, opacity: 0.9 }}>
-                          Cantidad: {u.qty}
-                          {u.unitCostCents != null ? ` · Unitario: ${eur(u.unitCostCents)}` : ""}
-                          {u.totalCostCents != null ? ` · Total: ${eur(u.totalCostCents)}` : ""}
-                        </div>
-                        <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75 }}>
-                          {fmtDateTime(u.createdAt)}
-                          {u.maintenanceEvent.faultCode ? ` · Código de avería: ${u.maintenanceEvent.faultCode}` : ""}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <PartUsagePanels row={row} />
         </>
       ) : null}
 
@@ -628,15 +403,6 @@ export default function MechanicsPartDetailPage() {
           onClose={() => setOpenHistory(false)}
         />
       ) : null}
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div>
-      <div style={{ fontSize: 12, opacity: 0.72 }}>{label}</div>
-      <div style={{ marginTop: 4, fontWeight: 900 }}>{value}</div>
     </div>
   );
 }

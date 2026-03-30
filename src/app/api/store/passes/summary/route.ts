@@ -84,7 +84,7 @@ export async function GET() {
   const tz = process.env.BUSINESS_TZ || "Europe/Madrid";
   const { start, endExclusive } = tzDayRangeUtc(tz, new Date());
 
-  // âœ… Pendientes: activos, no caducados, con minutos
+  // Pendientes: activos, no caducados, con minutos
   const pending = await prisma.passVoucher.findMany({
     where: {
       isVoided: false,
@@ -107,7 +107,7 @@ export async function GET() {
     },
   });
 
-  // âœ… Vendidos hoy (store)
+  // Vendidos hoy (store)
   const soldToday = await prisma.passVoucher.findMany({
     where: {
       origin: "STORE",

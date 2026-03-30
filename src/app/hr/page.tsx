@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
 
 type DashboardResponse = {
   ok: true;
@@ -85,37 +86,28 @@ type DashboardResponse = {
 };
 
 const pageShell: React.CSSProperties = {
-  maxWidth: 1360,
-  margin: "0 auto",
-  padding: 24,
+  ...opsStyles.pageShell,
+  width: "min(1360px, 100%)",
   display: "grid",
   gap: 16,
-  fontFamily: "system-ui",
 };
 
 const softCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.sectionCard,
   borderRadius: 20,
-  background: "#fff",
-  boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)",
 };
 
 const ghostBtn: React.CSSProperties = {
+  ...opsStyles.ghostButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #d0d9e4",
-  background: "#fff",
   fontWeight: 900,
   color: "#111",
   textDecoration: "none",
 };
 
 const primaryBtn: React.CSSProperties = {
+  ...opsStyles.primaryButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
   fontWeight: 950,
   textDecoration: "none",
 };
@@ -291,24 +283,22 @@ export default function HrHomePage() {
     <div style={pageShell}>
       <div
         style={{
-          ...softCard,
+          ...opsStyles.heroCard,
           padding: 16,
           background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 45%, #ecfeff 100%)",
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-          alignItems: "baseline",
+          display: "grid",
+          gap: 18,
         }}
       >
         <div>
-          <div style={{ fontWeight: 950, fontSize: 30 }}>RR. HH.</div>
+          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#0f766e" }}>HR</div>
+          <div style={{ ...opsStyles.heroTitle, fontSize: "clamp(2rem, 4vw, 3rem)" }}>RR. HH.</div>
           <div style={{ opacity: 0.72, fontSize: 13 }}>
             Operativa diaria, fichajes, horas y pagos
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={opsStyles.actionGrid}>
           <button type="button" onClick={() => load()} style={ghostBtn}>
             Refrescar
           </button>
@@ -589,7 +579,7 @@ function Kpi({
   return (
     <div
       style={{
-        ...softCard,
+        ...opsStyles.metricCard,
         border: danger ? "1px solid #fecaca" : "1px solid #dbe4ea",
         background: danger ? "linear-gradient(180deg, #fff1f2 0%, #ffffff 100%)" : "#fff",
         padding: 14,
@@ -624,9 +614,9 @@ function QuickLink({ href, label }: { href: string; label: string }) {
     <Link
       href={href}
       style={{
+        ...opsStyles.ghostButton,
         textDecoration: "none",
         color: "#111",
-        border: "1px solid #e5e7eb",
         background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
         borderRadius: 12,
         padding: "10px 12px",
