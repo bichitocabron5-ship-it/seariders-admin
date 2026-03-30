@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { opsStyles } from "@/components/ops-ui";
 import type { JetskiRow, JetskiStatus } from "../types";
 
 const JETSKI_STATUSES: JetskiStatus[] = ["OPERATIONAL", "OUT_OF_SERVICE", "RETIRED"];
@@ -86,7 +87,7 @@ export default function AdminJetskisPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={opsStyles.actionGrid}>
           <Link href="/admin" style={ghostBtn}>
             Volver a Admin
           </Link>
@@ -277,9 +278,8 @@ export default function AdminJetskisPage() {
 }
 
 const pageStyle: CSSProperties = {
-  maxWidth: 1200,
-  margin: "0 auto",
-  padding: 24,
+  ...opsStyles.pageShell,
+  width: "min(1200px, 100%)",
   display: "grid",
   gap: 14,
   background:
@@ -287,16 +287,12 @@ const pageStyle: CSSProperties = {
 };
 
 const heroStyle: CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.heroCard,
   borderRadius: 26,
   padding: 20,
   background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 48%, #eef2ff 100%)",
-  boxShadow: "0 20px 45px rgba(15, 23, 42, 0.08)",
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-end",
-  gap: 12,
-  flexWrap: "wrap",
+  display: "grid",
+  gap: 18,
 };
 
 const eyebrowStyle: CSSProperties = {
@@ -308,9 +304,9 @@ const eyebrowStyle: CSSProperties = {
 };
 
 const titleStyle: CSSProperties = {
-  fontSize: 34,
+  ...opsStyles.heroTitle,
+  fontSize: "clamp(2rem, 4vw, 3rem)",
   lineHeight: 1,
-  fontWeight: 950,
   color: "#0f172a",
 };
 
@@ -328,7 +324,7 @@ const summaryGrid: CSSProperties = {
 };
 
 const summaryCard: CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.metricCard,
   borderRadius: 16,
   padding: 12,
   background: "linear-gradient(180deg, #fff 0%, #f8fafc 100%)",
@@ -350,37 +346,28 @@ const summaryValue: CSSProperties = {
 };
 
 const panelStyle: CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.sectionCard,
   borderRadius: 18,
-  background: "#fff",
-  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.05)",
   padding: 12,
 };
 
 const ghostBtn: CSSProperties = {
+  ...opsStyles.ghostButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #dbe4ea",
-  background: "#fff",
   fontWeight: 900,
   textDecoration: "none",
   color: "#0f172a",
 };
 
 const ghostButtonElement: CSSProperties = {
+  ...opsStyles.ghostButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #dbe4ea",
-  background: "#fff",
   fontWeight: 900,
 };
 
 const darkBtn: CSSProperties = {
+  ...opsStyles.primaryButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
   fontWeight: 950,
 };
 

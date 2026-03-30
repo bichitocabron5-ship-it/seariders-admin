@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 type Ctx = { params: Promise<{ closureId: string }> };
 
 export async function POST(req: Request, { params }: Ctx) {
-  const { closureId } = await params; // âœ… importante en Next (params es Promise)
+  const { closureId } = await params; // importante en Next (params es Promise)
 
   if (!closureId) {
     return NextResponse.json({ error: "closureId requerido" }, { status: 400 });

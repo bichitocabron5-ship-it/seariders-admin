@@ -2,8 +2,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fmtDateTime, eurFromCents } from "@/lib/mechanics-format";
+import { fmtDateTime } from "@/lib/mechanics-format";
 import EditMaintenanceEventPartsModal from "./EditMaintenanceEventPartsModal";
+import EditMaintenanceEventFormSection from "./EditMaintenanceEventFormSection";
+import EditMaintenanceEventPartsHistorySection from "./EditMaintenanceEventPartsHistorySection";
 
 type MaintenanceStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "EXTERNAL" | "CANCELED";
 type MaintenanceSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -213,21 +215,6 @@ function ModalShell({
         {children}
       </div>
     </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-      {label}
-      {children}
-    </label>
   );
 }
 
@@ -533,275 +520,49 @@ export default function EditMaintenanceEventModal({
             </div>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 10,
-            }}
-          >
-            <Field label="Estado">
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as MaintenanceStatus)}
-                style={inputStyle}
-              >
-                <option value="OPEN">{statusLabel("OPEN")}</option>
-                <option value="IN_PROGRESS">{statusLabel("IN_PROGRESS")}</option>
-                <option value="RESOLVED">{statusLabel("RESOLVED")}</option>
-                <option value="EXTERNAL">{statusLabel("EXTERNAL")}</option>
-                <option value="CANCELED">{statusLabel("CANCELED")}</option>
-              </select>
-            </Field>
+          <EditMaintenanceEventFormSection
+            status={status}
+            severity={severity}
+            supplierName={supplierName}
+            resolvedAt={resolvedAt}
+            costCents={costCents}
+            laborCostCents={laborCostCents}
+            partsCostCents={partsCostCents}
+            faultCode={faultCode}
+            externalWorkshop={externalWorkshop}
+            affectsOperability={affectsOperability}
+            operabilityOnOpen={operabilityOnOpen}
+            operabilityOnResolved={operabilityOnResolved}
+            note={note}
+            inputStyle={inputStyle}
+            onStatusChange={setStatus}
+            onSeverityChange={setSeverity}
+            onSupplierNameChange={setSupplierName}
+            onResolvedAtChange={setResolvedAt}
+            onCostCentsChange={setCostCents}
+            onLaborCostCentsChange={setLaborCostCents}
+            onPartsCostCentsChange={setPartsCostCents}
+            onFaultCodeChange={(value) => setFaultCode(value.toUpperCase())}
+            onExternalWorkshopChange={setExternalWorkshop}
+            onAffectsOperabilityChange={setAffectsOperability}
+            onOperabilityOnOpenChange={setOperabilityOnOpen}
+            onOperabilityOnResolvedChange={setOperabilityOnResolved}
+            onNoteChange={setNote}
+            statusLabel={statusLabel}
+            severityLabel={severityLabel}
+          />
 
-            <Field label="Severidad">
-              <select
-                value={severity}
-                onChange={(e) => setSeverity(e.target.value as MaintenanceSeverity)}
-                style={inputStyle}
-              >
-                <option value="LOW">{severityLabel("LOW")}</option>
-                <option value="MEDIUM">{severityLabel("MEDIUM")}</option>
-                <option value="HIGH">{severityLabel("HIGH")}</option>
-                <option value="CRITICAL">{severityLabel("CRITICAL")}</option>
-              </select>
-            </Field>
-
-            <Field label="Proveedor / taller">
-              <input
-                value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
-                style={inputStyle}
-              />
-            </Field>
-
-            <Field label="Resuelto el">
-              <input
-                type="datetime-local"
-                value={resolvedAt}
-                onChange={(e) => setResolvedAt(e.target.value)}
-                style={inputStyle}
-              />
-            </Field>
-
-            <Field label="Coste total (céntimos)">
-              <input
-                value={costCents}
-                onChange={(e) => setCostCents(e.target.value)}
-                style={inputStyle}
-              />
-            </Field>
-
-            <Field label="Mano de obra (céntimos)">
-              <input
-                value={laborCostCents}
-                onChange={(e) => setLaborCostCents(e.target.value)}
-                style={inputStyle}
-              />
-            </Field>
-
-            <Field label="Piezas (céntimos)">
-              <input
-                value={partsCostCents}
-                onChange={(e) => setPartsCostCents(e.target.value)}
-                style={inputStyle}
-              />
-            </Field>
-
-            <Field label="Código de avería">
-              <input
-                value={faultCode}
-                onChange={(e) => setFaultCode(e.target.value.toUpperCase())}
-                style={inputStyle}
-              />
-            </Field>
-          </div>
-
-          <Field label="Taller externo">
-            <label style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 42 }}>
-              <input
-                type="checkbox"
-                checked={externalWorkshop}
-                onChange={(e) => setExternalWorkshop(e.target.checked)}
-              />
-              <span>Sí</span>
-            </label>
-          </Field>
-
-          <div
-            style={{
-              border: "1px solid #e5e7eb",
-              background: "#fafafa",
-              borderRadius: 12,
-              padding: 12,
-              display: "grid",
-              gap: 10,
-            }}
-          >
-            <div style={{ fontWeight: 900 }}>Operatividad en Plataforma</div>
-
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-              <input
-                type="checkbox"
-                checked={affectsOperability}
-                onChange={(e) => setAffectsOperability(e.target.checked)}
-              />
-              Este evento afecta a la operatividad de la unidad
-            </label>
-
-            {affectsOperability ? (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 10,
-                }}
-              >
-                <Field label="Estado al abrir/reabrir">
-                  <select
-                    value={operabilityOnOpen}
-                    onChange={(e) => setOperabilityOnOpen(e.target.value)}
-                    style={inputStyle}
-                  >
-                    <option value="">— Seleccionar —</option>
-                    <option value="MAINTENANCE">MAINTENANCE</option>
-                    <option value="DAMAGED">DAMAGED</option>
-                    <option value="OUT_OF_SERVICE">OUT_OF_SERVICE</option>
-                    <option value="OPERATIONAL">OPERATIONAL</option>
-                  </select>
-                </Field>
-
-                <Field label="Estado al resolver">
-                  <select
-                    value={operabilityOnResolved}
-                    onChange={(e) => setOperabilityOnResolved(e.target.value)}
-                    style={inputStyle}
-                  >
-                    <option value="">— Seleccionar —</option>
-                    <option value="OPERATIONAL">OPERATIONAL</option>
-                    <option value="MAINTENANCE">MAINTENANCE</option>
-                    <option value="DAMAGED">DAMAGED</option>
-                    <option value="OUT_OF_SERVICE">OUT_OF_SERVICE</option>
-                  </select>
-                </Field>
-              </div>
-            ) : null}
-          </div>
-
-
-          <Field label="Nota">
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={4}
-              style={{ ...inputStyle, resize: "vertical" }}
-            />
-          </Field>
-
-          <div style={sectionCard}>
-            <div style={{ fontWeight: 900 }}>Piezas ya vinculadas</div>
-
-            {row.partUsages.length === 0 ? (
-              <div style={{ opacity: 0.72 }}>No hay piezas asociadas todavía.</div>
-            ) : (
-              <div style={{ display: "grid", gap: 6 }}>
-                {row.partUsages.map((p) => (
-                  <div
-                    key={p.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      fontSize: 13,
-                    }}
-                  >
-                    <div>
-                      {p.sparePart?.name ?? "Recambio"}
-                      {p.sparePart?.sku ? ` · ${p.sparePart.sku}` : ""}
-                      {p.sparePart?.unit ? ` · ${p.qty} ${p.sparePart.unit}` : ` · qty ${p.qty}`}
-                    </div>
-                    <div style={{ fontWeight: 800 }}>
-                      {eurFromCents(p.totalCostCents)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div
-              style={{
-                border: "1px solid #e5e7eb",
-                background: "#fff",
-                borderRadius: 12,
-                padding: 12,
-                display: "grid",
-                gap: 8,
-              }}
-            >
-              <div style={{ fontWeight: 900 }}>Historial del evento</div>
-
-              {!row.logs || row.logs.length === 0 ? (
-                <div style={{ opacity: 0.72 }}>No hay entradas de historial todavía.</div>
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {row.logs.map((log) => (
-                    <div
-                      key={log.id}
-                      style={{
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 10,
-                        padding: 10,
-                        background: "#fafafa",
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: 10,
-                          flexWrap: "wrap",
-                          alignItems: "center",
-                        }}
-                      >
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                          <div style={logKindStyle(log.kind)}>{logKindLabel(log.kind)}</div>
-                          <div style={{ fontWeight: 800 }}>{log.message}</div>
-                        </div>
-
-                        <div style={{ fontSize: 12, opacity: 0.72 }}>
-                          {fmtDateTime(log.createdAt)}
-                        </div>
-                      </div>
-
-                      <div style={{ fontSize: 12, opacity: 0.8 }}>
-                        Usuario: <b>{userLabel(log.createdByUser)}</b>
-                      </div>
-
-                      {renderPayloadSummary(log.payloadJson)}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ fontSize: 13, opacity: 0.85 }}>
-              Coste real de piezas por consumos: <b>{eurFromCents(realPartsCost)}</b>
-            </div>
-
-            {onAdvancedPartsEdit ? (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setOpenPartsEditor(true)}
-                  style={ghostBtn}
-                >
-                  Editar piezas del evento
-                </button>
-              </div>
-            ) : null}
-          </div>
+          <EditMaintenanceEventPartsHistorySection
+            row={row}
+            realPartsCost={realPartsCost}
+            ghostBtn={ghostBtn}
+            sectionCard={sectionCard}
+            onAdvancedPartsEdit={onAdvancedPartsEdit ? () => setOpenPartsEditor(true) : undefined}
+            logKindStyle={logKindStyle}
+            logKindLabel={logKindLabel}
+            userLabel={userLabel}
+            renderPayloadSummary={renderPayloadSummary}
+          />
 
           {openPartsEditor ? (
             <EditMaintenanceEventPartsModal
@@ -840,4 +601,3 @@ export default function EditMaintenanceEventModal({
     </ModalShell>
   );
 }
-

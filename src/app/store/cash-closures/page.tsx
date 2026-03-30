@@ -2,6 +2,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
+import { StoreHero, StoreMetricCard, StoreMetricGrid } from "@/components/store-ui";
 import { Page, Card, Button, Input, Select, Alert, Stat, styles } from "@/components/ui";
 
 type Summary = {
@@ -301,7 +303,7 @@ export default function StoreCashClosuresPage() {
   const isClosed = Boolean(sum?.isClosed);
   const diffNetTone = diffTone(diffLive.netTotal);
   const headerRight = (
-    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+    <div style={opsStyles.actionGrid}>
       <Select value={shift} onChange={(e) => setShift(e.target.value as "MORNING" | "AFTERNOON")}>
         <option value="MORNING">Mañana</option>
         <option value="AFTERNOON">Tarde</option>
@@ -327,27 +329,15 @@ export default function StoreCashClosuresPage() {
               alignItems: "stretch",
             }}
           >
-            <div
-              style={{
-                borderRadius: 24,
-                padding: 22,
-                color: "#e2e8f0",
-                background:
-                  "radial-gradient(circle at top left, rgba(125, 211, 252, 0.24), transparent 34%), linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #0b1120 100%)",
-                display: "grid",
-                gap: 14,
-              }}
+            <StoreHero
+              eyebrow="Operativa diaria"
+              title="Cierre de tienda"
+              description="Revisa importes del sistema, completa el declarado y cierra el turno con los participantes correctos."
+              titleColor="#fff"
+              eyebrowColor="#7dd3fc"
+              background="radial-gradient(circle at top left, rgba(125, 211, 252, 0.24), transparent 34%), linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #0b1120 100%)"
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-                <div style={{ display: "grid", gap: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#7dd3fc" }}>
-                    Operativa diaria
-                  </span>
-                  <div style={{ fontSize: 28, fontWeight: 950, color: "#fff", lineHeight: 1.05 }}>Cierre de tienda</div>
-                  <div style={{ fontSize: 14, color: "#cbd5e1", maxWidth: 620 }}>
-                    Revisa importes del sistema, completa el declarado y cierra el turno con los participantes correctos.
-                  </div>
-                </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <div
                   style={{
                     padding: "8px 12px",
@@ -360,51 +350,55 @@ export default function StoreCashClosuresPage() {
                 >
                   {isClosed ? "Cerrado" : "Abierto"}
                 </div>
-              </div>
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <span style={{ ...styles.pill, background: "rgba(15, 23, 42, 0.24)", border: "1px solid rgba(148, 163, 184, 0.35)", color: "#fff" }}>
-                  Origin: {origin}
+                <span style={{ ...opsStyles.heroPill, background: "rgba(15, 23, 42, 0.24)", border: "1px solid rgba(148, 163, 184, 0.35)", color: "#fff" }}>
+                  Origen: {origin}
                 </span>
-                <span style={{ ...styles.pill, background: "rgba(15, 23, 42, 0.24)", border: "1px solid rgba(148, 163, 184, 0.35)", color: "#fff" }}>
+                <span style={{ ...opsStyles.heroPill, background: "rgba(15, 23, 42, 0.24)", border: "1px solid rgba(148, 163, 184, 0.35)", color: "#fff" }}>
                   Fecha: {today}
                 </span>
-                <span style={{ ...styles.pill, background: "rgba(15, 23, 42, 0.24)", border: "1px solid rgba(148, 163, 184, 0.35)", color: "#fff" }}>
+                <span style={{ ...opsStyles.heroPill, background: "rgba(15, 23, 42, 0.24)", border: "1px solid rgba(148, 163, 184, 0.35)", color: "#fff" }}>
                   Ventana: {sum?.ok ? `${hhmm(windowFrom)}-${hhmm(windowTo)}` : "--"}
                 </span>
               </div>
-            </div>
+            </StoreHero>
 
             <div style={{ display: "grid", gap: 12 }}>
-              <Stat label="Sistema neto" value={euros(systemNet)} />
-              <Stat label="Declarado neto" value={euros(declaredTotals.netTotal)} />
-              <div
-                style={{
-                  border: `1px solid ${diffNetTone.border}`,
-                  borderRadius: 16,
-                  padding: 14,
-                  background: diffNetTone.background,
-                  color: diffNetTone.color,
-                }}
+              <StoreMetricCard label="Sistema neto" value={euros(systemNet)} />
+              <StoreMetricCard label="Declarado neto" value={euros(declaredTotals.netTotal)} />
+              <StoreMetricCard
+                label="Diferencia neta"
+                value={euros(diffLive.netTotal)}
+                accentColor={diffNetTone.color}
+                valueColor={diffNetTone.color}
               >
-                <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>Diferencia neta</div>
-                <div style={{ fontSize: 22, fontWeight: 950 }}>{euros(diffLive.netTotal)}</div>
-              </div>
+                <div
+                  style={{
+                    marginTop: 4,
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    width: "fit-content",
+                    border: `1px solid ${diffNetTone.border}`,
+                    background: diffNetTone.background,
+                  }}
+                >
+                  Declarado - sistema
+                </div>
+              </StoreMetricCard>
             </div>
           </div>
 
-          <div style={styles.grid3}>
-            <Stat label="Servicio sistema" value={euros(sumMethodMapCents(systemServiceByMethod))} />
-            <Stat label="Fianza sistema" value={euros(sumMethodMapCents(systemDepositByMethod))} />
-            <Stat label="Participantes" value={ssRows.length} />
-          </div>
+          <StoreMetricGrid>
+            <StoreMetricCard label="Servicio sistema" value={euros(sumMethodMapCents(systemServiceByMethod))} />
+            <StoreMetricCard label="Fianza sistema" value={euros(sumMethodMapCents(systemDepositByMethod))} />
+            <StoreMetricCard label="Participantes" value={ssRows.length} />
+          </StoreMetricGrid>
         </div>
       </Card>
 
       {loading ? (
         <Alert kind="info">Cargando…</Alert>
       ) : !sum?.ok ? (
-        <Alert kind="error">Error: {sum?.error ?? "No se pudo cargar summary"}</Alert>
+        <Alert kind="error">Error: {sum?.error ?? "No se pudo cargar el resumen"}</Alert>
       ) : (
         <Card
           title={
@@ -429,7 +423,7 @@ export default function StoreCashClosuresPage() {
           </div>
 
           <div style={{ marginTop: 16, display: "grid", gap: 14 }}>
-            <div style={{ border: "1px solid #e2e8f0", borderRadius: 18, padding: 16, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)" }}>
+            <div style={{ ...opsStyles.sectionCard, borderRadius: 18, padding: 16, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <div style={{ fontWeight: 950 }}>Servicio</div>
                 <div style={{ fontSize: 12, opacity: 0.75 }}>en € (con coma)</div>
@@ -456,7 +450,7 @@ export default function StoreCashClosuresPage() {
               </div>
             </div>
 
-            <div style={{ border: "1px solid #e2e8f0", borderRadius: 18, padding: 16, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)" }}>
+            <div style={{ ...opsStyles.sectionCard, borderRadius: 18, padding: 16, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <div style={{ fontWeight: 950 }}>Fianza</div>
                 <div style={{ fontSize: 12, opacity: 0.75 }}>en € (con coma)</div>

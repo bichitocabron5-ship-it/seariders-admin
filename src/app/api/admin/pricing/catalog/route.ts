@@ -55,7 +55,7 @@ export async function GET() {
         validFrom: true,
         validTo: true,
       },
-      orderBy: { validFrom: "desc" }, // importante: el mÃ¡s nuevo primero
+      orderBy: { validFrom: "desc" }, // importante: el más nuevo primero
     }),
   ]);
 

@@ -76,7 +76,7 @@ export async function GET(req: Request) {
   const openTime = policy.openTime ?? "09:00";
   const closeTime = policy.closeTime ?? "20:00";
 
-    // 2) SlotLimit (auto-seed por categorÃ­as existentes)
+  // 2) SlotLimit (auto-seed por categorías existentes)
   const serviceCats = await prisma.service.findMany({
     where: { isActive: true },
     select: { category: true },
@@ -121,17 +121,17 @@ export async function GET(req: Request) {
   const usedBySlot: Array<Record<string, number>> = slotTimes.map(() => ({}));
   const noTime: Record<string, number> = {};
 
-  // 4) Rango del dÃ­a en UTC (segÃºn Madrid)
+  // 4) Rango del día en UTC (según Madrid)
   const dayStartUtc = utcDateFromYmdInTz(BUSINESS_TZ, date);
   const nextDate = addDaysYmd(date, 1);
   const dayEndExclusiveUtc =
     utcDateTimeFromYmdHmInTz(BUSINESS_TZ, nextDate, "00:00") ??
     new Date(dayStartUtc.getTime() + 24 * 60 * 60 * 1000);
 
-    // 5) Items del dÃ­a (unificado: quick + pack + futuro carrito)
+  // 5) Items del día (unificado: quick + pack + futuro carrito)
   const items = await prisma.reservationItem.findMany({
     where: {
-      isExtra: false, // âœ… actividades reales
+      isExtra: false, // actividades reales
       reservation: {
         source: "STORE",
         activityDate: { gte: dayStartUtc, lt: dayEndExclusiveUtc },
@@ -172,7 +172,7 @@ export async function GET(req: Request) {
     }
   }
 
-      // 6) Contabilizar por slots a partir de ITEMS
+  // 6) Contabilizar por slots a partir de ITEMS
   for (const it of items) {
     pushUsage({
       scheduledTime: it.reservation?.scheduledTime ?? null,

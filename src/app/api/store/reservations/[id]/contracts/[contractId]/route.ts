@@ -73,7 +73,7 @@ function minorRules(birth: Date, at: Date) {
 
 export async function PATCH(
   req: Request,
-  ctx: { params: Promise<{ id: string; contractId: string }> } // âœ… incluye reservation id
+  ctx: { params: Promise<{ id: string; contractId: string }> } // incluye reservation id
 ) {
   const session = await requireStoreOrAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });

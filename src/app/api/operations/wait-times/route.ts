@@ -330,10 +330,6 @@ export async function GET() {
     diffMinutes(r.formalizedAt, r.readyForPlatformAt)
   );
 
-  const platformToBoothLive = taxiboatOps
-    .filter((row) => row.status === "TO_BOOTH")
-    .map((row) => diffMinutes(row.departedPlatformAt ?? row.updatedAt, now));
-
   const platformToBoothCompleted = taxiboatOps
     .filter((row) => row.departedPlatformAt && row.arrivedBoothAt)
     .map((row) => diffMinutes(row.departedPlatformAt, row.arrivedBoothAt));

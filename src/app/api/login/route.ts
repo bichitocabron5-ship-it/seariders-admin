@@ -80,7 +80,7 @@ export async function POST(req: Request) {
   const role = userRole.role.name;
   const redirectPath = redirectPathFromRole(role);
 
-  // âœ… sesiÃ³n en App Router: cookies()
+  // Sesión en App Router: cookies()
   const cookieStore = await cookies();
   const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
 

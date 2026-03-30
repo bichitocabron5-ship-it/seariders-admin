@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
 
 type ServiceDto = { id: string; name: string; category: string | null };
 type OptionDto = { id: string; serviceId: string; durationMinutes: number | null; paxMax: number | null; contractedMinutes: number | null };
@@ -11,7 +12,7 @@ function eurosFromCents(cents: number) { return (Number(cents || 0) / 100).toFix
 function centsFromEurosString(v: string) { const n = Number(String(v).replace(",", ".")); return Number.isFinite(n) ? Math.round(n * 100) : 0; }
 
 function Field({ label, value, onChange, placeholder, type = "text" }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; }) {
-  return <label style={{ display: "grid", gap: 6 }}><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>{label}</div><input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", padding: 10, borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff" }} /></label>;
+  return <label style={{ display: "grid", gap: 6 }}><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>{label}</div><input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ ...opsStyles.field, width: "100%", padding: 10, borderRadius: 12, background: "#fff" }} /></label>;
 }
 
 export default function AdminPassProductsPage() {
@@ -87,23 +88,23 @@ export default function AdminPassProductsPage() {
 
   const canSubmit = code.trim().length >= 3 && name.trim().length >= 3 && !!serviceId && Number(totalMinutes) > 0 && centsFromEurosString(priceEuros) >= 0;
 
-  const pageShell: React.CSSProperties = { maxWidth: 1320, margin: "0 auto", padding: 24, display: "grid", gap: 16 };
-  const softCard: React.CSSProperties = { border: "1px solid #dbe4ea", borderRadius: 22, background: "#fff", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)" };
-  const ghostBtn: React.CSSProperties = { padding: "10px 12px", borderRadius: 12, border: "1px solid #d0d9e4", fontWeight: 800, background: "#fff", color: "#111", textDecoration: "none" };
-  const darkBtn: React.CSSProperties = { padding: "14px 12px", borderRadius: 14, border: "1px solid #111", background: canSubmit ? "#111" : "#e5e7eb", color: canSubmit ? "#fff" : "#111", fontWeight: 900, cursor: canSubmit ? "pointer" : "not-allowed" };
+  const pageShell: React.CSSProperties = { ...opsStyles.pageShell, width: "min(1320px, 100%)", display: "grid", gap: 16 };
+  const softCard: React.CSSProperties = { ...opsStyles.sectionCard, borderRadius: 22 };
+  const ghostBtn: React.CSSProperties = { ...opsStyles.ghostButton, padding: "10px 12px", fontWeight: 800, background: "#fff", color: "#111", textDecoration: "none" };
+  const darkBtn: React.CSSProperties = { ...opsStyles.primaryButton, padding: "14px 12px", borderRadius: 14, background: canSubmit ? "#111" : "#e5e7eb", color: canSubmit ? "#fff" : "#111", fontWeight: 900, cursor: canSubmit ? "pointer" : "not-allowed" };
 
   return (
     <div style={pageShell}>
-      <section style={{ ...softCard, padding: 20, background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 45%, #ecfeff 100%)", display: "grid", gap: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
+      <section style={{ ...opsStyles.heroCard, padding: 20, background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 45%, #ecfeff 100%)", display: "grid", gap: 16 }}>
+        <div style={{ display: "grid", gap: 18 }}>
           <div style={{ display: "grid", gap: 6, maxWidth: 760 }}>
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#0891b2" }}>Admin</div>
-            <div style={{ fontSize: 34, fontWeight: 950, lineHeight: 1.02 }}>Bonos y pases</div>
-            <div style={{ fontSize: 14, color: "#475569" }}>Crear y mantener productos de bonos con servicio, opcion, minutos consumibles y caducidad.</div>
+            <div style={{ ...opsStyles.heroTitle, fontSize: "clamp(2rem, 4vw, 3rem)", lineHeight: 1.02 }}>Bonos y pases</div>
+            <div style={{ fontSize: 14, color: "#475569" }}>Crear y mantener productos de bonos con servicio, opción, minutos consumibles y caducidad.</div>
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><Link href="/admin" style={ghostBtn}>Volver a admin</Link><button type="button" onClick={() => void loadAll()} disabled={loading} style={{ ...ghostBtn, opacity: loading ? 0.7 : 1 }}>{loading ? "Cargando..." : "Refrescar"}</button></div>
+          <div style={opsStyles.actionGrid}><Link href="/admin" style={ghostBtn}>Volver a Admin</Link><button type="button" onClick={() => void loadAll()} disabled={loading} style={{ ...ghostBtn, opacity: loading ? 0.7 : 1 }}>{loading ? "Cargando..." : "Refrescar"}</button></div>
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><span style={heroPill}>Productos: {rows.length}</span><span style={heroPill}>Servicios: {services.length}</span><span style={heroPill}>Opciones: {options.length}</span><span style={heroPill}>Modo: {isEdit ? "Edicion" : "Alta"}</span></div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><span style={heroPill}>Productos: {rows.length}</span><span style={heroPill}>Servicios: {services.length}</span><span style={heroPill}>Opciones: {options.length}</span><span style={heroPill}>Modo: {isEdit ? "Edición" : "Alta"}</span></div>
       </section>
 
       {err ? <div style={errorBox}>{err}</div> : null}
@@ -111,22 +112,22 @@ export default function AdminPassProductsPage() {
       <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 420px) 1fr", gap: 14, alignItems: "start" }}>
         <section style={{ ...softCard, padding: 16, display: "grid", gap: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}><div style={{ fontSize: 18, fontWeight: 900 }}>Productos</div><button type="button" onClick={resetForm} style={ghostBtn}>Nuevo</button></div>
-          <div style={{ display: "grid", gap: 10 }}>{rows.length === 0 ? <div style={{ opacity: 0.7 }}>No hay productos aun.</div> : rows.map((r) => <div key={r.id} style={{ border: selectedId === r.id ? "1px solid #111" : "1px solid #e5edf4", borderRadius: 16, padding: 12, background: selectedId === r.id ? "#fafcff" : "#fff" }}><button type="button" onClick={() => selectRow(r)} style={{ width: "100%", textAlign: "left", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}><div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}><div style={{ fontWeight: 900 }}>{r.name} {!r.isActive ? <span style={{ fontSize: 12, opacity: 0.7 }}>· INACTIVO</span> : null}</div><div style={{ fontWeight: 900 }}>{eurosFromCents(r.priceCents)} EUR</div></div><div style={{ fontSize: 12, opacity: 0.75, marginTop: 6, lineHeight: 1.4 }}>{r.code} · {r.totalMinutes} min · {r.service?.category ? `${r.service.category} · ` : ""}{r.service?.name}{r.option?.durationMinutes ? ` · opt ${r.option.durationMinutes}m` : ""}{r.validDays ? ` · caduca ${r.validDays} dias` : ""}</div></button><div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}><button type="button" onClick={() => void toggleActive(r)} style={{ ...ghostBtn, background: r.isActive ? "#fff" : "#111", color: r.isActive ? "#111" : "#fff" }}>{r.isActive ? "Desactivar" : "Activar"}</button></div></div>)}</div>
+          <div style={{ display: "grid", gap: 10 }}>{rows.length === 0 ? <div style={{ opacity: 0.7 }}>No hay productos aún.</div> : rows.map((r) => <div key={r.id} style={{ border: selectedId === r.id ? "1px solid #111" : "1px solid #e5edf4", borderRadius: 16, padding: 12, background: selectedId === r.id ? "#fafcff" : "#fff" }}><button type="button" onClick={() => selectRow(r)} style={{ width: "100%", textAlign: "left", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}><div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}><div style={{ fontWeight: 900 }}>{r.name} {!r.isActive ? <span style={{ fontSize: 12, opacity: 0.7 }}>· INACTIVO</span> : null}</div><div style={{ fontWeight: 900 }}>{eurosFromCents(r.priceCents)} EUR</div></div><div style={{ fontSize: 12, opacity: 0.75, marginTop: 6, lineHeight: 1.4 }}>{r.code} · {r.totalMinutes} min · {r.service?.category ? `${r.service.category} · ` : ""}{r.service?.name}{r.option?.durationMinutes ? ` · opción ${r.option.durationMinutes}m` : ""}{r.validDays ? ` · caduca ${r.validDays} días` : ""}</div></button><div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}><button type="button" onClick={() => void toggleActive(r)} style={{ ...ghostBtn, background: r.isActive ? "#fff" : "#111", color: r.isActive ? "#111" : "#fff" }}>{r.isActive ? "Desactivar" : "Activar"}</button></div></div>)}</div>
         </section>
 
         <section style={{ ...softCard, padding: 16, display: "grid", gap: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}><div style={{ fontSize: 18, fontWeight: 900 }}>{isEdit ? "Editar producto" : "Crear producto"}</div><label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 800, fontSize: 13 }}><input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />Activo</label></div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}><Field label="Code" value={code} onChange={setCode} placeholder="PASS_JETSKI_10H" /><Field label="Nombre" value={name} onChange={setName} placeholder="Bono Jetski 10h" /></div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}><label style={{ display: "grid", gap: 6 }}><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Servicio</div><select value={serviceId} onChange={(e) => setServiceId(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 12, border: "1px solid #d0d9e4" }}><option value="">Selecciona...</option>{services.map((s) => <option key={s.id} value={s.id}>{s.category ? `${s.category} · ` : ""}{s.name}</option>)}</select></label><label style={{ display: "grid", gap: 6 }}><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Opcion (opcional)</div><select value={optionId} onChange={(e) => setOptionId(e.target.value)} disabled={!serviceId} style={{ width: "100%", padding: 10, borderRadius: 12, border: "1px solid #d0d9e4", opacity: !serviceId ? 0.6 : 1 }}><option value="">(sin opcion fija)</option>{filteredOptions.map((o) => <option key={o.id} value={o.id}>{o.durationMinutes ? `${o.durationMinutes} min` : "-"}{o.paxMax ? ` · ${o.paxMax} pax` : ""}</option>)}</select></label></div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}><Field label="Total minutos" value={totalMinutes} onChange={setTotalMinutes} type="number" placeholder="600" /><Field label="Precio (EUR)" value={priceEuros} onChange={setPriceEuros} placeholder="299.00" /><Field label="Caducidad (dias)" value={validDays} onChange={setValidDays} type="number" placeholder="365" /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}><label style={{ display: "grid", gap: 6 }}><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Servicio</div><select value={serviceId} onChange={(e) => setServiceId(e.target.value)} style={{ ...opsStyles.field, width: "100%", padding: 10, borderRadius: 12, background: "#fff" }}><option value="">Selecciona...</option>{services.map((s) => <option key={s.id} value={s.id}>{s.category ? `${s.category} · ` : ""}{s.name}</option>)}</select></label><label style={{ display: "grid", gap: 6 }}><div style={{ fontSize: 12, opacity: 0.75, fontWeight: 800 }}>Opción (opcional)</div><select value={optionId} onChange={(e) => setOptionId(e.target.value)} disabled={!serviceId} style={{ ...opsStyles.field, width: "100%", padding: 10, borderRadius: 12, background: "#fff", opacity: !serviceId ? 0.6 : 1 }}><option value="">(sin opción fija)</option>{filteredOptions.map((o) => <option key={o.id} value={o.id}>{o.durationMinutes ? `${o.durationMinutes} min` : "-"}{o.paxMax ? ` · ${o.paxMax} pax` : ""}</option>)}</select></label></div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}><Field label="Total minutos" value={totalMinutes} onChange={setTotalMinutes} type="number" placeholder="600" /><Field label="Precio (EUR)" value={priceEuros} onChange={setPriceEuros} placeholder="299.00" /><Field label="Caducidad (días)" value={validDays} onChange={setValidDays} type="number" placeholder="365" /></div>
           <button type="button" onClick={isEdit ? () => void saveProduct() : () => void createProduct()} disabled={!canSubmit} style={darkBtn}>{isEdit ? "Guardar cambios" : "Crear producto"}</button>
-          <div style={{ fontSize: 12, opacity: 0.65 }}>Usa codes estables. El precio se fija aqui y el consumo descontara minutos cuando el bono se use en tienda.</div>
+          <div style={{ fontSize: 12, opacity: 0.65 }}>Usa codes estables. El precio se fija aquí y el consumo descontará minutos cuando el bono se use en tienda.</div>
         </section>
       </div>
     </div>
   );
 }
 
-const heroPill: React.CSSProperties = { padding: "6px 12px", borderRadius: 999, border: "1px solid #bae6fd", background: "rgba(255,255,255,0.88)", color: "#0f766e", fontWeight: 900, fontSize: 12 };
+const heroPill: React.CSSProperties = { ...opsStyles.heroPill, border: "1px solid #bae6fd", background: "rgba(255,255,255,0.88)", color: "#0f766e", fontWeight: 900, fontSize: 12 };
 const errorBox: React.CSSProperties = { padding: 12, borderRadius: 14, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 900 };
 

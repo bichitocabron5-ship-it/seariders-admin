@@ -1,4 +1,4 @@
-// src/app/api/platform/runs/route.ts
+﻿// src/app/api/platform/runs/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -14,12 +14,11 @@ const Body = z.object({
   kind: z.nativeEnum(MonitorRunKind),
   monitorJetskiId: z.string().optional().nullable(),
   monitorAssetId: z.string().optional().nullable(),
-  note: z.string().max(500).optional().nullable(),
-  activityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // ✅
+  note: z.string().max(500).optional().nullable(),  activityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 // ==========================
-// GET â†’ listado tablero
+// GET -> listado tablero
 //  - opcional: ?kind=JETSKI|NAUTICA
 // ==========================
 export async function GET(req: Request) {
@@ -63,7 +62,7 @@ export async function GET(req: Request) {
           jetskiId: true,
           jetski: { select: { id: true, number: true } },
 
-          // ✅ NAUTICA
+          // NAUTICA
           assetId: true,
           asset: { select: { id: true, name: true, type: true, model: true } },
 
@@ -93,7 +92,7 @@ export async function GET(req: Request) {
 }
 
 // ==========================
-// POST â†’ crear run (READY)
+// POST -> crear run (READY)
 // ==========================
 export async function POST(req: Request) {
   const session = await requirePlatformOrAdmin();
@@ -243,3 +242,4 @@ export async function POST(req: Request) {
   if ("error" in result) return NextResponse.json(result, { status: 409 });
   return NextResponse.json(result);
 }
+

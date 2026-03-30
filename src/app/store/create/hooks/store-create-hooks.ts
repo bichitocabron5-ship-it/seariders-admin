@@ -1,17 +1,24 @@
 // src/app/store/create/hooks/store-create-hooks.ts
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AvailabilityData,
+  CartItem,
+  Channel,
   ContractDraftState,
   ContractDto,
   ContractsState,
+  CustomerSearchRow,
   DiscountPreview,
   MigrateFlags,
+  Option,
+  PackPreview,
+  ServiceMain,
 } from "../types";
 import { errorMessage, isAbortError } from "../utils/errors";
 import { ensureContracts as ensureContractsRequest, fetchContracts, patchContract } from "../services/contracts";
+import { getAssetAvailability, type AssetAvailability } from "../../services/assets";
 
 export function useContractsState(args: {
   isMigrateMode: boolean;
@@ -421,4 +428,369 @@ export function useDiscountPreview(args: {
   }, [isEditMode, isMigrateMode, cartItemsLength, canCreate, baseTotalCents, serviceId, optionId, quantity, pax, customerCountry]);
 
   return { discountPreview, discountLoading };
+}
+
+export function useCustomerProfileSearch(args: {
+  onApplyProfile: (profile: {
+    customerName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    customerDocNumber?: string | null;
+    country?: string | null;
+    birthDate?: string | null;
+    address?: string | null;
+    postalCode?: string | null;
+    licenseNumber?: string | null;
+  }) => void;
+}) {
+  const { onApplyProfile } = args;
+
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerMatches, setCustomerMatches] = useState<CustomerSearchRow[]>([]);
+  const [customerSearchBusy, setCustomerSearchBusy] = useState(false);
+  const [customerSearchError, setCustomerSearchError] = useState<string | null>(null);
+  const [appliedCustomerProfileName, setAppliedCustomerProfileName] = useState<string | null>(null);
+
+  const searchCustomers = useCallback(async (term: string) => {
+    const q = term.trim();
+
+    if (q.length < 2) {
+      setCustomerMatches([]);
+      setCustomerSearchError(null);
+      return;
+    }
+
+    try {
+      setCustomerSearchBusy(true);
+      setCustomerSearchError(null);
+
+      const res = await fetch(
+        `/api/store/customers/search?q=${encodeURIComponent(q)}&take=8`,
+        { cache: "no-store" }
+      );
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      const data = await res.json();
+      setCustomerMatches(data.rows ?? []);
+    } catch (e: unknown) {
+      setCustomerSearchError(
+        e instanceof Error ? e.message : "Error buscando clientes"
+      );
+    } finally {
+      setCustomerSearchBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const q = customerSearch.trim();
+
+    if (q.length < 2) {
+      setCustomerMatches([]);
+      setCustomerSearchError(null);
+      return;
+    }
+
+    const t = setTimeout(() => {
+      void searchCustomers(q);
+    }, 350);
+
+    return () => clearTimeout(t);
+  }, [customerSearch, searchCustomers]);
+
+  const applyCustomerProfile = useCallback(async (reservationId: string) => {
+    try {
+      setCustomerSearchError(null);
+
+      const res = await fetch(
+        `/api/store/customers/profile?reservationId=${encodeURIComponent(reservationId)}`,
+        { cache: "no-store" }
+      );
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      const data = await res.json();
+      const p = data.profile ?? {};
+
+      onApplyProfile(p);
+      setCustomerMatches([]);
+      setCustomerSearch("");
+      setAppliedCustomerProfileName(p.customerName?.trim() || "Cliente previo");
+    } catch (e: unknown) {
+      setCustomerSearchError(
+        e instanceof Error ? e.message : "Error cargando ficha"
+      );
+    }
+  }, [onApplyProfile]);
+
+  return {
+    customerSearch,
+    setCustomerSearch,
+    customerMatches,
+    customerSearchBusy,
+    customerSearchError,
+    appliedCustomerProfileName,
+    searchCustomers,
+    applyCustomerProfile,
+  };
+}
+
+export function useStoreCreateCatalog(args: {
+  migrateReservationId: string | null;
+}) {
+  const { migrateReservationId } = args;
+
+  const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [servicesMain, setServicesMain] = useState<ServiceMain[]>([]);
+  const [options, setOptions] = useState<Option[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [categoriesMain, setCategoriesMain] = useState<string[]>([]);
+  const [assetAvailability, setAssetAvailability] = useState<AssetAvailability[]>([]);
+  const [initialDefaults, setInitialDefaults] = useState<{
+    serviceId: string;
+    optionId: string;
+    channelId: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const ac = new AbortController();
+
+    (async () => {
+      setLoadingCatalog(true);
+      setCatalogError(null);
+
+      try {
+        const [catalogRes, assetsData] = await Promise.all([
+          fetch("/api/pos/catalog?origin=STORE", { cache: "no-store", signal: ac.signal }),
+          getAssetAvailability(),
+        ]);
+
+        if (!catalogRes.ok) throw new Error(await catalogRes.text());
+        const data = await catalogRes.json();
+
+        const sm = (data?.servicesMain ?? []) as ServiceMain[];
+        const op = (data?.options ?? []) as Option[];
+        const ch = (data?.channels ?? []) as Channel[];
+
+        setServicesMain(sm);
+        setOptions(op);
+        setChannels(ch);
+        setCategoriesMain(((data?.categories?.main ?? []) as string[]) ?? []);
+        setAssetAvailability(assetsData.rows ?? []);
+
+        if (!migrateReservationId) {
+          const main0 = sm[0] ?? null;
+          const firstOpt = main0 ? op.find((o) => o.serviceId === main0.id) ?? null : null;
+          const ch0 = ch[0] ?? null;
+
+          setInitialDefaults({
+            serviceId: main0?.id ?? "",
+            optionId: firstOpt?.id ?? "",
+            channelId: ch0?.id ?? "",
+          });
+        } else {
+          setInitialDefaults(null);
+        }
+      } catch (e: unknown) {
+        if (isAbortError(e)) return;
+        setCatalogError(errorMessage(e, "No se pudo cargar el catálogo"));
+      } finally {
+        setLoadingCatalog(false);
+      }
+    })();
+
+    return () => ac.abort();
+  }, [migrateReservationId]);
+
+  return {
+    loadingCatalog,
+    catalogError,
+    servicesMain,
+    options,
+    channels,
+    categoriesMain,
+    assetAvailability,
+    initialDefaults,
+  };
+}
+
+export function useStoreCreateSelection(args: {
+  servicesMain: ServiceMain[];
+  options: Option[];
+  channels: Channel[];
+  category: string;
+  serviceId: string;
+  optionId: string;
+  quantity: number;
+  pax: number;
+  prefillServiceFallback: ServiceMain | null;
+  prefillOptionFallback: Option | null;
+  prefillChannelFallback: Channel | null;
+  setServiceId: (value: string) => void;
+  setOptionId: (value: string) => void;
+  setIsLicense: (value: boolean) => void;
+  setTimeStr: (value: string) => void;
+  setCartItems: React.Dispatch<React.SetStateAction<CartItem[]>>;
+}) {
+  const {
+    servicesMain,
+    options,
+    channels,
+    category,
+    serviceId,
+    optionId,
+    quantity,
+    pax,
+    prefillServiceFallback,
+    prefillOptionFallback,
+    prefillChannelFallback,
+    setServiceId,
+    setOptionId,
+    setIsLicense,
+    setTimeStr,
+    setCartItems,
+  } = args;
+
+  const [packPreview, setPackPreview] = useState<PackPreview | null>(null);
+
+  const selectedService = useMemo(
+    () => servicesMain.find((s) => s.id === serviceId) ?? (prefillServiceFallback?.id === serviceId ? prefillServiceFallback : null),
+    [servicesMain, serviceId, prefillServiceFallback]
+  );
+
+  const isPackMode = (selectedService?.category ?? "").toUpperCase() === "PACK";
+  const canAddToCart = !isPackMode && !!serviceId && !!optionId && Number(quantity) > 0 && Number(pax) > 0;
+
+  const servicesMainFiltered = useMemo(() => {
+    const list = !category ? servicesMain : servicesMain.filter((s) => (s.category ?? "") === category);
+    if (
+      prefillServiceFallback &&
+      prefillServiceFallback.id === serviceId &&
+      !list.some((s) => s.id === prefillServiceFallback.id) &&
+      (!category || (prefillServiceFallback.category ?? "") === category)
+    ) {
+      return [prefillServiceFallback, ...list];
+    }
+    return list;
+  }, [servicesMain, category, prefillServiceFallback, serviceId]);
+
+  const selectedCategory = useMemo(() => {
+    if (!serviceId) return "";
+    const svc = servicesMain.find((s) => s.id === serviceId) ?? (prefillServiceFallback?.id === serviceId ? prefillServiceFallback : null);
+    return String(svc?.category ?? "").toUpperCase();
+  }, [serviceId, servicesMain, prefillServiceFallback]);
+
+  const filteredOptions = useMemo(() => {
+    if (!serviceId) return [];
+    const list = options.filter((o) => o.serviceId === serviceId);
+    if (
+      prefillOptionFallback &&
+      prefillOptionFallback.serviceId === serviceId &&
+      !list.some((o) => o.id === prefillOptionFallback.id)
+    ) {
+      return [prefillOptionFallback, ...list];
+    }
+    return list;
+  }, [options, serviceId, prefillOptionFallback]);
+
+  const optionById = useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
+
+  const selectedOpt = useMemo(
+    () => options.find((o) => o.id === optionId) ?? (prefillOptionFallback?.id === optionId ? prefillOptionFallback : null),
+    [options, optionId, prefillOptionFallback]
+  );
+
+  const channelsWithFallback = useMemo(() => {
+    if (!prefillChannelFallback || channels.some((c) => c.id === prefillChannelFallback.id)) return channels;
+    return [prefillChannelFallback, ...channels];
+  }, [channels, prefillChannelFallback]);
+
+  const baseTotalCents = useMemo(() => {
+    if (!selectedOpt) return 0;
+    const unit = Number(selectedOpt.basePriceCents ?? 0) || 0;
+    return unit * Number(quantity || 0);
+  }, [selectedOpt, quantity]);
+
+  useEffect(() => {
+    if (!selectedService) return;
+    setIsLicense(Boolean(selectedService.isLicense));
+  }, [selectedService, setIsLicense]);
+
+  useEffect(() => {
+    if (isPackMode) setCartItems([]);
+  }, [isPackMode, setCartItems]);
+
+  useEffect(() => {
+    if (!filteredOptions.length) {
+      setOptionId("");
+      return;
+    }
+
+    if (!filteredOptions.some((o) => o.id === optionId)) {
+      const withPrice =
+        filteredOptions.find((o) => (o.hasPrice ?? true) && (o.basePriceCents ?? 0) > 0) ??
+        filteredOptions[0];
+
+      setOptionId(withPrice.id);
+    }
+  }, [filteredOptions, optionId, setOptionId]);
+
+  useEffect(() => {
+    if (!serviceId) {
+      const list = category
+        ? servicesMain.filter((s) => (s.category ?? "") === category)
+        : servicesMain;
+      const s0 = list[0];
+      if (s0) setServiceId(s0.id);
+    }
+
+    setTimeStr("");
+  }, [category, servicesMain, serviceId, setServiceId, setTimeStr]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setPackPreview(null);
+      if (selectedCategory !== "PACK" || !serviceId) return;
+      const r = await fetch(`/api/store/packs?serviceId=${serviceId}`, { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (alive) setPackPreview(j.pack);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [selectedCategory, serviceId]);
+
+  function handleCategoryChange(next: string) {
+    const list = next ? servicesMain.filter((svc) => (svc.category ?? "") === next) : servicesMain;
+    const firstService = list[0] ?? null;
+    setServiceId(firstService?.id ?? "");
+
+    const firstOption =
+      options.find((opt) => opt.serviceId === (firstService?.id ?? "") && (opt.hasPrice ?? true) && (opt.basePriceCents ?? 0) > 0) ??
+      options.find((opt) => opt.serviceId === (firstService?.id ?? "")) ??
+      null;
+    setOptionId(firstOption?.id ?? "");
+  }
+
+  return {
+    selectedService,
+    isPackMode,
+    canAddToCart,
+    servicesMainFiltered,
+    selectedCategory,
+    filteredOptions,
+    optionById,
+    selectedOpt,
+    channelsWithFallback,
+    baseTotalCents,
+    packPreview,
+    handleCategoryChange,
+  };
 }

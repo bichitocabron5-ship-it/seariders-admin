@@ -13,23 +13,23 @@ type AdminCard = {
 };
 
 const cards: AdminCard[] = [
-  { href: "/admin/catalog", tag: "CAT", icon: "[]", title: "Catalogo", description: "Servicios, opciones y estructura operativa.", section: "Comercial", accent: "#dbeafe" },
-  { href: "/admin/pricing", tag: "PVP", icon: "$", title: "Precios", description: "Tarifas, importes y configuracion comercial.", section: "Comercial", accent: "#dbeafe" },
-  { href: "/admin/discounts", tag: "DSC", icon: "%", title: "Descuentos", description: "Campanas, reglas y promociones activas.", section: "Comercial", accent: "#dbeafe" },
+  { href: "/admin/catalog", tag: "CAT", icon: "[]", title: "Catálogo", description: "Servicios, opciones y estructura operativa.", section: "Comercial", accent: "#dbeafe" },
+  { href: "/admin/pricing", tag: "PVP", icon: "$", title: "Precios", description: "Tarifas, importes y configuración comercial.", section: "Comercial", accent: "#dbeafe" },
+  { href: "/admin/discounts", tag: "DSC", icon: "%", title: "Descuentos", description: "Campañas, reglas y promociones activas.", section: "Comercial", accent: "#dbeafe" },
   { href: "/admin/channels", tag: "CHN", icon: ">>", title: "Canales", description: "Canales de venta y comisiones asociadas.", section: "Comercial", accent: "#dbeafe" },
-  { href: "/admin/pricing/history", tag: "LOG", icon: "H:", title: "Historico de precios", description: "Seguimiento de cambios y trazabilidad.", section: "Comercial", accent: "#dbeafe" },
-  { href: "/admin/packs", tag: "PKG", icon: "PK", title: "Packs", description: "Configuracion y gestion de packs comerciales.", section: "Comercial", accent: "#dbeafe" },
+  { href: "/admin/pricing/history", tag: "LOG", icon: "H:", title: "Histórico de precios", description: "Seguimiento de cambios y trazabilidad.", section: "Comercial", accent: "#dbeafe" },
+  { href: "/admin/packs", tag: "PKG", icon: "PK", title: "Packs", description: "Configuración y gestión de packs comerciales.", section: "Comercial", accent: "#dbeafe" },
   { href: "/admin/gifts", tag: "GFT", icon: "GF", title: "Regalos", description: "Gift vouchers y control de canjes.", section: "Comercial", accent: "#dbeafe" },
   { href: "/admin/passes", tag: "BON", icon: "BO", title: "Bonos", description: "Bonos, consumos y seguimiento.", section: "Comercial", accent: "#dbeafe" },
-  { href: "/executive", tag: "OPS", icon: "BI", title: "Dashboard operativo", description: "Direccion, rendimiento y salud del negocio.", section: "Operativa", accent: "#ccfbf1" },
-  { href: "/operations", tag: "CTR", icon: "OP", title: "Centro de operaciones", description: "Vision unificada de Booth, Store y Platform con alertas, contratos y extras pendientes.", section: "Operativa", accent: "#ccfbf1" },
-  { href: "/store", tag: "STO", icon: "ST", title: "Store", description: "Caja, calendario, creacion y operativa diaria de tienda.", section: "Operativa", accent: "#ccfbf1" },
-  { href: "/platform", tag: "PLT", icon: "PF", title: "Platform", description: "Cola operativa, salidas, asignaciones y gestion de extras de plataforma.", section: "Operativa", accent: "#ccfbf1" },
+  { href: "/executive", tag: "OPS", icon: "BI", title: "Dashboard operativo", description: "Dirección, rendimiento y salud del negocio.", section: "Operativa", accent: "#ccfbf1" },
+  { href: "/operations", tag: "CTR", icon: "OP", title: "Centro de operaciones", description: "Visión unificada de Booth, Store y Platform con alertas, contratos y extras pendientes.", section: "Operativa", accent: "#ccfbf1" },
+  { href: "/store", tag: "STO", icon: "ST", title: "Store", description: "Caja, calendario, creación y operativa diaria de tienda.", section: "Operativa", accent: "#ccfbf1" },
+  { href: "/platform", tag: "PLT", icon: "PF", title: "Platform", description: "Cola operativa, salidas, asignaciones y gestión de extras de plataforma.", section: "Operativa", accent: "#ccfbf1" },
   { href: "/admin/cash-closures", tag: "BOX", icon: "CA", title: "Cierres de caja", description: "Turnos, cierres y control de caja.", section: "Operativa", accent: "#ccfbf1" },
-  { href: "/admin/expenses", tag: "EXP", icon: "EX", title: "Gastos", description: "Contabilidad operativa, proveedores y categorias.", section: "Operativa", accent: "#ccfbf1" },
+  { href: "/admin/expenses", tag: "EXP", icon: "EX", title: "Gastos", description: "Contabilidad operativa, proveedores y categorías.", section: "Operativa", accent: "#ccfbf1" },
   { href: "/admin/slots", tag: "SLT", icon: "TM", title: "Slots", description: "Disponibilidad, cupos y reglas de reserva.", section: "Operativa", accent: "#ccfbf1" },
   { href: "/admin/bar", tag: "BAR", icon: "BA", title: "Bar", description: "Catalogo, stock y accesos al flujo operativo del punto BAR.", section: "Operativa", accent: "#ccfbf1" },
-  { href: "/admin/assets", tag: "AST", icon: "NA", title: "Nautica", description: "Boats, towboat, jetcar y otros recursos.", section: "Flota", accent: "#ede9fe" },
+  { href: "/admin/assets", tag: "AST", icon: "NA", title: "Náutica", description: "Boats, towboat, jetcar y otros recursos.", section: "Flota", accent: "#ede9fe" },
   { href: "/admin/jetskis", tag: "JSK", icon: "JS", title: "Jetskis", description: "Flota, matricula, horas y service.", section: "Flota", accent: "#ede9fe" },
   { href: "/admin/hr", tag: "HR", icon: "HR", title: "Recursos humanos", description: "Trabajadores, perfiles y organizacion interna.", section: "Personal", accent: "#dcfce7" },
   { href: "/admin/users", tag: "USR", icon: "ID", title: "Usuarios", description: "Accesos, roles, credenciales y passport.", section: "Personal", accent: "#dcfce7" },
@@ -52,7 +52,7 @@ export default function AdminHome() {
           <div style={eyebrowStyle}>Administracion</div>
           <h1 style={titleStyle}>Panel Admin</h1>
           <p style={subtitleStyle}>
-            Acceso centralizado a configuracion comercial, operacion, flota y equipo. Store, Platform y el centro operativo quedan visibles como entrada diaria.
+            Acceso centralizado a configuración comercial, operación, flota y equipo. Store, Platform y el centro operativo quedan visibles como entrada diaria.
           </p>
         </div>
 
@@ -81,13 +81,13 @@ export default function AdminHome() {
                     : section === "Comercial"
                       ? "Configuracion de oferta, precios y venta."
                       : section === "Flota"
-                        ? "Gestion de activos y mantenimiento de flota."
-                        : "Gestion de personal, accesos y estructura interna."}
+                        ? "Gestión de activos y mantenimiento de flota."
+                        : "Gestión de personal, accesos y estructura interna."}
                 </div>
               </div>
 
               <div style={{ ...countPill, background: theme.bg, color: theme.ink }}>
-                {items.length} modulos
+                {items.length} módulos
               </div>
             </div>
 

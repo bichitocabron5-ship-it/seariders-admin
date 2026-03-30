@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Select from "react-select";
+import { StoreHero, StoreMetricCard, StoreMetricGrid, storeStyles } from "@/components/store-ui";
 import { getCountryOptionsEs, type CountryOption } from "@/lib/countries";
 
 type PassProductDto = {
@@ -91,12 +92,12 @@ type PassSummaryRow = {
 type PassMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 type MinutesOption = 20 | 30 | 60 | 120 | 180;
 
-const shellStyle: React.CSSProperties = { padding: 24, maxWidth: 1240, margin: "0 auto", display: "grid", gap: 18 };
-const panelStyle: React.CSSProperties = { padding: 18, border: "1px solid #dbe4ea", borderRadius: 20, background: "#fff", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)" };
+const shellStyle: React.CSSProperties = storeStyles.shell;
+const panelStyle: React.CSSProperties = storeStyles.panel;
 const labelTitleStyle: React.CSSProperties = { fontSize: 12, opacity: 0.75, fontWeight: 800 };
-const inputStyle: React.CSSProperties = { width: "100%", padding: 12, borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff" };
-const primaryButtonStyle: React.CSSProperties = { padding: "12px 14px", borderRadius: 12, border: "1px solid #0f172a", background: "#0f172a", color: "#fff", fontWeight: 900 };
-const secondaryButtonStyle: React.CSSProperties = { padding: "12px 14px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", color: "#111827", fontWeight: 800 };
+const inputStyle: React.CSSProperties = { ...storeStyles.input, padding: 12 };
+const primaryButtonStyle: React.CSSProperties = { ...storeStyles.primaryButton, padding: "12px 14px", fontWeight: 900 };
+const secondaryButtonStyle: React.CSSProperties = { ...storeStyles.secondaryButton, padding: "12px 14px", fontWeight: 800 };
 
 function Field({
   label,
@@ -388,23 +389,21 @@ export default function StoreBonosPage() {
 
   return (
     <div style={shellStyle}>
-      <section style={{ ...panelStyle, display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap", background: "linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%)" }}>
-        <div style={{ display: "grid", gap: 6 }}>
-          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, textTransform: "uppercase", color: "#0369a1" }}>Store</div>
-          <h1 style={{ margin: 0, fontSize: 32, lineHeight: 1 }}>Bonos</h1>
-          <div style={{ color: "#475569", maxWidth: 720 }}>
-            Venta, consulta y consumo de bonos con acceso directo a la formalización en tienda.
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <StoreHero
+        title="Bonos"
+        description="Venta, consulta y consumo de bonos con acceso directo a la formalización en tienda."
+        eyebrowColor="#0369a1"
+        actions={
+          <>
           <button type="button" onClick={loadSummary} disabled={summaryLoading} style={secondaryButtonStyle}>
             {summaryLoading ? "Refrescando..." : "Refrescar resumen"}
           </button>
           <button type="button" onClick={() => router.push("/store")} style={secondaryButtonStyle}>
             Volver a Store
           </button>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {err ? (
         <div style={{ padding: 12, borderRadius: 14, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 700 }}>
@@ -512,20 +511,11 @@ export default function StoreBonosPage() {
             </button>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
-            <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Pendientes</div>
-              <div style={{ fontSize: 22, fontWeight: 900 }}>{pendingTop.length}</div>
-            </div>
-            <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Vendidos hoy</div>
-              <div style={{ fontSize: 22, fontWeight: 900 }}>{soldToday.length}</div>
-            </div>
-            <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Productos</div>
-              <div style={{ fontSize: 22, fontWeight: 900 }}>{products.length}</div>
-            </div>
-          </div>
+          <StoreMetricGrid>
+            <StoreMetricCard label="Pendientes" value={pendingTop.length} />
+            <StoreMetricCard label="Vendidos hoy" value={soldToday.length} />
+            <StoreMetricCard label="Productos" value={products.length} />
+          </StoreMetricGrid>
         </div>
       </section>
 

@@ -19,7 +19,7 @@ export async function GET() {
         method: true,
         origin: true,
         isDeposit: true,
-        direction: true, // âœ… nuevo
+        direction: true,
       },
     });
 
@@ -35,7 +35,7 @@ export async function GET() {
     const depositCents = payments.filter((p) => p.isDeposit).reduce((s, p) => s + signed(p), 0);
     const serviceCents = payments.filter((p) => !p.isDeposit).reduce((s, p) => s + signed(p), 0);
 
-    // Por mÃ©todo/origen: neto + in/out
+    // Por método/origen: neto + in/out
     const byMethod: Record<string, { netCents: number; inCents: number; outCents: number }> = {};
     const byOrigin: Record<string, { netCents: number; inCents: number; outCents: number }> = {};
 
@@ -65,7 +65,7 @@ export async function GET() {
       serviceCents,
       depositCents,
 
-      // desglose neto + in/out por agrupaciÃ³n
+      // desglose neto + in/out por agrupación
       byMethod,
       byOrigin,
     });

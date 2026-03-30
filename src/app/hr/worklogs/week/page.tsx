@@ -3,6 +3,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
+import WorklogsWeekFiltersSection from "@/app/hr/worklogs/week/_components/WorklogsWeekFiltersSection";
+import WorklogsWeekTableSection from "@/app/hr/worklogs/week/_components/WorklogsWeekTableSection";
 
 type WorkArea =
   | "PLATFORM"
@@ -80,45 +83,21 @@ type EmployeeLite = {
 const AREAS: WorkArea[] = ["PLATFORM", "BOOTH", "STORE", "BAR", "MECHANICS", "HR", "ADMIN", "OTHER"];
 
 const pageShell: React.CSSProperties = {
-  maxWidth: 1360,
-  margin: "0 auto",
-  padding: 24,
-  display: "grid",
+  ...opsStyles.pageShell,
+  width: "min(1360px, 100%)",
   gap: 16,
-  fontFamily: "system-ui",
 };
 
 const softCard: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.sectionCard,
   borderRadius: 20,
   background: "#fff",
   boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)",
 };
 
-const inputStyle: React.CSSProperties = {
-  padding: 10,
-  borderRadius: 12,
-  border: "1px solid #d0d9e4",
-  background: "#fff",
-};
-
 const ghostBtn: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #d0d9e4",
-  background: "#fff",
-  fontWeight: 900,
+  ...opsStyles.ghostButton,
   color: "#111",
-  textDecoration: "none",
-};
-
-const primaryBtn: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
-  fontWeight: 950,
 };
 
 const errorBox: React.CSSProperties = {
@@ -271,42 +250,32 @@ export default function HrWorklogsWeekPage() {
 
   return (
     <div style={pageShell}>
-      <div style={{ ...softCard, padding: 16, background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 45%, #ecfeff 100%)", display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
+      <div style={{ ...softCard, padding: "clamp(18px, 3vw, 24px)", background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 45%, #ecfeff 100%)", display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
         <div>
-          <div style={{ fontWeight: 950, fontSize: 30 }}>Horas semanales</div>
+          <div style={{ fontWeight: 950, fontSize: "clamp(30px, 4vw, 38px)", lineHeight: 1 }}>Horas semanales</div>
           <div style={{ opacity: 0.72, fontSize: 13 }}>Vista semanal por trabajador y totales diarios</div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={opsStyles.actionGrid}>
           <Link href="/hr/worklogs" style={ghostBtn}>Fichajes</Link>
           <button type="button" onClick={load} style={ghostBtn}>Refrescar</button>
         </div>
       </div>
 
-      <div style={{ ...softCard, padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, alignItems: "end" }}>
-        <button type="button" onClick={prevWeek} style={ghostBtn}>Semana anterior</button>
-        <button type="button" onClick={nextWeek} style={ghostBtn}>Semana siguiente</button>
-
-        <Field label="Semana (lunes)">
-          <input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} style={inputStyle} />
-        </Field>
-
-        <Field label="Trabajador">
-          <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} style={inputStyle}>
-            <option value="">Todos</option>
-            {employees.map((e) => <option key={e.id} value={e.id}>{e.fullName}</option>)}
-          </select>
-        </Field>
-
-        <Field label="Área">
-          <select value={area} onChange={(e) => setArea(e.target.value as "" | WorkArea)} style={inputStyle}>
-            <option value="">Todas</option>
-            {AREAS.map((a) => <option key={a} value={a}>{areaLabel(a)}</option>)}
-          </select>
-        </Field>
-
-        <button type="button" onClick={load} style={primaryBtn}>Aplicar</button>
-      </div>
+      <WorklogsWeekFiltersSection
+        weekStart={weekStart}
+        employeeId={employeeId}
+        area={area}
+        employees={employees}
+        areas={AREAS}
+        onPrevWeek={prevWeek}
+        onNextWeek={nextWeek}
+        onWeekStartChange={setWeekStart}
+        onEmployeeChange={setEmployeeId}
+        onAreaChange={setArea}
+        onApply={load}
+        areaLabel={areaLabel}
+      />
 
       {loading ? <div style={{ opacity: 0.75 }}>Cargando...</div> : null}
       {error ? <div style={errorBox}>{error}</div> : null}
@@ -320,108 +289,22 @@ export default function HrWorklogsWeekPage() {
             <MiniKpi title="Abiertas" value={openLogsCount} warn />
           </div>
 
-          <div style={{ ...softCard, overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1200 }}>
-              <thead>
-                <tr>
-                  <th style={thLeft}>Trabajador</th>
-                  {data.week.days.map((d) => <th key={d.ymd} style={thCenter}>{fmtDayShort(d.date)}</th>)}
-                  <th style={thCenter}>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.employees.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} style={{ padding: 18, textAlign: "center", opacity: 0.72 }}>Sin datos para esta semana.</td>
-                  </tr>
-                ) : (
-                  data.employees.map((row) => (
-                    <tr key={row.employee.id}>
-                      <td style={tdLeft}>
-                        <Link href={`/hr/employees/${row.employee.id}`} style={{ textDecoration: "none", color: "#111", fontWeight: 900 }}>{row.employee.fullName}</Link>
-                        <div style={{ fontSize: 12, opacity: 0.72 }}>{row.employee.code ?? "—"} · {employeeKindLabel(row.employee.kind)}</div>
-                      </td>
-                      {row.perDay.map((day) => {
-                        const hasOpen = day.openLogs > 0;
-                        const hasLogs = day.logs > 0;
-                        return (
-                          <td key={day.ymd} style={{ ...tdCenter, background: hasOpen ? "#fffbeb" : "#fff" }}>
-                            <div style={{ fontWeight: 900 }}>{hasLogs ? fmtMinutes(day.workedMinutes) : "—"}</div>
-                            {hasLogs ? <div style={{ fontSize: 11, opacity: 0.72 }}>{day.logs} reg.{day.openLogs > 0 ? ` · ${day.openLogs} abiertas` : ""}</div> : null}
-                          </td>
-                        );
-                      })}
-                      <td style={{ ...tdCenter, fontWeight: 950 }}>{fmtMinutes(row.totalMinutes)}<div style={{ fontSize: 11, opacity: 0.72 }}>{row.totalLogs} reg.</div></td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              {data.totals.byDay.length > 0 ? (
-                <tfoot>
-                  <tr>
-                    <td style={tfLeft}>Total día</td>
-                    {data.totals.byDay.map((d) => <td key={d.ymd} style={tfCenter}><div style={{ fontWeight: 950 }}>{fmtMinutes(d.totalMinutes)}</div><div style={{ fontSize: 11, opacity: 0.72 }}>{d.totalLogs} reg.{d.openLogs > 0 ? ` · ${d.openLogs} abiertas` : ""}</div></td>)}
-                    <td style={tfCenter}><div style={{ fontWeight: 950 }}>{fmtMinutes(data.totals.weekMinutes)}</div><div style={{ fontSize: 11, opacity: 0.72 }}>{data.totals.weekLogs} reg.</div></td>
-                  </tr>
-                </tfoot>
-              ) : null}
-            </table>
-          </div>
+          <WorklogsWeekTableSection
+            employees={data.employees}
+            weekDays={data.week.days}
+            totalsByDay={data.totals.byDay}
+            weekMinutes={data.totals.weekMinutes}
+            weekLogs={data.totals.weekLogs}
+            fmtMinutes={fmtMinutes}
+            fmtDayShort={fmtDayShort}
+            employeeKindLabel={employeeKindLabel}
+          />
         </>
       ) : null}
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label style={{ display: "grid", gap: 6, fontSize: 13 }}>{label}{children}</label>;
-}
-
 function MiniKpi({ title, value, warn }: { title: string; value: string | number; warn?: boolean }) {
   return <div style={{ ...softCard, border: warn ? "1px solid #fde68a" : "1px solid #dbe4ea", background: warn ? "linear-gradient(180deg, #fffbeb 0%, #ffffff 100%)" : "#fff", padding: 12 }}><div style={{ fontSize: 12, opacity: 0.72, fontWeight: 800 }}>{title}</div><div style={{ marginTop: 4, fontSize: 24, fontWeight: 950, color: warn ? "#92400e" : "#111" }}>{value}</div></div>;
 }
-
-const thLeft: React.CSSProperties = {
-  textAlign: "left",
-  padding: 12,
-  borderBottom: "1px solid #e5e7eb",
-  background: "#f8fafc",
-  fontSize: 13,
-};
-
-const thCenter: React.CSSProperties = {
-  textAlign: "center",
-  padding: 12,
-  borderBottom: "1px solid #e5e7eb",
-  background: "#f8fafc",
-  fontSize: 13,
-};
-
-const tdLeft: React.CSSProperties = {
-  textAlign: "left",
-  padding: 12,
-  borderBottom: "1px solid #f1f5f9",
-  verticalAlign: "top",
-};
-
-const tdCenter: React.CSSProperties = {
-  textAlign: "center",
-  padding: 12,
-  borderBottom: "1px solid #f1f5f9",
-  verticalAlign: "top",
-};
-
-const tfLeft: React.CSSProperties = {
-  textAlign: "left",
-  padding: 12,
-  background: "#f8fafc",
-  borderTop: "1px solid #e5e7eb",
-  fontWeight: 950,
-};
-
-const tfCenter: React.CSSProperties = {
-  textAlign: "center",
-  padding: 12,
-  background: "#f8fafc",
-  borderTop: "1px solid #e5e7eb",
-};

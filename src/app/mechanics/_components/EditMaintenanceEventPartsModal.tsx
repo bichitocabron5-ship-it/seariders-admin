@@ -1,8 +1,7 @@
-// src/app/mechanics/_components/EditMaintenanceEventPartsModal.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { eurFromCents } from "@/lib/mechanics-format";
+import EditMaintenanceEventPartsEditorSection from "@/app/mechanics/_components/EditMaintenanceEventPartsEditorSection";
 
 type EventPartRow = {
   id: string;
@@ -168,16 +167,14 @@ export default function EditMaintenanceEventPartsModal({
         if (cancelled) return;
 
         setOptions(available);
-
         setParts(
-          row.partUsages.map((p) => ({
-            sparePartId: p.sparePart?.id ?? "",
-            label: p.sparePart
-              ? `${p.sparePart.name}${p.sparePart.sku ? ` · ${p.sparePart.sku}` : ""}`
+          row.partUsages.map((partUsage) => ({
+            sparePartId: partUsage.sparePart?.id ?? "",
+            label: partUsage.sparePart
+              ? `${partUsage.sparePart.name}${partUsage.sparePart.sku ? ` · ${partUsage.sparePart.sku}` : ""}`
               : "Recambio",
-            qty: String(p.qty),
-            unitCostCents:
-              p.unitCostCents != null ? String(p.unitCostCents) : "",
+            qty: String(partUsage.qty),
+            unitCostCents: partUsage.unitCostCents != null ? String(partUsage.unitCostCents) : "",
           }))
         );
       } catch (e: unknown) {
@@ -199,14 +196,8 @@ export default function EditMaintenanceEventPartsModal({
     const q = partQuery.trim().toLowerCase();
     if (!q) return options;
 
-    return options.filter((p) => {
-      const hay = [
-        p.name,
-        p.sku ?? "",
-        p.brand ?? "",
-        p.model ?? "",
-        p.supplierName ?? "",
-      ]
+    return options.filter((part) => {
+      const hay = [part.name, part.sku ?? "", part.brand ?? "", part.model ?? "", part.supplierName ?? ""]
         .join(" ")
         .toLowerCase();
 
@@ -215,9 +206,9 @@ export default function EditMaintenanceEventPartsModal({
   }, [options, partQuery]);
 
   const totalCostPreview = useMemo(() => {
-    return parts.reduce((acc, p) => {
-      const qty = Number(p.qty || 0);
-      const unit = Number(p.unitCostCents || 0);
+    return parts.reduce((acc, part) => {
+      const qty = Number(part.qty || 0);
+      const unit = Number(part.unitCostCents || 0);
       if (!Number.isFinite(qty) || !Number.isFinite(unit)) return acc;
       return acc + qty * unit;
     }, 0);
@@ -225,15 +216,15 @@ export default function EditMaintenanceEventPartsModal({
 
   function addPart(sparePart: SparePartOption) {
     setParts((prev) => {
-      const existing = prev.find((p) => p.sparePartId === sparePart.id);
+      const existing = prev.find((part) => part.sparePartId === sparePart.id);
       if (existing) {
-        return prev.map((p) =>
-          p.sparePartId === sparePart.id
+        return prev.map((part) =>
+          part.sparePartId === sparePart.id
             ? {
-                ...p,
-                qty: String(Number(p.qty || 0) + 1),
+                ...part,
+                qty: String(Number(part.qty || 0) + 1),
               }
-            : p
+            : part
         );
       }
 
@@ -243,19 +234,14 @@ export default function EditMaintenanceEventPartsModal({
           sparePartId: sparePart.id,
           label: `${sparePart.name}${sparePart.sku ? ` · ${sparePart.sku}` : ""}`,
           qty: "1",
-          unitCostCents:
-            sparePart.costPerUnitCents != null
-              ? String(sparePart.costPerUnitCents)
-              : "",
+          unitCostCents: sparePart.costPerUnitCents != null ? String(sparePart.costPerUnitCents) : "",
         },
       ];
     });
   }
 
   function updatePart(index: number, patch: Partial<EditablePart>) {
-    setParts((prev) =>
-      prev.map((p, i) => (i === index ? { ...p, ...patch } : p))
-    );
+    setParts((prev) => prev.map((part, i) => (i === index ? { ...part, ...patch } : part)));
   }
 
   function removePart(index: number) {
@@ -268,12 +254,10 @@ export default function EditMaintenanceEventPartsModal({
       setError(null);
 
       const payload = {
-        partsUsed: parts.map((p) => ({
-          sparePartId: p.sparePartId,
-          qty: Number(p.qty),
-          unitCostCents: p.unitCostCents.trim()
-            ? Number(p.unitCostCents)
-            : null,
+        partsUsed: parts.map((part) => ({
+          sparePartId: part.sparePartId,
+          qty: Number(part.qty),
+          unitCostCents: part.unitCostCents.trim() ? Number(part.unitCostCents) : null,
         })),
       };
 
@@ -314,117 +298,19 @@ export default function EditMaintenanceEventPartsModal({
 
       {!loading ? (
         <>
-          <div style={sectionCard}>
-            <div style={{ fontWeight: 900 }}>Buscar y añadir recambio</div>
-            <input
-              value={partQuery}
-              onChange={(e) => setPartQuery(e.target.value)}
-              placeholder="Nombre, SKU, marca, modelo, proveedor..."
-              style={inputStyle}
-            />
-
-            <div style={{ display: "grid", gap: 6, maxHeight: 240, overflow: "auto" }}>
-              {filteredOptions.map((p) => (
-                <div
-                  key={p.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 10,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 10,
-                    padding: 10,
-                    background: "#fff",
-                  }}
-                >
-                  <div style={{ fontSize: 13 }}>
-                    <div style={{ fontWeight: 800 }}>
-                      {p.name}
-                      {p.sku ? ` · ${p.sku}` : ""}
-                    </div>
-                    <div style={{ opacity: 0.8 }}>
-                      Stock: {p.stockQty}
-                      {p.unit ? ` ${p.unit}` : ""}
-                      {p.costPerUnitCents != null
-                        ? ` · ${eurFromCents(p.costPerUnitCents)}`
-                        : ""}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => addPart(p)}
-                    style={ghostBtn}
-                  >
-                    Añadir
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div style={sectionCard}>
-            <div style={{ fontWeight: 900 }}>Piezas del evento</div>
-
-            {parts.length === 0 ? (
-              <div style={{ opacity: 0.72 }}>No hay piezas seleccionadas.</div>
-            ) : (
-              <div style={{ display: "grid", gap: 8 }}>
-                {parts.map((p, index) => (
-                  <div
-                    key={`${p.sparePartId}-${index}`}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1.4fr 120px 160px 120px",
-                      gap: 8,
-                      alignItems: "end",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: 10,
-                      padding: 10,
-                      background: "#fafafa",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 800 }}>{p.label}</div>
-                    </div>
-
-                    <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                      Cantidad
-                      <input
-                        value={p.qty}
-                        onChange={(e) => updatePart(index, { qty: e.target.value })}
-                        style={inputStyle}
-                      />
-                    </label>
-
-                    <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                      Coste unitario
-                      <input
-                        value={p.unitCostCents}
-                        onChange={(e) =>
-                          updatePart(index, { unitCostCents: e.target.value })
-                        }
-                        style={inputStyle}
-                      />
-                    </label>
-
-                    <button
-                      type="button"
-                      onClick={() => removePart(index)}
-                      style={ghostBtn}
-                    >
-                      Quitar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div style={{ fontSize: 13, fontWeight: 900 }}>
-              Coste estimado piezas: {eurFromCents(totalCostPreview)}
-            </div>
-          </div>
+          <EditMaintenanceEventPartsEditorSection
+            inputStyle={inputStyle}
+            ghostBtn={ghostBtn}
+            sectionCard={sectionCard}
+            partQuery={partQuery}
+            filteredOptions={filteredOptions}
+            parts={parts}
+            totalCostPreview={totalCostPreview}
+            onPartQueryChange={setPartQuery}
+            onAddPart={addPart}
+            onUpdatePart={updatePart}
+            onRemovePart={removePart}
+          />
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button type="button" onClick={onClose} style={ghostBtn} disabled={busy}>

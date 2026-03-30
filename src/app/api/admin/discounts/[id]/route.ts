@@ -9,7 +9,7 @@ import type { Prisma } from "@prisma/client";
 export const runtime = "nodejs";
 
 const PatchBody = z.object({
-  // pon aquÃ­ tus campos opcionales reales:
+  // Pon aquí tus campos opcionales reales:
   name: z.string().optional(),
   code: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
@@ -36,9 +36,9 @@ const PatchBody = z.object({
 
 export async function PATCH(
   req: Request,
-  ctx: { params: Promise<{ id: string }> } // ðŸ‘ˆ clave
+  ctx: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await ctx.params;          // ðŸ‘ˆ clave
+  const { id } = await ctx.params;
 
   // auth
   const cookieStore = await cookies();
@@ -49,7 +49,7 @@ export async function PATCH(
 
   const json = await req.json().catch(() => null);
   const parsed = PatchBody.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const patch = parsed.data;
 
@@ -60,7 +60,7 @@ export async function PATCH(
   });
   if (!current) return new NextResponse("Regla no existe", { status: 404 });
 
-  // 2) NormalizaciÃ³n segÃºn scope (evita datos mezclados)
+  // 2) Normalización según scope (evita datos mezclados)
   const nextScope = patch.scope ?? current.scope;
 
   const normalized: Prisma.DiscountRuleUpdateInput = { ...patch };

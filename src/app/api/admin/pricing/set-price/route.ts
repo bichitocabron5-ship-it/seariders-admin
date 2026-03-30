@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 const Body = z.object({
   serviceId: z.string().min(1),
-  optionId: z.string().min(1).nullable(), // âœ… NUEVO: null para extras
+  optionId: z.string().min(1).nullable(), // nuevo: null para extras
   basePriceCents: z.number().int().min(0).max(10_000_000),
   validFrom: z.string().optional(), // ISO opcional
 });
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const { serviceId, optionId, basePriceCents } = parsed.data;
   const validFrom = parsed.data.validFrom ? new Date(parsed.data.validFrom) : new Date();
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       where: { id: optionId, serviceId, isActive: true },
       select: { id: true },
     });
-    if (!opt) return new NextResponse("OptionId invÃ¡lido para este servicio", { status: 400 });
+    if (!opt) return new NextResponse("OptionId inválido para este servicio", { status: 400 });
   }
 
   const created = await prisma.$transaction(async (tx) => {
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     await tx.servicePrice.updateMany({
       where: {
         serviceId,
-        optionId: optionId, // âœ… clave real
+        optionId: optionId, // clave real
         isActive: true,
       },
       data: {
@@ -68,8 +68,8 @@ export async function POST(req: Request) {
     const p = await tx.servicePrice.create({
       data: {
         serviceId,
-        optionId: optionId, // âœ… guardamos optionId
-        durationMin: null,  // dejamos durationMin solo para compatibilidad (ya no lo usamos aquÃ­)
+        optionId: optionId, // guardamos optionId
+        durationMin: null,  // dejamos durationMin solo para compatibilidad (ya no lo usamos aquí)
         basePriceCents,
         validFrom,
         validTo: null,

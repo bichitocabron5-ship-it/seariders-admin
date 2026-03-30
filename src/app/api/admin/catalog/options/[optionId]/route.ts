@@ -25,7 +25,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ option
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   // Evitar duplicados si cambian duration/pax:
   const { optionId } = await params;
@@ -34,7 +34,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ option
     where: { id: optionId },
     select: { id: true, serviceId: true, durationMinutes: true, paxMax: true },
   });
-  if (!current) return new NextResponse("OpciÃ³n no existe", { status: 404 });
+  if (!current) return new NextResponse("Opción no existe", { status: 404 });
 
   const nextDuration = parsed.data.durationMinutes ?? current.durationMinutes;
   const nextPax = parsed.data.paxMax ?? current.paxMax;
@@ -49,7 +49,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ option
       },
       select: { id: true },
     });
-    if (exists) return new NextResponse("Ya existe otra opciÃ³n con esa duraciÃ³n y PAX", { status: 400 });
+    if (exists) return new NextResponse("Ya existe otra opción con esa duración y PAX", { status: 400 });
   }
 
   const updated = await prisma.serviceOption.update({

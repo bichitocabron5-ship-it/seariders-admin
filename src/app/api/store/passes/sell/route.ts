@@ -28,14 +28,14 @@ const Body = z.object({
   buyerPhone: z.string().max(40).optional().nullable(),
   buyerEmail: z.string().max(160).optional().nullable(),
 
-  // âœ… PRO contrato (se guardan en el bono)
+  // PRO contrato (se guardan en el bono)
   customerCountry: NullableStr,   // "ES"
   customerAddress: NullableStr,
   customerDocType: NullableStr,
   customerDocNumber: NullableStr,
 });
 
-// helper pequeÃ±o (mismo patrÃ³n que ya usas)
+// helper pequeño (mismo patrón que ya usas)
 const norm = (v: unknown) => {
   if (v == null) return null;
   const t = String(v).trim();
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return NextResponse.json({ error: "Body invÃ¡lido" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
 
   const { productId, method, buyerName, buyerPhone, buyerEmail, customerCountry, customerAddress, customerDocType, customerDocNumber } = parsed.data;
   const shiftSessionId = (session as AppSession & { shiftSessionId?: string | null }).shiftSessionId ?? null;
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
           priceCents: true,
         },
       });
-      if (!product || !product.isActive) throw new Error("Producto no existe o no estÃ¡ activo");
+      if (!product || !product.isActive) throw new Error("Producto no existe o no está activo");
 
       // 1) Payment (venta del bono)
       const pay = await tx.payment.create({
@@ -87,7 +87,7 @@ export async function POST(req: Request) {
           ? new Date(Date.now() + product.validDays * 24 * 60 * 60 * 1000)
           : null;
 
-      // Generar cÃ³digo (si hay choque, reintenta unas veces)
+      // Generar código (si hay choque, reintenta unas veces)
       let lastErr: unknown = null;
       for (let i = 0; i < 5; i++) {
         const code = makePassCode();
@@ -105,7 +105,7 @@ export async function POST(req: Request) {
               buyerPhone: norm(buyerPhone),
               buyerEmail: norm(buyerEmail),
 
-              // âœ… PRO: guardar contrato
+              // PRO: guardar contrato
               customerCountry: norm(customerCountry)?.toUpperCase() ?? null,
               customerAddress: norm(customerAddress),
               customerDocType: norm(customerDocType),
@@ -133,7 +133,7 @@ export async function POST(req: Request) {
         }
       }
 
-      throw new Error(lastErr instanceof Error ? lastErr.message : "No se pudo generar cÃ³digo Ãºnico");
+      throw new Error(lastErr instanceof Error ? lastErr.message : "No se pudo generar código único");
     });
 
     return NextResponse.json({ ok: true, voucher: result });

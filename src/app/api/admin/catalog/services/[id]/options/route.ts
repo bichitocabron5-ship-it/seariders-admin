@@ -12,8 +12,8 @@ const CreateBody = z.object({
   durationMinutes: z.number().int().min(1).max(600),
   paxMax: z.number().int().min(1).max(30),
   contractedMinutes: z.number().int().min(1).max(600).optional(),
-  isActive: z.boolean().optional(), // âœ… AÃ‘ADIR
-  // âœ… legacy obligatorio en tu schema (aunque ya no sea fuente de verdad)
+  isActive: z.boolean().optional(), // AÑADIR
+  // legacy obligatorio en tu schema (aunque ya no sea fuente de verdad)
   // Pon 0 por defecto y listo.  
   basePriceCents: z.number().int().min(0).max(10_000_000).optional(),
 });
@@ -28,7 +28,7 @@ export async function GET(
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const { id } = await Promise.resolve(ctx.params); // âœ…
+  const { id } = await Promise.resolve(ctx.params);
 
   const options = await prisma.serviceOption.findMany({
     where: { serviceId: id },
@@ -56,17 +56,17 @@ export async function POST(
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const { id } = await Promise.resolve(ctx.params); // âœ…
+  const { id } = await Promise.resolve(ctx.params);
 
   const json = await req.json().catch(() => null);
   const parsed = CreateBody.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const exists = await prisma.serviceOption.findFirst({
     where: { serviceId: id, durationMinutes: parsed.data.durationMinutes, paxMax: parsed.data.paxMax },
     select: { id: true },
   });
-  if (exists) return new NextResponse("Ya existe una opciÃ³n con esa duraciÃ³n y PAX", { status: 400 });
+  if (exists) return new NextResponse("Ya existe una opción con esa duración y PAX", { status: 400 });
 
 function makeOptionCode(serviceCode: string, durationMinutes: number, paxMax: number) {
   const sc = (serviceCode || "SVC").trim().toUpperCase().replace(/[^\p{L}\p{N}_]+/gu, "_");
@@ -74,7 +74,7 @@ function makeOptionCode(serviceCode: string, durationMinutes: number, paxMax: nu
 }
 
   const svc = await prisma.service.findUnique({
-  where: { id }, // âœ…
+  where: { id },
   select: { id: true, category: true, code:true },
 });
   if (!svc) return new NextResponse("Servicio no existe", { status: 404 });

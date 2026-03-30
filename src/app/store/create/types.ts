@@ -27,6 +27,20 @@ export type CartItem = {
   pax: number;
 };
 
+export type CustomerSearchRow = {
+  reservationId: string;
+  customerName: string | null;
+  email: string | null;
+  phone: string | null;
+  customerDocNumber: string | null;
+  country: string | null;
+  birthDate: string | null;
+  address: string | null;
+  postalCode: string | null;
+  licenseNumber: string | null;
+  lastActivityAt: string | null;
+};
+
 export type UIMode = "CREATE" | "FORMALIZE" | "EDIT";
 
 export type ContractDto = {

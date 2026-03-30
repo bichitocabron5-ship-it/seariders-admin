@@ -3,9 +3,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { fmtHours, eurFromCents, isNegativeNumber, fmtNumber } from "@/lib/mechanics-format";
+import { eurFromCents } from "@/lib/mechanics-format";
 import EditMaintenanceEventModal from "@/app/mechanics/_components/EditMaintenanceEventModal";
-import { operabilityBadgeStyle, operabilityLabel } from "@/lib/operability-ui";
+import CreateMaintenanceEventModal from "@/app/mechanics/[entityType]/[id]/_components/CreateMaintenanceEventModal";
+import MaintenanceEventsSection from "@/app/mechanics/[entityType]/[id]/_components/MaintenanceEventsSection";
+import MaintenanceDetailOverviewSection from "@/app/mechanics/[entityType]/[id]/_components/MaintenanceDetailOverviewSection";
+import RecurringFaultCodesSection from "@/app/mechanics/[entityType]/[id]/_components/RecurringFaultCodesSection";
 
 type MaintenanceEntityType = "JETSKI" | "ASSET";
 type MaintenanceEventType =
@@ -146,18 +149,6 @@ const STATUS_LABEL = {
   CANCELED: "Cancelada",
 } as const;
 
-function fmtDateTime(iso: string | null) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString("es-ES", {
-      dateStyle: "short",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 function hoursSince(dateIso: string | null | undefined) {
   if (!dateIso) return null;
 
@@ -168,16 +159,6 @@ function hoursSince(dateIso: string | null | undefined) {
   if (diffMs < 0) return 0;
 
   return diffMs / (1000 * 60 * 60);
-}
-
-function formatOpenAge(dateIso: string | null | undefined) {
-  const h = hoursSince(dateIso);
-  if (h == null) return "—";
-
-  if (h < 24) return `${fmtNumber(h, 1)} h`;
-
-  const d = h / 24;
-  return `${fmtNumber(d, 1)} d`;
 }
 
 function eventPriorityLabel(params: {
@@ -195,88 +176,6 @@ function eventPriorityLabel(params: {
   if (params.status === "EXTERNAL") return "MEDIA";
   if (ageHours >= 48) return "MEDIA";
   return "NORMAL";
-}
-
-function priorityBadgeStyle(priority: string): React.CSSProperties {
-  const base: React.CSSProperties = {
-    padding: "4px 8px",
-    borderRadius: 999,
-    fontSize: 12,
-    fontWeight: 900,
-    border: "1px solid #e5e7eb",
-    background: "#fff",
-  };
-
-  if (priority === "CRÍTICA") {
-    return {
-      ...base,
-      borderColor: "#fecaca",
-      background: "#fff1f2",
-      color: "#b91c1c",
-    };
-  }
-
-  if (priority === "MUY ALTA") {
-    return {
-      ...base,
-      borderColor: "#fde68a",
-      background: "#fffbeb",
-      color: "#92400e",
-    };
-  }
-
-  if (priority === "ALTA") {
-    return {
-      ...base,
-      borderColor: "#fed7aa",
-      background: "#fff7ed",
-      color: "#c2410c",
-    };
-  }
-
-  if (priority === "MEDIA") {
-    return {
-      ...base,
-      borderColor: "#bfdbfe",
-      background: "#eff6ff",
-      color: "#1d4ed8",
-    };
-  }
-
-  return {
-    ...base,
-    borderColor: "#bbf7d0",
-    background: "#f0fdf4",
-    color: "#166534",
-  };
-}
-
-function stateBadgeStyle(state: ServiceState): React.CSSProperties {
-  const base: React.CSSProperties = {
-    padding: "6px 10px",
-    borderRadius: 999,
-    fontWeight: 900,
-    fontSize: 12,
-    border: "1px solid #e5e7eb",
-  };
-
-  if (state === "DUE") {
-    return { ...base, borderColor: "#fecaca", background: "#fff1f2", color: "#b91c1c" };
-  }
-  if (state === "WARN") {
-    return { ...base, borderColor: "#fde68a", background: "#fffbeb", color: "#92400e" };
-  }
-  if (state === "UNKNOWN") {
-    return { ...base, borderColor: "#d1d5db", background: "#f9fafb", color: "#374151" };
-  }
-  return { ...base, borderColor: "#bbf7d0", background: "#f0fdf4", color: "#166534" };
-}
-
-function stateLabel(state: ServiceState) {
-  if (state === "DUE") return "DUE";
-  if (state === "WARN") return "WARN";
-  if (state === "UNKNOWN") return "UNKNOWN";
-  return "OK";
 }
 
 const pageShell: React.CSSProperties = {
@@ -358,10 +257,6 @@ export default function MechanicsDetailPage() {
     if (!eventIdFromQuery) return;
     setEditingEventId(eventIdFromQuery);
   }, [eventIdFromQuery]);
-
-function isEditableEventStatus(status: string) {
-  return status === "OPEN" || status === "IN_PROGRESS" || status === "EXTERNAL";
-}
 
   const openEventModal = useCallback(
     (nextEventType: MaintenanceEventType = "SERVICE") => {
@@ -810,255 +705,6 @@ function isEditableEventStatus(status: string) {
     }
   }
 
-  function renderEventCard(e: (typeof data extends null ? never : NonNullable<typeof data>["events"][number])) {
-    const partsSummary = e.partUsages.reduce(
-      (acc, p) => {
-        acc.qty += Number(p.qty ?? 0);
-        acc.cost += Number(p.totalCostCents ?? 0);
-        return acc;
-      },
-      { qty: 0, cost: 0 }
-    );
-
-  const openAge = formatOpenAge(e.createdAt);
-    const priority = eventPriorityLabel({
-      status: e.status,
-      severity: e.severity,
-      createdAt: e.createdAt,
-    });
-
-    const realPartsCost = e.partUsages.reduce(
-      (acc, p) => acc + Number(p.totalCostCents ?? 0),
-      0
-    );
-
-    const totalKnownCost =
-    Number(e.laborCostCents ?? 0) + Number(realPartsCost ?? 0);
-
-    return (
-      <div
-        key={e.id}
-        style={{
-          border: "1px solid #eee",
-          borderRadius: 14,
-          padding: 12,
-          background: "#fafafa",
-          display: "grid",
-          gap: 8,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "start",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "grid", gap: 4 }}>
-            <div style={{ fontWeight: 900 }}>
-              {EVENT_TYPE_LABEL[e.type] ?? e.type}
-              {typeof e.hoursAtService === "number" ? ` · ${fmtHours(e.hoursAtService)} h` : ""}
-            </div>
-
-            <div style={{ fontSize: 12, opacity: 0.8 }}>
-              {fmtDateTime(e.createdAt)}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <div
-              style={{
-                padding: "4px 8px",
-                borderRadius: 999,
-                border: "1px solid #e5e7eb",
-                background: "#fff",
-                fontSize: 12,
-                fontWeight: 900,
-              }}
-            >
-              {e.status}
-            </div>
-
-            <div
-              style={{
-                padding: "4px 8px",
-                borderRadius: 999,
-                border: "1px solid #e5e7eb",
-                background: "#fff",
-                fontSize: 12,
-                fontWeight: 900,
-              }}
-            >
-              {e.severity}
-            </div>
-
-            <div style={priorityBadgeStyle(priority)}>{priority}</div>
-
-              {isEditableEventStatus(e.status) ? (
-                <button
-                  type="button"
-                  onClick={() => setEditingEventId(e.id)}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #e5e7eb",
-                    background: "#fff",
-                    fontSize: 12,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                  }}
-                >
-                  Editar / Resolver
-                </button>
-              ) : null}
-
-              {e.status === "RESOLVED" ? (
-                <button
-                  type="button"
-                  onClick={() => reopenEvent(e.id)}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #e5e7eb",
-                    background: "#fff",
-                    fontSize: 12,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                  }}
-                >
-                  Reabrir
-                </button>
-              ) : null}
-            </div>
-        </div>
-
-        {e.faultCode ? (
-          <div style={{ fontSize: 13 }}>
-            <b>Fault code:</b> {e.faultCode}
-          </div>
-        ) : null}
-
-        {e.reopenCount > 0 ? (
-          <div
-            style={{
-              padding: "4px 8px",
-              borderRadius: 999,
-              border: "1px solid #e5e7eb",
-              background: "#fff",
-              fontSize: 12,
-              fontWeight: 900,
-            }}
-          >
-            Reabierto {e.reopenCount}x
-          </div>
-        ) : null}
-
-        {e.note ? (
-          <div style={{ fontSize: 13 }}>{e.note}</div>
-        ) : null}
-
-        <div style={{ fontSize: 13, opacity: 0.85 }}>
-          Coste: <b>{eurFromCents(e.costCents)}</b>
-          {e.laborCostCents != null ? ` · Mano de obra: ${eurFromCents(e.laborCostCents)}` : ""}
-          {e.partsCostCents != null ? ` · Piezas: ${eurFromCents(e.partsCostCents)}` : ""}
-        </div>
-
-        {isEditableEventStatus(e.status) ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: 8,
-              fontSize: 13,
-            }}
-          >
-            <div
-              style={{
-                border: "1px solid #e5e7eb",
-                borderRadius: 10,
-                padding: 10,
-                background: "#fff",
-              }}
-            >
-              <div style={{ fontSize: 12, opacity: 0.72 }}>Tiempo abierto</div>
-              <div style={{ marginTop: 4, fontWeight: 900 }}>{openAge}</div>
-            </div>
-
-            <div
-              style={{
-                border: "1px solid #e5e7eb",
-                borderRadius: 10,
-                padding: 10,
-                background: "#fff",
-              }}
-            >
-              <div style={{ fontSize: 12, opacity: 0.72 }}>Coste piezas real</div>
-              <div style={{ marginTop: 4, fontWeight: 900 }}>
-                {eurFromCents(realPartsCost)}
-              </div>
-            </div>
-
-            <div
-              style={{
-                border: "1px solid #e5e7eb",
-                borderRadius: 10,
-                padding: 10,
-                background: "#fff",
-              }}
-            >
-              <div style={{ fontSize: 12, opacity: 0.72 }}>Coste conocido actual</div>
-              <div style={{ marginTop: 4, fontWeight: 900 }}>
-                {eurFromCents(totalKnownCost)}
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {e.partUsages?.length ? (
-          <div
-            style={{
-              marginTop: 6,
-              border: "1px solid #e5e7eb",
-              background: "#fff",
-              borderRadius: 10,
-              padding: 10,
-              display: "grid",
-              gap: 6,
-            }}
-          >
-            <div style={{ fontSize: 12, fontWeight: 900 }}>
-              Recambios utilizados · {partsSummary.qty} uds · {eurFromCents(partsSummary.cost)}
-            </div>
-
-            {e.partUsages.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                  fontSize: 12,
-                }}
-              >
-                <div>
-                  {p.sparePart?.name ?? "Recambio eliminado"}
-                  {p.sparePart?.sku ? ` · ${p.sparePart.sku}` : ""}
-                  {p.sparePart?.unit ? ` · ${p.qty} ${p.sparePart.unit}` : ` · qty ${p.qty}`}
-                </div>
-
-                <div style={{ fontWeight: 700 }}>
-                  {eurFromCents(p.totalCostCents)}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
     <div style={pageShell}>
       <div
@@ -1148,148 +794,18 @@ function isEditableEventStatus(status: string) {
 
       {!loading && data ? (
         <>
-          <div
-            style={{
-              ...softCard,
-              padding: 16,
-              display: "grid",
-              gap: 10,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontWeight: 950, fontSize: 22 }}>{data.entity.displayName}</div>
-                <div style={{ fontSize: 13, opacity: 0.8 }}>
-                  {data.entityType === "JETSKI" ? "JETSKI" : data.entity.type}
-                  {data.entity.model ? ` · ${data.entity.model}` : ""}
-                  {data.entity.year ? ` · ${data.entity.year}` : ""}
-                  {data.entity.plate ? ` · ${data.entity.plate}` : ""}
-                  {data.entity.chassisNumber ? ` · Bastidor: ${data.entity.chassisNumber}` : ""}
-                  {data.entity.maxPax ? ` · Pax máx: ${data.entity.maxPax}` : ""}
-                  {data.entity.code ? ` · ${data.entity.code}` : ""}
-                </div>
-              </div>
+          <MaintenanceDetailOverviewSection
+            entityType={data.entityType}
+            entity={data.entity}
+            service={data.service}
+            lastServiceHoursEffective={data.lastServiceHoursEffective}
+          />
 
-              <div style={stateBadgeStyle(data.service.state)}>{stateLabel(data.service.state)}</div>
-            </div>
-
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <span>Estado operativo:</span>
-              <span style={operabilityBadgeStyle(data.entity.operabilityStatus ?? data.entity.status)}>
-                {operabilityLabel(data.entity.operabilityStatus ?? data.entity.status)}
-              </span>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 12,
-            }}
-          >
-            <Kpi title="Horas actuales" value={fmtHours(data.entity.currentHours)} />
-            <Kpi title="Desde última revisión" value={fmtHours(data.service.hoursSinceService)} />
-            <Kpi title="Próxima revisión" value={fmtHours(data.service.serviceDueAt)} />
-            <Kpi
-              title="Horas restantes"
-              value={fmtHours(data.service.hoursLeft)}
-              danger={isNegativeNumber(data.service.hoursLeft)}
-            />
-            <Kpi title="Última revisión efectiva" value={fmtHours(data.lastServiceHoursEffective)} />
-          </div>
-
-          <div
-            style={{
-              ...softCard,
-              padding: 16,
-              display: "grid",
-              gap: 12,
-            }}
-          >
-            <div style={{ fontWeight: 950, fontSize: 20 }}>
-              Códigos de avería recurrentes
-            </div>
-
-            {recurringFaultCatalogLoading ? (
-              <div style={{ opacity: 0.72 }}>Cargando catálogo de códigos de avería...</div>
-            ) : recurringFaults.length === 0 ? (
-              <div style={{ opacity: 0.72 }}>No hay códigos de avería repetidos registrados.</div>
-            ) : (
-              <div style={{ display: "grid", gap: 8 }}>
-                {recurringFaults.map((f) => {
-                  const catalog = recurringFaultCatalog[f.code.toUpperCase()] ?? null;
-
-                  return (
-                    <div
-                      key={f.code}
-                      style={{
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 12,
-                        padding: 12,
-                        background: "#fafafa",
-                        display: "grid",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                        <div style={{ fontWeight: 900 }}>{f.code}</div>
-
-                        {catalog?.system ? (
-                          <div
-                            style={{
-                              padding: "4px 8px",
-                              borderRadius: 999,
-                              border: "1px solid #e5e7eb",
-                              background: "#fff",
-                              fontSize: 12,
-                              fontWeight: 800,
-                            }}
-                          >
-                            {catalog.system}
-                          </div>
-                        ) : null}
-
-                        {catalog?.severityHint ? (
-                          <div
-                            style={{
-                              padding: "4px 8px",
-                              borderRadius: 999,
-                              border: "1px solid #e5e7eb",
-                              background: "#fff",
-                              fontSize: 12,
-                              fontWeight: 800,
-                            }}
-                          >
-                            Severidad sugerida: {catalog.severityHint}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div style={{ fontSize: 13, fontWeight: 800 }}>
-                        {catalog?.titleEs ?? "Código sin descripción en catálogo"}
-                      </div>
-
-                      {catalog?.descriptionEs ? (
-                        <div style={{ fontSize: 13, opacity: 0.9 }}>
-                          {catalog.descriptionEs}
-                        </div>
-                      ) : null}
-
-                      <div style={{ fontSize: 13, opacity: 0.85 }}>
-                        <b>{f.count}</b> vez/veces · última vez: {fmtDateTime(f.lastSeenAt)}
-                      </div>
-
-                      <div style={{ fontSize: 13, opacity: 0.85 }}>
-                        Coste acumulado: {eurFromCents(f.totalCostCents)} Coste piezas:{" "}
-                        {eurFromCents(f.totalPartsCostCents)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <RecurringFaultCodesSection
+            loading={recurringFaultCatalogLoading}
+            recurringFaults={recurringFaults}
+            recurringFaultCatalog={recurringFaultCatalog}
+          />
 
           <div
             style={{
@@ -1314,597 +830,67 @@ function isEditableEventStatus(status: string) {
             />
           </div>
 
-          <div
-            style={{
-              ...softCard,
-              padding: 16,
-              display: "grid",
-              gap: 12,
-            }}
-          >
-          <div style={{ display: "grid", gap: 16 }}>
-            <div
-              style={{
-                border: "1px solid #e5e7eb",
-                background: "#fff",
-                borderRadius: 18,
-                padding: 16,
-                display: "grid",
-                gap: 12,
-              }}
-            >
-              <div style={{ fontWeight: 950, fontSize: 22 }}>
-                Eventos abiertos / en curso · {activeEvents.length}
-              </div>
-
-              {activeEvents.length === 0 ? (
-                <div style={{ opacity: 0.72 }}>No hay eventos abiertos, en curso o externos.</div>
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {activeEvents.map((e) => renderEventCard(e))}
-                </div>
-                
-              )}
-            </div>
-
-            <div
-              style={{
-                border: "1px solid #e5e7eb",
-                background: "#fff",
-                borderRadius: 18,
-                padding: 16,
-                display: "grid",
-                gap: 12,
-              }}
-            >
-              <div style={{ fontWeight: 950, fontSize: 22 }}>
-                Historial resuelto · {resolvedEvents.length}
-              </div>
-
-              {resolvedEvents.length === 0 ? (
-                <div style={{ opacity: 0.72 }}>No hay eventos resueltos o cancelados.</div>
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {resolvedEvents.map((e) => renderEventCard(e))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          </div>
+          <MaintenanceEventsSection
+            activeEvents={activeEvents}
+            resolvedEvents={resolvedEvents}
+            eventTypeLabel={EVENT_TYPE_LABEL}
+            onEdit={(eventId) => setEditingEventId(eventId)}
+            onReopen={reopenEvent}
+          />
         </>
       ) : null}
 
-      {open ? (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.3)",
-            display: "grid",
-            placeItems: "center",
-            padding: 16,
-            zIndex: 60,
-          }}
-          onClick={() => (busy ? null : setOpen(false))}
-        >
-          <div
-            style={{
-              width: "min(1100px, 100%)",
-              background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-              borderRadius: 18,
-              border: "1px solid #dbe4ea",
-              padding: 14,
-              boxShadow: "0 18px 40px rgba(15, 23, 42, 0.1)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ fontWeight: 950, fontSize: 18 }}>Crear evento técnico</div>
-              <button
-                type="button"
-                onClick={() => (busy ? null : setOpen(false))}
-                style={{
-                  border: "1px solid #e5e7eb",
-                  background: "#fff",
-                  borderRadius: 10,
-                  padding: "6px 10px",
-                  fontWeight: 900,
-                }}
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                Tipo de evento
-                <select
-                  value={eventType}
-                  onChange={(e) => setEventType(e.target.value as MaintenanceEventType)}
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                >
-                  {Object.entries(EVENT_TYPE_LABEL).map(([key, value]) => (
-                    <option key={key} value={key}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                Horas en el momento del evento
-                <input
-                  value={hoursAtService}
-                  onChange={(e) => setHoursAtService(e.target.value)}
-                  placeholder="Vacío = currentHours"
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                />
-              </label>
-
-              <label style={{ display: "grid", gap: 6, fontSize: 13, gridColumn: "1 / -1" }}>
-                Nota
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  rows={4}
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                />
-              </label>
-
-              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Severidad
-                  <select
-                    value={severity}
-                    onChange={(e) => setSeverity(e.target.value as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL")}
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                  >
-                    {Object.entries(SEVERITY_LABEL).map(([key, value]) => (
-                      <option key={key} value={key}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Estado
-                  <select
-                    value={eventStatus}
-                    onChange={(e) =>
-                      setEventStatus(e.target.value as "OPEN" | "IN_PROGRESS" | "RESOLVED" | "EXTERNAL" | "CANCELED")
-                    }
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                  >
-                    {Object.entries(STATUS_LABEL).map(([key, value]) => (
-                      <option key={key} value={key}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Proveedor / taller
-                  <input
-                    value={supplierName}
-                    onChange={(e) => setSupplierName(e.target.value)}
-                    placeholder="Ej: Mecánico Escala"
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                  />
-                </label>
-
-                <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={externalWorkshop}
-                    onChange={(e) => setExternalWorkshop(e.target.checked)}
-                  />
-                  Taller externo
-                </label>
-
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Coste total (céntimos)
-                  <input
-                    value={costCents}
-                    onChange={(e) => setCostCents(e.target.value)}
-                    placeholder="Ej: 13800"
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                  />
-                </label>
-
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Mano de obra (céntimos)
-                  <input
-                    value={laborCostCents}
-                    onChange={(e) => setLaborCostCents(e.target.value)}
-                    placeholder="Ej: 12000"
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                  />
-                </label>
-
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Coste piezas (céntimos)
-                  <input
-                    value={partsCostCents}
-                    onChange={(e) => setPartsCostCents(e.target.value)}
-                    placeholder="Ej: 1800"
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                  />
-                </label>
-
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Código de avería
-                  <input
-                    value={faultCode}
-                    onChange={(e) => setFaultCode(e.target.value.toUpperCase())}
-                    placeholder="Ej: P0562 / P0122 / U0129"
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                  />
-                </label>
-
-                <div
-                  style={{
-                    gridColumn: "1 / -1",
-                    border: "1px solid #e5e7eb",
-                    background: "#fafafa",
-                    borderRadius: 12,
-                    padding: 12,
-                    display: "grid",
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ fontWeight: 900, fontSize: 13 }}>Ayuda de código de avería</div>
-
-                  {!faultCode.trim() ? (
-                    <div style={{ fontSize: 13, opacity: 0.72 }}>
-                      Escribe un código para ver su descripción, causas probables y acción recomendada.
-                    </div>
-                  ) : faultCodeLoading ? (
-                    <div style={{ fontSize: 13, opacity: 0.72 }}>Buscando código...</div>
-                  ) : faultCodeLookupError ? (
-                    <div style={{ fontSize: 13, color: "#991b1b", fontWeight: 900 }}>
-                      {faultCodeLookupError}
-                    </div>
-                  ) : selectedFaultCode ? (
-                    <>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                        <div style={{ fontWeight: 950 }}>{selectedFaultCode.code}</div>
-                        {selectedFaultCode.system ? (
-                          <div
-                            style={{
-                              padding: "4px 8px",
-                              borderRadius: 999,
-                              border: "1px solid #e5e7eb",
-                              background: "#fff",
-                              fontSize: 12,
-                              fontWeight: 800,
-                            }}
-                          >
-                            {selectedFaultCode.system}
-                          </div>
-                        ) : null}
-                        {selectedFaultCode.severityHint ? (
-                          <div
-                            style={{
-                              padding: "4px 8px",
-                              borderRadius: 999,
-                              border: "1px solid #e5e7eb",
-                              background: "#fff",
-                              fontSize: 12,
-                              fontWeight: 800,
-                            }}
-                          >
-                            Severidad sugerida: {selectedFaultCode.severityHint}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div style={{ fontSize: 13 }}>
-                        <b>{selectedFaultCode.titleEs}</b>
-                      </div>
-
-                      {selectedFaultCode.descriptionEs ? (
-                        <div style={{ fontSize: 13, opacity: 0.9 }}>
-                          <b>Descripción:</b> {selectedFaultCode.descriptionEs}
-                        </div>
-                      ) : null}
-
-                      {selectedFaultCode.likelyCausesEs ? (
-                        <div style={{ fontSize: 13, opacity: 0.9 }}>
-                          <b>Causas probables:</b> {selectedFaultCode.likelyCausesEs}
-                        </div>
-                      ) : null}
-
-                      {selectedFaultCode.recommendedActionEs ? (
-                        <div style={{ fontSize: 13, opacity: 0.9 }}>
-                          <b>Acción recomendada:</b> {selectedFaultCode.recommendedActionEs}
-                        </div>
-                      ) : null}
-
-                      <div style={{ fontSize: 12, opacity: 0.7 }}>
-                        {selectedFaultCode.source ? `Fuente: ${selectedFaultCode.source}` : "Fuente no indicada"}
-                      </div>
-
-                      {faultCodeOptions.length > 1 ? (
-                        <div style={{ display: "grid", gap: 6 }}>
-                          <div style={{ fontSize: 12, fontWeight: 900 }}>Coincidencias</div>
-                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            {faultCodeOptions.map((row) => (
-                              <button
-                                key={row.id}
-                                type="button"
-                                onClick={() => setFaultCode(row.code)}
-                                style={{
-                                  padding: "6px 10px",
-                                  borderRadius: 999,
-                                  border:
-                                    row.code === selectedFaultCode.code
-                                      ? "1px solid #111"
-                                      : "1px solid #e5e7eb",
-                                  background: row.code === selectedFaultCode.code ? "#111" : "#fff",
-                                  color: row.code === selectedFaultCode.code ? "#fff" : "#111",
-                                  fontSize: 12,
-                                  fontWeight: 900,
-                                }}
-                              >
-                                {row.code}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <div style={{ fontSize: 13, opacity: 0.72 }}>
-                      No hay coincidencias en el catálogo para este código.
-                    </div>
-                  )}
-                </div>
-
-                {normalizedFaultCode ? (
-                  <div
-                    style={{
-                      marginTop: 8,
-                      padding: 10,
-                      borderRadius: 10,
-                      border: exactFaultCodeMatch
-                        ? "1px solid #bbf7d0"
-                        : "1px solid #fde68a",
-                      background: exactFaultCodeMatch ? "#f0fdf4" : "#fffbeb",
-                      color: exactFaultCodeMatch ? "#166534" : "#92400e",
-                      fontSize: 13,
-                      fontWeight: 800,
-                    }}
-                  >
-                    {exactFaultCodeMatch
-                      ? "Código reconocido en catálogo."
-                      : "Código no encontrado en catálogo. Se guardará como código libre."}
-                  </div>
-                ) : null}
-
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Resuelto el
-                  <input
-                    type="datetime-local"
-                    value={resolvedAt}
-                    onChange={(e) => setResolvedAt(e.target.value)}
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                  />
-                </label>
-              </div>
-
-              <div style={{ marginTop: 14, display: "grid", gap: 8, overflow: "auto" }}>
-                <div style={{ fontWeight: 900, fontSize: 13 }}>Piezas usadas</div>
-
-                {partsUsed.map((p, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "minmax(220px, 2fr) minmax(90px, 110px) minmax(120px, 150px) auto",
-                        gap: 8,
-                        alignItems: "end",
-                      }}
-                    >
-                    <label style={{ display: "grid", gap: 6, fontSize: 12 }}>
-                      Recambio
-                      <select
-                        value={p.sparePartId}
-                        onChange={(e) => {
-                          const next = [...partsUsed];
-                          next[idx].sparePartId = e.target.value;
-                          const selected = parts.find((x) => x.id === e.target.value);
-                          if (selected && !next[idx].unitCostCents) {
-                            next[idx].unitCostCents =
-                              selected.costPerUnitCents != null ? String(selected.costPerUnitCents) : "";
-                          }
-                          setPartsUsed(next);
-                        }}
-                        style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                      >
-                        <option value="">Selecciona recambio...</option>
-                        {parts.map((sp) => (
-                          <option key={sp.id} value={sp.id}>
-                            {sp.name} {sp.unit ? `· ${sp.unit}` : ""} · stock {sp.stockQty}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label style={{ display: "grid", gap: 6, fontSize: 12 }}>
-                      Qty
-                      <input
-                        value={p.qty}
-                        onChange={(e) => {
-                          const next = [...partsUsed];
-                          next[idx].qty = e.target.value;
-                          setPartsUsed(next);
-                        }}
-                        style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                      />
-                    </label>
-
-                    <label style={{ display: "grid", gap: 6, fontSize: 12 }}>
-                      Coste unit. cént.
-                      <input
-                        value={p.unitCostCents}
-                        onChange={(e) => {
-                          const next = [...partsUsed];
-                          next[idx].unitCostCents = e.target.value;
-                          setPartsUsed(next);
-                        }}
-                        style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                      />
-                    </label>
-
-                    <button
-                      type="button"
-                      onClick={() => setPartsUsed(partsUsed.filter((_, i) => i !== idx))}
-                      style={{
-                        padding: "10px 12px",
-                        borderRadius: 10,
-                        border: "1px solid #e5e7eb",
-                        background: "#fff",
-                        fontWeight: 900,
-                      }}
-                    >
-                      Quitar
-                    </button>
-                  </div>
-                ))}
-
-                <div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPartsUsed([
-                        ...partsUsed,
-                        { sparePartId: "", qty: "", unitCostCents: "" },
-                      ])
-                    }
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      border: "1px solid #e5e7eb",
-                      background: "#fff",
-                      fontWeight: 900,
-                    }}
-                  >
-                    + Añadir pieza
-                  </button>
-                </div>
-              </div>
-
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-                <input
-                  type="checkbox"
-                  checked={applyToEntity}
-                  onChange={(e) => setApplyToEntity(e.target.checked)}
-                />
-                Aplicar a la entidad
-              </label>
-
-              <div
-                style={{
-                  border: "1px solid #e5e7eb",
-                  background: "#fafafa",
-                  borderRadius: 12,
-                  padding: 12,
-                  display: "grid",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontWeight: 900 }}>Operatividad en Plataforma</div>
-
-                <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={affectsOperability}
-                    onChange={(e) => setAffectsOperability(e.target.checked)}
-                  />
-                  Este evento afecta a la operatividad actual
-                </label>
-
-                {affectsOperability ? (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 10,
-                    }}
-                  >
-                    <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                      Estado al abrir/reabrir
-                      <select
-                        value={operabilityOnOpen}
-                        onChange={(e) => setOperabilityOnOpen(e.target.value)}
-                        style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                      >
-                        <option value="">Selecciona...</option>
-                        <option value="MAINTENANCE">MAINTENANCE</option>
-                        <option value="DAMAGED">DAMAGED</option>
-                        <option value="OUT_OF_SERVICE">OUT_OF_SERVICE</option>
-                        <option value="OPERATIONAL">OPERATIONAL</option>
-                      </select>
-                    </label>
-
-                    <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                      Estado al resolver
-                      <select
-                        value={operabilityOnResolved}
-                        onChange={(e) => setOperabilityOnResolved(e.target.value)}
-                        style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                      >
-                        <option value="">Selecciona...</option>
-                        <option value="OPERATIONAL">OPERATIONAL</option>
-                        <option value="MAINTENANCE">MAINTENANCE</option>
-                        <option value="DAMAGED">DAMAGED</option>
-                        <option value="OUT_OF_SERVICE">OUT_OF_SERVICE</option>
-                      </select>
-                    </label>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            {modalError ? (
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: 10,
-                  borderRadius: 12,
-                  border: "1px solid #fecaca",
-                  background: "#fff1f2",
-                  color: "#991b1b",
-                  fontWeight: 900,
-                }}
-              >
-                {modalError}
-              </div>
-            ) : null}
-
-            <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <button
-                type="button"
-                onClick={submitEvent}
-                disabled={busy}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid #111",
-                  background: busy ? "#9ca3af" : "#111",
-                  color: "#fff",
-                  fontWeight: 950,
-                }}
-              >
-                {busy ? "Guardando..." : "Guardar evento"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <CreateMaintenanceEventModal
+        open={open}
+        busy={busy}
+        modalError={modalError}
+        eventType={eventType}
+        setEventType={setEventType}
+        eventTypeLabel={EVENT_TYPE_LABEL}
+        hoursAtService={hoursAtService}
+        setHoursAtService={setHoursAtService}
+        note={note}
+        setNote={setNote}
+        severity={severity}
+        setSeverity={setSeverity}
+        severityLabel={SEVERITY_LABEL}
+        eventStatus={eventStatus}
+        setEventStatus={setEventStatus}
+        statusLabel={STATUS_LABEL}
+        supplierName={supplierName}
+        setSupplierName={setSupplierName}
+        externalWorkshop={externalWorkshop}
+        setExternalWorkshop={setExternalWorkshop}
+        costCents={costCents}
+        setCostCents={setCostCents}
+        laborCostCents={laborCostCents}
+        setLaborCostCents={setLaborCostCents}
+        partsCostCents={partsCostCents}
+        setPartsCostCents={setPartsCostCents}
+        faultCode={faultCode}
+        setFaultCode={setFaultCode}
+        faultCodeOptions={faultCodeOptions}
+        faultCodeLoading={faultCodeLoading}
+        faultCodeLookupError={faultCodeLookupError}
+        selectedFaultCode={selectedFaultCode}
+        normalizedFaultCode={normalizedFaultCode}
+        exactFaultCodeMatch={exactFaultCodeMatch}
+        resolvedAt={resolvedAt}
+        setResolvedAt={setResolvedAt}
+        parts={parts}
+        partsUsed={partsUsed}
+        setPartsUsed={setPartsUsed}
+        applyToEntity={applyToEntity}
+        setApplyToEntity={setApplyToEntity}
+        affectsOperability={affectsOperability}
+        setAffectsOperability={setAffectsOperability}
+        operabilityOnOpen={operabilityOnOpen}
+        setOperabilityOnOpen={setOperabilityOnOpen}
+        operabilityOnResolved={operabilityOnResolved}
+        setOperabilityOnResolved={setOperabilityOnResolved}
+        onClose={() => setOpen(false)}
+        onSubmit={submitEvent}
+      />
 
       {editingEventId ? (
         <EditMaintenanceEventModal

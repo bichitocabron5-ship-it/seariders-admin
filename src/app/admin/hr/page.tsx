@@ -3,6 +3,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import EmployeesListSection from "./_components/EmployeesListSection";
+import EmployeeModal from "./_components/EmployeeModal";
+import EmployeesFiltersSection from "./_components/EmployeesFiltersSection";
 
 type EmployeeKind =
   | "MONITOR"
@@ -66,15 +69,6 @@ const EMPLOYEE_KIND_LABEL: Record<EmployeeKind, string> = {
   EXTRA: "Extra",
   MANAGER: "Responsable",
 };
-
-function fmtDateTime(iso: string) {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" });
-  } catch {
-    return iso;
-  }
-}
 
 export default function AdminHrPage() {
   const [loading, setLoading] = useState(true);
@@ -187,67 +181,19 @@ export default function AdminHrPage() {
         </article>
       </section>
 
-      <div style={panelStyle}>
-        <div style={{ fontWeight: 950 }}>Filtros</div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Buscar
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Nombre, código, email, teléfono..."
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-            />
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Tipo
-            <select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as "" | EmployeeKind)}
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-            >
-              <option value="">Todos</option>
-              {EMPLOYEE_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {EMPLOYEE_KIND_LABEL[k]}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Activo
-            <select
-              value={active}
-              onChange={(e) => setActive(e.target.value as "" | "true" | "false")}
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-            >
-              <option value="">Todos</option>
-              <option value="true">Sí</option>
-              <option value="false">No</option>
-            </select>
-          </label>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button
-            type="button"
-            onClick={() => load({ showLoading: true })}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #111",
-              background: "#111",
-              color: "#fff",
-              fontWeight: 950,
-            }}
-          >
-            Aplicar
-          </button>
-        </div>
-      </div>
+      <EmployeesFiltersSection
+        q={q}
+        kind={kind}
+        active={active}
+        setQ={setQ}
+        setKind={setKind}
+        setActive={setActive}
+        load={() => load({ showLoading: true })}
+        employeeKinds={EMPLOYEE_KINDS}
+        employeeKindLabel={EMPLOYEE_KIND_LABEL}
+        panelStyle={panelStyle}
+        darkBtn={darkBtn}
+      />
 
       <div
         style={{
@@ -263,129 +209,13 @@ export default function AdminHrPage() {
         <SummaryCard title="Mecánicos" value={rows.filter((r) => r.kind === "MECHANIC").length} />
       </div>
 
-      <div style={{ marginTop: 14, border: "1px solid #e5e7eb", borderRadius: 14, background: "#fff" }}>
-        <div
-          style={{
-            padding: 12,
-            borderBottom: "1px solid #eee",
-            display: "flex",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ fontWeight: 950 }}>Trabajadores</div>
-          <div style={{ fontWeight: 900, opacity: 0.8 }}>{rows.length}</div>
-        </div>
-
-        <div style={{ padding: 12 }}>
-          {loading ? <div style={{ opacity: 0.7 }}>Cargando...</div> : null}
-
-          {error ? (
-            <div
-              style={{
-                padding: 10,
-                borderRadius: 12,
-                border: "1px solid #fecaca",
-                background: "#fff1f2",
-                color: "#991b1b",
-                fontWeight: 900,
-              }}
-            >
-              {error}
-            </div>
-          ) : null}
-
-          {!loading && rows.length === 0 ? <div style={{ opacity: 0.7 }}>No hay trabajadores.</div> : null}
-
-          <div style={{ display: "grid", gap: 10 }}>
-            {rows.map((r) => (
-              <div
-                key={r.id}
-                style={{
-                  border: "1px solid #eee",
-                  borderRadius: 14,
-                  padding: 12,
-                  background: "#fff",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
-                    <div style={{ fontWeight: 950, fontSize: 16 }}>{r.fullName}</div>
-
-                    <div
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        border: "1px solid #e5e7eb",
-                        fontWeight: 900,
-                        fontSize: 12,
-                        background: r.isActive ? "#ecfeff" : "#fafafa",
-                      }}
-                    >
-                      {r.isActive ? "ACTIVO" : "INACTIVO"}
-                    </div>
-
-                    <div style={{ fontSize: 12, opacity: 0.8 }}>
-                      {EMPLOYEE_KIND_LABEL[r.kind]}
-                      {r.jobTitle ? ` · ${r.jobTitle}` : ""}
-                      {r.code ? ` · ${r.code}` : ""}
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    Actualizado: <b>{fmtDateTime(r.updatedAt)}</b>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
-                  {r.email ? r.email : "Sin email"} {r.phone ? ` · ${r.phone}` : ""}
-                  {r.note ? ` · ${r.note}` : ""}
-                </div>
-
-                <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-                  Usuario:{" "}
-                  <b>
-                    {r.user
-                      ? `${r.user.username}${r.user.passportCode ? ` · ${r.user.passportCode}` : ""}`
-                      : "No vinculado"}
-                  </b>
-                </div>
-
-                <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={() => setEditing(r)}
-                    style={{
-                      padding: "9px 12px",
-                      borderRadius: 12,
-                      border: "1px solid #111",
-                      background: "#fff",
-                      color: "#111",
-                      fontWeight: 900,
-                    }}
-                  >
-                    Editar
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => toggleActive(r)}
-                    style={{
-                      padding: "9px 12px",
-                      borderRadius: 12,
-                      border: "1px solid #111",
-                      background: r.isActive ? "#fff" : "#111",
-                      color: r.isActive ? "#111" : "#fff",
-                      fontWeight: 900,
-                    }}
-                  >
-                    {r.isActive ? "Dar de baja" : "Reactivar"}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      <EmployeesListSection
+        rows={rows}
+        loading={loading}
+        error={error}
+        onEdit={(row) => setEditing(row)}
+        onToggleActive={toggleActive}
+      />
 
       {openCreate ? (
         <EmployeeModal
@@ -530,302 +360,3 @@ function SummaryCard({ title, value }: { title: string; value: number }) {
   );
 }
 
-function EmployeeModal({
-  title,
-  initial,
-  onClose,
-  onSaved,
-}: {
-  title: string;
-  initial?: EmployeeRow | null;
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const [code, setCode] = useState(initial?.code ?? "");
-  const [fullName, setFullName] = useState(initial?.fullName ?? "");
-  const [phone, setPhone] = useState(initial?.phone ?? "");
-  const [email, setEmail] = useState(initial?.email ?? "");
-  const [kind, setKind] = useState<EmployeeKind>(initial?.kind ?? "EXTRA");
-  const [jobTitle, setJobTitle] = useState(initial?.jobTitle ?? "");
-  const [isActive, setIsActive] = useState(initial?.isActive ?? true);
-  const [note, setNote] = useState(initial?.note ?? "");
-  const [internshipHoursTotal, setInternshipHoursTotal] = useState(
-    initial?.internshipHoursTotal != null ? String(initial.internshipHoursTotal) : ""
-  );
-  const [internshipStartDate, setInternshipStartDate] = useState(
-    initial?.internshipStartDate ? initial.internshipStartDate.slice(0, 10) : ""
-  );
-  const [internshipEndDate, setInternshipEndDate] = useState(
-    initial?.internshipEndDate ? initial.internshipEndDate.slice(0, 10) : ""
-  );
-
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function save() {
-    setError(null);
-    if (!fullName.trim()) return setError("Nombre obligatorio.");
-
-    setBusy(true);
-    try {
-      const body = {
-        code: code.trim() || null,
-        fullName: fullName.trim(),
-        phone: phone.trim() || null,
-        email: email.trim() || null,
-        kind,
-        jobTitle: jobTitle.trim() || null,
-        isActive,
-        note: note.trim() || null,
-        internshipHoursTotal:
-          kind === "INTERN" && internshipHoursTotal.trim()
-            ? Number(internshipHoursTotal)
-            : null,
-
-        internshipStartDate:
-          kind === "INTERN" && internshipStartDate
-            ? new Date(`${internshipStartDate}T00:00`).toISOString()
-            : null,
-
-        internshipEndDate:
-          kind === "INTERN" && internshipEndDate
-            ? new Date(`${internshipEndDate}T00:00`).toISOString()
-            : null,
-      };
-
-      const res = await fetch(
-        initial ? `/api/admin/hr/${initial.id}` : "/api/admin/hr",
-        {
-          method: initial ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }
-      );
-
-      if (!res.ok) throw new Error(await res.text());
-      await onSaved();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error guardando");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.35)",
-        display: "grid",
-        placeItems: "center",
-        padding: 16,
-        zIndex: 60,
-      }}
-      onClick={() => (busy ? null : onClose())}
-    >
-      <div
-        style={{
-          width: "min(860px, 100%)",
-          background: "#fff",
-          borderRadius: 16,
-          border: "1px solid #e5e7eb",
-          padding: 14,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-          <div style={{ fontWeight: 950, fontSize: 18 }}>{title}</div>
-          <button
-            type="button"
-            onClick={() => (busy ? null : onClose())}
-            style={{
-              border: "1px solid #e5e7eb",
-              background: "#fff",
-              borderRadius: 10,
-              padding: "6px 10px",
-              fontWeight: 900,
-            }}
-          >
-            Cerrar
-          </button>
-        </div>
-
-        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Código (opcional)
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="Ej: EMP-MEC-002"
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-            />
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Nombre completo
-            <input
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Ej: Juan Pérez"
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-            />
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Teléfono
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+34..."
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-            />
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Email
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="persona@empresa.com"
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-            />
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Tipo
-            <select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as EmployeeKind)}
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-            >
-              {EMPLOYEE_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {EMPLOYEE_KIND_LABEL[k]}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Puesto visible / cargo
-            <input
-              value={jobTitle}
-              onChange={(e) => setJobTitle(e.target.value)}
-              placeholder="Ej: Responsable mecánica, Seguridad carpa, Extra verano..."
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-            />
-          </label>
-
-          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-            />
-            Activo
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13, gridColumn: "1 / -1" }}>
-            Nota
-            <input
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Observaciones, detalles internos..."
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-            />
-          </label>
-          
-        </div>
-
-        {kind === "INTERN" ? (
-          <div
-            style={{
-              marginTop: 12,
-              padding: 12,
-              borderRadius: 14,
-              border: "1px solid #fde68a",
-              background: "#fffbeb",
-              display: "grid",
-              gap: 10,
-            }}
-          >
-            <div style={{ fontWeight: 950, color: "#92400e" }}>Bolsa de horas · Prácticas</div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-              <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                Horas totales
-                <input
-                  value={internshipHoursTotal}
-                  onChange={(e) => setInternshipHoursTotal(e.target.value)}
-                  placeholder="Ej: 400"
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                />
-              </label>
-
-              <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                Inicio prácticas
-                <input
-                  type="date"
-                  value={internshipStartDate}
-                  onChange={(e) => setInternshipStartDate(e.target.value)}
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                />
-              </label>
-
-              <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                Fin prácticas
-                <input
-                  type="date"
-                  value={internshipEndDate}
-                  onChange={(e) => setInternshipEndDate(e.target.value)}
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                />
-              </label>
-            </div>
-
-            {initial?.internshipHoursUsed != null ? (
-              <div style={{ fontSize: 13, opacity: 0.9 }}>
-                Horas usadas automáticas: <b>{initial.internshipHoursUsed}</b>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {error ? (
-          <div
-            style={{
-              marginTop: 10,
-              padding: 10,
-              borderRadius: 12,
-              border: "1px solid #fecaca",
-              background: "#fff1f2",
-              color: "#991b1b",
-              fontWeight: 900,
-            }}
-          >
-            {error}
-          </div>
-        ) : null}
-
-        <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button
-            type="button"
-            onClick={save}
-            disabled={busy}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #111",
-              background: busy ? "#9ca3af" : "#111",
-              color: "#fff",
-              fontWeight: 950,
-            }}
-          >
-            {busy ? "Guardando..." : "Guardar"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

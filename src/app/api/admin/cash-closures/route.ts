@@ -24,7 +24,7 @@ const Q = z.object({
 
 function parseBusinessDate(yyyyMmDd: string) {
   const d = new Date(yyyyMmDd + "T00:00:00.000");
-  if (!Number.isFinite(d.getTime())) throw new Error("date invÃ¡lida");
+  if (!Number.isFinite(d.getTime())) throw new Error("date inválida");
   d.setHours(0, 0, 0, 0);
   return d;
 }
@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     origin: u.searchParams.get("origin") || undefined,
     date: u.searchParams.get("date") || undefined,
   });
-  if (!parsed.success) return NextResponse.json({ error: "Params invÃ¡lidos" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Params inválidos" }, { status: 400 });
 
   const where: Prisma.CashClosureWhereInput = {};
   if (parsed.data.origin) where.origin = parsed.data.origin;

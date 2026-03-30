@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
 import type { AssetRow, AssetStatus, AssetType } from "../types";
 
 const ASSET_TYPES: AssetType[] = ["BOAT", "TOWBOAT", "JETCAR", "PARASAILING", "FLYBOARD", "TOWABLE", "OTHER"];
@@ -16,14 +17,13 @@ function fmtDateTime(iso: string) {
 }
 
 const pageShell: React.CSSProperties = {
-  maxWidth: 1320,
-  margin: "0 auto",
-  padding: 24,
-  display: "grid",
+  ...opsStyles.pageShell,
+  width: "min(1320px, 100%)",
   gap: 16,
 };
 
 const softCard: React.CSSProperties = {
+  ...opsStyles.sectionCard,
   border: "1px solid #dbe4ea",
   borderRadius: 22,
   background: "#fff",
@@ -31,29 +31,19 @@ const softCard: React.CSSProperties = {
 };
 
 const inputStyle: React.CSSProperties = {
+  ...opsStyles.field,
   padding: 10,
   borderRadius: 12,
-  border: "1px solid #d0d9e4",
-  width: "100%",
-  background: "#fff",
 };
 
 const ghostBtn: React.CSSProperties = {
+  ...opsStyles.ghostButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #d0d9e4",
-  background: "#fff",
-  fontWeight: 900,
-  color: "#111",
-  textDecoration: "none",
 };
 
 const darkBtn: React.CSSProperties = {
+  ...opsStyles.primaryButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
   fontWeight: 950,
 };
 
@@ -103,11 +93,8 @@ export default function AdminAssetsPage() {
     <div style={pageShell}>
       <section
         style={{
-          ...softCard,
-          padding: 20,
+          ...opsStyles.heroCard,
           background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 45%, #ecfeff 100%)",
-          display: "grid",
-          gap: 16,
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
@@ -115,13 +102,13 @@ export default function AdminAssetsPage() {
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#0891b2" }}>
               Admin
             </div>
-            <div style={{ fontSize: 34, fontWeight: 950, lineHeight: 1.02, color: "#0f172a" }}>Recursos nauticos</div>
+            <div style={{ ...opsStyles.heroTitle, color: "#0f172a" }}>Recursos náuticos</div>
             <div style={{ fontSize: 14, color: "#475569" }}>
-              Flota de apoyo, estado operativo y datos tecnicos de boats, towboat, jetcar, parasailing, flyboard y towables.
+              Flota de apoyo, estado operativo y datos técnicos de boats, towboat, jetcar, parasailing, flyboard y towables.
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ ...opsStyles.actionGrid, width: "min(100%, 520px)" }}>
             <Link href="/admin" style={ghostBtn}>
               Volver a admin
             </Link>
@@ -154,7 +141,7 @@ export default function AdminAssetsPage() {
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
           <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
             Buscar
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre, code, matricula, bastidor o modelo" style={inputStyle} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre, code, matrícula, bastidor o modelo" style={inputStyle} />
           </label>
           <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
             Tipo
@@ -196,7 +183,7 @@ export default function AdminAssetsPage() {
                     {r.type}{r.code ? ` · ${r.code}` : ""}{r.plate ? ` · ${r.plate}` : ""}{r.chassisNumber ? ` · Bastidor ${r.chassisNumber}` : ""}{r.maxPax ? ` · Pax max ${r.maxPax}` : ""}
                   </div>
                   <div style={{ fontSize: 12, color: "#64748b" }}>
-                    {r.model ? `Modelo ${r.model}` : "Modelo no informado"}{r.year ? ` · Ano ${r.year}` : ""}{r.note ? ` · ${r.note}` : ""}
+                    {r.model ? `Modelo ${r.model}` : "Modelo no informado"}{r.year ? ` · Año ${r.year}` : ""}{r.note ? ` · ${r.note}` : ""}
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: "#64748b" }}>Actualizado: <b>{fmtDateTime(r.updatedAt)}</b></div>
@@ -240,17 +227,17 @@ function AssetModal({ initial, onClose, onSaved }: { initial: AssetRow | null; o
     setError(null);
     if (!name.trim()) return setError("Nombre obligatorio.");
     const yearNum = year.trim() ? Number(year.trim()) : null;
-    if (yearNum !== null && (!Number.isFinite(yearNum) || yearNum < 1950 || yearNum > 2100)) return setError("Ano invalido.");
+    if (yearNum !== null && (!Number.isFinite(yearNum) || yearNum < 1950 || yearNum > 2100)) return setError("Año inválido.");
     const maxPaxNum = maxPax.trim() ? Number(maxPax.trim()) : null;
-    if (maxPaxNum !== null && (!Number.isInteger(maxPaxNum) || maxPaxNum < 1 || maxPaxNum > 100)) return setError("Pax max invalido.");
+    if (maxPaxNum !== null && (!Number.isInteger(maxPaxNum) || maxPaxNum < 1 || maxPaxNum > 100)) return setError("Pax máx. inválido.");
     const currentHoursNum = currentHours.trim() ? Number(currentHours.trim()) : null;
-    if (currentHours.trim() && (!Number.isFinite(currentHoursNum) || currentHoursNum! < 0)) return setError("Horas actuales invalidas.");
+    if (currentHours.trim() && (!Number.isFinite(currentHoursNum) || currentHoursNum! < 0)) return setError("Horas actuales inválidas.");
     const lastServiceHoursNum = lastServiceHours.trim() ? Number(lastServiceHours.trim()) : null;
-    if (lastServiceHours.trim() && (!Number.isFinite(lastServiceHoursNum) || lastServiceHoursNum! < 0)) return setError("Horas ultimo service invalidas.");
+    if (lastServiceHours.trim() && (!Number.isFinite(lastServiceHoursNum) || lastServiceHoursNum! < 0)) return setError("Horas último service inválidas.");
     const serviceIntervalHoursNum = serviceIntervalHours.trim() ? Number(serviceIntervalHours.trim()) : null;
-    if (serviceIntervalHours.trim() && (!Number.isFinite(serviceIntervalHoursNum) || serviceIntervalHoursNum! <= 0)) return setError("Intervalo de service invalido.");
+    if (serviceIntervalHours.trim() && (!Number.isFinite(serviceIntervalHoursNum) || serviceIntervalHoursNum! <= 0)) return setError("Intervalo de service inválido.");
     const serviceWarnHoursNum = serviceWarnHours.trim() ? Number(serviceWarnHours.trim()) : null;
-    if (serviceWarnHours.trim() && (!Number.isFinite(serviceWarnHoursNum) || serviceWarnHoursNum! < 0)) return setError("Aviso de service invalido.");
+    if (serviceWarnHours.trim() && (!Number.isFinite(serviceWarnHoursNum) || serviceWarnHoursNum! < 0)) return setError("Aviso de service inválido.");
 
     setBusy(true);
     try {
@@ -285,7 +272,7 @@ function AssetModal({ initial, onClose, onSaved }: { initial: AssetRow | null; o
     }
   }
 
-  return <div style={overlayStyle} onClick={() => (busy ? null : onClose())}><div style={modalStyle} onClick={(e) => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "start" }}><div style={{ display: "grid", gap: 4 }}><div style={{ fontSize: 24, fontWeight: 950 }}>{isEdit ? "Editar recurso" : "Nuevo recurso"}</div><div style={{ fontSize: 13, color: "#64748b" }}>Datos base, operatividad y horas de mantenimiento.</div></div><button type="button" onClick={() => (busy ? null : onClose())} style={ghostBtn}>Cerrar</button></div><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}><Field label="Tipo"><select value={type} onChange={(e) => setType(e.target.value as AssetType)} style={inputStyle}>{ASSET_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></Field><Field label="Estado"><select value={status} onChange={(e) => setStatus(e.target.value as AssetStatus)} style={inputStyle}>{ASSET_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></Field><Field label="Nombre"><input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} /></Field><Field label="Code"><input value={code} onChange={(e) => setCode(e.target.value)} style={inputStyle} /></Field><Field label="Modelo"><input value={model} onChange={(e) => setModel(e.target.value)} style={inputStyle} /></Field><Field label="Ano"><input value={year} onChange={(e) => setYear(e.target.value)} style={inputStyle} /></Field><Field label="Matricula / placa"><input value={plate} onChange={(e) => setPlate(e.target.value)} style={inputStyle} /></Field><Field label="Bastidor"><input value={chassisNumber} onChange={(e) => setChassisNumber(e.target.value)} style={inputStyle} /></Field><Field label="Pax max"><input value={maxPax} onChange={(e) => setMaxPax(e.target.value)} style={inputStyle} /></Field><label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={isMotorized} onChange={(e) => setIsMotorized(e.target.checked)} />Recurso motorizado</label><Field label="Horas actuales"><input value={currentHours} onChange={(e) => setCurrentHours(e.target.value)} style={inputStyle} /></Field><Field label="Horas ultimo service"><input value={lastServiceHours} onChange={(e) => setLastServiceHours(e.target.value)} style={inputStyle} /></Field><Field label="Intervalo service"><input value={serviceIntervalHours} onChange={(e) => setServiceIntervalHours(e.target.value)} style={inputStyle} /></Field><Field label="Aviso service"><input value={serviceWarnHours} onChange={(e) => setServiceWarnHours(e.target.value)} style={inputStyle} /></Field><Field label="Nota" full><input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle} /></Field></div>{error ? <div style={errorBox}>{error}</div> : null}<div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}><button type="button" onClick={() => void save()} disabled={busy} style={{ ...darkBtn, background: busy ? "#9ca3af" : "#111" }}>{busy ? "Guardando..." : "Guardar"}</button></div></div></div>;
+  return <div style={overlayStyle} onClick={() => (busy ? null : onClose())}><div style={modalStyle} onClick={(e) => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "start" }}><div style={{ display: "grid", gap: 4 }}><div style={{ fontSize: 24, fontWeight: 950 }}>{isEdit ? "Editar recurso" : "Nuevo recurso"}</div><div style={{ fontSize: 13, color: "#64748b" }}>Datos base, operatividad y horas de mantenimiento.</div></div><button type="button" onClick={() => (busy ? null : onClose())} style={ghostBtn}>Cerrar</button></div><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}><Field label="Tipo"><select value={type} onChange={(e) => setType(e.target.value as AssetType)} style={inputStyle}>{ASSET_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></Field><Field label="Estado"><select value={status} onChange={(e) => setStatus(e.target.value as AssetStatus)} style={inputStyle}>{ASSET_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select></Field><Field label="Nombre"><input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} /></Field><Field label="Code"><input value={code} onChange={(e) => setCode(e.target.value)} style={inputStyle} /></Field><Field label="Modelo"><input value={model} onChange={(e) => setModel(e.target.value)} style={inputStyle} /></Field><Field label="Año"><input value={year} onChange={(e) => setYear(e.target.value)} style={inputStyle} /></Field><Field label="Matrícula / placa"><input value={plate} onChange={(e) => setPlate(e.target.value)} style={inputStyle} /></Field><Field label="Bastidor"><input value={chassisNumber} onChange={(e) => setChassisNumber(e.target.value)} style={inputStyle} /></Field><Field label="Pax máx."><input value={maxPax} onChange={(e) => setMaxPax(e.target.value)} style={inputStyle} /></Field><label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}><input type="checkbox" checked={isMotorized} onChange={(e) => setIsMotorized(e.target.checked)} />Recurso motorizado</label><Field label="Horas actuales"><input value={currentHours} onChange={(e) => setCurrentHours(e.target.value)} style={inputStyle} /></Field><Field label="Horas último service"><input value={lastServiceHours} onChange={(e) => setLastServiceHours(e.target.value)} style={inputStyle} /></Field><Field label="Intervalo service"><input value={serviceIntervalHours} onChange={(e) => setServiceIntervalHours(e.target.value)} style={inputStyle} /></Field><Field label="Aviso service"><input value={serviceWarnHours} onChange={(e) => setServiceWarnHours(e.target.value)} style={inputStyle} /></Field><Field label="Nota" full><input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle} /></Field></div>{error ? <div style={errorBox}>{error}</div> : null}<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}><button type="button" onClick={() => void save()} disabled={busy} style={{ ...darkBtn, background: busy ? "#9ca3af" : "#111", width: "100%" }}>{busy ? "Guardando..." : "Guardar"}</button></div></div></div>;
 }
 
 function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean; }) {
@@ -309,7 +296,7 @@ function statusBadge(status: AssetStatus): React.CSSProperties {
 }
 
 const badgeBase: React.CSSProperties = { padding: "6px 10px", borderRadius: 999, fontWeight: 900, fontSize: 12 };
-const heroPill: React.CSSProperties = { padding: "6px 12px", borderRadius: 999, border: "1px solid #bae6fd", background: "rgba(255,255,255,0.88)", color: "#0f766e", fontWeight: 900, fontSize: 12 };
+const heroPill: React.CSSProperties = { ...opsStyles.heroPill, border: "1px solid #bae6fd", background: "rgba(255,255,255,0.88)", color: "#0f766e" };
 const errorBox: React.CSSProperties = { padding: 12, borderRadius: 14, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 900 };
 const overlayStyle: React.CSSProperties = { position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.38)", display: "grid", placeItems: "center", padding: 16, zIndex: 70 };
 const modalStyle: React.CSSProperties = { width: "min(960px, 100%)", borderRadius: 20, border: "1px solid #dbe4ea", background: "#fff", boxShadow: "0 24px 60px rgba(15, 23, 42, 0.18)", padding: 18, display: "grid", gap: 14 };

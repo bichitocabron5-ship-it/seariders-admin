@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import React, { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { opsStyles } from "@/components/ops-ui";
+import GiftProductsCreateSection from "@/app/admin/gifts/_components/GiftProductsCreateSection";
+import GiftProductsListSection from "@/app/admin/gifts/_components/GiftProductsListSection";
 
 type GiftProductRow = {
   id: string;
@@ -47,28 +50,20 @@ function optLabel(o: { id: string; name?: string | null; durationMinutes?: numbe
 }
 
 const inputStyle: React.CSSProperties = {
-  width: "100%",
+  ...opsStyles.field,
   padding: 10,
-  borderRadius: 10,
-  border: "1px solid #e5e7eb",
+  borderRadius: 12,
 };
 
 const lightBtn: React.CSSProperties = {
+  ...opsStyles.ghostButton,
   padding: "10px 12px",
-  fontWeight: 900,
-  borderRadius: 10,
-  border: "1px solid #e5e7eb",
-  background: "#fff",
   cursor: "pointer",
 };
 
 const darkBtn: React.CSSProperties = {
+  ...opsStyles.primaryButton,
   padding: "10px 12px",
-  fontWeight: 900,
-  borderRadius: 10,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
   cursor: "pointer",
 };
 
@@ -227,7 +222,7 @@ export default function AdminGiftsPage() {
   }
 
   async function voidVoucher(id: string) {
-    const reason = prompt("Motivo de anulacion (obligatorio):") ?? "";
+    const reason = prompt("Motivo de anulación (obligatorio):") ?? "";
     if (reason.trim().length < 3) return;
 
     setErr(null);
@@ -259,7 +254,7 @@ export default function AdminGiftsPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={opsStyles.actionGrid}>
           <Link href="/admin" style={ghostBtn}>
             Volver a Admin
           </Link>
@@ -325,125 +320,47 @@ export default function AdminGiftsPage() {
         <div style={{ marginTop: 12, opacity: 0.7 }}>Cargando...</div>
       ) : tab === "PRODUCTS" ? (
         <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 12 }}>
-          <div style={panelStyle}>
-            <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>Crear producto regalo</div>
+          <GiftProductsCreateSection
+            panelStyle={panelStyle}
+            inputStyle={inputStyle}
+            darkBtn={darkBtn}
+            services={services}
+            serviceOptions={serviceOptions}
+            pServiceId={pServiceId}
+            pOptionId={pOptionId}
+            pName={pName}
+            pPriceEuros={pPriceEuros}
+            pValidDays={pValidDays}
+            pActive={pActive}
+            optLabel={optLabel}
+            onServiceChange={setPServiceId}
+            onOptionChange={setPOptionId}
+            onNameChange={setPName}
+            onPriceChange={setPPriceEuros}
+            onValidDaysChange={setPValidDays}
+            onActiveChange={setPActive}
+            onCreate={createProduct}
+          />
 
-            <div style={{ padding: 12, display: "grid", gap: 10 }}>
-              <label style={{ fontSize: 13 }}>
-                Actividad
-                <select value={pServiceId} onChange={(e) => setPServiceId(e.target.value)} style={inputStyle}>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.category} · {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ fontSize: 13 }}>
-                Opcion
-                <select value={pOptionId} onChange={(e) => setPOptionId(e.target.value)} style={inputStyle}>
-                  {serviceOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {optLabel(o)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ fontSize: 13 }}>
-                Nombre visible (opcional)
-                <input value={pName} onChange={(e) => setPName(e.target.value)} style={inputStyle} placeholder="Ej: Regalo Moto 20 min" />
-              </label>
-
-              <label style={{ fontSize: 13 }}>
-                PVP (EUR)
-                <input value={pPriceEuros} onChange={(e) => setPPriceEuros(e.target.value)} style={inputStyle} placeholder="75" />
-              </label>
-
-              <label style={{ fontSize: 13 }}>
-                Validez en dias (opcional)
-                <input value={pValidDays} onChange={(e) => setPValidDays(e.target.value)} style={inputStyle} placeholder="365" />
-              </label>
-
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-                <input type="checkbox" checked={pActive} onChange={(e) => setPActive(e.target.checked)} />
-                Activo
-              </label>
-
-              <button onClick={createProduct} style={darkBtn}>Crear producto</button>
-
-              <div style={{ fontSize: 12, opacity: 0.75 }}>
-                Consejo: usa el nombre opcional solo si quieres un nombre comercial distinto; si no, se genera desde actividad y opcion.
-              </div>
-            </div>
-          </div>
-
-          <div style={panelStyle}>
-            <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>Productos</div>
-
-            {products.length === 0 ? (
-              <div style={{ padding: 12, opacity: 0.7 }}>No hay productos.</div>
-            ) : (
-              <div style={{ display: "grid" }}>
-                {products.map((p) => (
-                  <div
-                    key={p.id}
-                    style={{
-                      padding: 12,
-                      borderTop: "1px solid #eee",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 10,
-                    }}
-                  >
-                    {editingId === p.id ? (
-                      <>
-                        <div style={{ flex: 1, display: "grid", gap: 8 }}>
-                          <input value={eName} onChange={(e) => setEName(e.target.value)} placeholder="Nombre visible" style={{ ...inputStyle, padding: 8 }} />
-
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <input value={ePriceEuros} onChange={(e) => setEPriceEuros(e.target.value)} placeholder="PVP EUR" style={{ ...inputStyle, padding: 8, width: 120 }} />
-                            <input value={eValidDays} onChange={(e) => setEValidDays(e.target.value)} placeholder="Validez dias" style={{ ...inputStyle, padding: 8, width: 140 }} />
-                          </div>
-                        </div>
-
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button onClick={() => void saveEdit(p.id)} style={lightBtn}>Guardar</button>
-                          <button onClick={cancelEdit} style={lightBtn}>Cancelar</button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <div style={{ fontWeight: 900 }}>
-                            {p.name}
-                            {!p.isActive ? <span style={{ fontSize: 12, opacity: 0.7 }}> · INACTIVO</span> : null}
-                          </div>
-
-                          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                            {p.service.category} · {p.service.name} · {optLabel(p.option)}
-                          </div>
-
-                          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                            PVP: <b>{euros(p.priceCents)}</b>
-                            {p.validDays ? <> · Validez: <b>{p.validDays} dias</b></> : null}
-                          </div>
-                        </div>
-
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <button onClick={() => startEdit(p)} style={lightBtn}>Editar</button>
-                          <button onClick={() => void toggleProduct(p.id, !p.isActive)} style={lightBtn}>
-                            {p.isActive ? "Desactivar" : "Activar"}
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <GiftProductsListSection
+            panelStyle={panelStyle}
+            inputStyle={inputStyle}
+            lightBtn={lightBtn}
+            products={products}
+            editingId={editingId}
+            eName={eName}
+            ePriceEuros={ePriceEuros}
+            eValidDays={eValidDays}
+            euros={euros}
+            optLabel={optLabel}
+            onStartEdit={startEdit}
+            onCancelEdit={cancelEdit}
+            onSaveEdit={saveEdit}
+            onToggleProduct={toggleProduct}
+            onEditNameChange={setEName}
+            onEditPriceChange={setEPriceEuros}
+            onEditValidDaysChange={setEValidDays}
+          />
         </div>
       ) : (
         <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
@@ -451,7 +368,7 @@ export default function AdminGiftsPage() {
             <div style={{ fontWeight: 900, marginBottom: 10 }}>Vales vendidos</div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <input value={qCode} onChange={(e) => setQCode(e.target.value)} placeholder="Buscar codigo (RG-...)" style={{ ...inputStyle, minWidth: 240, width: "auto" }} />
+              <input value={qCode} onChange={(e) => setQCode(e.target.value)} placeholder="Buscar código (RG-...)" style={{ ...inputStyle, minWidth: 240, width: "auto" }} />
 
               <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
                 <input type="checkbox" checked={onlyPending} onChange={(e) => setOnlyPending(e.target.checked)} />
@@ -523,21 +440,16 @@ export default function AdminGiftsPage() {
 }
 
 const pageStyle: CSSProperties = {
-  maxWidth: 1200,
-  margin: "0 auto",
-  padding: 24,
-  display: "grid",
+  ...opsStyles.pageShell,
+  width: "min(1200px, 100%)",
   gap: 14,
   background:
     "radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 34%), radial-gradient(circle at top right, rgba(34, 197, 94, 0.08), transparent 30%)",
 };
 
 const modernHeroStyle: CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 26,
-  padding: 20,
+  ...opsStyles.heroCard,
   background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 48%, #f0fdf4 100%)",
-  boxShadow: "0 20px 45px rgba(15, 23, 42, 0.08)",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-end",
@@ -554,8 +466,7 @@ const eyebrowStyle: CSSProperties = {
 };
 
 const titleStyle: CSSProperties = {
-  fontSize: 34,
-  lineHeight: 1,
+  ...opsStyles.heroTitle,
   fontWeight: 950,
   color: "#0f172a",
 };
@@ -574,8 +485,7 @@ const summaryGrid: CSSProperties = {
 };
 
 const summaryCard: CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 16,
+  ...opsStyles.metricCard,
   padding: 12,
   background: "linear-gradient(180deg, #fff 0%, #f8fafc 100%)",
 };
@@ -596,12 +506,8 @@ const summaryValue: CSSProperties = {
 };
 
 const ghostBtn: CSSProperties = {
+  ...opsStyles.ghostButton,
   padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #dbe4ea",
-  background: "#fff",
-  fontWeight: 900,
-  textDecoration: "none",
   color: "#0f172a",
 };
 
@@ -613,19 +519,14 @@ const tabsWrap: CSSProperties = {
 };
 
 const panelStyle: CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 18,
+  ...opsStyles.sectionCard,
+  padding: 0,
   overflow: "hidden",
-  background: "#fff",
-  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.05)",
 };
 
 const panelPaddedStyle: CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 18,
+  ...opsStyles.sectionCard,
   padding: 12,
-  background: "#fff",
-  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.05)",
 };
 
 const errorStyle: CSSProperties = {

@@ -11,7 +11,7 @@ const Body = z.object({
   serviceId: z.string().min(1),
 
   // UNO de los dos:
-  optionId: z.string().min(1).nullable().optional(),          // precios por opciÃ³n
+  optionId: z.string().min(1).nullable().optional(),          // precios por opción
   durationMin: z.number().int().min(1).max(600).nullable().optional(), // extras/legacy (null para extra fijo)
 
   basePriceCents: z.number().int().min(0).max(50_000_000),
@@ -28,22 +28,22 @@ export async function POST(req: Request) {
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const { serviceId, optionId, durationMin, basePriceCents } = parsed.data;
   const now = parsed.data.validFrom ? new Date(parsed.data.validFrom) : new Date();
 
-  // ValidaciÃ³n: no ambos
+  // Validación: no ambos
   if (optionId && durationMin != null) {
     return new NextResponse("Usa optionId o durationMin, no ambos", { status: 400 });
   }
 
-  // ValidaciÃ³n: si el servicio es EXTRA, debe ir sin optionId y durationMin = null
+  // Validación: si el servicio es EXTRA, debe ir sin optionId y durationMin = null
   const svc = await prisma.service.findUnique({
     where: { id: serviceId },
     select: { id: true, category: true, isActive: true },
   });
-  if (!svc || !svc.isActive) return new NextResponse("Servicio no existe o estÃ¡ inactivo", { status: 404 });
+  if (!svc || !svc.isActive) return new NextResponse("Servicio no existe o está inactivo", { status: 404 });
 
   if (svc.category === "EXTRA") {
     if (optionId) return new NextResponse("Los extras no usan optionId", { status: 400 });

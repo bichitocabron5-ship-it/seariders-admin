@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { opsStyles } from "@/components/ops-ui";
 
 type ServiceRow = {
   id: string;
@@ -135,14 +136,14 @@ export default function AdminCatalogPage() {
       <section style={heroStyle}>
         <div style={{ display: "grid", gap: 8 }}>
           <div style={eyebrowStyle}>Comercial</div>
-          <h1 style={titleStyle}>Catalogo</h1>
+          <h1 style={titleStyle}>Catálogo</h1>
           <p style={subtitleStyle}>
-            Servicios, categorias y dependencias operativas. Desde aqui puedes crear servicios y ajustar si requieren
+            Servicios, categorías y dependencias operativas. Desde aquí puedes crear servicios y ajustar si requieren
             plataforma, jetski, monitor o si son productos de licencia.
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={opsStyles.actionGrid}>
           <Link href="/admin" style={ghostBtn}>
             Volver a Admin
           </Link>
@@ -181,9 +182,9 @@ export default function AdminCatalogPage() {
           </label>
 
           <label style={fieldLabel}>
-            Categoria
+            Categoría
             <select value={cat} onChange={(e) => setCat(e.target.value)} style={inputStyle}>
-              <option value="ALL">Todas las categorias</option>
+              <option value="ALL">Todas las categorías</option>
               {categories.map((value) => (
                 <option key={value} value={value}>
                   {value}
@@ -207,7 +208,7 @@ export default function AdminCatalogPage() {
         <div style={panelHeader}>
           <div style={{ fontWeight: 950 }}>Crear servicio</div>
           <div style={{ fontSize: 12, color: "#64748b" }}>
-            Si la categoria es <strong>EXTRA</strong>, el servicio no tendra opciones de duracion o pax.
+            Si la categoría es <strong>EXTRA</strong>, el servicio no tendrá opciones de duración o pax.
           </div>
         </div>
 
@@ -224,7 +225,7 @@ export default function AdminCatalogPage() {
             </label>
 
             <label style={fieldLabel}>
-              Categoria
+              Categoría
               <input
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -274,7 +275,7 @@ export default function AdminCatalogPage() {
                         {service.isLicense ? <span style={licensePill}>Licencia</span> : null}
                       </div>
                       <div style={{ fontSize: 12, color: "#64748b" }}>
-                        Dependencias operativas y configuracion comercial del servicio.
+                        Dependencias operativas y configuración comercial del servicio.
                       </div>
                     </div>
 
@@ -372,19 +373,15 @@ export default function AdminCatalogPage() {
 }
 
 const pageStyle: CSSProperties = {
-  maxWidth: 1200,
-  margin: "0 auto",
-  padding: 24,
-  display: "grid",
+  ...opsStyles.pageShell,
+  width: "min(1200px, 100%)",
   gap: 14,
   background:
     "radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 34%), radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 30%)",
 };
 
 const heroStyle: CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 26,
-  padding: 20,
+  ...opsStyles.heroCard,
   background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 48%, #eff6ff 100%)",
   boxShadow: "0 20px 45px rgba(15, 23, 42, 0.08)",
   display: "flex",
@@ -403,10 +400,8 @@ const eyebrowStyle: CSSProperties = {
 };
 
 const titleStyle: CSSProperties = {
-  margin: 0,
-  fontSize: 34,
+  ...opsStyles.heroTitle,
   lineHeight: 1,
-  fontWeight: 950,
   color: "#0f172a",
 };
 
@@ -425,7 +420,7 @@ const summaryGrid: CSSProperties = {
 };
 
 const summaryCard: CSSProperties = {
-  border: "1px solid #dbe4ea",
+  ...opsStyles.metricCard,
   borderRadius: 16,
   padding: 12,
   background: "linear-gradient(180deg, #fff 0%, #f8fafc 100%)",
@@ -447,6 +442,7 @@ const summaryValue: CSSProperties = {
 };
 
 const panelStyle: CSSProperties = {
+  ...opsStyles.sectionCard,
   border: "1px solid #dbe4ea",
   borderRadius: 18,
   background: "#fff",
@@ -454,6 +450,7 @@ const panelStyle: CSSProperties = {
 };
 
 const filtersPanel: CSSProperties = {
+  ...opsStyles.sectionCard,
   border: "1px solid #dbe4ea",
   borderRadius: 18,
   background: "#fff",
@@ -491,11 +488,9 @@ const fieldLabel: CSSProperties = {
 };
 
 const inputStyle: CSSProperties = {
+  ...opsStyles.field,
   padding: 10,
   borderRadius: 10,
-  border: "1px solid #dbe4ea",
-  outline: "none",
-  width: "100%",
 };
 
 const rowCard: CSSProperties = {
@@ -508,31 +503,24 @@ const rowCard: CSSProperties = {
 };
 
 const ghostBtn: CSSProperties = {
+  ...opsStyles.ghostButton,
   padding: "10px 12px",
-  borderRadius: 12,
   border: "1px solid #dbe4ea",
-  background: "#fff",
-  fontWeight: 900,
-  textDecoration: "none",
   color: "#0f172a",
 };
 
 const ghostButtonElement: CSSProperties = {
+  ...opsStyles.ghostButton,
   padding: "10px 12px",
-  borderRadius: 12,
   border: "1px solid #dbe4ea",
-  background: "#fff",
-  fontWeight: 900,
   color: "#0f172a",
 };
 
 const darkBtn: CSSProperties = {
+  ...opsStyles.primaryButton,
   padding: "10px 12px",
-  borderRadius: 12,
   border: "1px solid #0f172a",
   background: "#0f172a",
-  color: "#fff",
-  fontWeight: 900,
 };
 
 const categoryPill: CSSProperties = {

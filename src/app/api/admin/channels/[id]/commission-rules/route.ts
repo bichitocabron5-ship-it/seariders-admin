@@ -64,7 +64,7 @@ export async function PUT(
 
   const json = await req.json().catch(() => null);
   const parsed = PutBody.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const { id } = await Promise.resolve(ctx.params);
   const channelId = id;

@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return NextResponse.json({ error: "Body invalido" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
 
   const code = parsed.data.code.trim().toUpperCase();
   const customerCountry = (parsed.data.customerCountry ?? "ES").toUpperCase();
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
         select: { id: true },
       });
 
-      // Idempotencia y auto-reparaciÃ³n para datos antiguos/inconsistentes:
+      // Idempotencia y auto-reparación para datos antiguos/inconsistentes:
       // si ya existe reserva del voucher, devolvemos esa reserva y alineamos campos del voucher.
       if (existingReservation) {
         const fixData: {
@@ -100,8 +100,8 @@ export async function POST(req: Request) {
       });
       if (claimed.count !== 1) throw new Error("Voucher ya canjeado");
 
-      // âœ… reserva "draft": NO entra en /reservations/today (porque formalizedAt null)
-      // activityDate: hoy (inicio dÃ­a en tz negocio). scheduledTime: null hasta formalizar.
+      // Reserva "draft": no entra en /reservations/today (porque formalizedAt null)
+      // activityDate: hoy (inicio día en tz negocio). scheduledTime: null hasta formalizar.
       const ymd = ymdInTz(now, BUSINESS_TZ);
       const activityDate = utcDateFromYmdInTz(BUSINESS_TZ, ymd);
 
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
           status: "WAITING",
 
           activityDate,
-          scheduledTime: null, // ðŸ‘ˆ importante
+          scheduledTime: null, // importante
           storeQueueStartedAt: now,
           paymentCompletedAt: now,
 
@@ -121,7 +121,7 @@ export async function POST(req: Request) {
           quantity: 1,
           pax: 1,
 
-          // no ponemos total definitivo aquÃ­
+          // no ponemos total definitivo aquí
           basePriceCents: 0,
           totalPriceCents: 0,
 
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
         select: { id: true },
       });
 
-      // âœ… item real (actividad) a 0â‚¬ (pagado por regalo)
+      // Item real (actividad) a 0€ (pagado por regalo)
       await tx.reservationItem.create({
         data: {
           reservationId: reservation.id,

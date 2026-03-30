@@ -20,7 +20,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const session = await requireStoreOrAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const { id } = await Promise.resolve(ctx.params); // âœ… FIX Next params Promise
+  const { id } = await Promise.resolve(ctx.params); // FIX Next params Promise
 
   const res = await prisma.reservation.findUnique({
     where: { id },
@@ -163,13 +163,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       licenseNumber: res.licenseNumber,
     },
 
-    // âœ… nuevo: mÃ©tricas â€œfuente de verdadâ€ para badge
+    // Nuevo: métricas "fuente de verdad" para badge
     requiredUnits,
     readyCount,
     needsContracts,
     contractsState,
 
-    // âœ… contratos ya filtrados
+    // Contratos ya filtrados
     contracts,
   });
 }

@@ -2,6 +2,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { opsStyles } from "@/components/ops-ui";
+import { PayrollCalculationModal } from "./_components/PayrollCalculationModal";
+import { PayrollListSection } from "./_components/PayrollListSection";
+import { PayrollEditorModal } from "./_components/PayrollEditorModal";
 
 type PayrollStatus = "DRAFT" | "PENDING" | "PAID" | "CANCELED";
 
@@ -104,11 +108,11 @@ type PayrollCalculationResponse = {
 
 const PAYROLL_STATUSES: PayrollStatus[] = ["DRAFT", "PENDING", "PAID", "CANCELED"];
 
-function eur(cents: number) {
+function formatEur(cents: number) {
   return `${(cents / 100).toFixed(2)} €`;
 }
 
-function fmtDate(iso: string | null) {
+function formatDateSafe(iso: string | null) {
   if (!iso) return "—";
   try {
     return new Date(iso).toLocaleDateString("es-ES");
@@ -279,30 +283,18 @@ export default function HrPayrollPage() {
   }
 
   return (
-    <div style={{ padding: 16, display: "grid", gap: 16 }}>
+    <div style={pageShell}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontWeight: 950, fontSize: 30 }}>Pagos</div>
+          <div style={{ fontWeight: 950, fontSize: "clamp(30px, 4vw, 38px)", lineHeight: 1 }}>Pagos</div>
           <div style={{ opacity: 0.72, fontSize: 13 }}>
             Liquidaciones, pagos pendientes y estado
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <a href="/hr" style={linkBtn}>← RRHH</a>
+        <div style={opsStyles.actionGrid}>
+          <a href="/hr" style={linkBtn}>← RR. HH.</a>
           <button type="button" onClick={() => load()} style={ghostBtn}>Refrescar</button>
-          <button
-            type="button"
-            onClick={() => {
-              setEditing(null);
-              setPrefillPayroll(null);
-              setOpen(true);
-            }}
-            style={primaryBtn}
-          >
-            Nuevo pago
-          </button>
-        </div>
           <button
             type="button"
             onClick={() => {
@@ -317,6 +309,18 @@ export default function HrPayrollPage() {
           >
             Calcular desde horas
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(null);
+              setPrefillPayroll(null);
+              setOpen(true);
+            }}
+            style={primaryBtn}
+          >
+            Nuevo pago
+          </button>
+        </div>
       </div>
 
       <div
@@ -370,7 +374,7 @@ export default function HrPayrollPage() {
             fontWeight: 900,
           }}
         >
-          {eur(totalShown)}
+          {formatEur(totalShown)}
         </div>
 
         <button type="button" onClick={() => load()} style={primaryBtn}>
@@ -378,75 +382,26 @@ export default function HrPayrollPage() {
         </button>
       </div>
 
-      {loading ? <div>Cargando…</div> : null}
+      {loading ? <div>Cargando...</div> : null}
       {error ? <div style={errorBox}>{error}</div> : null}
 
       {!loading && !error && rows.length === 0 ? (
         <div style={emptyBox}>No hay pagos para los filtros seleccionados.</div>
       ) : null}
-
-      <div style={{ display: "grid", gap: 10 }}>
-        {rows.map((r) => (
-          <button
-            key={r.id}
-            type="button"
-            onClick={() => {
-              setEditing(r);
-              setOpen(true);
-            }}
-            style={{
-              textAlign: "left",
-              border: "1px solid #eee",
-              background: "#fff",
-              borderRadius: 16,
-              padding: 14,
-              cursor: "pointer",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <div>
-                <a
-                  href={`/hr/employees/${r.employee.id}`}
-                  style={{ textDecoration: "none", color: "#111", fontWeight: 950, fontSize: 18 }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {r.employee.fullName}
-                </a>
-                <div style={{ fontSize: 12, opacity: 0.8 }}>
-                  {r.employee.kind}
-                  {r.employee.jobTitle ? ` · ${r.employee.jobTitle}` : ""}
-                  {r.employee.code ? ` · ${r.employee.code}` : ""}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                <div style={statusStyle(r.status)}>{r.status}</div>
-                <div style={{ fontWeight: 950, fontSize: 18 }}>{eur(r.amountCents)}</div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                marginTop: 12,
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-                gap: 10,
-              }}
-            >
-              <Mini label="Periodo desde" value={fmtDate(r.periodStart)} />
-              <Mini label="Periodo hasta" value={fmtDate(r.periodEnd)} />
-              <Mini label="Pagado el" value={fmtDate(r.paidAt)} />
-              <Mini label="Creado" value={fmtDate(r.createdAt)} />
-            </div>
-
-            {r.concept ? <div style={{ marginTop: 8, fontSize: 12, opacity: 0.9 }}>Concepto: {r.concept}</div> : null}
-            {r.note ? <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>Nota: {r.note}</div> : null}
-          </button>
-        ))}
-      </div>
+      <PayrollListSection
+        rows={rows}
+        onSelect={(row) => {
+          setEditing(row);
+          setOpen(true);
+        }}
+        formatEur={formatEur}
+        formatDateSafe={formatDateSafe}
+        statusStyle={statusStyle}
+      />
 
       {open ? (
-        <PayrollModal
+
+        <PayrollEditorModal
           initial={editing}
           prefill={prefillPayroll}
           employees={employees}
@@ -456,6 +411,10 @@ export default function HrPayrollPage() {
             setPrefillPayroll(null);
             await load();
           }}
+          inputStyle={inputStyle}
+          ghostBtn={ghostBtn}
+          primaryBtn={primaryBtn}
+          errorBox={errorBox}
         />
       ) : null}
 
@@ -470,470 +429,85 @@ export default function HrPayrollPage() {
             fontWeight: 900,
           }}
         >
-          Pago pre-rellenado desde cálculo asistido. Revisa importe, periodo y concepto antes de guardar.
+          Pago prerrellenado desde cálculo asistido. Revisa importe, período y concepto antes de guardar.
         </div>
       ) : null}
-
-      {openCalc ? (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.3)",
-            display: "grid",
-            placeItems: "center",
-            padding: 16,
-            zIndex: 60,
-          }}
-          onClick={() => (calcBusy ? null : setOpenCalc(false))}
-        >
-          <div
-            style={{
-              width: "min(980px, 100%)",
-              background: "#fff",
-              borderRadius: 16,
-              border: "1px solid #e5e7eb",
-              padding: 14,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ fontWeight: 950, fontSize: 18 }}>Cálculo asistido de pago</div>
-              <button type="button" onClick={() => setOpenCalc(false)} style={ghostBtn}>
-                Cerrar
-              </button>
-            </div>
-
-            <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 10, alignItems: "end" }}>
-              <Field label="Trabajador">
-                <select value={calcEmployeeId} onChange={(e) => setCalcEmployeeId(e.target.value)} style={inputStyle}>
-                  <option value="">Selecciona trabajador…</option>
-                  {employees.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.fullName}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Periodo desde">
-                <input type="date" value={calcPeriodStart} onChange={(e) => setCalcPeriodStart(e.target.value)} style={inputStyle} />
-              </Field>
-
-              <Field label="Periodo hasta">
-                <input type="date" value={calcPeriodEnd} onChange={(e) => setCalcPeriodEnd(e.target.value)} style={inputStyle} />
-              </Field>
-
-              <button type="button" onClick={runCalculation} disabled={calcBusy} style={primaryBtn}>
-                {calcBusy ? "Calculando..." : "Calcular"}
-              </button>
-            </div>
-
-            {calcError ? <div style={{ ...errorBox, marginTop: 12 }}>{calcError}</div> : null}
-
-            {calcResult ? (
-              <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
-                <div
-                  style={{
-                    border: "1px solid #e5e7eb",
-                    background: "#fafafa",
-                    borderRadius: 14,
-                    padding: 14,
-                    display: "grid",
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ fontWeight: 950, fontSize: 18 }}>{calcResult.employee.fullName}</div>
-
-                  <div style={{ fontSize: 13, opacity: 0.85 }}>
-                    {calcResult.employee.kind}
-                    {calcResult.employee.jobTitle ? ` · ${calcResult.employee.jobTitle}` : ""}
-                    {calcResult.employee.code ? ` · ${calcResult.employee.code}` : ""}
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-                    <Mini label="Horas aprobadas" value={calcResult.summary.workedHours.toFixed(2)} />
-                    <Mini label="Minutos aprobados" value={String(calcResult.summary.workedMinutes)} />
-                    <Mini label="Días aprobados" value={String(calcResult.summary.workedDays)} />
-                    <Mini label="Turnos aprobados" value={String(calcResult.summary.workedShifts)} />
-                    <Mini label="Registros aprobados" value={String(calcResult.summary.approvedLogsCount)} />
-                  </div>
-
-                  <div
-                    style={{
-                      padding: 10,
-                      borderRadius: 12,
-                      border: "1px solid #dbeafe",
-                      background: "#eff6ff",
-                      color: "#1d4ed8",
-                      fontSize: 13,
-                      fontWeight: 900,
-                    }}
-                  >
-                    El cálculo usa solo jornadas en estado APPROVED. Los registros OPEN, CLOSED o CANCELED no entran en payroll.
-                  </div>
-
-                  {calcResult.rate ? (
-                    <div style={{ fontSize: 13, opacity: 0.9 }}>
-                      Tarifa: <b>{calcResult.rate.rateType}</b> · {(calcResult.rate.amountCents / 100).toFixed(2)} €
-                    </div>
-                  ) : null}
-
-                  {calcResult.internship ? (
-                    <div style={{ fontSize: 13, opacity: 0.9 }}>
-                      Bolsa prácticas:
-                      {" "}total <b>{calcResult.internship.internshipHoursTotal ?? "—"} h</b>
-                      {" · "}usadas <b>{calcResult.internship.internshipHoursUsed ?? "—"} h</b>
-                      {" · "}restantes <b>{calcResult.internship.internshipHoursRemaining ?? "—"} h</b>
-                    </div>
-                  ) : null}
-
-                  <div
-                    style={{
-                      padding: 12,
-                      borderRadius: 12,
-                      border: calcResult.calculation.supported ? "1px solid #bbf7d0" : "1px solid #fde68a",
-                      background: calcResult.calculation.supported ? "#f0fdf4" : "#fffbeb",
-                      fontWeight: 900,
-                    }}
-                  >
-                    {calcResult.calculation.supported ? (
-                      <>
-                        Pago sugerido: {calcResult.calculation.suggestedAmountEur} €
-                        {calcResult.calculation.calculationBase ? ` · ${calcResult.calculation.calculationBase}` : ""}
-                      </>
-                    ) : (
-                      calcResult.calculation.message
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                  <button type="button" onClick={() => setOpenCalc(false)} style={ghostBtn}>
-                    Cerrar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openPaymentFromCalculation}
-                    disabled={!!calcResult?.internship?.isIntern}
-                    style={{
-                      ...primaryBtn,
-                      background: calcResult?.internship?.isIntern ? "#9ca3af" : "#111",
-                      borderColor: calcResult?.internship?.isIntern ? "#9ca3af" : "#111",
-                      cursor: calcResult?.internship?.isIntern ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    Usar en nuevo pago
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+      <PayrollCalculationModal
+        open={openCalc}
+        employees={employees}
+        calcEmployeeId={calcEmployeeId}
+        calcPeriodStart={calcPeriodStart}
+        calcPeriodEnd={calcPeriodEnd}
+        calcBusy={calcBusy}
+        calcError={calcError}
+        calcResult={calcResult}
+        onClose={() => setOpenCalc(false)}
+        onEmployeeChange={setCalcEmployeeId}
+        onPeriodStartChange={setCalcPeriodStart}
+        onPeriodEndChange={setCalcPeriodEnd}
+        onRunCalculation={runCalculation}
+        onUseInNewPayroll={openPaymentFromCalculation}
+        inputStyle={inputStyle}
+        ghostBtn={ghostBtn}
+        primaryBtn={primaryBtn}
+        errorBox={errorBox}
+      />
     </div>
   );
 }
 
-function PayrollModal({
-  initial,
-  prefill,
-  employees,
-  onClose,
-  onSaved,
-}: {
-  initial: PayrollRow | null;
-  prefill: {
-    employeeId: string;
-    periodStart: string;
-    periodEnd: string;
-    status: PayrollStatus;
-    amountCents: string;
-    concept: string | null;
-    note: string | null;
-    paidAt: string;
-  } | null;
-  employees: EmployeeLite[];
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-}) {
+const pageShell: React.CSSProperties = {
+  ...opsStyles.pageShell,
+  width: "min(1360px, 100%)",
+  gap: 16,
+};
 
-  const isEdit = !!initial;
+const panelCard: React.CSSProperties = {
+  ...opsStyles.sectionCard,
+  padding: 0,
+  borderRadius: 18,
+  background: "#fff",
+};
 
-  const [employeeId, setEmployeeId] = useState(initial?.employeeId ?? prefill?.employeeId ?? "");
-  const [periodStart, setPeriodStart] = useState(fmtDateInput(initial?.periodStart ?? null) || prefill?.periodStart || "");
-  const [periodEnd, setPeriodEnd] = useState(fmtDateInput(initial?.periodEnd ?? null) || prefill?.periodEnd || "");
-  const [status, setStatus] = useState<PayrollStatus>(initial?.status ?? prefill?.status ?? "DRAFT");
-  const [amountCents, setAmountCents] = useState(String(initial?.amountCents ?? prefill?.amountCents ?? ""));
-  const [concept, setConcept] = useState(initial?.concept ?? prefill?.concept ?? "");
-  const [note, setNote] = useState(initial?.note ?? prefill?.note ?? "");
-  const [paidAt, setPaidAt] = useState(fmtDateInput(initial?.paidAt ?? null) || prefill?.paidAt || "");
+const inputStyle: React.CSSProperties = {
+  ...opsStyles.field,
+  padding: 10,
+  borderRadius: 10,
+  background: "#fff",
+};
 
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+const ghostBtn: React.CSSProperties = {
+  ...opsStyles.ghostButton,
+  padding: "10px 12px",
+};
 
-  async function save() {
-    setBusy(true);
-    setError(null);
+const primaryBtn: React.CSSProperties = {
+  ...opsStyles.primaryButton,
+  padding: "10px 12px",
+  fontWeight: 950,
+};
 
-    try {
-      if (!isEdit && !employeeId) throw new Error("Selecciona un trabajador.");
-      if (!periodStart || !periodEnd) throw new Error("Periodo obligatorio.");
-      if (!amountCents.trim()) throw new Error("Importe obligatorio.");
-
-      const selectedEmployee = employees.find((e) => e.id === employeeId);
-      if (!isEdit && selectedEmployee?.kind === "INTERN") {
-        throw new Error("Los trabajadores en prácticas no generan pagos.");
-      }
-
-      const body = isEdit
-        ? {
-            status,
-            amountCents: Number(amountCents),
-            concept: concept.trim() || null,
-            note: note.trim() || null,
-            paidAt: paidAt ? new Date(`${paidAt}T00:00`).toISOString() : null,
-          }
-        : {
-            employeeId,
-            periodStart: new Date(`${periodStart}T00:00`).toISOString(),
-            periodEnd: new Date(`${periodEnd}T00:00`).toISOString(),
-            status,
-            amountCents: Number(amountCents),
-            concept: concept.trim() || null,
-            note: note.trim() || null,
-            paidAt: paidAt ? new Date(`${paidAt}T00:00`).toISOString() : null,
-          };
-
-      const res = await fetch(isEdit ? `/api/hr/payroll/${initial!.id}` : `/api/hr/payroll`, {
-        method: isEdit ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) throw new Error(await res.text());
-
-      await onSaved();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error guardando pago");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <ModalShell title={isEdit ? "Editar pago" : "Nuevo pago"} onClose={onClose}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        {!isEdit ? (
-          <Field label="Trabajador">
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} style={inputStyle}>
-              <option value="">Selecciona trabajador…</option>
-              {employees.filter((e) => e.kind !== "INTERN").map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.fullName}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : (
-          <Field label="Trabajador">
-            <input value={initial?.employee.fullName ?? ""} readOnly style={inputStyle} />
-          </Field>
-        )}
-
-        {!isEdit ? (
-          <Field label="Estado">
-            <select value={status} onChange={(e) => setStatus(e.target.value as PayrollStatus)} style={inputStyle}>
-              {PAYROLL_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : (
-          <Field label="Estado">
-            <select value={status} onChange={(e) => setStatus(e.target.value as PayrollStatus)} style={inputStyle}>
-              {PAYROLL_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </Field>
-        )}
-
-        {!isEdit ? (
-          <>
-            <Field label="Periodo desde">
-              <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} style={inputStyle} />
-            </Field>
-
-            <Field label="Periodo hasta">
-              <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} style={inputStyle} />
-            </Field>
-          </>
-        ) : (
-          <>
-            <Field label="Periodo desde">
-              <input value={fmtDateInput(initial?.periodStart ?? null)} readOnly style={inputStyle} />
-            </Field>
-
-            <Field label="Periodo hasta">
-              <input value={fmtDateInput(initial?.periodEnd ?? null)} readOnly style={inputStyle} />
-            </Field>
-          </>
-        )}
-
-        <Field label="Importe (céntimos)">
-          <input value={amountCents} onChange={(e) => setAmountCents(e.target.value)} style={inputStyle} />
-        </Field>
-
-        <Field label="Pagado el">
-          <input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} style={inputStyle} />
-        </Field>
-
-        <Field label="Concepto">
-          <input value={concept} onChange={(e) => setConcept(e.target.value)} style={inputStyle} />
-        </Field>
-
-        <Field label="Nota" full>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={4} style={{ ...inputStyle, resize: "vertical" }} />
-        </Field>
-      </div>
-
-      {error ? <div style={errorBox}>{error}</div> : null}
-
-      <ModalActions onClose={onClose} onSave={save} busy={busy} />
-    </ModalShell>
-  );
-}
-
-function ModalShell({
-  title,
-  children,
-  onClose,
-}: {
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.3)",
-        display: "grid",
-        placeItems: "center",
-        padding: 16,
-        zIndex: 60,
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          width: "min(980px, 100%)",
-          background: "#fff",
-          borderRadius: 16,
-          border: "1px solid #e5e7eb",
-          padding: 14,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-          <div style={{ fontWeight: 950, fontSize: 18 }}>{title}</div>
-          <button type="button" onClick={onClose} style={ghostBtn}>
-            Cerrar
-          </button>
-        </div>
-
-        <div style={{ marginTop: 12, display: "grid", gap: 12 }}>{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function ModalActions({
-  onClose,
-  onSave,
-  busy,
-}: {
-  onClose: () => void;
-  onSave: () => void;
-  busy: boolean;
-}) {
-  return (
-    <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 8 }}>
-      <button type="button" onClick={onClose} style={ghostBtn}>
-        Cancelar
-      </button>
-      <button type="button" onClick={onSave} disabled={busy} style={{ ...primaryBtn, background: busy ? "#9ca3af" : "#111" }}>
-        {busy ? "Guardando..." : "Guardar"}
-      </button>
-    </div>
-  );
-}
+const linkBtn: React.CSSProperties = {
+  ...opsStyles.ghostButton,
+  padding: "10px 12px",
+  textDecoration: "none",
+  color: "#111",
+};
 
 function Field({
   label,
   children,
-  full,
 }: {
   label: string;
   children: React.ReactNode;
-  full?: boolean;
 }) {
   return (
-    <label style={{ display: "grid", gap: 6, fontSize: 13, gridColumn: full ? "1 / -1" : undefined }}>
+    <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
       {label}
       {children}
     </label>
   );
 }
-
-function Mini({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 12, opacity: 0.72 }}>{label}</div>
-      <div style={{ marginTop: 4, fontWeight: 900 }}>{value}</div>
-    </div>
-  );
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: 10,
-  borderRadius: 10,
-  border: "1px solid #e5e7eb",
-  background: "#fff",
-};
-
-const ghostBtn: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #e5e7eb",
-  background: "#fff",
-  fontWeight: 900,
-};
-
-const primaryBtn: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
-  fontWeight: 950,
-};
-
-const linkBtn: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #e5e7eb",
-  background: "#fff",
-  fontWeight: 900,
-  textDecoration: "none",
-  color: "#111",
-};
 
 const errorBox: React.CSSProperties = {
   padding: 12,
@@ -945,7 +519,7 @@ const errorBox: React.CSSProperties = {
 };
 
 const emptyBox: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
+  ...panelCard,
   background: "#fff",
   borderRadius: 16,
   padding: 18,

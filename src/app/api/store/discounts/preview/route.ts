@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   try {
     const json = await req.json().catch(() => null);
     const parsed = Body.safeParse(json);
-    if (!parsed.success) return new NextResponse("Datos invÃ¡lidos", { status: 400 });
+    if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
     const { serviceId, optionId, quantity, customerCountry, promoCode } = parsed.data;
 
@@ -47,8 +47,8 @@ export async function POST(req: Request) {
       where: { id: optionId },
       select: { id: true, serviceId: true, durationMinutes: true },
     });
-    if (!opt) return new NextResponse("OpciÃ³n no existe", { status: 404 });
-    if (opt.serviceId !== serviceId) return new NextResponse("OpciÃ³n no pertenece al servicio", { status: 400 });
+    if (!opt) return new NextResponse("Opción no existe", { status: 404 });
+    if (opt.serviceId !== serviceId) return new NextResponse("Opción no pertenece al servicio", { status: 400 });
 
     // 2) precio vigente por optionId (nuevo) o durationMin (legacy)
     const now = new Date();
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
         AND: [
           {
             OR: [
-              { optionId: optionId }, // âœ… principal moderno
+              { optionId: optionId }, // principal moderno
               { optionId: null, durationMin: opt.durationMinutes }, // fallback legacy
             ],
           },
@@ -72,11 +72,11 @@ export async function POST(req: Request) {
       select: { basePriceCents: true },
     });
 
-    if (!price) return new NextResponse("No hay precio vigente para esta opciÃ³n.", { status: 400 });
+    if (!price) return new NextResponse("No hay precio vigente para esta opción.", { status: 400 });
 
     const baseTotalCents = Number(price.basePriceCents || 0) * quantity;
 
-    // 3) categorÃ­a
+    // 3) categoría
     const svc = await prisma.service.findUnique({
       where: { id: serviceId },
       select: { category: true, name: true },
@@ -107,13 +107,13 @@ export async function POST(req: Request) {
     const reason = detail.rule
       ? [
           detail.rule.name,
-          detail.rule.code ? `cÃ³digo:${detail.rule.code}` : null,
+          detail.rule.code ? `código:${detail.rule.code}` : null,
           detail.rule.requiresCountry ? `req:${detail.rule.requiresCountry}` : null,
           detail.rule.excludeCountry ? `exc:${detail.rule.excludeCountry}` : null,
-          start || end ? `${start ?? "â€”"}â€“${end ?? "â€”"}` : null,
+          start || end ? `${start ?? "-"}-${end ?? "-"}` : null,
         ]
           .filter(Boolean)
-          .join(" Â· ")
+          .join(" · ")
       : null;
 
     return NextResponse.json({

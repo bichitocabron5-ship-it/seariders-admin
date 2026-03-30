@@ -60,7 +60,7 @@ export async function GET() {
       return NextResponse.json({ count: 0, totalCommissionCents: 0, byChannel: {} });
     }
 
-    // 2) Reglas especí­ficas channel+service
+    // 2) Reglas específicas channel+service
     const rules = await prisma.channelCommissionRule.findMany({
       where: {
         isActive: true,
@@ -92,7 +92,7 @@ export async function GET() {
       if (mainItem.isExtra) continue;
 
       const base = Number(mainItem.totalPriceCents ?? 0);
-      if (base <= 0) continue; // âœ… evita â€œcomisionesâ€ sin base
+      if (base <= 0) continue; // evita "comisiones" sin base
 
       const key = `${ch.id}:${mainItem.serviceId}`;
       const rulePct = ruleMap.get(key); // 0..100

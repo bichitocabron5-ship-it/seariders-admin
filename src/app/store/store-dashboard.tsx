@@ -2,6 +2,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { StoreHero, StoreMetricCard, StoreMetricGrid, storeStyles } from "@/components/store-ui";
+import { StoreOpsSummarySection } from "./dashboard/components/StoreOpsSummarySection";
+import { StorePendingColumnSection } from "./dashboard/components/StorePendingColumnSection";
+import { StoreReservationColumnSection } from "./dashboard/components/StoreReservationColumnSection";
 import { LeftReservationCard } from "./dashboard/components/LeftReservationCard";
 import { ReadyReservationCard } from "./dashboard/components/ReadyReservationCard";
 import type {
@@ -44,11 +48,14 @@ export default function StoreDashboard() {
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const btnSecondary: CSSProperties = {
-    padding: "10px 12px",
-    borderRadius: 12,
-    border: "1px solid #e5e7eb",
-    background: "#fff",
-    color: "#111",
+    ...storeStyles.secondaryButton,
+    fontWeight: 900,
+    cursor: "pointer",
+    textDecoration: "none",
+  };
+
+  const btnPrimary: CSSProperties = {
+    ...storeStyles.primaryButton,
     fontWeight: 900,
     cursor: "pointer",
     textDecoration: "none",
@@ -148,7 +155,6 @@ export default function StoreDashboard() {
       await ensureOkResponse(r, "No se pudieron cargar las reservas");
       const data = await r.json();
       setRows(data.rows ?? []);
-      console.log(data.rows)
 
       if (s.ok) setCashSummary(await s.json());
       else setCashSummary(null);
@@ -199,7 +205,7 @@ export default function StoreDashboard() {
       for (const l of lines) {
         const r = await fetch("/api/store/payments/create", {
           method: "POST",
-          headers: { "Content-Typ": "application/json" },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             reservationId,
             amountCents: l.amountCents,
@@ -444,16 +450,14 @@ export default function StoreDashboard() {
   );
 
   return (
-    <div style={{ padding: 20, fontFamily: "system-ui", maxWidth: 1760, margin: "0 auto", display: "grid", gap: 18 }}>
-      <section style={{ border: "1px solid #d8e0ea", background: "linear-gradient(135deg, #ffffff 0%, #f4f7fb 100%)", borderRadius: 26, padding: 22, display: "grid", gap: 16, boxShadow: "0 18px 40px rgba(20, 32, 51, 0.08)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-          <div style={{ display: "grid", gap: 8 }}>
-            <div style={{ fontSize: 11, letterSpacing: 1.2, textTransform: "uppercase", fontWeight: 900, color: "#58708f" }}>Store</div>
-            <div style={{ margin: 0, fontSize: 34, lineHeight: 1, fontWeight: 950, color: "#142033" }}>Tienda</div>
-            <div style={{ fontSize: 14, color: "#51627b", maxWidth: 720 }}>Operativa del día, cobros, pendientes y seguimiento de plataforma en una sola vista.</div>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+    <div style={{ ...storeStyles.shell, width: "min(1760px, 100%)", padding: 20 }}>
+      <StoreHero
+        title="Tienda"
+        description="Operativa del día, cobros, pendientes y seguimiento de plataforma en una sola vista."
+        eyebrowColor="#58708f"
+        background="linear-gradient(135deg, #ffffff 0%, #f4f7fb 100%)"
+        actions={
+          <>
             <a
               href={cashClosureHref}
               style={{
@@ -471,32 +475,32 @@ export default function StoreDashboard() {
             <a href="/store/gifts" style={btnSecondary}>Regalos</a>
             <a href="/store/bonos" style={btnSecondary}>Bonos</a>
             <a href="/store/calendar" style={btnSecondary}>Calendario</a>
-            <a href="/store/create" style={{ padding: "10px 12px", border: "1px solid #111", borderRadius: 12, fontWeight: 900, background: "#111", color: "#fff", textDecoration: "none" }}>
+            <a href="/store/create" style={btnPrimary}>
               + Crear reserva
             </a>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-          <div style={summaryCard}><div style={summaryLabel}>Pendientes de formalizar</div><div style={summaryValue}>{pendingLoading ? "..." : pendingCount}</div><div style={{ marginTop: 4, fontSize: 12, color: pendingErr ? "#b91c1c" : "#6b7280" }}>{pendingErr ?? "Se actualiza automáticamente."}</div></div>
-          <div style={summaryCard}><div style={summaryLabel}>Reservas del día</div><div style={summaryValue}>{totals.dayCount}</div><div style={summaryMeta}>{euros(totals.dayTotalCents)} previstos</div></div>
-          <div style={summaryCard}><div style={summaryLabel}>Pendiente de cobro</div><div style={summaryValue}>{totals.pendingCount}</div><div style={summaryMeta}>{euros(totals.pendingCents)}</div></div>
-          <div style={summaryCard}><div style={summaryLabel}>Cobrado</div><div style={summaryValue}>{totals.paidCount}</div><div style={summaryMeta}>{euros(totals.paidCents)}</div></div>
-          <div style={summaryCard}>
-            <div style={summaryLabel}>Incidencias con fianza retenida</div>
-            <div style={summaryValue}>{retainedIncidentCount}</div>
-            <div style={{ marginTop: 4, fontSize: 12, color: retainedIncidentCount > 0 ? "#b91c1c" : "#6b7280" }}>
-              {retainedIncidentCount > 0 ? "Revisar antes de devolver fianza." : "Sin incidencias bloqueantes."}
-            </div>
-          </div>
-          <div style={summaryCard}>
-            <div style={summaryLabel}>Extras plataforma</div>
-            <div style={summaryValue}>{platformExtrasPendingCount}</div>
-            <div style={{ marginTop: 4, fontSize: 12, color: platformExtrasPendingCount > 0 ? "#0f766e" : "#6b7280" }}>
-              {platformExtrasPendingCount > 0 ? "Pendientes de aplicar o cobrar en tienda." : "Sin extras pendientes."}
-            </div>
-          </div>
-        </div>
+          </>
+        }
+      >
+        <StoreMetricGrid>
+          <StoreMetricCard
+            label="Pendientes de formalizar"
+            value={pendingLoading ? "..." : pendingCount}
+            description={pendingErr ?? "Se actualiza automáticamente."}
+          />
+          <StoreMetricCard label="Reservas del día" value={totals.dayCount} description={`${euros(totals.dayTotalCents)} previstos`} />
+          <StoreMetricCard label="Pendiente de cobro" value={totals.pendingCount} description={euros(totals.pendingCents)} />
+          <StoreMetricCard label="Cobrado" value={totals.paidCount} description={euros(totals.paidCents)} />
+          <StoreMetricCard
+            label="Incidencias con fianza retenida"
+            value={retainedIncidentCount}
+            description={retainedIncidentCount > 0 ? "Revisar antes de devolver fianza." : "Sin incidencias bloqueantes."}
+          />
+          <StoreMetricCard
+            label="Extras plataforma"
+            value={platformExtrasPendingCount}
+            description={platformExtrasPendingCount > 0 ? "Pendientes de aplicar o cobrar en tienda." : "Sin extras pendientes."}
+          />
+        </StoreMetricGrid>
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ fontSize: 13, color: "#51627b" }}>Consulta rápida de pendientes y acceso directo al calendario operativo.</div>
@@ -519,254 +523,153 @@ export default function StoreDashboard() {
             </a>
           </div>
         </div>
-      </section>
+      </StoreHero>
 
       {error ? <div style={{ padding: 12, border: "1px solid #fecaca", background: "#fee2e2", borderRadius: 14 }}>{error}</div> : null}
       <CashClosedBanner />
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
-        {cashSummary ? (
-          <div style={panelCard}>
-            <div style={panelTitle}>Caja de hoy</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
-              <div><div style={smallLabel}>Cobrado total</div><div style={{ fontSize: 20, fontWeight: 900 }}>{euros(cashSummary.totalCents)}</div></div>
-              <div><div style={smallLabel}>Servicio</div><div style={{ fontWeight: 800 }}>{euros(cashSummary.serviceCents)}</div></div>
-              <div><div style={smallLabel}>Fianzas</div><div style={{ fontWeight: 800 }}>{euros(cashSummary.depositCents)}</div></div>
-              <div><div style={smallLabel}>Pagos</div><div style={{ fontWeight: 800 }}>{cashSummary.count}</div></div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-              <div>
-                <div style={smallLabel}>Por método</div>
-                {Object.entries(cashSummary.byMethod).map(([k, v]) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}><div>{k}</div><div>{euros(v.netCents)}</div></div>)}
-              </div>
-              <div>
-                <div style={smallLabel}>Por origen</div>
-                {Object.entries(cashSummary.byOrigin).map(([k, v]) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}><div>{k}</div><div>{euros(v.netCents)}</div></div>)}
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        <div style={panelCard}>
-          <div style={panelTitle}>Comisiones</div>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>Estado: {commissionSummary ? "Cargado" : "Sin datos"}</div>
-          {commissionSummary ? (
-            <div style={{ display: "grid", gap: 6 }}>
-              <div>Total comisiones: <strong>{euros(commissionSummary.totalCommissionCents)}</strong></div>
-              {Object.entries(commissionSummary.byChannel).map(([channel, cents]) => <div key={channel} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}><span>{channel}</span><strong>{euros(Number(cents))}</strong></div>)}
-            </div>
-          ) : (
-            <div style={{ opacity: 0.6 }}>No hay datos de comisión o falló la carga.</div>
-          )}
-        </div>
-
-        <div style={panelCard}>
-          <div style={panelTitle}>Estado operativo</div>
-          <div style={{ display: "grid", gap: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <span style={smallLabel}>Cierre de caja</span>
-              <strong>{cashClosureSummary?.isClosed ? "Cerrado" : "Abierto"}</strong>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <span style={smallLabel}>Devueltas con incidencia</span>
-              <strong>{returnedWithIncidentCount}</strong>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <span style={smallLabel}>Ready / En mar</span>
-              <strong>{rowsRight.length}</strong>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <span style={smallLabel}>Extras de plataforma</span>
-              <strong>{platformExtrasPendingCount}</strong>
-            </div>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
-              {cashClosureSummary?.isClosed
-                ? `Ultimo cierre: ${cashClosureSummary.closure?.closedAt ? new Date(cashClosureSummary.closure.closedAt).toLocaleString() : "sin fecha"}`
-                : "Pendiente de cierre en este turno."}
-            </div>
-          </div>
-        </div>
-      </section>
+      <StoreOpsSummarySection
+        cashSummary={cashSummary}
+        commissionSummary={commissionSummary}
+        cashClosureSummary={cashClosureSummary}
+        returnedWithIncidentCount={returnedWithIncidentCount}
+        rowsRightCount={rowsRight.length}
+        platformExtrasPendingCount={platformExtrasPendingCount}
+      />
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 16, alignItems: "start" }}>
         <div style={{ ...columnCard, minWidth: 0 }}>
-          <h2 style={{ marginTop: 0, marginBottom: 12 }}>Pendientes tienda</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 12 }}>
-            <div style={miniStat}><div style={smallLabel}>Pendientes</div><div style={{ fontSize: 18, fontWeight: 900 }}>{totals.pendingCount}</div><div style={{ fontWeight: 800 }}>{euros(totals.pendingCents)}</div></div>
-            <div style={miniStat}><div style={smallLabel}>Pagadas</div><div style={{ fontSize: 18, fontWeight: 900 }}>{totals.paidCount}</div><div style={{ fontWeight: 800 }}>{euros(totals.paidCents)}</div></div>
-            <div style={miniStat}><div style={smallLabel}>Total del día</div><div style={{ fontSize: 18, fontWeight: 900 }}>{totals.dayCount}</div><div style={{ fontWeight: 800 }}>{euros(totals.dayTotalCents)}</div></div>
-          </div>
-
-          {rowsLeft.length === 0 ? (
-            <p>No hay reservas hoy.</p>
-          ) : (
-            <div style={{ display: "grid", gap: 10 }}>
-              {rowsLeft.map((r) => {
-                const method = (paymentMethodByReservation[r.id] ?? "CASH") as PayMethod;
-                return (
-                  <LeftReservationCard
-                    key={r.id}
-                    r={r}
-                    isCashClosed={isCashClosed}
-                    method={method}
-                    setMethod={(m) => setPaymentMethodByReservation((prev) => ({ ...prev, [r.id]: m }))}
-                    passToReadyForPlatform={passToReadyForPlatform}
-                    createPayment={createPayment}
-                    load={load}
-                    setError={setError}
-                    servicesExtra={servicesExtra}
-                    extraUi={extraUi}
-                    setExtraUi={setExtraUi}
-                    getExtraState={getExtraState}
-                    addExtraToReservation={addExtraToReservation}
-                    servicePayLines={getServicePayLines(r.id)}
-                    addServicePayLine={() => addServicePayLine(r.id)}
-                    removeServicePayLine={(idx) => removeServicePayLine(r.id, idx)}
-                    updateServicePayLine={(idx, patch) => updateServicePayLine(r.id, idx, patch)}
-                    chargeServiceSplit={chargeServiceSplit}
-                    btnSecondary={btnSecondary}
-                    nowMs={nowMs}
-                    cancelReservation={cancelReservation}
-                  />
-                );
-              })}
-            </div>
-          )}
+          <StorePendingColumnSection totals={totals}>
+            {rowsLeft.length === 0 ? (
+              <p>No hay reservas hoy.</p>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {rowsLeft.map((r) => {
+                  const method = (paymentMethodByReservation[r.id] ?? "CASH") as PayMethod;
+                  return (
+                    <LeftReservationCard
+                      key={r.id}
+                      r={r}
+                      isCashClosed={isCashClosed}
+                      method={method}
+                      setMethod={(m) => setPaymentMethodByReservation((prev) => ({ ...prev, [r.id]: m }))}
+                      passToReadyForPlatform={passToReadyForPlatform}
+                      createPayment={createPayment}
+                      load={load}
+                      setError={setError}
+                      servicesExtra={servicesExtra}
+                      extraUi={extraUi}
+                      setExtraUi={setExtraUi}
+                      getExtraState={getExtraState}
+                      addExtraToReservation={addExtraToReservation}
+                      servicePayLines={getServicePayLines(r.id)}
+                      addServicePayLine={() => addServicePayLine(r.id)}
+                      removeServicePayLine={(idx) => removeServicePayLine(r.id, idx)}
+                      updateServicePayLine={(idx, patch) => updateServicePayLine(r.id, idx, patch)}
+                      chargeServiceSplit={chargeServiceSplit}
+                      btnSecondary={btnSecondary}
+                      nowMs={nowMs}
+                      cancelReservation={cancelReservation}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </StorePendingColumnSection>
         </div>
 
         <div style={{ ...columnCard, minWidth: 0 }}>
-          <h2 style={{ marginTop: 0 }}>
-            Ready for platform / En mar <span style={{ opacity: 0.6, fontWeight: 700 }}>({rowsRight.length})</span>
-          </h2>
-          <div style={{ fontSize: 12, opacity: 0.7, marginTop: -6, marginBottom: 10 }}>(Incluye IN_SEA para seguimiento)</div>
-          {rowsRight.map((r) => {
-            const method = (paymentMethodByReservation[r.id] ?? "CASH") as PayMethod;
-            return (
-              <ReadyReservationCard
-                key={r.id}
-                r={r}
-                isCashClosed={isCashClosed}
-                isOpen={openOpsId === r.id}
-                onToggleOpen={() => setOpenOpsId((prev) => (prev === r.id ? "" : r.id))}
-                method={method}
-                setMethod={(m) => setPaymentMethodByReservation((prev) => ({ ...prev, [r.id]: m }))}
-                applyPlatformExtras={applyPlatformExtras}
-                createPayment={createPayment}
-                load={load}
-                setError={setError}
-                servicesExtra={servicesExtra}
-                extraUi={extraUi}
-                setExtraUi={setExtraUi}
-                getExtraState={getExtraState}
-                addExtraToReservation={addExtraToReservation}
-                servicePayLines={getServicePayLines(r.id)}
-                addServicePayLine={() => addServicePayLine(r.id)}
-                removeServicePayLine={(idx) => removeServicePayLine(r.id, idx)}
-                updateServicePayLine={(idx, patch) => updateServicePayLine(r.id, idx, patch)}
-                chargeServiceSplit={chargeServiceSplit}
-                btnSecondary={btnSecondary}
-                completeReturn={completeReturn}
-                cancelReservation={cancelReservation}
-              />
-            );
-          })}
+          <StoreReservationColumnSection
+            title="Ready for platform / En mar"
+            count={rowsRight.length}
+            subtitle="Incluye IN_SEA para seguimiento"
+            emptyMessage={<p>No hay reservas en ready o en mar.</p>}
+          >
+            {rowsRight.map((r) => {
+              const method = (paymentMethodByReservation[r.id] ?? "CASH") as PayMethod;
+              return (
+                <ReadyReservationCard
+                  key={r.id}
+                  r={r}
+                  isCashClosed={isCashClosed}
+                  isOpen={openOpsId === r.id}
+                  onToggleOpen={() => setOpenOpsId((prev) => (prev === r.id ? "" : r.id))}
+                  method={method}
+                  setMethod={(m) => setPaymentMethodByReservation((prev) => ({ ...prev, [r.id]: m }))}
+                  applyPlatformExtras={applyPlatformExtras}
+                  createPayment={createPayment}
+                  load={load}
+                  setError={setError}
+                  servicesExtra={servicesExtra}
+                  extraUi={extraUi}
+                  setExtraUi={setExtraUi}
+                  getExtraState={getExtraState}
+                  addExtraToReservation={addExtraToReservation}
+                  servicePayLines={getServicePayLines(r.id)}
+                  addServicePayLine={() => addServicePayLine(r.id)}
+                  removeServicePayLine={(idx) => removeServicePayLine(r.id, idx)}
+                  updateServicePayLine={(idx, patch) => updateServicePayLine(r.id, idx, patch)}
+                  chargeServiceSplit={chargeServiceSplit}
+                  btnSecondary={btnSecondary}
+                  completeReturn={completeReturn}
+                  cancelReservation={cancelReservation}
+                />
+              );
+            })}
+          </StoreReservationColumnSection>
         </div>
 
         <div style={{ ...columnCard, minWidth: 0 }}>
-          <h2 style={{ marginTop: 0 }}>
-            Devueltas / Cierre <span style={{ opacity: 0.6 }}>({rowsReturned.length})</span>
-          </h2>
+          <StoreReservationColumnSection
+            title="Devueltas / Cierre"
+            count={rowsReturned.length}
+            subtitle={
+              returnedWithIncidentCount > 0
+                ? `${returnedWithIncidentCount} con incidencia o fianza retenida`
+                : "Pendientes de devolver/retener fianza y cerrar operativa"
+            }
+            emptyMessage={<p>No hay reservas devueltas.</p>}
+          >
+            {rowsReturned.map((r) => {
+              const method = (paymentMethodByReservation[r.id] ?? "CASH") as PayMethod;
 
-        <div style={{ fontSize: 12, opacity: 0.7, marginTop: -6, marginBottom: 10 }}>
-          {returnedWithIncidentCount > 0
-            ? `${returnedWithIncidentCount} con incidencia o fianza retenida`
-            : "Pendientes de devolver/retener fianza y cerrar operativa"}
-        </div>
-
-          {rowsReturned.length === 0 ? (
-            <p>No hay reservas devueltas.</p>
-          ) : (
-            <div style={{ display: "grid", gap: 10 }}>
-              {rowsReturned.map((r) => {
-                const method = (paymentMethodByReservation[r.id] ?? "CASH") as PayMethod;
-
-                return (
-                  <ReadyReservationCard
-                    key={r.id}
-                    r={r}
-                    isCashClosed={isCashClosed}
-                    isOpen={openOpsId === r.id}
-                    onToggleOpen={() => setOpenOpsId((prev) => (prev === r.id ? "" : r.id))}
-                    method={method}
-                    setMethod={(m) => setPaymentMethodByReservation((prev) => ({ ...prev, [r.id]: m }))}
-                    applyPlatformExtras={applyPlatformExtras}
-                    createPayment={createPayment}
-                    load={load}
-                    setError={setError}
-                    servicesExtra={servicesExtra}
-                    extraUi={extraUi}
-                    setExtraUi={setExtraUi}
-                    getExtraState={getExtraState}
-                    addExtraToReservation={addExtraToReservation}
-                    servicePayLines={getServicePayLines(r.id)}
-                    addServicePayLine={() => addServicePayLine(r.id)}
-                    removeServicePayLine={(idx) => removeServicePayLine(r.id, idx)}
-                    updateServicePayLine={(idx, patch) => updateServicePayLine(r.id, idx, patch)}
-                    chargeServiceSplit={chargeServiceSplit}
-                    btnSecondary={btnSecondary}
-                    showReturnedBanner
-                    showReturnedActions
-                    completeReturn={completeReturn}
-                    cancelReservation={cancelReservation}
-                  />
-                );
-              })}
-            </div>
-          )}
+              return (
+                <ReadyReservationCard
+                  key={r.id}
+                  r={r}
+                  isCashClosed={isCashClosed}
+                  isOpen={openOpsId === r.id}
+                  onToggleOpen={() => setOpenOpsId((prev) => (prev === r.id ? "" : r.id))}
+                  method={method}
+                  setMethod={(m) => setPaymentMethodByReservation((prev) => ({ ...prev, [r.id]: m }))}
+                  applyPlatformExtras={applyPlatformExtras}
+                  createPayment={createPayment}
+                  load={load}
+                  setError={setError}
+                  servicesExtra={servicesExtra}
+                  extraUi={extraUi}
+                  setExtraUi={setExtraUi}
+                  getExtraState={getExtraState}
+                  addExtraToReservation={addExtraToReservation}
+                  servicePayLines={getServicePayLines(r.id)}
+                  addServicePayLine={() => addServicePayLine(r.id)}
+                  removeServicePayLine={(idx) => removeServicePayLine(r.id, idx)}
+                  updateServicePayLine={(idx, patch) => updateServicePayLine(r.id, idx, patch)}
+                  chargeServiceSplit={chargeServiceSplit}
+                  btnSecondary={btnSecondary}
+                  showReturnedBanner
+                  showReturnedActions
+                  completeReturn={completeReturn}
+                  cancelReservation={cancelReservation}
+                />
+              );
+            })}
+          </StoreReservationColumnSection>
         </div>
       </section>
     </div>
   );
 }
-
-const summaryCard: CSSProperties = {
-  border: "1px solid #dde4ee",
-  borderRadius: 18,
-  padding: 14,
-  background: "#fff",
-};
-
-const summaryLabel: CSSProperties = {
-  fontSize: 12,
-  opacity: 0.7,
-  fontWeight: 800,
-};
-
-const summaryValue: CSSProperties = {
-  marginTop: 6,
-  fontSize: 28,
-  fontWeight: 950,
-};
-
-const summaryMeta: CSSProperties = {
-  marginTop: 4,
-  fontSize: 12,
-  color: "#6b7280",
-};
-
-const panelCard: CSSProperties = {
-  padding: 16,
-  border: "1px solid #dde4ee",
-  borderRadius: 20,
-  background: "#fff",
-  display: "grid",
-  gap: 12,
-};
-
-const panelTitle: CSSProperties = {
-  fontWeight: 900,
-  fontSize: 20,
-};
 
 const columnCard: CSSProperties = {
   padding: 18,
@@ -776,13 +679,3 @@ const columnCard: CSSProperties = {
   boxShadow: "0 10px 28px rgba(20, 32, 51, 0.04)",
 };
 
-const miniStat: CSSProperties = {
-  padding: 10,
-  border: "1px solid #eee",
-  borderRadius: 10,
-};
-
-const smallLabel: CSSProperties = {
-  fontSize: 12,
-  opacity: 0.75,
-};

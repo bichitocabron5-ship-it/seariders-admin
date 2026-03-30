@@ -13,7 +13,12 @@ import type {
   RunOpen,
 } from "../types/types";
 import { operabilityBadgeStyle, operabilityLabel } from "@/lib/operability-ui";
-import Link from "next/link";
+import { opsStyles } from "@/components/ops-ui";
+import PlatformAssignModal from "./PlatformAssignModal";
+import PlatformAssignmentActionsModal from "./PlatformAssignmentActionsModal";
+import PlatformIncidentModal from "./PlatformIncidentModal";
+import PlatformResourceRadar from "./PlatformResourceRadar";
+import PlatformRunCard from "./PlatformRunCard";
 
 type Props = { title: string; kind: MonitorRunKind; categories: string[] };
 const NO_RESOURCE_SELECTED = "__NONE__";
@@ -22,38 +27,12 @@ const QUEUED_ALERT_MINUTES = Number.isFinite(queuedAlertMinutesRaw) && queuedAle
 const ASSIGNED_QUEUE_WARN_MINUTES = QUEUED_ALERT_MINUTES / 2;
 const ASSIGNED_QUEUE_CRITICAL_MINUTES = QUEUED_ALERT_MINUTES;
 
-function clamp(n: number, a: number, b: number) { return Math.max(a, Math.min(b, n)); }
 function fmtHm(d: Date) { return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
 function msToClock(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(s / 60);
   const r = s % 60;
   return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
-}
-function clsTimer(msLeft: number) {
-  if (msLeft <= 0) return { bg: "#fff1f2", bd: "#fecaca", fg: "#b91c1c" };
-  if (msLeft <= 5 * 60 * 1000) return { bg: "#fffbeb", bd: "#fde68a", fg: "#b45309" };
-  return { bg: "#ecfdf5", bd: "#a7f3d0", fg: "#065f46" };
-}
-function timerLabel(msLeft: number | null) { if (msLeft === null) return ""; if (msLeft <= 0) return `+${msToClock(Math.abs(msLeft))}`; return msToClock(msLeft); }
-function progressTone(progress: number, msLeft: number) {
-  if (msLeft <= 0) return { fill: "#dc2626", track: "#fee2e2", text: "#991b1b" };
-  if (msLeft <= 5 * 60 * 1000) return { fill: "#f59e0b", track: "#fef3c7", text: "#92400e" };
-  if (progress >= 0.75) return { fill: "#0f766e", track: "#ccfbf1", text: "#115e59" };
-  return { fill: "#0f172a", track: "#dbeafe", text: "#1e3a8a" };
-}
-function TimelineBar({ progress, msLeft }: { progress: number; msLeft: number }) {
-  const p = clamp(progress, 0, 1);
-  const tone = progressTone(p, msLeft);
-  return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ position: "relative", height: 12, borderRadius: 999, background: tone.track, overflow: "hidden", border: "1px solid rgba(15, 23, 42, 0.08)" }}>
-        <div style={{ width: `${Math.max(0, Math.min(100, p * 100))}%`, height: "100%", borderRadius: 999, background: `linear-gradient(90deg, ${tone.fill} 0%, ${tone.fill}cc 100%)`, transition: "width 0.4s ease" }} />
-        {[25, 50, 75].map((mark) => <div key={mark} style={{ position: "absolute", left: `${mark}%`, top: 0, bottom: 0, width: 1, background: "rgba(15, 23, 42, 0.18)" }} />)}
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, color: "#64748b", fontWeight: 800 }}><span>Salida</span><span>25%</span><span>50%</span><span>75%</span><span>Fin</span></div>
-    </div>
-  );
 }
 
 function mechanicsDetailHref(params: {
@@ -349,6 +328,92 @@ export default function PlatformBoard(props: Props) {
   const blockedCount = kind === "JETSKI"
     ? Math.max(0, jetskis.length - assignableJetskis.length)
     : Math.max(0, assets.length - assignableAssets.length);
+  const assignRunOptions = useMemo(
+    () =>
+      readyRuns.map((run) => ({
+        id: run.id,
+        label: `${run.monitor?.name || "Monitor"} | ${run.status} | ${fmtHm(new Date(run.startedAt))}`,
+      })),
+    [readyRuns]
+  );
+  const assignResourceOptions = useMemo(
+    () =>
+      kind === "JETSKI"
+        ? assignableJetskis.map((jetski) => ({
+            id: jetski.id,
+            label: `Moto ${jetski.number || "-"}`,
+          }))
+        : assignableAssets.map((asset) => ({
+            id: asset.id,
+            label: asset.name,
+          })),
+    [assignableAssets, assignableJetskis, kind]
+  );
+  const radarItems = useMemo(
+    () =>
+      kind === "JETSKI"
+        ? jetskis.map((jetski) => {
+            const busy = busyJetskis.has(jetski.id);
+            const assignable = !busy && jetski.operabilityStatus === "OPERATIONAL";
+
+            return {
+              id: jetski.id,
+              title: `Moto ${jetski.number || "-"}`,
+              subtitle: !assignable ? (busy ? "En salida activa" : jetski.blockReason || "No asignable") : null,
+              titleHint: assignable ? "Asignable" : busy ? "Ocupada en salida" : "Bloqueada por mecánica",
+              stateLabel: radarStateLabel({
+                operabilityStatus: jetski.operabilityStatus,
+                busy,
+              }),
+              stateStyle: radarStateStyle({
+                operabilityStatus: jetski.operabilityStatus,
+                busy,
+              }),
+              availabilityLabel: assignable ? "Asignable" : busy ? "En salida" : "No asignable",
+              availabilityActive: assignable,
+              detailHref: !assignable ? mechanicsDetailHref({ kind, jetskiId: jetski.id }) : null,
+              eventHref:
+                !assignable && jetski.activeMaintenanceEventId
+                  ? mechanicsEventHref({
+                      kind,
+                      jetskiId: jetski.id,
+                      eventId: jetski.activeMaintenanceEventId,
+                    })
+                  : null,
+            };
+          })
+        : assets.map((asset) => {
+            const busy = busyAssets.has(asset.id);
+            const assignable = !busy && asset.operabilityStatus === "OPERATIONAL";
+
+            return {
+              id: asset.id,
+              title: asset.name,
+              subtitle: !assignable ? (busy ? "En uso / salida activa" : asset.blockReason || "No asignable") : null,
+              titleHint: assignable ? "Asignable" : busy ? "Ocupado en salida" : "Bloqueado por mecánica",
+              stateLabel: radarStateLabel({
+                operabilityStatus: asset.operabilityStatus,
+                busy,
+              }),
+              stateStyle: radarStateStyle({
+                operabilityStatus: asset.operabilityStatus,
+                busy,
+              }),
+              availabilityLabel: assignable ? "Asignable" : busy ? "En uso" : "No asignable",
+              availabilityActive: assignable,
+              detailHref: !assignable ? mechanicsDetailHref({ kind, assetId: asset.id }) : null,
+              eventHref:
+                !assignable && asset.activeMaintenanceEventId
+                  ? mechanicsEventHref({
+                      kind,
+                      assetId: asset.id,
+                      eventId: asset.activeMaintenanceEventId,
+                    })
+                  : null,
+            };
+          }),
+    [assets, busyAssets, busyJetskis, jetskis, kind]
+  );
   const queuedWarnings = useMemo(() => {
     const warnMs = QUEUED_ALERT_MINUTES * 60_000;
     return queue.filter((item) => {
@@ -367,6 +432,20 @@ export default function PlatformBoard(props: Props) {
     try { const body = kind === "JETSKI" ? { reservationUnitId: assignTarget.reservationUnitId ?? "", jetskiId: assignResourceId } : { reservationUnitId: assignTarget.reservationUnitId ?? "", assetId: assignResourceId }; const res = await fetch(`/api/platform/runs/${assignRunId}/assign`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) throw new Error(await res.text()); setAssignOpen(false); setAssignTarget(null); await loadAll(); } catch (e: unknown) { setAssignError(e instanceof Error ? e.message : "Error asignando"); } finally { setAssignBusy(false); }
   }
   function openAssignmentActions(a: RunOpen["assignments"][0]) { setActionAssignment(a); setActionOpen(true); setActionError(null); }
+  function openIncidentFlow() {
+    setIncidentType("OTHER");
+    setIncidentLevel("LOW");
+    setIncidentTitle("");
+    setIncidentDescription("");
+    setIncidentNotes("");
+    setIncidentAffectsOperability(false);
+    setIncidentOperabilityStatus("OPERATIONAL");
+    setIncidentRetainDeposit(false);
+    setIncidentRetainDepositCents("");
+    setIncidentCreateMaintenanceEvent(false);
+    setIncidentError(null);
+    setIncidentOpen(true);
+  }
   async function finishAssignment(hasIncident: boolean) { if (!actionAssignment) return; setActionBusy(true); setActionError(null); try { const res = await fetch(`/api/platform/assignments/${actionAssignment.id}/finish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hasIncident, type: hasIncident ? "OTHER" : undefined, level: hasIncident ? "LOW" : undefined }) }); if (!res.ok) throw new Error(await res.text()); setActionOpen(false); setActionAssignment(null); await loadAll(); } catch (e: unknown) { setActionError(e instanceof Error ? e.message : "Error finalizando"); } finally { setActionBusy(false); } }
   async function extendAssignment(extraMinutes: number, serviceCode: string) { if (!actionAssignment) return; setActionBusy(true); setActionError(null); try { const res = await fetch(`/api/platform/assignments/${actionAssignment.id}/extend`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ extraMinutes, serviceCode }) }); if (!res.ok) throw new Error(await res.text()); setActionOpen(false); setActionAssignment(null); await loadAll(); } catch (e: unknown) { setActionError(e instanceof Error ? e.message : "Error extendiendo tiempo"); } finally { setActionBusy(false); } }
   async function unassignAssignment(assignmentId: string) {
@@ -387,13 +466,13 @@ export default function PlatformBoard(props: Props) {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 1600, margin: "0 auto", display: "grid", gap: 16 }}>
-      <div style={{ display: "grid", gap: 16, padding: 22, border: "1px solid #dbe4ea", borderRadius: 24, background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 48%, #e0f2fe 100%)", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)" }}>
+    <div style={{ width: "min(1600px, 100%)", padding: "clamp(16px, 3vw, 28px)", margin: "0 auto", display: "grid", gap: 18 }}>
+      <div style={{ display: "grid", gap: 16, padding: "clamp(20px, 3vw, 24px)", border: "1px solid #dbe4ea", borderRadius: 24, background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 48%, #e0f2fe 100%)", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <div><div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#0369a1" }}>Board en vivo</div><div style={{ fontSize: 30, fontWeight: 950, lineHeight: 1, marginTop: 6 }}>{title}</div><div style={{ fontSize: 13, color: "#64748b", marginTop: 6 }}>Monitores, recursos, cola operativa y temporizadores de salida en tiempo real.</div></div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <a href="/operations" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #d0d9e4", textDecoration: "none", color: "#111", background: "#fff", fontWeight: 900 }}>Centro de Operaciones</a>
-          <button type="button" onClick={() => loadAll({ showLoading: true })} style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", fontWeight: 900 }}>Refrescar</button>
+        <div><div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#0369a1" }}>Board en vivo</div><div style={{ fontSize: "clamp(28px, 4vw, 34px)", fontWeight: 950, lineHeight: 1, marginTop: 6 }}>{title}</div><div style={{ fontSize: 13, color: "#64748b", marginTop: 6 }}>Monitores, recursos, cola operativa y temporizadores de salida en tiempo real.</div></div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, width: "min(100%, 360px)" }}>
+          <a href="/operations" style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #d0d9e4", textDecoration: "none", color: "#111", background: "#fff", fontWeight: 900, textAlign: "center" }}>Centro de Operaciones</a>
+          <button type="button" onClick={() => loadAll({ showLoading: true })} style={{ padding: "10px 14px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", fontWeight: 900, width: "100%" }}>Refrescar</button>
         </div>
       </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
@@ -425,7 +504,7 @@ export default function PlatformBoard(props: Props) {
             }}
           >
             <div>Estado mecánico</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, max-content))", gap: 8 }}>
               {blockedSummary.jetskiMaintenance > 0 ? (
                 <div style={operabilityBadgeStyle("MAINTENANCE")}>
                   {blockedSummary.jetskiMaintenance} motos en mantenimiento
@@ -460,7 +539,7 @@ export default function PlatformBoard(props: Props) {
           </div>
         )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 1.1fr) minmax(520px, 2fr) minmax(260px, 1fr)", gap: 16, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, alignItems: "start" }}>
         {departError ? <div style={{ gridColumn: "1 / -1", padding: 12, borderRadius: 14, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 900 }}>{departError}</div> : null}
 
         <div style={{ border: "1px solid #dbe4ea", borderRadius: 22, background: "#fff", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)" }}>
@@ -510,634 +589,107 @@ export default function PlatformBoard(props: Props) {
                 <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Nota opcional<input value={createRunNote} onChange={(e) => setCreateRunNote(e.target.value)} placeholder="Ej: grupo escuela / incidencia previa..." style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4" }} /></label>
               </div>
               {createRunError ? <div style={{ marginTop: 10, padding: 10, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 900 }}>{createRunError}</div> : null}
-              <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 8 }}><button type="button" onClick={createRun} disabled={createRunBusy} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #111", background: createRunBusy ? "#9ca3af" : "#111", color: "#fff", fontWeight: 950 }}>{createRunBusy ? "Abriendo..." : "Abrir salida"}</button></div>
+              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}><button type="button" onClick={createRun} disabled={createRunBusy} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #111", background: createRunBusy ? "#9ca3af" : "#111", color: "#fff", fontWeight: 950, width: "100%" }}>{createRunBusy ? "Abriendo..." : "Abrir salida"}</button></div>
             </div>
-            {openRuns.map((run) => <div key={run.id} style={{ border: "1px solid #e2e8f0", borderRadius: 18, padding: 16, background: "#fff" }}>
-              {(() => {
-                const hasActiveOrQueuedAssignments = (run.assignments || []).some((a) => a.status === "ACTIVE" || a.status === "QUEUED");
-                const canCloseRun =
-                  (run.status === "READY" || run.status === "IN_SEA") &&
-                  !hasActiveOrQueuedAssignments;
-                return (
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}><div style={{ fontWeight: 950, fontSize: 18 }}>{run.monitor?.name || "Monitor"}</div><div style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e5e7eb", fontWeight: 900, fontSize: 12, background: run.status === "IN_SEA" ? "#ecfeff" : "#f8fafc" }}>{run.status}</div><div style={{ fontSize: 12, opacity: 0.8 }}>Salida iniciada: <b>{fmtHm(new Date(run.startedAt))}</b></div>{run.monitorJetski ? <div style={{ fontSize: 12, opacity: 0.85 }}>Moto monitor: <b>#{run.monitorJetski.number || "-"}</b></div> : null}{run.monitorAsset ? <div style={{ fontSize: 12, opacity: 0.85 }}>Recurso monitor: <b>{run.monitorAsset.name}</b></div> : null}</div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <button type="button" onClick={() => departRun(run.id)} disabled={run.status !== "READY" || departBusyRunId === run.id || closeBusyRunId === run.id} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #111", background: run.status !== "READY" || departBusyRunId === run.id || closeBusyRunId === run.id ? "#9ca3af" : "#111", color: "#fff", fontWeight: 900, cursor: run.status !== "READY" || departBusyRunId === run.id || closeBusyRunId === run.id ? "not-allowed" : "pointer" }}>{departBusyRunId === run.id ? "Iniciando..." : "Iniciar salida"}</button>
-                  <button type="button" onClick={() => closeRun(run.id)} disabled={!canCloseRun || closeBusyRunId === run.id || departBusyRunId === run.id} title={canCloseRun ? "Cerrar salida y liberar monitor/recurso" : "Solo disponible en READY/IN_SEA y sin clientes asignados"} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #dc2626", background: !canCloseRun || closeBusyRunId === run.id || departBusyRunId === run.id ? "#fecaca" : "#fff", color: "#991b1b", fontWeight: 900, cursor: !canCloseRun || closeBusyRunId === run.id || departBusyRunId === run.id ? "not-allowed" : "pointer" }}>{closeBusyRunId === run.id ? "Desasignando..." : "Desasignar"}</button>
-                  {run.note ? <div style={{ fontSize: 12, opacity: 0.8 }}>Nota: {run.note}</div> : null}
-                </div>
-              </div>
-                );
-              })()}
-              <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-                {(run.assignments || []).filter((a) => a.status === "ACTIVE" || a.status === "QUEUED").map((a) => {
-                  const isQueued = a.status === "QUEUED";
-                  const canUnassign = run.status !== "IN_SEA" || isQueued;
-                  const queuedAtMs = a.createdAt ? new Date(a.createdAt).getTime() : null;
-                  const queuedWaitMs = isQueued && queuedAtMs ? Math.max(0, now - queuedAtMs) : null;
-                  const queuedWarnMs = ASSIGNED_QUEUE_WARN_MINUTES * 60_000;
-                  const queuedCriticalMs = ASSIGNED_QUEUE_CRITICAL_MINUTES * 60_000;
-                  const queuedIsWarn = isQueued && queuedWaitMs !== null && queuedWaitMs >= queuedWarnMs;
-                  const queuedIsCritical = isQueued && queuedWaitMs !== null && queuedWaitMs >= queuedCriticalMs;
-                  const startMs = a.startedAt ? new Date(a.startedAt).getTime() : null;
-                  const endMs = a.expectedEndAt ? new Date(a.expectedEndAt).getTime() : null;
-                  const hasTimes = !isQueued && startMs !== null && endMs !== null;
-                  const totalMs = hasTimes ? Math.max(1, endMs - startMs) : 1;
-                  const elapsedMs = hasTimes ? clamp(now - startMs, 0, totalMs) : 0;
-                  const msLeft = hasTimes ? endMs - now : null;
-                  const progress = hasTimes ? elapsedMs / totalMs : 0;
-                  const colors = hasTimes ? clsTimer(msLeft || 0) : queuedIsCritical ? { bd: "#fecaca", bg: "#fff1f2", fg: "#b91c1c" } : queuedIsWarn ? { bd: "#fde68a", bg: "#fffbeb", fg: "#92400e" } : { bd: "#e5e7eb", bg: "#f9fafb", fg: "#111" };
-                  const customer = a.reservation?.customerName || "Cliente";
-                  const resourceLabel = kind === "JETSKI" ? (a.jetski?.number ? `Moto ${a.jetski.number}` : "Moto") : a.asset?.name || "Recurso";
-                  const mins = a.durationMinutesSnapshot || null;
-                  return <div key={a.id} style={{ border: `1px solid ${colors.bd}`, background: colors.bg, borderRadius: 18, padding: 14, display: "grid", gap: 10, boxShadow: "0 12px 24px rgba(15, 23, 42, 0.04)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-                      <div style={{ fontWeight: 950 }}>{customer}<span style={{ opacity: 0.75 }}> | {resourceLabel}</span>{mins ? <span style={{ opacity: 0.75 }}> | {mins} min</span> : null}</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}><div style={{ padding: "4px 10px", borderRadius: 999, background: "#ffffffaa", border: `1px solid ${colors.bd}`, fontSize: 12, fontWeight: 900, color: colors.fg }}>{isQueued ? "QUEUE" : msLeft !== null && msLeft <= 0 ? "EXTRA" : "EN CURSO"}</div><div style={{ fontWeight: 950, color: colors.fg, fontSize: 20 }}>{isQueued ? `Pendiente${queuedWaitMs !== null ? ` | ${msToClock(queuedWaitMs)}` : ""}` : msLeft !== null ? `${timerLabel(msLeft)} ${msLeft <= 0 ? "extra" : "restantes"}` : ""}</div></div>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", fontSize: 12, opacity: 0.85 }}>{hasTimes ? <><div>Inicio: {fmtHm(new Date(startMs!))}</div><div>Fin: {fmtHm(new Date(endMs!))}</div></> : <div>Aún no ha iniciado la salida{queuedWaitMs !== null && queuedAtMs ? ` | en cola desde ${fmtHm(new Date(queuedAtMs))}` : ""}{queuedIsCritical ? ` | ALERTA CRITICA (${ASSIGNED_QUEUE_CRITICAL_MINUTES}+ min)` : queuedIsWarn ? ` | Alerta de espera (${ASSIGNED_QUEUE_WARN_MINUTES}+ min)` : ""}</div>}</div>
-                    {hasTimes ? <div style={{ display: "grid", gap: 10, padding: 12, borderRadius: 14, background: "#ffffffaa", border: `1px solid ${colors.bd}` }}><div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}><div style={{ fontSize: 12, fontWeight: 900, color: colors.fg }}>Progreso temporal</div><div style={{ fontSize: 12, color: colors.fg, fontWeight: 900 }}>{Math.round(progress * 100)}%</div></div><TimelineBar progress={progress} msLeft={msLeft ?? 0} /><div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", fontSize: 12, color: "#475569" }}><span>Inicio: <b>{fmtHm(new Date(startMs!))}</b></span><span>Fin previsto: <b>{fmtHm(new Date(endMs!))}</b></span></div></div> : null}
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
-                      <button type="button" onClick={() => openAssignmentActions(a)} disabled={isQueued} style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #111", background: isQueued ? "#f3f4f6" : "#fff", opacity: isQueued ? 0.6 : 1, fontWeight: 900, cursor: isQueued ? "not-allowed" : "pointer" }}>Acciones</button>
-                      <button
-                        type="button"
-                        onClick={() => unassignAssignment(a.id)}
-                        disabled={!canUnassign || unassignBusyAssignmentId === a.id}
-                        title={canUnassign ? "Quitar cliente de la salida y devolverlo a cola" : "No se puede desasignar un cliente activo en IN_SEA"}
-                        style={{
-                          padding: "8px 10px",
-                          borderRadius: 10,
-                          border: "1px solid #dc2626",
-                          background: !canUnassign || unassignBusyAssignmentId === a.id ? "#fecaca" : "#fff",
-                          color: "#991b1b",
-                          fontWeight: 900,
-                          cursor: !canUnassign || unassignBusyAssignmentId === a.id ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        {unassignBusyAssignmentId === a.id ? "Desasignando..." : "Desasignar cliente"}
-                      </button>
-                    </div>
-                  </div>;
-                })}
-                {(run.assignments || []).filter((a) => a.status === "ACTIVE" || a.status === "QUEUED").length === 0 ? <div style={{ opacity: 0.7, fontSize: 13 }}>No hay clientes activos o pendientes en esta salida.</div> : null}
-              </div>
-            </div>)}
+            {openRuns.map((run) => (
+              <PlatformRunCard
+                key={run.id}
+                run={run}
+                kind={kind}
+                now={now}
+                assignedQueueWarnMinutes={ASSIGNED_QUEUE_WARN_MINUTES}
+                assignedQueueCriticalMinutes={ASSIGNED_QUEUE_CRITICAL_MINUTES}
+                departBusy={departBusyRunId === run.id}
+                closeBusy={closeBusyRunId === run.id}
+                unassignBusyAssignmentId={unassignBusyAssignmentId}
+                onDepartRun={departRun}
+                onCloseRun={closeRun}
+                onOpenAssignmentActions={openAssignmentActions}
+                onUnassignAssignment={unassignAssignment}
+              />
+            ))}
           </div>
         </div>
 
-        <div style={{ border: "1px solid #dbe4ea", borderRadius: 22, background: "#fff", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)" }}>
-          <div style={{ padding: 16, borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", background: "#f8fafc" }}>
-            <div style={{ fontWeight: 950 }}>{kind === "JETSKI" ? "Radar de motos" : "Radar de recursos"}</div>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              {kind === "JETSKI" ? jetskis.length : assets.length} en radar
-            </div>
-          </div>
-          <div style={{ padding: 16, display: "grid", gap: 10 }}>
-            {kind === "JETSKI" && jetskis.length === 0 && !loading ? (
-              <div style={{ opacity: 0.7 }}>No hay motos registradas en radar.</div>
-            ) : null}
-
-            {kind === "NAUTICA" && assets.length === 0 && !loading ? (
-              <div style={{ opacity: 0.7 }}>No hay recursos registrados en radar.</div>
-            ) : null}
-            {kind === "JETSKI"
-              ? jetskis.map((j) => {
-                  const busy = busyJetskis.has(j.id);
-                  const assignable = !busy && j.operabilityStatus === "OPERATIONAL";
-
-                  return (
-                    <div
-                      key={j.id}
-                      style={{
-                        border: "1px solid #e2e8f0",
-                        borderRadius: 16,
-                        padding: 12,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        alignItems: "center",
-                        background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-                        opacity: assignable ? 1 : 0.92,
-                      }}
-                      title={assignable ? "Asignable" : busy ? "Ocupada en salida" : "Bloqueada por mecánica"}
-                    >
-                      <div style={{ display: "grid", gap: 6 }}>
-                        <div style={{ fontWeight: 950 }}>Moto {j.number || "-"}</div>
-                        
-                        {!assignable ? (
-                        <div style={{ fontSize: 12, color: "#92400e", fontWeight: 700 }}>
-                          {busy ? "En salida activa" : j.blockReason || "No asignable"}
-                        </div>
-                      ) : null}
-                      </div>
-
-                        {!assignable ? (
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <Link
-                              href={mechanicsDetailHref({
-                                kind,
-                                jetskiId: j.id,
-                              })}
-                              style={{
-                                padding: "6px 10px",
-                                borderRadius: 10,
-                                border: "1px solid #e5e7eb",
-                                background: "#fff",
-                                color: "#111",
-                                textDecoration: "none",
-                                fontSize: 12,
-                                fontWeight: 900,
-                              }}
-                            >
-                              Ver ficha
-                            </Link>
-
-                            {j.activeMaintenanceEventId ? (
-                              <Link
-                                href={mechanicsEventHref({
-                                  kind,
-                                  jetskiId: j.id,
-                                  eventId: j.activeMaintenanceEventId,
-                                })}
-                                style={{
-                                  padding: "6px 10px",
-                                  borderRadius: 10,
-                                  border: "1px solid #e5e7eb",
-                                  background: "#fff",
-                                  color: "#111",
-                                  textDecoration: "none",
-                                  fontSize: 12,
-                                  fontWeight: 900,
-                                }}
-                              >
-                                Ver evento
-                              </Link>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                        <div
-                          style={radarStateStyle({
-                            operabilityStatus: j.operabilityStatus,
-                            busy,
-                          })}
-                        >
-                          {radarStateLabel({
-                            operabilityStatus: j.operabilityStatus,
-                            busy,
-                          })}
-                        </div>
-
-                        <div
-                          style={{
-                            padding: "4px 8px",
-                            borderRadius: 999,
-                            fontSize: 12,
-                            fontWeight: 900,
-                            border: "1px solid #e5e7eb",
-                            background: assignable ? "#f0fdf4" : "#f8fafc",
-                            color: assignable ? "#166534" : "#64748b",
-                          }}
-                        >
-                          {assignable ? "Asignable" : busy ? "En salida" : "No asignable"}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              : assets.map((a) => {
-                  const busy = busyAssets.has(a.id);
-                  const assignable = !busy && a.operabilityStatus === "OPERATIONAL";
-
-                  return (
-                    <div
-                      key={a.id}
-                      style={{
-                        border: "1px solid #e2e8f0",
-                        borderRadius: 16,
-                        padding: 12,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        alignItems: "center",
-                        background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-                        opacity: assignable ? 1 : 0.92,
-                      }}
-                      title={assignable ? "Asignable" : busy ? "Ocupado en salida" : "Bloqueado por mecánica"}
-                    >
-                      <div style={{ display: "grid", gap: 6 }}>
-                        <div style={{ fontWeight: 950 }}>{a.name}</div>
-
-                        {!assignable ? (
-                          <div style={{ fontSize: 12, color: "#92400e", fontWeight: 700 }}>
-                            {busy ? "En uso / salida activa" : a.blockReason || "No asignable"}
-                          </div>
-                        ) : null}
-                      </div>
-
-                        {!assignable ? (
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <Link
-                              href={mechanicsDetailHref({
-                                kind,
-                                assetId: a.id,
-                              })}
-                              style={{
-                                padding: "6px 10px",
-                                borderRadius: 10,
-                                border: "1px solid #e5e7eb",
-                                background: "#fff",
-                                color: "#111",
-                                textDecoration: "none",
-                                fontSize: 12,
-                                fontWeight: 900,
-                              }}
-                            >
-                              Ver ficha
-                            </Link>
-
-                            {a.activeMaintenanceEventId ? (
-                              <Link
-                                href={mechanicsEventHref({
-                                  kind,
-                                  assetId: a.id,
-                                  eventId: a.activeMaintenanceEventId,
-                                })}
-                                style={{
-                                  padding: "6px 10px",
-                                  borderRadius: 10,
-                                  border: "1px solid #e5e7eb",
-                                  background: "#fff",
-                                  color: "#111",
-                                  textDecoration: "none",
-                                  fontSize: 12,
-                                  fontWeight: 900,
-                                }}
-                              >
-                                Ver evento
-                              </Link>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                        <div
-                          style={radarStateStyle({
-                            operabilityStatus: a.operabilityStatus,
-                            busy,
-                          })}
-                        >
-                          {radarStateLabel({
-                            operabilityStatus: a.operabilityStatus,
-                            busy,
-                          })}
-                        </div>
-
-                        <div
-                          style={{
-                            padding: "4px 8px",
-                            borderRadius: 999,
-                            fontSize: 12,
-                            fontWeight: 900,
-                            border: "1px solid #e5e7eb",
-                            background: assignable ? "#f0fdf4" : "#f8fafc",
-                            color: assignable ? "#166534" : "#64748b",
-                          }}
-                        >
-                          {assignable ? "Asignable" : busy ? "En uso" : "No asignable"}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}        
-            </div>
-        </div>
+        <PlatformResourceRadar
+          title={kind === "JETSKI" ? "Radar de motos" : "Radar de recursos"}
+          count={kind === "JETSKI" ? jetskis.length : assets.length}
+          emptyLabel={kind === "JETSKI" ? "No hay motos registradas en radar." : "No hay recursos registrados en radar."}
+          loading={loading}
+          items={radarItems}
+        />
       </div>
 
-      {assignOpen ? <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", display: "grid", placeItems: "center", padding: 16, zIndex: 50 }} onClick={() => (assignBusy ? null : setAssignOpen(false))}><div style={{ width: "min(720px, 100%)", background: "#fff", borderRadius: 16, border: "1px solid #e5e7eb", padding: 14 }} onClick={(e) => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}><div style={{ fontWeight: 950, fontSize: 18 }}>Asignar a salida</div><button type="button" onClick={() => (assignBusy ? null : setAssignOpen(false))} style={{ border: "1px solid #e5e7eb", background: "#fff", borderRadius: 10, padding: "6px 10px", fontWeight: 900 }}>Cerrar</button></div><div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>{assignTarget?.customerName || "Cliente"} | {assignTarget?.serviceName || "Servicio"}</div><div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}><label style={{ display: "grid", gap: 6, fontSize: 13 }}>Monitor / Salida<select value={assignRunId} onChange={(e) => setAssignRunId(e.target.value)} style={{ padding: 10 }}><option value="">Selecciona...</option>{readyRuns.map((r) => <option key={r.id} value={r.id}>{r.monitor?.name || "Monitor"} | {r.status} | {fmtHm(new Date(r.startedAt))}</option>)}</select></label><label style={{ display: "grid", gap: 6, fontSize: 13 }}>{kind === "JETSKI" ? "Moto" : "Recurso"}<select value={assignResourceId} onChange={(e) => setAssignResourceId(e.target.value)} style={{ padding: 10 }}><option value="">Selecciona...</option>{kind === "JETSKI"
-        ? assignableJetskis.map((j) => (
-            <option key={j.id} value={j.id}>
-              {`Moto ${j.number || "-"}`}
-            </option>
-          ))
-        : assignableAssets.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-        ))}</select></label></div>{assignError ? <div style={{ marginTop: 10, padding: 10, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 900 }}>{assignError}</div> : null}<div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 8 }}><button type="button" onClick={doAssign} disabled={assignBusy} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #111", background: assignBusy ? "#9ca3af" : "#111", color: "#fff", fontWeight: 950 }}>{assignBusy ? "Asignando..." : "Asignar"}</button></div></div></div> : null}
-      {actionOpen && actionAssignment ? <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", display: "grid", placeItems: "center", padding: 16, zIndex: 50 }} onClick={() => (actionBusy ? null : setActionOpen(false))}><div style={{ width: "min(720px, 100%)", background: "#fff", borderRadius: 16, border: "1px solid #e5e7eb", padding: 14 }} onClick={(e) => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}><div style={{ fontWeight: 950, fontSize: 18 }}>Acciones</div><button type="button" onClick={() => (actionBusy ? null : setActionOpen(false))} style={{ border: "1px solid #e5e7eb", background: "#fff", borderRadius: 10, padding: "6px 10px", fontWeight: 900 }}>Cerrar</button></div><div style={{ marginTop: 10, display: "grid", gap: 6, fontSize: 13, opacity: 0.85 }}><div><b>Assignment:</b> {actionAssignment.id}</div><div><b>Fin previsto:</b> {actionAssignment.expectedEndAt ? fmtHm(new Date(actionAssignment.expectedEndAt)) : "- pendiente de salida -"}</div></div><div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}><button type="button" disabled={actionBusy} onClick={() => finishAssignment(false)} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #111", background: "#111", color: "#fff", fontWeight: 950 }}>Finalizar (sin incidencia)</button>
-      <button
-        type="button"
-        disabled={actionBusy}
-        onClick={() => {
-          setIncidentType("OTHER");
-          setIncidentLevel("LOW");
-          setIncidentTitle("");
-          setIncidentDescription("");
-          setIncidentNotes("");
-          setIncidentAffectsOperability(false);
-          setIncidentOperabilityStatus("OPERATIONAL");
-          setIncidentRetainDeposit(false);
-          setIncidentRetainDepositCents("");
-          setIncidentCreateMaintenanceEvent(false);
-          setIncidentError(null);
-          setIncidentOpen(true);
-        }}
-        style={{
-          padding: "10px 12px",
-          borderRadius: 12,
-          border: "1px solid #e5e7eb",
-          background: "#fff",
-          fontWeight: 950,
-        }}
-      >
-        Finalizar (con incidencia)
-      </button><div style={{ flex: "1 1 auto" }} /><button type="button" disabled={actionBusy} onClick={() => extendAssignment(20, "JETSKI_EXTRA_20")} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #e5e7eb", background: "#fff", fontWeight: 950 }}>+20 (jetski)</button><button type="button" disabled={actionBusy} onClick={() => extendAssignment(40, "JETSKI_EXTRA_40")} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #e5e7eb", background: "#fff", fontWeight: 950 }}>+40 (jetski)</button><button type="button" disabled={actionBusy} onClick={() => extendAssignment(60, "BOAT_EXTRA_60")} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #e5e7eb", background: "#fff", fontWeight: 950 }}>+60 (boat)</button><button type="button" disabled={actionBusy} onClick={() => extendAssignment(120, "BOAT_EXTRA_120")} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #e5e7eb", background: "#fff", fontWeight: 950 }}>+120 (boat)</button></div>{actionError ? <div style={{ marginTop: 10, padding: 10, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 900 }}>{actionError}</div> : null}<div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>Nota: &quot;Finalizar con incidencia&quot; usa OTHER/LOW por defecto. Luego se puede ampliar a checklist completo.</div></div></div> : null}
+      <PlatformAssignModal
+        open={assignOpen}
+        busy={assignBusy}
+        error={assignError}
+        kind={kind}
+        target={assignTarget}
+        runId={assignRunId}
+        resourceId={assignResourceId}
+        runOptions={assignRunOptions}
+        resourceOptions={assignResourceOptions}
+        onClose={() => setAssignOpen(false)}
+        onRunChange={setAssignRunId}
+        onResourceChange={setAssignResourceId}
+        onSubmit={doAssign}
+      />
+      <PlatformAssignmentActionsModal
+        open={actionOpen}
+        busy={actionBusy}
+        error={actionError}
+        assignment={actionAssignment}
+        expectedEndLabel={actionAssignment?.expectedEndAt ? fmtHm(new Date(actionAssignment.expectedEndAt)) : "- pendiente de salida -"}
+        onClose={() => setActionOpen(false)}
+        onFinishWithoutIncident={() => finishAssignment(false)}
+        onFinishWithIncident={openIncidentFlow}
+        onExtend={extendAssignment}
+      />
     
-    {incidentOpen && actionAssignment ? (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.35)",
-          display: "grid",
-          placeItems: "center",
-          padding: 16,
-          zIndex: 60,
+      <PlatformIncidentModal
+        open={incidentOpen}
+        busy={incidentBusy}
+        error={incidentError}
+        kind={kind}
+        assignment={actionAssignment}
+        incidentType={incidentType}
+        incidentLevel={incidentLevel}
+        incidentTitle={incidentTitle}
+        incidentDescription={incidentDescription}
+        incidentNotes={incidentNotes}
+        incidentAffectsOperability={incidentAffectsOperability}
+        incidentOperabilityStatus={incidentOperabilityStatus}
+        incidentRetainDeposit={incidentRetainDeposit}
+        incidentRetainDepositCents={incidentRetainDepositCents}
+        incidentCreateMaintenanceEvent={incidentCreateMaintenanceEvent}
+        onClose={() => setIncidentOpen(false)}
+        onSubmit={submitIncidentFinish}
+        onIncidentTypeChange={setIncidentType}
+        onIncidentLevelChange={(next) => {
+          setIncidentLevel(next);
+          applyIncidentDefaultsByLevel(next, {
+            setIncidentAffectsOperability,
+            setIncidentOperabilityStatus,
+            setIncidentCreateMaintenanceEvent,
+          });
         }}
-        onClick={() => (incidentBusy ? null : setIncidentOpen(false))}
-      >
-        <div
-          style={{
-            width: "min(900px, 100%)",
-            background: "#fff",
-            borderRadius: 16,
-            border: "1px solid #e5e7eb",
-            padding: 16,
-            display: "grid",
-            gap: 12,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-            <div style={{ fontWeight: 950, fontSize: 20 }}>Registrar incidencia</div>
-            <button
-              type="button"
-              onClick={() => (incidentBusy ? null : setIncidentOpen(false))}
-              style={{
-                border: "1px solid #e5e7eb",
-                background: "#fff",
-                borderRadius: 10,
-                padding: "6px 10px",
-                fontWeight: 900,
-              }}
-            >
-              Cerrar
-            </button>
-          </div>
-
-          <div style={{ display: "grid", gap: 6, fontSize: 13, opacity: 0.85 }}>
-            <div><b>Assignment:</b> {actionAssignment.id}</div>
-            <div><b>Cliente:</b> {actionAssignment.reservation?.customerName || "Cliente"}</div>
-            <div>
-              <b>Unidad:</b>{" "}
-              {kind === "JETSKI"
-                ? actionAssignment.jetski?.number
-                  ? `Moto ${actionAssignment.jetski.number}`
-                  : "Moto"
-                : actionAssignment.asset?.name || "Recurso"}
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-              Tipo
-              <select
-                value={incidentType}
-                onChange={(e) => setIncidentType(e.target.value as "ACCIDENT" | "DAMAGE" | "MECHANICAL" | "OTHER")}
-                style={{ padding: 10, borderRadius: 10, border: "1px solid #d0d9e4" }}
-              >
-                <option value="ACCIDENT">Accidente</option>
-                <option value="DAMAGE">Daño</option>
-                <option value="MECHANICAL">Mecánica</option>
-                <option value="OTHER">Otra</option>
-              </select>
-            </label>
-
-            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-              Nivel
-              <select
-                value={incidentLevel}
-                onChange={(e) => {
-                  const next = e.target.value as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-                  setIncidentLevel(next);
-                  applyIncidentDefaultsByLevel(next, {
-                    setIncidentAffectsOperability,
-                    setIncidentOperabilityStatus,
-                    setIncidentCreateMaintenanceEvent,
-                  });
-                }}
-                style={{ padding: 10, borderRadius: 10, border: "1px solid #d0d9e4" }}
-              >
-                <option value="LOW">Baja</option>
-                <option value="MEDIUM">Media</option>
-                <option value="HIGH">Alta</option>
-                <option value="CRITICAL">Crítica</option>
-              </select>
-            </label>
-          </div>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Título corto
-            <input
-              value={incidentTitle}
-              onChange={(e) => setIncidentTitle(e.target.value)}
-              placeholder="Ej: golpe lateral, pérdida de potencia..."
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #d0d9e4" }}
-            />
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Descripción
-            <textarea
-              value={incidentDescription}
-              onChange={(e) => setIncidentDescription(e.target.value)}
-              rows={3}
-              placeholder="Describe lo ocurrido..."
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #d0d9e4", resize: "vertical" }}
-            />
-          </label>
-
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Notas operativas
-            <textarea
-              value={incidentNotes}
-              onChange={(e) => setIncidentNotes(e.target.value)}
-              rows={3}
-              placeholder="Observaciones del monitor o de plataforma..."
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #d0d9e4", resize: "vertical" }}
-            />
-          </label>
-
-          <div
-            style={{
-              border: "1px solid #e5e7eb",
-              borderRadius: 12,
-              padding: 12,
-              background: "#fafafa",
-              display: "grid",
-              gap: 10,
-            }}
-          >
-            <div style={{ fontWeight: 900 }}>Operatividad</div>
-
-            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-              <input
-                type="checkbox"
-                checked={incidentAffectsOperability}
-                onChange={(e) => setIncidentAffectsOperability(e.target.checked)}
-              />
-              Esta incidencia afecta a la operatividad
-            </label>
-
-            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-              Estado tras incidencia
-              <select
-                value={incidentOperabilityStatus}
-                onChange={(e) =>
-                  setIncidentOperabilityStatus(
-                    e.target.value as "" | "OPERATIONAL" | "MAINTENANCE" | "DAMAGED" | "OUT_OF_SERVICE"
-                  )
-                }
-                disabled={!incidentAffectsOperability}
-                style={{ padding: 10, borderRadius: 10, border: "1px solid #d0d9e4" }}
-              >
-                <option value="">Selecciona...</option>
-                <option value="OPERATIONAL">Operativa</option>
-                <option value="MAINTENANCE">Mantenimiento</option>
-                <option value="DAMAGED">Dañada</option>
-                <option value="OUT_OF_SERVICE">Fuera de servicio</option>
-              </select>
-            </label>
-          </div>
-
-          <div
-            style={{
-              border: "1px solid #e5e7eb",
-              borderRadius: 12,
-              padding: 12,
-              background: "#fafafa",
-              display: "grid",
-              gap: 10,
-            }}
-          >
-            <div style={{ fontWeight: 900 }}>Fianza</div>
-
-            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-              <input
-                type="checkbox"
-                checked={incidentRetainDeposit}
-                onChange={(e) => setIncidentRetainDeposit(e.target.checked)}
-              />
-              Retener fianza
-            </label>
-
-            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-              Importe retenido (céntimos)
-              <input
-                value={incidentRetainDepositCents}
-                onChange={(e) => setIncidentRetainDepositCents(e.target.value)}
-                disabled={!incidentRetainDeposit}
-                inputMode="numeric"
-                placeholder="Ej: 15000"
-                style={{ padding: 10, borderRadius: 10, border: "1px solid #d0d9e4" }}
-              />
-            </label>
-          </div>
-
-          <div
-            style={{
-              border: "1px solid #e5e7eb",
-              borderRadius: 12,
-              padding: 12,
-              background: "#fafafa",
-              display: "grid",
-              gap: 10,
-            }}
-          >
-            <div style={{ fontWeight: 900 }}>Mecánica</div>
-
-            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-              <input
-                type="checkbox"
-                checked={incidentCreateMaintenanceEvent}
-                onChange={(e) => setIncidentCreateMaintenanceEvent(e.target.checked)}
-              />
-              Crear evento técnico automáticamente
-            </label>
-          </div>
-
-          {incidentError ? (
-            <div
-              style={{
-                padding: 10,
-                borderRadius: 12,
-                border: "1px solid #fecaca",
-                background: "#fff1f2",
-                color: "#991b1b",
-                fontWeight: 900,
-              }}
-            >
-              {incidentError}
-            </div>
-          ) : null}
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => (incidentBusy ? null : setIncidentOpen(false))}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #e5e7eb",
-                background: "#fff",
-                fontWeight: 900,
-              }}
-            >
-              Cancelar
-            </button>
-
-            <button
-              type="button"
-              onClick={submitIncidentFinish}
-              disabled={incidentBusy}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #111",
-                background: incidentBusy ? "#9ca3af" : "#111",
-                color: "#fff",
-                fontWeight: 950,
-              }}
-            >
-              {incidentBusy ? "Guardando..." : "Finalizar con incidencia"}
-            </button>
-          </div>
-        </div>
-      </div>
-    ) : null}
+        onIncidentTitleChange={setIncidentTitle}
+        onIncidentDescriptionChange={setIncidentDescription}
+        onIncidentNotesChange={setIncidentNotes}
+        onIncidentAffectsOperabilityChange={setIncidentAffectsOperability}
+        onIncidentOperabilityStatusChange={setIncidentOperabilityStatus}
+        onIncidentRetainDepositChange={setIncidentRetainDeposit}
+        onIncidentRetainDepositCentsChange={setIncidentRetainDepositCents}
+        onIncidentCreateMaintenanceEventChange={setIncidentCreateMaintenanceEvent}
+      />
     </div>
   );
 }
 
 const metricCardStyle: React.CSSProperties = {
-  border: "1px solid #dbe4ea",
-  borderRadius: 18,
-  padding: 14,
+  ...opsStyles.metricCard,
   background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-  display: "grid",
-  gap: 4,
 };
 
 const metricLabelStyle: React.CSSProperties = {

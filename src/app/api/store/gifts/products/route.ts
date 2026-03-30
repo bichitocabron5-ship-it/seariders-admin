@@ -36,7 +36,7 @@ export async function GET() {
     ...r,
     name:
       r.name?.trim() ||
-      `${r.service.category} Â· ${r.service.name} Â· ${r.option.durationMinutes} min`,
+      `${r.service.category} · ${r.service.name} · ${r.option.durationMinutes} min`,
     isActive: true,
   }));
 

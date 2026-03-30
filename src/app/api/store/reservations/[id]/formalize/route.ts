@@ -112,9 +112,9 @@ function toHmInTz(d: Date, tz: string) {
 
 function firstIssueMessage(err: z.ZodError) {
   const issue = err.issues[0];
-  if (!issue) return "Datos invÃ¡lidos";
+  if (!issue) return "Datos inválidos";
   const path = issue.path?.length ? `${issue.path.join(".")}: ` : "";
-  return `Datos invÃ¡lidos (${path}${issue.message})`;
+  return `Datos inválidos (${path}${issue.message})`;
 }
 
 async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: string) {
