@@ -127,3 +127,28 @@ export type AssetAvailableResponse = {
   assets: AssetAvail[];
   usedAssetIds: string[];
 };
+
+export type PlatformOverrideLogRow = {
+  id: string;
+  targetType: "RESERVATION" | "MONITOR_RUN";
+  action: "FORCE_READY" | "FORCE_DEPART" | "FORCE_CLOSE_RUN";
+  targetId: string;
+  reason: string;
+  createdAt: string;
+  createdBy: {
+    id: string | null;
+    username: string | null;
+    fullName: string | null;
+  } | null;
+  reservation?: {
+    id: string;
+    customerName: string | null;
+    status: string | null;
+  } | null;
+  run?: {
+    id: string;
+    kind: MonitorRunKind;
+    status: RunStatus;
+    monitorName: string | null;
+  } | null;
+};

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "r
 import { opsStyles } from "@/components/ops-ui";
 import OperationsAlertsSection from "./_components/OperationsAlertsSection";
 import OperationsBoardSection from "./_components/OperationsBoardSection";
+import OperationsSystemHealthSection from "./_components/OperationsSystemHealthSection";
 import WaitTimesSection from "./_components/WaitTimesSection";
 
 type OperationCard = {
@@ -223,6 +224,34 @@ type WaitTimesResponse = {
   }>;
 };
 
+type SystemHealthResponse = {
+  ok: true;
+  generatedAt: string;
+  summary: {
+    total: number;
+    critical: number;
+    warn: number;
+    info: number;
+    readyWithoutAssignment: number;
+    queuedWithoutDeparture: number;
+    staleReadyRuns: number;
+    overdueInSeaRuns: number;
+  };
+  items: Array<{
+    key: string;
+    type: "force_ready_followup" | "force_depart" | "close_run";
+    severity: "critical" | "warn" | "info";
+    title: string;
+    subtitle: string;
+    detail: string;
+    href: string;
+    entityId: string;
+    targetMin: number;
+    waitedMin: number;
+    overByMin: number;
+  }>;
+};
+
 function eur(cents: number | null | undefined) {
   if (cents == null) return "-";
   return `${(cents / 100).toFixed(2)} EUR`;
@@ -350,36 +379,79 @@ export default function OperationsPage() {
   const [waitTimes, setWaitTimes] = useState<WaitTimesResponse | null>(null);
   const [waitTimesLoading, setWaitTimesLoading] = useState(false);
   const [waitTimesError, setWaitTimesError] = useState<string | null>(null);
+  const [systemHealth, setSystemHealth] = useState<SystemHealthResponse | null>(null);
+  const [systemHealthLoading, setSystemHealthLoading] = useState(false);
+  const [systemHealthError, setSystemHealthError] = useState<string | null>(null);
+  const [healthActionBusyKey, setHealthActionBusyKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setWaitTimesLoading(true);
     setWaitTimesError(null);
+    setSystemHealthLoading(true);
+    setSystemHealthError(null);
 
     try {
-      const [overviewRes, waitTimesRes] = await Promise.all([
+      const [overviewRes, waitTimesRes, systemHealthRes] = await Promise.all([
         fetch("/api/operations/overview", { cache: "no-store" }),
         fetch("/api/operations/wait-times", { cache: "no-store" }),
+        fetch("/api/operations/system-health", { cache: "no-store" }),
       ]);
 
       if (!overviewRes.ok) throw new Error(await overviewRes.text());
       if (!waitTimesRes.ok) throw new Error(await waitTimesRes.text());
+      if (!systemHealthRes.ok) throw new Error(await systemHealthRes.text());
 
       const overviewJson = (await overviewRes.json()) as OverviewResponse;
       const waitTimesJson = (await waitTimesRes.json()) as WaitTimesResponse;
+      const systemHealthJson = (await systemHealthRes.json()) as SystemHealthResponse;
 
       setData(overviewJson);
       setWaitTimes(waitTimesJson);
+      setSystemHealth(systemHealthJson);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Error cargando operaciones";
       setError(msg);
       setWaitTimesError(msg);
+      setSystemHealthError(msg);
     } finally {
       setLoading(false);
       setWaitTimesLoading(false);
+      setSystemHealthLoading(false);
     }
   }, []);
+
+  const handleForceReady = useCallback(
+    async (reservationId: string) => {
+      const reason = window.prompt(
+        "Motivo del override para forzar READY. Se usará solo como contingencia operativa."
+      );
+      if (!reason || !reason.trim()) return;
+
+      const busyKey =
+        systemHealth?.items.find(
+          (item) => item.type === "force_ready_followup" && item.entityId === reservationId
+        )?.key ?? reservationId;
+
+      try {
+        setHealthActionBusyKey(busyKey);
+        const res = await fetch(`/api/operations/reservations/${reservationId}/actions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "force_ready", reason: reason.trim() }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        await load();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "No se pudo forzar READY";
+        window.alert(msg);
+      } finally {
+        setHealthActionBusyKey(null);
+      }
+    },
+    [load, systemHealth]
+  );
 
     useEffect(() => {
       load();
@@ -592,6 +664,16 @@ export default function OperationsPage() {
               phaseSummaryRows={phaseSummaryRows}
             />
           </section>
+
+          <OperationsSystemHealthSection
+            loading={systemHealthLoading}
+            error={systemHealthError}
+            generatedAtLabel={systemHealth?.generatedAt ? fmtDateTime(systemHealth.generatedAt) : null}
+            summary={systemHealth?.summary ?? null}
+            items={systemHealth?.items ?? []}
+            actionBusyKey={healthActionBusyKey}
+            onForceReady={handleForceReady}
+          />
 
           <OperationsAlertsSection alerts={data.alerts} formatEur={eur} />
 
