@@ -36,6 +36,7 @@ type OperationCard = {
   notes: string | null;
   scheduledTime: string | null;
   activityDate: string | null;
+  detailHref?: string | null;
 };
 
 type SaturationItem = {
@@ -76,6 +77,11 @@ export default function OperationsBoardSection({
       ready: OperationCard[];
       inSea: OperationCard[];
       extrasPending: OperationCard[];
+    };
+    bar: {
+      pendingDeliveries: OperationCard[];
+      pendingReturns: OperationCard[];
+      incidents: OperationCard[];
     };
   };
   saturation: SaturationItem[];
@@ -123,6 +129,15 @@ export default function OperationsBoardSection({
               { title: "Ready", rows: areas.platform.ready },
               { title: "En mar", rows: areas.platform.inSea },
               { title: "Extras pendientes", rows: areas.platform.extrasPending },
+            ]}
+          />
+
+          <AreaBlock
+            title="Bar"
+            sections={[
+              { title: "Entregas pendientes", rows: areas.bar.pendingDeliveries },
+              { title: "Devoluciones pendientes", rows: areas.bar.pendingReturns },
+              { title: "Incidencias activas", rows: areas.bar.incidents },
             ]}
           />
         </div>
@@ -284,7 +299,7 @@ function OperationItem({ row }: { row: OperationCard }) {
       {row.notes ? <div style={{ fontSize: 12, opacity: 0.88 }}>{row.notes}</div> : null}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-        <a href={`/store/create?editFrom=${row.id}`} style={secondaryLinkSmall}>
+        <a href={row.detailHref ?? `/store/create?editFrom=${row.id}`} style={secondaryLinkSmall}>
           Abrir
         </a>
       </div>
