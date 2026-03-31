@@ -45,6 +45,7 @@ model User {
   maintenanceEventsCreated   MaintenanceEvent[]    @relation("MaintenanceEventCreatedBy")
   sparePartMovementsCreated  SparePartMovement[]   @relation("SparePartMovementCreatedBy")
   maintenanceEventLogs       MaintenanceEventLog[] @relation("MaintenanceEventLogCreatedBy")
+  operationalOverrideLogs    OperationalOverrideLog[] @relation("OperationalOverrideLogCreatedBy")
   incidentsCreated           Incident[]            @relation("IncidentCreatedBy")
   openedRentalAssetIncidents RentalAssetIncident[] @relation("RentalAssetIncidentOpenedByUser")
 
@@ -1160,6 +1161,23 @@ model MaintenanceEventLog {
   @@index([kind, createdAt])
 }
 
+model OperationalOverrideLog {
+  id            String                    @id @default(cuid())
+  targetType    OperationalOverrideTarget
+  action        OperationalOverrideAction
+  targetId      String
+  reason        String                    @db.VarChar(300)
+  payloadJson   Json?
+  createdByUserId String?
+  createdAt     DateTime                  @default(now())
+
+  createdByUser User? @relation("OperationalOverrideLogCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId, createdAt])
+  @@index([action, createdAt])
+  @@index([createdByUserId, createdAt])
+}
+
 model Incident {
   id String @id @default(cuid())
 
@@ -2160,6 +2178,17 @@ enum MaintenanceEventLogKind {
   COSTS_UPDATED
   NOTE_UPDATED
   FIELD_UPDATE
+}
+
+enum OperationalOverrideTarget {
+  RESERVATION
+  MONITOR_RUN
+}
+
+enum OperationalOverrideAction {
+  FORCE_READY
+  FORCE_DEPART
+  FORCE_CLOSE_RUN
 }
 
 enum SparePartMovementType {
