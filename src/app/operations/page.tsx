@@ -68,6 +68,7 @@ type OperationCard = {
   unformalized: boolean;
 
   notes: string | null;
+  detailHref?: string | null;
 
   items: Array<{
     id: string;
@@ -153,6 +154,11 @@ type OverviewResponse = {
       ready: OperationCard[];
       inSea: OperationCard[];
       extrasPending: OperationCard[];
+    };
+    bar: {
+      pendingDeliveries: OperationCard[];
+      pendingReturns: OperationCard[];
+      incidents: OperationCard[];
     };
   };
 };

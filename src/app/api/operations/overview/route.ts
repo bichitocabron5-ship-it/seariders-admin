@@ -102,6 +102,42 @@ function minutesDiff(from: Date, to: Date) {
   return Math.floor((to.getTime() - from.getTime()) / 60000);
 }
 
+function labelRentalAssetStatus(status: string) {
+  switch (status) {
+    case "MAINTENANCE":
+      return "Mantenimiento";
+    case "DAMAGED":
+      return "Dañado";
+    case "LOST":
+      return "Perdido";
+    case "DELIVERED":
+      return "Entregado";
+    case "AVAILABLE":
+      return "Disponible";
+    case "INACTIVE":
+      return "Inactivo";
+    default:
+      return status;
+  }
+}
+
+function joinItemNames(
+  items: Array<{
+    nameSnap: string;
+    quantity: number | null;
+  }>
+) {
+  const labels = items
+    .map((item) => {
+      const qty = Number(item.quantity ?? 0);
+      return qty > 1 ? `${item.nameSnap} x${qty}` : item.nameSnap;
+    })
+    .filter(Boolean);
+
+  if (labels.length <= 2) return labels.join(" | ");
+  return `${labels.slice(0, 2).join(" | ")} | +${labels.length - 2} más`;
+}
+
 export async function GET() {
   const session = await requireOpsOrAdmin();
   if (!session) {
@@ -205,6 +241,88 @@ export async function GET() {
       depositHoldReason: true,
     },
   });
+
+  const [barPendingTasksDb, barReturnTasksDb, barIncidentAssetsDb] = await Promise.all([
+    prisma.fulfillmentTask.findMany({
+      where: {
+        area: "BAR",
+        status: "PENDING",
+      },
+      orderBy: [{ scheduledFor: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        customerNameSnap: true,
+        paid: true,
+        paidAmountCents: true,
+        scheduledFor: true,
+        createdAt: true,
+        items: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            nameSnap: true,
+            quantity: true,
+          },
+        },
+      },
+    }),
+    prisma.fulfillmentTask.findMany({
+      where: {
+        area: "BAR",
+        type: "EXTRA_DELIVERY",
+        status: "DELIVERED",
+      },
+      orderBy: [{ deliveredAt: "asc" }, { scheduledFor: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        customerNameSnap: true,
+        paid: true,
+        paidAmountCents: true,
+        scheduledFor: true,
+        deliveredAt: true,
+        createdAt: true,
+        items: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            nameSnap: true,
+            quantity: true,
+          },
+        },
+      },
+    }),
+    prisma.rentalAsset.findMany({
+      where: {
+        isActive: true,
+        status: { in: ["MAINTENANCE", "DAMAGED", "LOST"] },
+      },
+      orderBy: [{ status: "asc" }, { type: "asc" }, { code: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        type: true,
+        name: true,
+        code: true,
+        size: true,
+        status: true,
+        notes: true,
+        updatedAt: true,
+        assignments: {
+          where: { returnedAt: null },
+          orderBy: { assignedAt: "desc" },
+          take: 1,
+          select: {
+            assignedAt: true,
+            task: {
+              select: {
+                customerNameSnap: true,
+              },
+            },
+          },
+        },
+      },
+    }),
+  ]);
 
   const rows = rowsDb.map((r) => {
     const scheduledBase = r.scheduledTime ?? r.activityDate ?? null;
@@ -405,6 +523,7 @@ export async function GET() {
       unformalized,
 
       notes: r.manualDiscountReason ?? null,
+      detailHref: `/store/create?editFrom=${r.id}`,
 
       items: r.items.map((it) => ({
         id: it.id,
@@ -423,6 +542,176 @@ export async function GET() {
         pax: it.pax,
         totalPriceCents: it.totalPriceCents,
       })),
+    };
+  });
+
+  const barPendingDeliveries = barPendingTasksDb.map((task) => {
+    const serviceName = joinItemNames(task.items);
+    const scheduledIso = task.scheduledFor?.toISOString?.() ?? null;
+    const baseTime = task.scheduledFor ?? task.createdAt;
+
+    return {
+      id: task.id,
+      bucket: "pending" as const,
+      createdAt: task.createdAt.toISOString(),
+      updatedAt: task.createdAt.toISOString(),
+      activityDate: scheduledIso,
+      scheduledTime: scheduledIso,
+      formalizedAt: task.createdAt.toISOString(),
+      customerName: task.customerNameSnap ?? "Sin cliente",
+      customerCountry: null,
+      companionsCount: 0,
+      serviceName: serviceName || (task.type === "CATERING" ? "Catering" : "Extra"),
+      durationMinutes: null,
+      channelName: null,
+      source: "BAR",
+      boothCode: null,
+      arrivedStoreAt: null,
+      taxiboatTripId: null,
+      taxiboatBoat: null,
+      taxiboatTripNo: null,
+      taxiboatDepartedAt: null,
+      status: task.type === "CATERING" ? "CATERING" : "PENDIENTE",
+      minsToStart: task.scheduledFor ? minutesDiff(now, task.scheduledFor) : null,
+      soldTotalCents: Number(task.paidAmountCents ?? 0),
+      pendingCents: task.paid ? 0 : Number(task.paidAmountCents ?? 0),
+      pendingServiceCents: task.paid ? 0 : Number(task.paidAmountCents ?? 0),
+      pendingDepositCents: 0,
+      paidCents: task.paid ? Number(task.paidAmountCents ?? 0) : 0,
+      depositStatus: "PENDIENTE" as const,
+      depositHeld: false,
+      depositHoldReason: null,
+      contractsBadge: null,
+      contractsIncomplete: false,
+      platformExtrasPendingCount: 0,
+      startingSoon: task.scheduledFor ? minutesDiff(now, task.scheduledFor) <= 60 && minutesDiff(now, task.scheduledFor) >= 0 : false,
+      overdueStart: task.scheduledFor ? minutesDiff(now, task.scheduledFor) < 0 : false,
+      notReadyEnough: false,
+      criticalPendingPayment: !task.paid && Number(task.paidAmountCents ?? 0) > 0,
+      criticalContractsIncomplete: false,
+      taxiboatBlocked: false,
+      overdueOperation: false,
+      waitingTooLong: baseTime ? minutesDiff(baseTime, now) > 30 : false,
+      missingAssignment: false,
+      unformalized: false,
+      notes: task.title,
+      detailHref: "/bar",
+      items: [],
+      extras: [],
+    };
+  });
+
+  const barPendingReturns = barReturnTasksDb.map((task) => {
+    const serviceName = joinItemNames(task.items);
+    const scheduledIso = task.scheduledFor?.toISOString?.() ?? null;
+    const deliveredIso = task.deliveredAt?.toISOString?.() ?? task.createdAt.toISOString();
+
+    return {
+      id: task.id,
+      bucket: "pending" as const,
+      createdAt: task.createdAt.toISOString(),
+      updatedAt: deliveredIso,
+      activityDate: scheduledIso,
+      scheduledTime: scheduledIso,
+      formalizedAt: task.createdAt.toISOString(),
+      customerName: task.customerNameSnap ?? "Sin cliente",
+      customerCountry: null,
+      companionsCount: 0,
+      serviceName: serviceName || "Extra entregado",
+      durationMinutes: null,
+      channelName: null,
+      source: "BAR",
+      boothCode: null,
+      arrivedStoreAt: null,
+      taxiboatTripId: null,
+      taxiboatBoat: null,
+      taxiboatTripNo: null,
+      taxiboatDepartedAt: null,
+      status: "PENDIENTE DEVOLUCIÓN",
+      minsToStart: null,
+      soldTotalCents: Number(task.paidAmountCents ?? 0),
+      pendingCents: 0,
+      pendingServiceCents: 0,
+      pendingDepositCents: 0,
+      paidCents: task.paid ? Number(task.paidAmountCents ?? 0) : 0,
+      depositStatus: "PENDIENTE" as const,
+      depositHeld: false,
+      depositHoldReason: null,
+      contractsBadge: null,
+      contractsIncomplete: false,
+      platformExtrasPendingCount: 0,
+      startingSoon: false,
+      overdueStart: false,
+      notReadyEnough: false,
+      criticalPendingPayment: false,
+      criticalContractsIncomplete: false,
+      taxiboatBlocked: false,
+      overdueOperation: false,
+      waitingTooLong: false,
+      missingAssignment: false,
+      unformalized: false,
+      notes: task.title,
+      detailHref: "/bar",
+      items: [],
+      extras: [],
+    };
+  });
+
+  const barIncidents = barIncidentAssetsDb.map((asset) => {
+    const activeAssignment = asset.assignments[0] ?? null;
+    const customerName = asset.code ? `${asset.name} · ${asset.code}` : asset.name;
+    const serviceName = activeAssignment?.task.customerNameSnap
+      ? `Asignado a ${activeAssignment.task.customerNameSnap}`
+      : `${asset.type}${asset.size ? ` · ${asset.size}` : ""}`;
+
+    return {
+      id: asset.id,
+      bucket: "pending" as const,
+      createdAt: asset.updatedAt.toISOString(),
+      updatedAt: asset.updatedAt.toISOString(),
+      activityDate: activeAssignment?.assignedAt?.toISOString?.() ?? null,
+      scheduledTime: null,
+      formalizedAt: asset.updatedAt.toISOString(),
+      customerName,
+      customerCountry: null,
+      companionsCount: 0,
+      serviceName,
+      durationMinutes: null,
+      channelName: null,
+      source: "BAR",
+      boothCode: null,
+      arrivedStoreAt: null,
+      taxiboatTripId: null,
+      taxiboatBoat: null,
+      taxiboatTripNo: null,
+      taxiboatDepartedAt: null,
+      status: labelRentalAssetStatus(asset.status),
+      minsToStart: null,
+      soldTotalCents: 0,
+      pendingCents: 0,
+      pendingServiceCents: 0,
+      pendingDepositCents: 0,
+      paidCents: 0,
+      depositStatus: "PENDIENTE" as const,
+      depositHeld: false,
+      depositHoldReason: null,
+      contractsBadge: null,
+      contractsIncomplete: false,
+      platformExtrasPendingCount: 0,
+      startingSoon: false,
+      overdueStart: false,
+      notReadyEnough: false,
+      criticalPendingPayment: false,
+      criticalContractsIncomplete: false,
+      taxiboatBlocked: false,
+      overdueOperation: asset.status === "LOST" || asset.status === "DAMAGED",
+      waitingTooLong: false,
+      missingAssignment: false,
+      unformalized: false,
+      notes: asset.notes ?? null,
+      detailHref: "/bar",
+      items: [],
+      extras: [],
     };
   });
 
@@ -553,6 +842,11 @@ export async function GET() {
         ready: rows.filter((r) => r.status === "READY_FOR_PLATFORM"),
         inSea: rows.filter((r) => r.status === "IN_SEA"),
         extrasPending: rows.filter((r) => r.platformExtrasPendingCount > 0),
+      },
+      bar: {
+        pendingDeliveries: barPendingDeliveries,
+        pendingReturns: barPendingReturns,
+        incidents: barIncidents,
       },
     },
   });
