@@ -205,7 +205,12 @@ export default function BarPage() {
   function getQuantity(productId: string) {
     return Math.max(1, Number(quantities[productId] ?? 1));
   }
-  async function handleQuickSell(product: BarCategoryWithProducts["products"][number], method: BarMethod) {
+  async function handleQuickSell(
+    product: BarCategoryWithProducts["products"][number],
+    method: BarMethod,
+    _cashReceivedEuros?: string
+  ) {
+    void _cashReceivedEuros;
     try {
       setError(null);
       setActionBusy(`${product.id}-${method}`);
@@ -418,7 +423,9 @@ export default function BarPage() {
                           onIncreaseQuantity={() =>
                             setQuantities((prev) => ({ ...prev, [product.id]: quantity + 1 }))
                           }
-                          onQuickSell={(method) => void handleQuickSell(product, method)}
+                          onQuickSell={(method, cashReceivedEuros) =>
+                            void handleQuickSell(product, method, cashReceivedEuros)
+                          }
                           methodPill={methodPill}
                         />
                       );

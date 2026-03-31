@@ -14,7 +14,7 @@ type Option = { id: string; serviceId: string; durationMinutes: number; paxMax: 
 type Channel = { id: string; name: string };
 type PayMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 
-type SplitLine = { amount: string; method: PayMethod };
+type SplitLine = { amount: string; method: PayMethod; received?: string };
 
 type ReservationLike = {
   id: string;
@@ -351,8 +351,8 @@ const taxiboatOpsByBoat = useMemo(
 function getSplit(id: string): [SplitLine, SplitLine] {
   return (
     splitById[id] ?? [
-      { amount: "", method: "CASH" },
-      { amount: "", method: "CARD" },
+      { amount: "", method: "CASH", received: "" },
+      { amount: "", method: "CARD", received: "" },
     ]
   );
 }

@@ -46,6 +46,9 @@ type HistoryRow = {
   durationMinutes: number | null;
   paidCents: number;
   paidDepositCents: number;
+  depositCollectedCents: number;
+  depositReturnedCents: number;
+  depositRetainedCents: number;
   totalToChargeCents: number;
   incidents: HistoryIncident[];
 };

@@ -1,8 +1,10 @@
 "use client";
 
+import CashChangeHelper from "@/components/cash-change-helper";
+
 type PayMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 
-type SplitLine = { amount: string; method: PayMethod };
+type SplitLine = { amount: string; method: PayMethod; received?: string };
 
 type ReservationLike = {
   id: string;
@@ -108,9 +110,15 @@ export default function BoothPreReservationsSection({
               </div>
 
               <div style={{ marginTop: 8, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-                <div style={{ fontSize: 13 }}>Total: <strong>{euros(reservation.totalPriceCents ?? 0)}</strong></div>
-                <div style={{ fontSize: 13, opacity: 0.85 }}>Pagado: <strong>{euros(reservation.paidCents ?? 0)}</strong></div>
-                <div style={{ fontSize: 13, opacity: 0.85 }}>Pendiente: <strong>{euros(reservation.pendingCents ?? 0)}</strong></div>
+                <div style={{ fontSize: 13 }}>
+                  Total: <strong>{euros(reservation.totalPriceCents ?? 0)}</strong>
+                </div>
+                <div style={{ fontSize: 13, opacity: 0.85 }}>
+                  Pagado: <strong>{euros(reservation.paidCents ?? 0)}</strong>
+                </div>
+                <div style={{ fontSize: 13, opacity: 0.85 }}>
+                  Pendiente: <strong>{euros(reservation.pendingCents ?? 0)}</strong>
+                </div>
               </div>
 
               {waitMeta ? (
@@ -162,61 +170,70 @@ export default function BoothPreReservationsSection({
                     background: "#f8fafc",
                   }}
                 >
-                  <div style={{ fontWeight: 900, fontSize: 13, color: "#0f172a" }}>Cobro parcial / split payment</div>
-
-                  <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", alignItems: "center" }}>
-                    <input
-                      disabled={isCashClosed}
-                      placeholder="Importe EUR (1)"
-                      value={getSplit(reservation.id)[0].amount}
-                      onChange={(e) => setSplitLine(reservation.id, 0, { amount: e.target.value })}
-                      style={fieldStyle}
-                    />
-                    <select
-                      disabled={isCashClosed}
-                      value={getSplit(reservation.id)[0].method}
-                      onChange={(e) => setSplitLine(reservation.id, 0, { method: e.target.value as PayMethod })}
-                      style={fieldStyle}
-                    >
-                      <option value="CASH">Efectivo</option>
-                      <option value="CARD">Tarjeta</option>
-                      <option value="BIZUM">Bizum</option>
-                      <option value="TRANSFER">Transfer</option>
-                    </select>
+                  <div style={{ fontWeight: 900, fontSize: 13, color: "#0f172a" }}>
+                    Cobro parcial / split payment
                   </div>
 
-                  <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", alignItems: "center" }}>
-                    <input
-                      disabled={isCashClosed}
-                      placeholder="Importe EUR (2)"
-                      value={getSplit(reservation.id)[1].amount}
-                      onChange={(e) => setSplitLine(reservation.id, 1, { amount: e.target.value })}
-                      style={fieldStyle}
-                    />
-                    <select
-                      disabled={isCashClosed}
-                      value={getSplit(reservation.id)[1].method}
-                      onChange={(e) => setSplitLine(reservation.id, 1, { method: e.target.value as PayMethod })}
-                      style={fieldStyle}
-                    >
-                      <option value="CASH">Efectivo</option>
-                      <option value="CARD">Tarjeta</option>
-                      <option value="BIZUM">Bizum</option>
-                      <option value="TRANSFER">Transfer</option>
-                    </select>
-                    <button
-                      onClick={() => paySplitNow(reservation.id, reservation.pendingCents ?? 0)}
-                      disabled={payingId === reservation.id || isCashClosed}
-                      style={{
-                        ...darkBtn,
-                        width: "100%",
-                        opacity: payingId === reservation.id || isCashClosed ? 0.5 : 1,
-                        cursor: isCashClosed ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      {isCashClosed ? "Caja cerrada" : payingId === reservation.id ? "Cobrando..." : "Cobrar (split)"}
-                    </button>
-                  </div>
+                  {[0, 1].map((lineIndex) => {
+                    const line = getSplit(reservation.id)[lineIndex as 0 | 1];
+                    return (
+                      <div
+                        key={lineIndex}
+                        style={{
+                          display: "grid",
+                          gap: 10,
+                          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                          alignItems: "start",
+                        }}
+                      >
+                        <input
+                          disabled={isCashClosed}
+                          placeholder={`Importe EUR (${lineIndex + 1})`}
+                          value={line.amount}
+                          onChange={(e) => setSplitLine(reservation.id, lineIndex as 0 | 1, { amount: e.target.value })}
+                          style={fieldStyle}
+                        />
+                        <select
+                          disabled={isCashClosed}
+                          value={line.method}
+                          onChange={(e) =>
+                            setSplitLine(reservation.id, lineIndex as 0 | 1, {
+                              method: e.target.value as PayMethod,
+                            })
+                          }
+                          style={fieldStyle}
+                        >
+                          <option value="CASH">Efectivo</option>
+                          <option value="CARD">Tarjeta</option>
+                          <option value="BIZUM">Bizum</option>
+                          <option value="TRANSFER">Transfer</option>
+                        </select>
+                        {line.method === "CASH" ? (
+                          <CashChangeHelper
+                            amountEuros={line.amount}
+                            receivedEuros={line.received ?? ""}
+                            onReceivedEurosChange={(value) =>
+                              setSplitLine(reservation.id, lineIndex as 0 | 1, { received: value })
+                            }
+                            inputStyle={fieldStyle}
+                          />
+                        ) : null}
+                      </div>
+                    );
+                  })}
+
+                  <button
+                    onClick={() => paySplitNow(reservation.id, reservation.pendingCents ?? 0)}
+                    disabled={payingId === reservation.id || isCashClosed}
+                    style={{
+                      ...darkBtn,
+                      width: "100%",
+                      opacity: payingId === reservation.id || isCashClosed ? 0.5 : 1,
+                      cursor: isCashClosed ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isCashClosed ? "Caja cerrada" : payingId === reservation.id ? "Cobrando..." : "Cobrar (split)"}
+                  </button>
 
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
                     Pendiente: <strong>{euros(reservation.pendingCents ?? 0)}</strong> · Se pueden usar 1 o 2 líneas.
@@ -231,7 +248,9 @@ export default function BoothPreReservationsSection({
           );
         })}
 
-        {preReservationRows.length === 0 ? <div style={{ opacity: 0.7 }}>No hay pre-reservas pendientes de asignación.</div> : null}
+        {preReservationRows.length === 0 ? (
+          <div style={{ opacity: 0.7 }}>No hay pre-reservas pendientes de asignación.</div>
+        ) : null}
       </div>
     </section>
   );

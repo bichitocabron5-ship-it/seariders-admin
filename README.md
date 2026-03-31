@@ -1,67 +1,104 @@
 # SeaRiders Admin
 
-Consola operativa y de administracion para SeaRiders. Cubre el flujo diario de tienda y carpa (reservas, cobros, cierres de caja), junto con el backoffice de catalogo, precios, descuentos, packs, regalos y comisiones.
+Consola operativa y administrativa para SeaRiders. Cubre tienda, carpa, plataforma, bar, RR. HH., mecánica y backoffice con cierres de caja, catálogo, precios, descuentos, regalos, packs y reporting.
 
-**Stack principal**
-- Next.js 16 (App Router) + React 19
+## Stack
+
+- Next.js 16 + React 19
 - Prisma + PostgreSQL
-- iron-session (cookie de sesion)
-- Zod para validacion
-- Tailwind configurado, UI actual con estilos inline
+- `iron-session` para sesión HTTP
+- Zod para validación
 
-**Modulos y rutas**
-- `src/app/login`: acceso con usuario, password y turno.
-- `src/app/store`: dashboard de tienda (reservas del dia, cobros, caja, comisiones, descuentos, packs, regalos).
-- `src/app/booth`: operativa de carpa/booth (reservas, cobros, viajes de taxiboat, cierres de caja).
-- `src/app/admin`: backoffice (catalogo, precios, canales y comisiones, descuentos, packs, cierres de caja, regalos).
-- `src/app/platform` y `src/app/bar`: placeholders por ahora.
+## Módulos principales
 
-**API interna (Route Handlers)**
-Las rutas de backend viven bajo `src/app/api` y se agrupan por dominio:
-- `login` para autenticacion.
-- `pos/catalog` para catalogo operativo.
-- `store/*` y `booth/*` para reservas, pagos, cierres de caja, comisiones, descuentos y regalos.
-- `admin/*` para CRUD de catalogo, precios, canales, descuentos, packs y cierres.
+- `src/app/login`: acceso con usuario, contraseña y turno.
+- `src/app/store`: tienda, cobros, devoluciones, fianzas y cierres.
+- `src/app/booth`: operativa de carpa, taxiboat y cobros.
+- `src/app/platform`: asignación y seguimiento operativo.
+- `src/app/bar`: TPV, entregas, devoluciones e incidencias.
+- `src/app/hr`: fichajes, tarifas, payroll y empleados.
+- `src/app/mechanics`: mantenimiento, incidencias y recambios.
+- `src/app/admin`: catálogo, precios, canales, usuarios, activos, cierres y configuración.
+- `src/app/executive`: reporting ejecutivo.
 
-**Modelo de datos (Prisma)**
-El esquema se mantiene en `prisma/schema.prisma`. Modelos clave:
-- Usuarios/roles/sesiones de turno: `User`, `Role`, `UserRole`, `ShiftSession`.
-- Catalogo y pricing: `Channel`, `Service`, `ServiceOption`, `ServicePrice`, `Pack`, `PackItem`.
-- Reservas y pagos: `Reservation`, `ReservationItem`, `Payment`, `ReservationJetski`, `Jetski`.
-- Caja: `CashShift`, `CashClosure`, `CashClosureUser`, `EditLock`.
-- Descuentos y regalos: `DiscountRule`, `GiftProduct`, `GiftVoucher`.
-- Operativa extra: `TaxiboatTrip`, `Monitor`, `MonitorRun`.
+## Autenticación
 
-**Autenticacion y sesiones**
-- `src/middleware.ts` protege todas las rutas salvo `login` y `api/login`.
-- Sesion con cookie `seariders_session` via `iron-session` en `src/lib/session.ts`.
-- Redireccion por rol en `src/app/api/login/route.ts`.
+- La sesión usa la cookie `seariders_session`.
+- Un usuario puede tener varios roles.
+- Si tiene más de uno, tras validar credenciales aparece un selector de acceso y la sesión se abre con el rol operativo elegido para ese turno.
 
-## Requisitos y configuracion
+## Variables de entorno
 
-1. Instalar dependencias:
-```bash
-npm install
-```
+Copia `.env.example` a `.env` y define como mínimo:
 
-2. Definir variables de entorno en `.env`:
 ```bash
 DATABASE_URL=...
-DIRECT_URL=...
 SESSION_PASSWORD=...
+NEXT_PUBLIC_APP_URL=https://tu-dominio
+BUSINESS_TZ=Europe/Madrid
 ```
 
-3. Prisma:
-- Configuracion en `prisma.config.ts`.
-- Migraciones en `prisma/migrations`.
-- Seed disponible:
+Si vas a usar PDFs, firmas o ficheros en S3:
+
+```bash
+S3_PUBLIC_BASE_URL=...
+AWS_REGION=...
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_S3_BUCKET=...
+```
+
+## Desarrollo
+
+```bash
+npm install
+npm run prisma:seed
+npm run dev
+```
+
+## Scripts
+
+- `npm run dev`
+- `npm run build`
+- `npm run start`
+- `npm run lint`
+- `npm run prisma:seed`
+
+## Producción
+
+Checklist mínima para subirla bien:
+
+1. Crear base de datos PostgreSQL de producción.
+2. Configurar `DATABASE_URL`, `SESSION_PASSWORD`, `NEXT_PUBLIC_APP_URL` y `BUSINESS_TZ`.
+3. Ejecutar migraciones:
+
+```bash
+npx prisma migrate deploy
+```
+
+4. Si necesitas datos base:
+
 ```bash
 npm run prisma:seed
 ```
 
-## Scripts
-- `npm run dev` inicia el servidor local.
-- `npm run build` genera el build de produccion.
-- `npm run start` arranca el build.
-- `npm run lint` ejecuta ESLint.
-- `npm run prisma:seed` carga datos iniciales.
+5. Generar y arrancar build:
+
+```bash
+npm run build
+npm run start
+```
+
+6. Servir la app detrás de HTTPS.
+7. Tener copias de seguridad de la base de datos.
+8. Revisar que exista al menos un usuario admin activo.
+
+## Nota operativa
+
+El proyecto ya usa bastante lógica de negocio real en cobros, fianzas, caja y reporting. Antes de abrir a producción conviene validar con datos reales:
+
+- login multirol,
+- cierres de caja por origen,
+- devolución total/parcial/retención de fianza,
+- histórico y executive,
+- permisos por rol en rutas críticas.

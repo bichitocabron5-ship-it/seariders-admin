@@ -22,7 +22,11 @@ function LoginContent() {
         ? "Tu usuario no tiene un rol asignado."
         : error === "invalid_form"
           ? "Formulario inválido."
-          : null;
+          : error === "invalid_role"
+            ? "El rol seleccionado no es válido para este usuario."
+            : error === "session_expired"
+              ? "La selección de acceso ha expirado. Vuelve a entrar."
+              : null;
 
   return <LoginView errorText={errorText} />;
 }
@@ -74,12 +78,24 @@ function LoginView({ errorText }: { errorText: string | null }) {
               Control operativo para tienda, plataforma y flota.
             </div>
             <div style={{ fontSize: 15, lineHeight: 1.55, opacity: 0.86, maxWidth: 420 }}>
-              Accede al panel de trabajo diario con una vista más limpia, rápida y preparada para caja, reservas y operativa real.
+              Accede al panel diario con una vista más limpia, rápida y preparada para caja,
+              reservas y operativa real. Si tu usuario tiene varios accesos, podrás elegir el rol
+              después de validar la contraseña.
             </div>
           </div>
 
           <div style={{ display: "grid", gap: 10 }}>
-            <div style={{ fontSize: 12, letterSpacing: 0.4, textTransform: "uppercase", opacity: 0.72, fontWeight: 800 }}>Usuarios frecuentes</div>
+            <div
+              style={{
+                fontSize: 12,
+                letterSpacing: 0.4,
+                textTransform: "uppercase",
+                opacity: 0.72,
+                fontWeight: 800,
+              }}
+            >
+              Usuarios frecuentes
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {["mike", "charles", "tomas", "maria", "carlos", "moha", "gisela", "aaron", "jose", "mechanic"].map((name) => (
                 <span
@@ -111,15 +127,36 @@ function LoginView({ errorText }: { errorText: string | null }) {
           }}
         >
           <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#0f766e", textTransform: "uppercase", letterSpacing: 0.5 }}>Login</div>
-            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 950, color: "#111827" }}>Entrar al panel</h1>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 800,
+                color: "#0f766e",
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+              }}
+            >
+              Login
+            </div>
+            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 950, color: "#111827" }}>
+              Entrar al panel
+            </h1>
             <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>
               Usa tu usuario interno y selecciona el turno de trabajo.
             </div>
           </div>
 
           {errorText ? (
-            <div style={{ padding: 12, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 700 }}>
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 12,
+                border: "1px solid #fecaca",
+                background: "#fff1f2",
+                color: "#991b1b",
+                fontWeight: 700,
+              }}
+            >
               {errorText}
             </div>
           ) : null}
@@ -143,7 +180,17 @@ function LoginView({ errorText }: { errorText: string | null }) {
               </select>
             </label>
 
-            <button type="submit" style={{ padding: 14, fontWeight: 900, borderRadius: 14, border: "1px solid #0f172a", background: "#0f172a", color: "#fff" }}>
+            <button
+              type="submit"
+              style={{
+                padding: 14,
+                fontWeight: 900,
+                borderRadius: 14,
+                border: "1px solid #0f172a",
+                background: "#0f172a",
+                color: "#fff",
+              }}
+            >
               Entrar
             </button>
           </form>

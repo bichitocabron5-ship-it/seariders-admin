@@ -2,6 +2,10 @@
 "use client";
 
 import type React from "react";
+import { useState } from "react";
+
+import CashChangeHelper from "@/components/cash-change-helper";
+
 import type { ExtraUiMap, PayLine, PayMethod, ReservationRow, Service } from "../types";
 import { errorMessage, euros } from "../utils";
 
@@ -26,7 +30,11 @@ type ReservationOpsPanelProps = {
   servicesExtra: Service[];
   extraUi: ExtraUiMap;
   setExtraUi: React.Dispatch<React.SetStateAction<ExtraUiMap>>;
-  getExtraState: (reservationId: string, servicesExtra: Service[], extraUi: ExtraUiMap) => { extraServiceId: string; qty: number };
+  getExtraState: (
+    reservationId: string,
+    servicesExtra: Service[],
+    extraUi: ExtraUiMap
+  ) => { extraServiceId: string; qty: number };
   addExtraToReservation: (reservationId: string) => Promise<void>;
   servicePayLines: PayLine[];
   addServicePayLine: () => void;
@@ -54,6 +62,7 @@ export function ReservationOpsPanel({
   updateServicePayLine,
   chargeServiceSplit,
 }: ReservationOpsPanelProps) {
+  const [fullCashReceivedEuros, setFullCashReceivedEuros] = useState("");
   const pendingService = Number(r.pendingServiceCents ?? 0);
   const pendingDeposit = Number(r.pendingDepositCents ?? 0);
   const paidDepositCents = Number(r.paidDepositCents ?? 0);
@@ -65,7 +74,11 @@ export function ReservationOpsPanel({
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <select value={method} onChange={(e) => setMethod(e.target.value as PayMethod)} style={{ padding: 6 }}>
+        <select
+          value={method}
+          onChange={(e) => setMethod(e.target.value as PayMethod)}
+          style={{ padding: 6 }}
+        >
           <option value="CASH">Efectivo</option>
           <option value="CARD">Tarjeta</option>
           <option value="BIZUM">Bizum</option>
@@ -118,7 +131,9 @@ export function ReservationOpsPanel({
               <div style={{ marginTop: 6, opacity: 0.85 }}>{depositHoldReason}</div>
             </details>
           ) : (
-            <div style={{ marginTop: 6, opacity: 0.75 }}>Marcada por plataforma. No se puede devolver desde tienda.</div>
+            <div style={{ marginTop: 6, opacity: 0.75 }}>
+              Marcada por plataforma. No se puede devolver desde tienda.
+            </div>
           )}
         </div>
       ) : null}
@@ -130,7 +145,13 @@ export function ReservationOpsPanel({
             {r.extras.map((ex) => (
               <span
                 key={ex.id}
-                style={{ padding: "4px 8px", borderRadius: 999, border: "1px solid #e5e7eb", fontSize: 12, background: "#fafafa" }}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 999,
+                  border: "1px solid #e5e7eb",
+                  fontSize: 12,
+                  background: "#fafafa",
+                }}
               >
                 {ex.serviceName} × {ex.quantity} ({euros(ex.totalPriceCents)})
               </span>
@@ -140,7 +161,15 @@ export function ReservationOpsPanel({
           <div style={{ fontSize: 12, opacity: 0.6, marginBottom: 6 }}>Sin extras</div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 100px", gap: 6, alignItems: "center", marginTop: 4 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 70px 100px",
+            gap: 6,
+            alignItems: "center",
+            marginTop: 4,
+          }}
+        >
           <select
             value={getExtraState(r.id, servicesExtra, extraUi).extraServiceId}
             onChange={(e) =>
@@ -178,30 +207,60 @@ export function ReservationOpsPanel({
             style={{ padding: 6, fontSize: 13 }}
           />
 
-          <button type="button" onClick={() => addExtraToReservation(r.id)} style={{ padding: "6px 10px", fontSize: 13 }}>
+          <button
+            type="button"
+            onClick={() => addExtraToReservation(r.id)}
+            style={{ padding: "6px 10px", fontSize: 13 }}
+          >
             Añadir
           </button>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", width: "100%", opacity: isCashClosed ? 0.6 : 1 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          flexWrap: "wrap",
+          width: "100%",
+          opacity: isCashClosed ? 0.6 : 1,
+        }}
+      >
         {pendingService > 0 ? (
-          <div style={{ width: "100%", marginTop: 6, padding: 10, border: "1px solid #e5e7eb", borderRadius: 10 }}>
+          <div
+            style={{
+              width: "100%",
+              marginTop: 6,
+              padding: 10,
+              border: "1px solid #e5e7eb",
+              borderRadius: 10,
+            }}
+          >
             <div style={{ fontWeight: 800, marginBottom: 8 }}>
               Cobrar servicio (puede ser mixto)
-              {isCashClosed ? <span style={{ marginLeft: 8, fontWeight: 700, opacity: 0.8 }}>· Caja cerrada</span> : null}
+              {isCashClosed ? (
+                <span style={{ marginLeft: 8, fontWeight: 700, opacity: 0.8 }}>· Caja cerrada</span>
+              ) : null}
             </div>
 
             <div style={{ display: "grid", gap: 8 }}>
-              {servicePayLines.map((l, idx) => (
+              {servicePayLines.map((line, idx) => (
                 <div
                   key={idx}
-                  style={{ display: "grid", gridTemplateColumns: "140px 160px 1fr", gap: 8, alignItems: "center" }}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "140px 160px minmax(180px, 220px) 1fr",
+                    gap: 8,
+                    alignItems: "center",
+                  }}
                 >
                   <select
-                    value={l.method}
+                    value={line.method}
                     disabled={isCashClosed}
-                    onChange={(e) => updateServicePayLine(idx, { method: e.target.value as PayMethod })}
+                    onChange={(e) =>
+                      updateServicePayLine(idx, { method: e.target.value as PayMethod })
+                    }
                     style={{ padding: 10, cursor: isCashClosed ? "not-allowed" : "pointer" }}
                   >
                     <option value="CASH">Efectivo</option>
@@ -211,10 +270,10 @@ export function ReservationOpsPanel({
                   </select>
 
                   <input
-                    value={l.amountEuros}
+                    value={line.amountEuros}
                     disabled={isCashClosed}
                     onChange={(e) => updateServicePayLine(idx, { amountEuros: e.target.value })}
-                    placeholder="Importe €"
+                    placeholder="Importe EUR"
                     style={{
                       padding: 10,
                       textAlign: "right",
@@ -224,13 +283,29 @@ export function ReservationOpsPanel({
                     }}
                   />
 
+                  {line.method === "CASH" ? (
+                    <CashChangeHelper
+                      amountEuros={line.amountEuros}
+                      receivedEuros={line.receivedEuros ?? ""}
+                      onReceivedEurosChange={(value) =>
+                        updateServicePayLine(idx, { receivedEuros: value })
+                      }
+                    />
+                  ) : (
+                    <div />
+                  )}
+
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                     {servicePayLines.length > 1 ? (
                       <button
                         type="button"
                         disabled={isCashClosed}
                         onClick={() => removeServicePayLine(idx)}
-                        style={{ padding: "8px 12px", opacity: isCashClosed ? 0.6 : 1, cursor: isCashClosed ? "not-allowed" : "pointer" }}
+                        style={{
+                          padding: "8px 12px",
+                          opacity: isCashClosed ? 0.6 : 1,
+                          cursor: isCashClosed ? "not-allowed" : "pointer",
+                        }}
                       >
                         Quitar
                       </button>
@@ -245,7 +320,11 @@ export function ReservationOpsPanel({
                 type="button"
                 disabled={isCashClosed}
                 onClick={addServicePayLine}
-                style={{ padding: "8px 12px", opacity: isCashClosed ? 0.6 : 1, cursor: isCashClosed ? "not-allowed" : "pointer" }}
+                style={{
+                  padding: "8px 12px",
+                  opacity: isCashClosed ? 0.6 : 1,
+                  cursor: isCashClosed ? "not-allowed" : "pointer",
+                }}
               >
                 + Añadir pago
               </button>
@@ -253,7 +332,12 @@ export function ReservationOpsPanel({
                 type="button"
                 disabled={isCashClosed}
                 onClick={() => chargeServiceSplit(r.id, pendingService)}
-                style={{ padding: "10px 14px", fontWeight: 800, opacity: isCashClosed ? 0.6 : 1, cursor: isCashClosed ? "not-allowed" : "pointer" }}
+                style={{
+                  padding: "10px 14px",
+                  fontWeight: 800,
+                  opacity: isCashClosed ? 0.6 : 1,
+                  cursor: isCashClosed ? "not-allowed" : "pointer",
+                }}
               >
                 {isCashClosed ? "Caja cerrada" : "Cobrar servicio"}
               </button>
@@ -268,16 +352,29 @@ export function ReservationOpsPanel({
             try {
               if (pendingDeposit > 0) {
                 await createPayment(
-                  { reservationId: r.id, amountCents: pendingDeposit, method, origin: "STORE", isDeposit: true },
+                  {
+                    reservationId: r.id,
+                    amountCents: pendingDeposit,
+                    method,
+                    origin: "STORE",
+                    isDeposit: true,
+                  },
                   { reload: false }
                 );
               }
               if (pendingService > 0) {
                 await createPayment(
-                  { reservationId: r.id, amountCents: pendingService, method, origin: "STORE", isDeposit: false },
+                  {
+                    reservationId: r.id,
+                    amountCents: pendingService,
+                    method,
+                    origin: "STORE",
+                    isDeposit: false,
+                  },
                   { reload: false }
                 );
               }
+              setFullCashReceivedEuros("");
               await reloadDashboard();
             } catch (e: unknown) {
               setError(errorMessage(e, "Error cobrando todo"));
@@ -291,6 +388,16 @@ export function ReservationOpsPanel({
         >
           {isCashClosed ? "Caja cerrada" : "Cobrar todo"}
         </button>
+
+        {!isCashClosed && method === "CASH" && pendingService + pendingDeposit > 0 ? (
+          <div style={{ width: "100%", maxWidth: 240 }}>
+            <CashChangeHelper
+              amountEuros={((pendingService + pendingDeposit) / 100).toFixed(2)}
+              receivedEuros={fullCashReceivedEuros}
+              onReceivedEurosChange={setFullCashReceivedEuros}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

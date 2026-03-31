@@ -1430,6 +1430,13 @@ export async function GET() {
     cash: {
       collectedTodayCents: todayMetrics.totals.collectedCents,
       pendingTodayCents: todayMetrics.totals.pendingCents,
+      depositsReturnedCents: reservationsToday.reduce((sum, reservation) => {
+        const returned = reservation.payments
+          .filter((payment) => payment.isDeposit && payment.direction === "OUT")
+          .reduce((acc, payment) => acc + payment.amountCents, 0);
+
+        return sum + returned;
+      }, 0),
       depositsHeldCents: reservationsToday.reduce(
         (sum, reservation) =>
           sum +
@@ -1453,6 +1460,22 @@ export async function GET() {
         },
         0
       ),
+      depositsRetainedNetCents: reservationsToday.reduce((sum, reservation) => {
+        if (!reservation.depositHeld) return sum;
+
+        const netDeposit = reservation.payments
+          .filter((payment) => payment.isDeposit)
+          .reduce(
+            (acc, payment) =>
+              acc +
+              (payment.direction === "OUT"
+                ? -payment.amountCents
+                : payment.amountCents),
+            0
+          );
+
+        return sum + Math.max(0, netDeposit);
+      }, 0),
       reservationsWithDebt: reservationsToday.filter((reservation) => {
         const sold =
           reservation.items.length > 0

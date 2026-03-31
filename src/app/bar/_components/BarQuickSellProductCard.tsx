@@ -1,7 +1,9 @@
 "use client";
 
 import type React from "react";
+import { useState } from "react";
 
+import CashChangeHelper from "@/components/cash-change-helper";
 import { styles } from "@/components/ui";
 import { calculateBarLineTotal, getBarPromotionBadge } from "@/lib/bar-pricing";
 import type { BarCategoryWithProducts, BarMethod } from "../services/bar";
@@ -16,7 +18,7 @@ type BarQuickSellProductCardProps = {
   onDecreaseQuantity: () => void;
   onSetQuantity: (value: number) => void;
   onIncreaseQuantity: () => void;
-  onQuickSell: (method: BarMethod) => void;
+  onQuickSell: (method: BarMethod, cashReceivedEuros?: string) => void;
   methodPill: (method: BarMethod) => React.CSSProperties;
 };
 
@@ -31,6 +33,8 @@ export function BarQuickSellProductCard({
   onQuickSell,
   methodPill,
 }: BarQuickSellProductCardProps) {
+  const [showCashHelper, setShowCashHelper] = useState(false);
+  const [cashReceivedEuros, setCashReceivedEuros] = useState("");
   const stockValue = Number(product.currentStock ?? 0);
   const minStockValue = Number(product.minStock ?? 0);
   const lowStock = product.controlsStock && stockValue <= minStockValue;
@@ -119,7 +123,13 @@ export function BarQuickSellProductCard({
             <button
               key={method}
               type="button"
-              onClick={() => onQuickSell(method)}
+              onClick={() => {
+                if (method === "CASH") {
+                  setShowCashHelper((prev) => !prev);
+                  return;
+                }
+                onQuickSell(method);
+              }}
               disabled={busy}
               style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", ...methodPill(method) }}
             >
@@ -128,6 +138,55 @@ export function BarQuickSellProductCard({
           );
         })}
       </div>
+
+      {showCashHelper ? (
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+            padding: 12,
+            borderRadius: 14,
+            border: "1px solid #dbe4ea",
+            background: "#fff",
+          }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 900, color: "#475569" }}>
+            Cobro en efectivo · total {(pricing.totalCents / 100).toFixed(2)} EUR
+          </div>
+          <CashChangeHelper
+            amountEuros={(pricing.totalCents / 100).toFixed(2)}
+            receivedEuros={cashReceivedEuros}
+            onReceivedEurosChange={setCashReceivedEuros}
+          />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => onQuickSell("CASH", cashReceivedEuros)}
+              disabled={actionBusy === `${product.id}-CASH`}
+              style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", ...methodPill("CASH") }}
+            >
+              {actionBusy === `${product.id}-CASH` ? "Guardando..." : "Confirmar efectivo"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCashHelper(false);
+                setCashReceivedEuros("");
+              }}
+              style={{
+                padding: "10px 14px",
+                borderRadius: 12,
+                border: "1px solid #cbd5e1",
+                background: "#fff",
+                cursor: "pointer",
+                fontWeight: 800,
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

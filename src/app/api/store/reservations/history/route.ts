@@ -1,10 +1,11 @@
-// src/app/api/reservations/history/route.ts
-import { NextResponse } from "next/server";
+// src/app/api/store/reservations/history/route.ts
 import { getIronSession } from "iron-session";
-import { sessionOptions, AppSession } from "@/lib/session";
-import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import { z } from "zod";
+
+import { prisma } from "@/lib/prisma";
+import { type AppSession, sessionOptions } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -45,7 +46,6 @@ export async function GET(req: Request) {
   }
 
   const { q, status, hasIncident, depositHeld, dateFrom, dateTo, take } = parsed.data;
-
   const where: Record<string, unknown> = {};
 
   if (q?.trim()) {
@@ -71,15 +71,11 @@ export async function GET(req: Request) {
   }
 
   if (hasIncident === "true") {
-    where.incidents = {
-      some: {},
-    };
+    where.incidents = { some: {} };
   }
 
   if (hasIncident === "false") {
-    where.incidents = {
-      none: {},
-    };
+    where.incidents = { none: {} };
   }
 
   const rowsDb = await prisma.reservation.findMany({
@@ -103,26 +99,9 @@ export async function GET(req: Request) {
       depositHoldReason: true,
       source: true,
       formalizedAt: true,
-
-      channel: {
-        select: {
-          name: true,
-        },
-      },
-
-      service: {
-        select: {
-          name: true,
-          category: true,
-        },
-      },
-
-      option: {
-        select: {
-          durationMinutes: true,
-        },
-      },
-
+      channel: { select: { name: true } },
+      service: { select: { name: true, category: true } },
+      option: { select: { durationMinutes: true } },
       payments: {
         select: {
           amountCents: true,
@@ -130,7 +109,6 @@ export async function GET(req: Request) {
           direction: true,
         },
       },
-
       incidents: {
         orderBy: { createdAt: "desc" },
         select: {
@@ -145,7 +123,6 @@ export async function GET(req: Request) {
           notes: true,
           maintenanceEventId: true,
           createdAt: true,
-
           entityType: true,
           jetskiId: true,
           assetId: true,
@@ -154,52 +131,58 @@ export async function GET(req: Request) {
     },
   });
 
-  const rows = rowsDb.map((r) => {
-    const paidCents = r.payments.reduce((sum, p) => {
-      const sign = p.direction === "OUT" ? -1 : 1;
-      return sum + sign * p.amountCents;
+  const rows = rowsDb.map((reservation) => {
+    const paidCents = reservation.payments.reduce((sum, payment) => {
+      const sign = payment.direction === "OUT" ? -1 : 1;
+      return sum + sign * payment.amountCents;
     }, 0);
 
-    const paidDepositCents = r.payments
-      .filter((p) => p.isDeposit)
-      .reduce((sum, p) => {
-        const sign = p.direction === "OUT" ? -1 : 1;
-        return sum + sign * p.amountCents;
+    const depositCollectedCents = reservation.payments
+      .filter((payment) => payment.isDeposit && payment.direction === "IN")
+      .reduce((sum, payment) => sum + payment.amountCents, 0);
+
+    const depositReturnedCents = reservation.payments
+      .filter((payment) => payment.isDeposit && payment.direction === "OUT")
+      .reduce((sum, payment) => sum + payment.amountCents, 0);
+
+    const paidDepositCents = reservation.payments
+      .filter((payment) => payment.isDeposit)
+      .reduce((sum, payment) => {
+        const sign = payment.direction === "OUT" ? -1 : 1;
+        return sum + sign * payment.amountCents;
       }, 0);
 
-    const totalToChargeCents =
-      Number(r.totalPriceCents ?? 0) + Number(r.depositCents ?? 0);
-
     return {
-      id: r.id,
-      status: r.status,
-      activityDate: r.activityDate,
-      scheduledTime: r.scheduledTime,
-      arrivalAt: r.arrivalAt,
-      customerName: r.customerName,
-      customerCountry: r.customerCountry,
-      quantity: r.quantity,
-      pax: r.pax,
-      isLicense: r.isLicense,
-      totalPriceCents: r.totalPriceCents,
-      depositCents: r.depositCents,
-      depositHeld: r.depositHeld,
-      depositHoldReason: r.depositHoldReason,
-      source: r.source,
-      formalizedAt: r.formalizedAt,
-      channelName: r.channel?.name ?? null,
-      serviceName: r.service?.name ?? null,
-      serviceCategory: r.service?.category ?? null,
-      durationMinutes: r.option?.durationMinutes ?? null,
+      id: reservation.id,
+      status: reservation.status,
+      activityDate: reservation.activityDate,
+      scheduledTime: reservation.scheduledTime,
+      arrivalAt: reservation.arrivalAt,
+      customerName: reservation.customerName,
+      customerCountry: reservation.customerCountry,
+      quantity: reservation.quantity,
+      pax: reservation.pax,
+      isLicense: reservation.isLicense,
+      totalPriceCents: reservation.totalPriceCents,
+      depositCents: reservation.depositCents,
+      depositHeld: reservation.depositHeld,
+      depositHoldReason: reservation.depositHoldReason,
+      source: reservation.source,
+      formalizedAt: reservation.formalizedAt,
+      channelName: reservation.channel?.name ?? null,
+      serviceName: reservation.service?.name ?? null,
+      serviceCategory: reservation.service?.category ?? null,
+      durationMinutes: reservation.option?.durationMinutes ?? null,
       paidCents,
       paidDepositCents,
-      totalToChargeCents,
-      incidents: r.incidents,
+      depositCollectedCents,
+      depositReturnedCents,
+      depositRetainedCents: reservation.depositHeld ? Math.max(0, paidDepositCents) : 0,
+      totalToChargeCents:
+        Number(reservation.totalPriceCents ?? 0) + Number(reservation.depositCents ?? 0),
+      incidents: reservation.incidents,
     };
   });
 
-  return NextResponse.json({
-    ok: true,
-    rows,
-  });
+  return NextResponse.json({ ok: true, rows });
 }

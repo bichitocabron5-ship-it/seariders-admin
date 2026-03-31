@@ -113,8 +113,10 @@ type ExecutiveResponse = {
   cash: {
     collectedTodayCents: number;
     pendingTodayCents: number;
+    depositsReturnedCents: number;
     depositsHeldCents: number;
     depositsLiberableCents: number;
+    depositsRetainedNetCents: number;
     reservationsWithDebt: number;
   };
   trends: {
@@ -412,7 +414,7 @@ export default function ExecutivePage() {
             {
               title: "Liquidez",
               value: eur(data.kpis.month.collectedCents),
-              detail: `Pendiente ${eur(data.kpis.month.pendingCents)} · Depósitos ${eur(data.cash.depositsHeldCents)}`,
+              detail: `Pendiente ${eur(data.kpis.month.pendingCents)} · Retenido ${eur(data.cash.depositsRetainedNetCents)}`,
               warn: data.kpis.month.pendingCents > 0,
             },
             {
@@ -710,7 +712,9 @@ export default function ExecutivePage() {
               <div style={metricsGrid}>
                 <MetricCard title="Cobrado hoy" value={eur(data.cash.collectedTodayCents)} />
                 <MetricCard title="Pendiente hoy" value={eur(data.cash.pendingTodayCents)} warn={data.cash.pendingTodayCents > 0} />
+                <MetricCard title="Fianza devuelta" value={eur(data.cash.depositsReturnedCents)} />
                 <MetricCard title="Depósitos retenidos" value={eur(data.cash.depositsHeldCents)} />
+                <MetricCard title="Retenido neto" value={eur(data.cash.depositsRetainedNetCents)} />
                 <MetricCard title="Depósitos liberables" value={eur(data.cash.depositsLiberableCents)} />
                 <MetricCard title="Reservas con deuda" value={fmtInt(data.cash.reservationsWithDebt)} warn={data.cash.reservationsWithDebt > 0} />
               </div>

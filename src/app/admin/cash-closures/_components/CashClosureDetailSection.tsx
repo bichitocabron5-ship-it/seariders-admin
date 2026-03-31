@@ -24,6 +24,12 @@ type Row = {
     deposit?: Record<string, number>;
     total?: Record<string, number>;
   };
+  depositSummary?: {
+    returnedCents: number;
+    retainedNetCents: number;
+    retainedCount: number;
+    partialRetentions: number;
+  };
 };
 
 type CommissionsSummary = {
@@ -71,7 +77,9 @@ export default function CashClosureDetailSection({
 }: Props) {
   return (
     <div style={panelStyle}>
-      <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>Detalle</div>
+      <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>
+        Detalle
+      </div>
 
       {!selected ? (
         <div style={{ padding: 12, opacity: 0.7 }}>Selecciona un cierre.</div>
@@ -79,7 +87,16 @@ export default function CashClosureDetailSection({
         <div style={{ padding: 12, display: "grid", gap: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
             <div>
-              <div style={{ fontWeight: 900, fontSize: 14, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 14,
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
                 <span
                   style={{
                     padding: "4px 8px",
@@ -136,8 +153,35 @@ export default function CashClosureDetailSection({
             </div>
           </div>
 
-          <div style={{ marginTop: 10, border: "1px solid #e2e8f0", borderRadius: 18, padding: 14, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)" }}>
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Desglose por método (céntimos)</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+            <div style={detailStatStyle}>
+              <div style={detailStatLabel}>Fianza devuelta</div>
+              <div style={detailStatValue}>{euros(selected.depositSummary?.returnedCents ?? 0)}</div>
+            </div>
+            <div style={detailStatStyle}>
+              <div style={detailStatLabel}>Retenido neto</div>
+              <div style={detailStatValue}>{euros(selected.depositSummary?.retainedNetCents ?? 0)}</div>
+            </div>
+            <div style={detailStatStyle}>
+              <div style={detailStatLabel}>Retenciones</div>
+              <div style={detailStatValue}>{selected.depositSummary?.retainedCount ?? 0}</div>
+            </div>
+            <div style={detailStatStyle}>
+              <div style={detailStatLabel}>Retenciones parciales</div>
+              <div style={detailStatValue}>{selected.depositSummary?.partialRetentions ?? 0}</div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: 10,
+              border: "1px solid #e2e8f0",
+              borderRadius: 18,
+              padding: 14,
+              background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+            }}
+          >
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Desglose por método</div>
 
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -187,61 +231,61 @@ export default function CashClosureDetailSection({
               </table>
             </div>
 
-            <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, padding: 14, background: "#fff" }}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>Comisiones por canal</div>
-
-              {commLoading ? (
-                <div style={{ opacity: 0.7 }}>Cargando…</div>
-              ) : !comm ? (
-                <div style={{ opacity: 0.7 }}>Sin datos de comisiones (o no hay canales con comisión).</div>
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <div style={{ opacity: 0.75, fontSize: 12 }}>Total comisiones (estimado)</div>
-                    <div style={{ fontWeight: 900 }}>{euros(comm.totalCommissionCents ?? 0)}</div>
-                  </div>
-
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                      <thead>
-                        <tr>
-                          <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Canal</th>
-                          <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Reservas</th>
-                          <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base servicio</th>
-                          <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base fianza</th>
-                          <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base total</th>
-                          <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Comisión</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(comm.rows ?? []).map((row) => (
-                          <tr key={row.channelId}>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", fontWeight: 800 }}>{row.name}</td>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{row.reservations}</td>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(row.baseServiceCents)}</td>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(row.baseDepositCents)}</td>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 800 }}>{euros(row.baseTotalCents)}</td>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 900 }}>{euros(row.commissionCents)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>
-                    Nota: base calculada con pagos netos del cierre (IN−OUT). Si el canal marca “comisión sobre fianza”, se incluye.
-                  </div>
-                </div>
-              )}
-            </div>
-
             <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-              Nota: “DIF” = Declarado − Sistema. Lo normal es que el mayor descuadre esté en CASH.
+              Fianza devuelta = salidas de depósito registradas en la ventana. Retenido neto = saldo de depósito que quedó bloqueado en reservas retenidas durante ese cierre.
             </div>
           </div>
 
-          <div style={{ fontSize: 12, opacity: 0.8 }}>
-            Si quieres, la siguiente iteración muestra el desglose por método (CASH/CARD/BIZUM/TRANSFER/VOUCHER) y servicio/fianza.
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, padding: 14, background: "#fff" }}>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Comisiones por canal</div>
+
+            {commLoading ? (
+              <div style={{ opacity: 0.7 }}>Cargando...</div>
+            ) : !comm ? (
+              <div style={{ opacity: 0.7 }}>Sin datos de comisiones o sin canales configurados.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ opacity: 0.75, fontSize: 12 }}>Total comisiones (estimado)</div>
+                  <div style={{ fontWeight: 900 }}>{euros(comm.totalCommissionCents ?? 0)}</div>
+                </div>
+
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Canal</th>
+                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Reservas</th>
+                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base servicio</th>
+                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base fianza</th>
+                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base total</th>
+                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Comisión</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(comm.rows ?? []).map((row) => (
+                        <tr key={row.channelId}>
+                          <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", fontWeight: 800 }}>{row.name}</td>
+                          <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{row.reservations}</td>
+                          <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(row.baseServiceCents)}</td>
+                          <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(row.baseDepositCents)}</td>
+                          <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 800 }}>{euros(row.baseTotalCents)}</td>
+                          <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 900 }}>{euros(row.commissionCents)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ fontSize: 12, opacity: 0.75 }}>
+                  Base calculada con pagos netos del cierre (IN−OUT). Si el canal marca comisión sobre fianza, se incluye.
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+            Nota: “DIF” = Declarado − Sistema. Lo normal es que el mayor descuadre esté en CASH.
           </div>
         </div>
       )}
