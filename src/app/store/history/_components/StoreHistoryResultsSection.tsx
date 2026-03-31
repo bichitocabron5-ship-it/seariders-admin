@@ -43,6 +43,9 @@ type HistoryRow = {
   durationMinutes: number | null;
   paidCents: number;
   paidDepositCents: number;
+  depositCollectedCents: number;
+  depositReturnedCents: number;
+  depositRetainedCents: number;
   totalToChargeCents: number;
   incidents: HistoryIncident[];
 };
@@ -115,7 +118,7 @@ export default function StoreHistoryResultsSection({
         <div style={emptyState}>No hay resultados para los filtros actuales.</div>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ ...styles.table, minWidth: 1400 }}>
+          <table style={{ ...styles.table, minWidth: 1440 }}>
             <thead>
               <tr>
                 <th style={styles.th}>Reserva</th>
@@ -132,12 +135,21 @@ export default function StoreHistoryResultsSection({
               {rows.map((row) => {
                 const statusUi = statusTone(row.status);
                 const incidentCount = row.incidents.length;
+                const holdStatus = row.depositHeld
+                  ? row.depositReturnedCents > 0
+                    ? "Retenida parcial"
+                    : "Retenida"
+                  : row.depositReturnedCents > 0
+                    ? "Devuelta"
+                    : "Sin bloqueo";
 
                 return (
                   <tr key={row.id} style={{ verticalAlign: "top" }}>
                     <td style={cell}>
                       <div style={{ display: "grid", gap: 8 }}>
-                        <div style={{ fontWeight: 900, color: "#0f172a" }}>{row.customerName || "Sin nombre"}</div>
+                        <div style={{ fontWeight: 900, color: "#0f172a" }}>
+                          {row.customerName || "Sin nombre"}
+                        </div>
                         <div style={mutedStack}>
                           <span>{row.customerCountry || "-"}</span>
                           <span>{row.source || "Origen no indicado"}</span>
@@ -180,7 +192,9 @@ export default function StoreHistoryResultsSection({
                         >
                           {row.status}
                         </span>
-                        <div style={mutedText}>Formalizada: {row.formalizedAt ? dt(row.formalizedAt) : "No"}</div>
+                        <div style={mutedText}>
+                          Formalizada: {row.formalizedAt ? dt(row.formalizedAt) : "No"}
+                        </div>
                       </div>
                     </td>
 
@@ -188,7 +202,12 @@ export default function StoreHistoryResultsSection({
                       <div style={{ display: "grid", gap: 6 }}>
                         <div style={moneyValue}>{euros(countPaidServiceCents(row))}</div>
                         <div style={mutedText}>Total servicio {euros(row.totalToChargeCents)}</div>
-                        <div style={{ color: countPendingServiceCents(row) > 0 ? "#b45309" : "#166534", fontWeight: 800 }}>
+                        <div
+                          style={{
+                            color: countPendingServiceCents(row) > 0 ? "#b45309" : "#166534",
+                            fontWeight: 800,
+                          }}
+                        >
                           Pendiente {euros(countPendingServiceCents(row))}
                         </div>
                       </div>
@@ -199,9 +218,19 @@ export default function StoreHistoryResultsSection({
                         <div style={moneyValue}>
                           {euros(row.paidDepositCents)} / {euros(row.depositCents)}
                         </div>
-                        <div style={{ color: row.depositHeld ? "#b91c1c" : "#166534", fontWeight: 900 }}>
-                          {row.depositHeld ? "Retenida" : "Sin bloqueo"}
+                        <div
+                          style={{
+                            color: row.depositHeld ? "#b91c1c" : row.depositReturnedCents > 0 ? "#166534" : "#334155",
+                            fontWeight: 900,
+                          }}
+                        >
+                          {holdStatus}
                         </div>
+                        {(row.depositReturnedCents > 0 || row.depositRetainedCents > 0) ? (
+                          <div style={mutedText}>
+                            Devuelto {euros(row.depositReturnedCents)} · Retenido {euros(row.depositRetainedCents)}
+                          </div>
+                        ) : null}
                         {row.depositHoldReason ? <div style={mutedText}>{row.depositHoldReason}</div> : null}
                       </div>
                     </td>
@@ -212,8 +241,14 @@ export default function StoreHistoryResultsSection({
                       ) : (
                         <div style={{ display: "grid", gap: 10, minWidth: 260 }}>
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            <Pill bg="#fff7ed" border="#fed7aa">{incidentCount} incidencias</Pill>
-                            {row.depositHeld ? <Pill bg="#fff1f2" border="#fecdd3">Fianza retenida</Pill> : null}
+                            <Pill bg="#fff7ed" border="#fed7aa">
+                              {incidentCount} incidencias
+                            </Pill>
+                            {row.depositHeld ? (
+                              <Pill bg="#fff1f2" border="#fecdd3">
+                                Fianza retenida
+                              </Pill>
+                            ) : null}
                           </div>
 
                           {row.incidents.map((incident) => {
@@ -236,12 +271,22 @@ export default function StoreHistoryResultsSection({
                                 </summary>
 
                                 <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-                                  {incident.description ? <div style={{ color: "#0f172a" }}>{incident.description}</div> : null}
+                                  {incident.description ? (
+                                    <div style={{ color: "#0f172a" }}>{incident.description}</div>
+                                  ) : null}
                                   {incident.notes ? <div style={mutedText}>Notas: {incident.notes}</div> : null}
                                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                    {incident.isOpen ? <Pill bg="#eff6ff" border="#bfdbfe">Abierta</Pill> : <Pill>Cerrada</Pill>}
+                                    {incident.isOpen ? (
+                                      <Pill bg="#eff6ff" border="#bfdbfe">
+                                        Abierta
+                                      </Pill>
+                                    ) : (
+                                      <Pill>Cerrada</Pill>
+                                    )}
                                     {incident.retainDeposit ? (
-                                      <Pill bg="#fff1f2" border="#fecdd3">Retiene {euros(incident.retainDepositCents)}</Pill>
+                                      <Pill bg="#fff1f2" border="#fecdd3">
+                                        Retiene {euros(incident.retainDepositCents)}
+                                      </Pill>
                                     ) : null}
                                   </div>
                                   <div style={mutedText}>Registrada: {dt(incident.createdAt)}</div>
@@ -266,7 +311,12 @@ export default function StoreHistoryResultsSection({
                         </a>
 
                         {row.incidents.some((incident) => incident.maintenanceEventId) ? (
-                          <a href={mechanicsEventHref(row.incidents.find((incident) => incident.maintenanceEventId)!)} style={actionLink}>
+                          <a
+                            href={mechanicsEventHref(
+                              row.incidents.find((incident) => incident.maintenanceEventId)!
+                            )}
+                            style={actionLink}
+                          >
                             Ver evento
                           </a>
                         ) : null}

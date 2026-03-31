@@ -12,6 +12,7 @@ import type {
   CashClosureSummary,
   CashSummary,
   CommissionSummary,
+  CompleteReturnInput,
   ExtraUiMap,
   PayLine,
   PayMethod,
@@ -94,27 +95,27 @@ export default function StoreDashboard() {
   }, []);
 
   function getServicePayLines(reservationId: string): PayLine[] {
-    return servicePayLinesByReservation[reservationId] ?? [{ amountEuros: "", method: "CASH" }];
+    return servicePayLinesByReservation[reservationId] ?? [{ amountEuros: "", method: "CASH", receivedEuros: "" }];
   }
 
   function addServicePayLine(reservationId: string) {
     setServicePayLinesByReservation((prev) => ({
       ...prev,
-      [reservationId]: [...(prev[reservationId] ?? [{ amountEuros: "", method: "CASH" }]), { amountEuros: "", method: "CARD" }],
+      [reservationId]: [...(prev[reservationId] ?? [{ amountEuros: "", method: "CASH", receivedEuros: "" }]), { amountEuros: "", method: "CARD", receivedEuros: "" }],
     }));
   }
 
   function removeServicePayLine(reservationId: string, idx: number) {
     setServicePayLinesByReservation((prev) => ({
       ...prev,
-      [reservationId]: (prev[reservationId] ?? [{ amountEuros: "", method: "CASH" }]).filter((_, i) => i !== idx),
+      [reservationId]: (prev[reservationId] ?? [{ amountEuros: "", method: "CASH", receivedEuros: "" }]).filter((_, i) => i !== idx),
     }));
   }
 
   function updateServicePayLine(reservationId: string, idx: number, patch: Partial<PayLine>) {
     setServicePayLinesByReservation((prev) => ({
       ...prev,
-      [reservationId]: (prev[reservationId] ?? [{ amountEuros: "", method: "CASH" }]).map((l, i) => (i === idx ? { ...l, ...patch } : l)),
+      [reservationId]: (prev[reservationId] ?? [{ amountEuros: "", method: "CASH", receivedEuros: "" }]).map((l, i) => (i === idx ? { ...l, ...patch } : l)),
     }));
   }
 
@@ -221,7 +222,7 @@ export default function StoreDashboard() {
 
       setServicePayLinesByReservation((prev) => ({
         ...prev,
-        [reservationId]: [{ amountEuros: "", method: "CASH" }],
+        [reservationId]: [{ amountEuros: "", method: "CASH", receivedEuros: "" }],
       }));
 
       await load();
@@ -286,13 +287,18 @@ export default function StoreDashboard() {
     }
   }
 
-  async function completeReturn(reservationId: string) {
+  async function completeReturn(input: CompleteReturnInput) {
     setError(null);
     try {
-      const r = await fetch(`/api/store/reservations/${reservationId}/complete-return`, {
+      const r = await fetch(`/api/store/reservations/${input.reservationId}/complete-return`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          settlementMode: input.settlementMode ?? "AUTO",
+          refundAmountCents: input.refundAmountCents,
+          refundMethod: input.refundMethod,
+          retainReason: input.retainReason,
+        }),
       });
 
       await ensureOkResponse(r, "No se pudo cerrar la devolución");

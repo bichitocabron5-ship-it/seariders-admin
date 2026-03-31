@@ -4,9 +4,16 @@ export type AppSession = {
   userId?: string;
   username?: string;
   role?: string;
-  shift?: "MORNING" | "AFTERNOON";   // ✅ esto
+  availableRoles?: string[];
+  shift?: "MORNING" | "AFTERNOON";
   shiftSessionId?: string;
   isLoggedIn?: boolean;
+  pendingLogin?: {
+    userId: string;
+    username: string;
+    shift: "MORNING" | "AFTERNOON";
+    roles: string[];
+  };
 };
 
 export const sessionOptions: SessionOptions = {

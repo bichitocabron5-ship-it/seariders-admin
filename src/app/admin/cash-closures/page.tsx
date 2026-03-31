@@ -39,6 +39,12 @@ type Row = {
   reviewedAt?: string | null;
   reviewNote?: string | null;
   reviewedByUser?: { fullName?: string | null; username?: string | null } | null;
+  depositSummary?: {
+    returnedCents: number;
+    retainedNetCents: number;
+    retainedCount: number;
+    partialRetentions: number;
+  };
 };
 
 type CommissionsSummary = {

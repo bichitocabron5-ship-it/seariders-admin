@@ -1,12 +1,14 @@
-﻿// src/app/api/login/route.ts
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { getIronSession } from "iron-session";
+// src/app/api/login/route.ts
 import bcrypt from "bcryptjs";
+import { RoleName } from "@prisma/client";
+import { getIronSession } from "iron-session";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import { z } from "zod";
+
 import { prisma } from "@/lib/prisma";
-import { sessionOptions, AppSession } from "@/lib/session";
-import { redirectPathFromRole } from "@/lib/auth-redirect";
+import { finalizeLoginSession } from "@/lib/login-session";
+import { type AppSession, sessionOptions } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -14,6 +16,7 @@ const BodySchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
   shift: z.enum(["MORNING", "AFTERNOON"]),
+  role: z.nativeEnum(RoleName).optional(),
 });
 
 export async function POST(req: Request) {
@@ -25,14 +28,14 @@ export async function POST(req: Request) {
     username: formData.get("username"),
     password: formData.get("password"),
     shift: formData.get("shift"),
+    role: formData.get("role") || undefined,
   });
 
   if (!parsed.success) {
     return toLoginWithError("invalid_form");
   }
 
-  const { username, password, shift } = parsed.data;
-
+  const { username, password, shift, role } = parsed.data;
   const user = await prisma.user.findUnique({ where: { username } });
   if (!user || !user.isActive) {
     return toLoginWithError("bad_credentials");
@@ -43,55 +46,64 @@ export async function POST(req: Request) {
     return toLoginWithError("bad_credentials");
   }
 
-  const userRole = await prisma.userRole.findFirst({
+  const userRoles = await prisma.userRole.findMany({
     where: { userId: user.id },
     include: { role: true },
   });
 
-  if (!userRole) {
+  if (userRoles.length === 0) {
     return toLoginWithError("no_role");
   }
 
-  const businessDate = new Date();
-  businessDate.setHours(0, 0, 0, 0);
+  const availableRoles = userRoles.map((userRole) => userRole.role.name);
 
-  const existing = await prisma.shiftSession.findFirst({
-    where: {
+  if (role) {
+    if (!availableRoles.includes(role)) {
+      return toLoginWithError("invalid_role");
+    }
+
+    const result = await finalizeLoginSession({
       userId: user.id,
+      username,
+      role,
       shift,
-      businessDate,
-      endedAt: null,
-    },
-    select: { id: true },
-  });
+    });
 
-  const shiftSession =
-    existing ??
-    (await prisma.shiftSession.create({
-      data: {
-        userId: user.id,
-        roleId: userRole.roleId,
-        shift,
-        businessDate,
-      },
-      select: { id: true },
-    }));
+    return NextResponse.redirect(new URL(result.redirectPath, req.url), 303);
+  }
 
-  const role = userRole.role.name;
-  const redirectPath = redirectPathFromRole(role);
+  if (availableRoles.length === 1) {
+    const result = await finalizeLoginSession({
+      userId: user.id,
+      username,
+      role: availableRoles[0],
+      shift,
+    });
 
-  // Sesión en App Router: cookies()
+    return NextResponse.redirect(new URL(result.redirectPath, req.url), 303);
+  }
+
   const cookieStore = await cookies();
-  const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
+  const session = await getIronSession<AppSession>(
+    cookieStore as unknown as never,
+    sessionOptions
+  );
 
-  session.userId = user.id;
-  session.username = username;
-  session.role = role;
-  session.shift = shift;
-  session.shiftSessionId = shiftSession.id;
-  session.isLoggedIn = true;
+  session.userId = undefined;
+  session.username = undefined;
+  session.role = undefined;
+  session.availableRoles = undefined;
+  session.shift = undefined;
+  session.shiftSessionId = undefined;
+  session.isLoggedIn = false;
+  session.pendingLogin = {
+    userId: user.id,
+    username,
+    shift,
+    roles: availableRoles,
+  };
 
   await session.save();
 
-  return NextResponse.redirect(new URL(redirectPath, req.url), 303);
+  return NextResponse.redirect(new URL("/login/select-role", req.url), 303);
 }

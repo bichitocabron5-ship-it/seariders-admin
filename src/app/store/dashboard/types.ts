@@ -67,6 +67,21 @@ export type PayMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 export type PayLine = {
   amountEuros: string;
   method: PayMethod;
+  receivedEuros?: string;
+};
+
+export type ReturnSettlementMode =
+  | "AUTO"
+  | "FULL_REFUND"
+  | "PARTIAL_REFUND"
+  | "RETAIN_ALL";
+
+export type CompleteReturnInput = {
+  reservationId: string;
+  settlementMode?: ReturnSettlementMode;
+  refundAmountCents?: number;
+  refundMethod?: PayMethod;
+  retainReason?: string;
 };
 
 export type CashSummary = {

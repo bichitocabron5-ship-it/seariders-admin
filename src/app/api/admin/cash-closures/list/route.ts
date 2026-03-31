@@ -81,6 +81,73 @@ export async function GET(req: Request) {
     },
   });
 
-  return NextResponse.json({ ok: true, rows });
+  const rowsWithDepositSummary = await Promise.all(
+    rows.map(async (row) => {
+      const [depositPayments, heldReservations] = await Promise.all([
+        prisma.payment.findMany({
+          where: {
+            createdAt: { gte: row.windowFrom, lt: row.windowTo },
+            origin: row.origin,
+            isDeposit: true,
+          },
+          select: {
+            amountCents: true,
+            direction: true,
+          },
+        }),
+        prisma.reservation.findMany({
+          where: {
+            depositHeld: true,
+            depositHeldAt: { gte: row.windowFrom, lt: row.windowTo },
+          },
+          select: {
+            payments: {
+              where: { isDeposit: true },
+              select: {
+                amountCents: true,
+                direction: true,
+              },
+            },
+          },
+        }),
+      ]);
+
+      const returnedCents = depositPayments
+        .filter((payment) => payment.direction === "OUT")
+        .reduce((sum, payment) => sum + payment.amountCents, 0);
+
+      const retained = heldReservations.map((reservation) => {
+        const returned = reservation.payments
+          .filter((payment) => payment.direction === "OUT")
+          .reduce((sum, payment) => sum + payment.amountCents, 0);
+
+        const netHeld = Math.max(
+          0,
+          reservation.payments.reduce(
+            (sum, payment) =>
+              sum + (payment.direction === "OUT" ? -payment.amountCents : payment.amountCents),
+            0
+          )
+        );
+
+        return {
+          netHeld,
+          isPartial: returned > 0 && netHeld > 0,
+        };
+      });
+
+      return {
+        ...row,
+        depositSummary: {
+          returnedCents,
+          retainedNetCents: retained.reduce((sum, item) => sum + item.netHeld, 0),
+          retainedCount: retained.filter((item) => item.netHeld > 0).length,
+          partialRetentions: retained.filter((item) => item.isPartial).length,
+        },
+      };
+    })
+  );
+
+  return NextResponse.json({ ok: true, rows: rowsWithDepositSummary });
 }
 
