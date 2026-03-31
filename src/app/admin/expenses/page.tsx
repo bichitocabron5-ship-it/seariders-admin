@@ -243,7 +243,7 @@ function costCenterLabel(v: ExpenseCostCenter) {
     case "HR":
       return "RRHH";
     case "MECHANICS":
-      return "Mecanica";
+      return "Mecánica";
     case "OPERATIONS":
       return "Operativa";
     case "MARKETING":
@@ -486,7 +486,7 @@ export default function AdminExpensesPage() {
           </div>
           <div style={heroBadges}>
             <MiniBadge label="Gastos" value={String(summary?.count ?? rows.length)} />
-            <MiniBadge label="Categorias" value={String(categories.filter((category) => category.isActive).length)} />
+            <MiniBadge label="Categorías" value={String(categories.filter((category) => category.isActive).length)} />
             <MiniBadge label="Proveedores" value={String(vendors.filter((vendor) => vendor.isActive).length)} />
             <MiniBadge label="Pendientes" value={String(rows.filter((row) => row.status === "PENDING").length)} warn={rows.some((row) => row.status === "PENDING")} />
           </div>
@@ -558,7 +558,7 @@ export default function AdminExpensesPage() {
             </select>
           </Field>
 
-          <Field label="Categoria">
+          <Field label="Categoría">
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={inputStyle}>
               <option value="">Todas</option>
               {categories.map((c) => (

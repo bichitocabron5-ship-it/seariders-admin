@@ -440,7 +440,7 @@ export default function MechanicsPage() {
           </div>
           <div style={{ fontWeight: 950, fontSize: 34, lineHeight: 1.02, color: "#0f172a" }}>Operativa y mantenimiento</div>
           <div style={{ color: "#475569", fontSize: 14 }}>
-            Flota tecnica, revisiones, incidencias abiertas y accesos directos a ficha y recambios en una sola vista.
+            Flota técnica, revisiones, incidencias abiertas y accesos directos a ficha y recambios en una sola vista.
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <span style={heroPill}>Urgentes: {urgentCount}</span>

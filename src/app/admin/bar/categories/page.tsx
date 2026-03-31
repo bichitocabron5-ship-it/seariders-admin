@@ -119,7 +119,7 @@ export default function AdminBarCategoriesPage() {
   const headerRight = (
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
       <Link href="/admin/bar" style={ghostLink}>
-        Modulo Bar
+        Módulo Bar
       </Link>
       <Link href="/admin/bar/products" style={ghostLink}>
         Productos
@@ -128,21 +128,21 @@ export default function AdminBarCategoriesPage() {
   );
 
   return (
-    <Page title="Admin Bar - Categorias" right={headerRight}>
+    <Page title="Admin Bar - Categorías" right={headerRight}>
       {error ? <Alert kind="error">{error}</Alert> : null}
 
       <Card
-        title="Nueva categoria"
-        right={<div style={{ fontSize: 12, color: "#64748b" }}>Ejemplo: Bebidas frias, Snacks, Merch, Extras de playa</div>}
+        title="Nueva categoría"
+        right={<div style={{ fontSize: 12, color: "#64748b" }}>Ejemplo: Bebidas frías, Snacks, Merch, Extras de playa</div>}
       >
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "2fr 1fr auto" }}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Bebidas frias" />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Bebidas frías" />
           <Input value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} placeholder="Ej: 10, 20, 30" />
           <Button onClick={createCategory}>Crear</Button>
         </div>
       </Card>
 
-      <Card title="Categorias">
+      <Card title="Categorías">
         {loading ? (
           <div>Cargando...</div>
         ) : (
@@ -168,7 +168,7 @@ export default function AdminBarCategoriesPage() {
 
                 {editingId === row.id ? (
                   <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr auto", gap: 12, paddingTop: 8, borderTop: "1px dashed #cbd5e1" }}>
-                    <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Ej: Bebidas frias" />
+                    <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Ej: Bebidas frías" />
                     <Input value={editSortOrder} onChange={(e) => setEditSortOrder(e.target.value)} placeholder="Ej: 10, 20, 30" />
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <Button onClick={() => void saveEdit(row)} disabled={busyId === row.id}>

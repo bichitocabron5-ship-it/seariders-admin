@@ -228,10 +228,10 @@ export default function AdminBarProductsPage() {
   const headerRight = (
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
       <Link href="/admin/bar" style={ghostLink}>
-        Modulo Bar
+        Módulo Bar
       </Link>
       <Link href="/admin/bar/categories" style={ghostLink}>
-        Categorias
+        Categorías
       </Link>
     </div>
   );
@@ -243,7 +243,7 @@ export default function AdminBarProductsPage() {
       <Card title="Nuevo producto" right={<div style={{ fontSize: 12, color: "#64748b" }}>Ejemplo: Agua 50 cl, Cerveza lata, Neopreno adulto, Bolsa de hielo</div>}>
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
           <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            <option value="">Selecciona la categoria</option>
+            <option value="">Selecciona la categoría</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -320,7 +320,7 @@ export default function AdminBarProductsPage() {
                 {editingId === row.id ? (
                   <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(3, minmax(0, 1fr))", paddingTop: 8, borderTop: "1px dashed #cbd5e1" }}>
                     <Select value={editCategoryId} onChange={(e) => setEditCategoryId(e.target.value)}>
-                      <option value="">Selecciona la categoria</option>
+                      <option value="">Selecciona la categoría</option>
                       {categories.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}

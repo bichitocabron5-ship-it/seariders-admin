@@ -735,7 +735,7 @@ export default function MechanicsDetailPage() {
           </button>
 
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#0369a1" }}>
-            Ficha tecnica
+            Ficha técnica
           </div>
           <div style={{ fontWeight: 950, fontSize: 34, lineHeight: 1.02 }}>{title}</div>
           <div style={{ color: "#475569", fontSize: 14 }}>

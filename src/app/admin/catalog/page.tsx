@@ -1,20 +1,13 @@
-// src/app/admin/catalog/page.tsx
 "use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { opsStyles } from "@/components/ops-ui";
 
-type ServiceRow = {
-  id: string;
-  name: string;
-  category: string;
-  isActive: boolean;
-  requiresPlatform: boolean;
-  requiresJetski: boolean;
-  requiresMonitor: boolean;
-  isLicense: boolean;
-};
+import { opsStyles } from "@/components/ops-ui";
+import AdminCatalogCreateSection from "./_components/AdminCatalogCreateSection";
+import AdminCatalogFiltersSection from "./_components/AdminCatalogFiltersSection";
+import AdminCatalogServicesSection from "./_components/AdminCatalogServicesSection";
+import type { ServiceRow } from "./types";
 
 export default function AdminCatalogPage() {
   const [rows, setRows] = useState<ServiceRow[]>([]);
@@ -31,14 +24,14 @@ export default function AdminCatalogPage() {
     setLoading(true);
     setError(null);
 
-    const r = await fetch("/api/admin/catalog/services", { cache: "no-store" });
-    if (!r.ok) {
-      setError(await r.text());
+    const response = await fetch("/api/admin/catalog/services", { cache: "no-store" });
+    if (!response.ok) {
+      setError(await response.text());
       setLoading(false);
       return;
     }
 
-    const data = await r.json();
+    const data = await response.json();
     setRows(data.services ?? []);
     setLoading(false);
   }
@@ -46,26 +39,26 @@ export default function AdminCatalogPage() {
   async function create() {
     setError(null);
 
-    const nm = name.trim();
-    const catValue = category.trim();
+    const trimmedName = name.trim();
+    const trimmedCategory = category.trim();
 
-    if (!nm) {
+    if (!trimmedName) {
       setError("Falta el nombre");
       return;
     }
-    if (!catValue) {
-      setError("Falta la categoria");
+    if (!trimmedCategory) {
+      setError("Falta la categoría");
       return;
     }
 
-    const r = await fetch("/api/admin/catalog/services", {
+    const response = await fetch("/api/admin/catalog/services", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: nm, category: catValue, isActive: true }),
+      body: JSON.stringify({ name: trimmedName, category: trimmedCategory, isActive: true }),
     });
 
-    if (!r.ok) {
-      setError(await r.text());
+    if (!response.ok) {
+      setError(await response.text());
       return;
     }
 
@@ -88,12 +81,12 @@ export default function AdminCatalogPage() {
   }, [rows]);
 
   const filtered = useMemo(() => {
-    const qq = q.trim().toLowerCase();
+    const query = q.trim().toLowerCase();
 
     return rows
       .filter((service) => (showInactive ? true : service.isActive))
       .filter((service) => (cat === "ALL" ? true : service.category === cat))
-      .filter((service) => (qq ? service.name.toLowerCase().includes(qq) : true))
+      .filter((service) => (query ? service.name.toLowerCase().includes(query) : true))
       .sort((a, b) => {
         if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
         const categoryCmp = a.category.localeCompare(b.category);
@@ -102,30 +95,31 @@ export default function AdminCatalogPage() {
       });
   }, [rows, q, cat, showInactive]);
 
-  const stats = useMemo(() => {
-    return {
+  const stats = useMemo(
+    () => ({
       total: rows.length,
       active: rows.filter((row) => row.isActive).length,
       licenses: rows.filter((row) => row.isLicense).length,
-    };
-  }, [rows]);
+    }),
+    [rows]
+  );
 
   async function patchService(id: string, patch: Partial<ServiceRow>) {
     setSavingId(id);
 
-    const r = await fetch(`/api/admin/catalog/services/${id}`, {
+    const response = await fetch(`/api/admin/catalog/services/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
 
-    if (!r.ok) {
-      setError(await r.text());
+    if (!response.ok) {
+      setError(await response.text());
       setSavingId(null);
       return;
     }
 
-    const data = await r.json();
+    const data = await response.json();
     const updated: ServiceRow = data.service;
     setRows((prev) => prev.map((row) => (row.id === id ? updated : row)));
     setSavingId(null);
@@ -168,80 +162,32 @@ export default function AdminCatalogPage() {
         </article>
       </section>
 
-      <section style={filtersPanel}>
-        <div style={{ fontWeight: 950 }}>Filtros</div>
-        <div style={filtersGrid}>
-          <label style={fieldLabel}>
-            Buscar servicio
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Jetski, barco, licencia..."
-              style={inputStyle}
-            />
-          </label>
+      <AdminCatalogFiltersSection
+        q={q}
+        cat={cat}
+        categories={categories}
+        showInactive={showInactive}
+        filteredCount={filtered.length}
+        inputStyle={inputStyle}
+        fieldLabel={fieldLabel}
+        toggleRow={toggleRow}
+        panelStyle={filtersPanel}
+        onQueryChange={setQ}
+        onCategoryChange={setCat}
+        onShowInactiveChange={setShowInactive}
+      />
 
-          <label style={fieldLabel}>
-            Categoría
-            <select value={cat} onChange={(e) => setCat(e.target.value)} style={inputStyle}>
-              <option value="ALL">Todas las categorías</option>
-              {categories.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label style={{ ...fieldLabel, justifyContent: "end" }}>
-            Visibilidad
-            <span style={toggleRow}>
-              <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
-              Mostrar inactivos
-            </span>
-          </label>
-        </div>
-        <div style={{ fontSize: 12, color: "#64748b" }}>{filtered.length} servicios en la vista actual</div>
-      </section>
-
-      <section style={panelStyle}>
-        <div style={panelHeader}>
-          <div style={{ fontWeight: 950 }}>Crear servicio</div>
-          <div style={{ fontSize: 12, color: "#64748b" }}>
-            Si la categoría es <strong>EXTRA</strong>, el servicio no tendrá opciones de duración o pax.
-          </div>
-        </div>
-
-        <div style={{ padding: 14, display: "grid", gap: 10 }}>
-          <div style={filtersGrid}>
-            <label style={fieldLabel}>
-              Nombre
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ej. Jetski turista"
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={fieldLabel}>
-              Categoría
-              <input
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="JETSKI, BOAT, EXTRA..."
-                style={inputStyle}
-              />
-            </label>
-
-            <div style={{ display: "grid", alignItems: "end" }}>
-              <button type="button" onClick={() => void create()} style={darkBtn}>
-                Crear servicio
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <AdminCatalogCreateSection
+        name={name}
+        category={category}
+        inputStyle={inputStyle}
+        fieldLabel={fieldLabel}
+        darkBtn={darkBtn}
+        panelStyle={panelStyle}
+        onNameChange={setName}
+        onCategoryChange={setCategory}
+        onCreate={() => void create()}
+      />
 
       {error ? <div style={errorStyle}>{error}</div> : null}
 
@@ -250,123 +196,34 @@ export default function AdminCatalogPage() {
           <div style={{ padding: 18, opacity: 0.7 }}>Cargando...</div>
         </section>
       ) : (
-        <section style={panelStyle}>
-          <div style={panelHeader}>
-            <div style={{ fontWeight: 950 }}>Servicios</div>
-            <div style={{ fontSize: 12, color: "#64748b" }}>
-              Configura la operativa de cada servicio y accede a sus opciones o precios.
-            </div>
-          </div>
-
-          <div style={{ padding: 14, display: "grid", gap: 12 }}>
-            {filtered.map((service) => {
-              const busy = savingId === service.id;
-
-              return (
-                <article key={service.id} style={{ ...rowCard, opacity: busy ? 0.65 : 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                    <div style={{ display: "grid", gap: 4 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 950, fontSize: 17, color: "#0f172a" }}>{service.name}</div>
-                        <span style={categoryPill}>{service.category}</span>
-                        <span style={{ ...statusPill, ...(service.isActive ? statusOn : statusOff) }}>
-                          {service.isActive ? "Activo" : "Inactivo"}
-                        </span>
-                        {service.isLicense ? <span style={licensePill}>Licencia</span> : null}
-                      </div>
-                      <div style={{ fontSize: 12, color: "#64748b" }}>
-                        Dependencias operativas y configuración comercial del servicio.
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {service.category !== "EXTRA" ? (
-                        <Link href={`/admin/catalog/${service.id}/options`} style={ghostBtn}>
-                          Opciones
-                        </Link>
-                      ) : (
-                        <Link href={`/admin/pricing?serviceId=${encodeURIComponent(service.id)}`} style={ghostBtn}>
-                          Poner precio
-                        </Link>
-                      )}
-
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          const newName = window.prompt("Nuevo nombre del servicio:", service.name) ?? "";
-                          if (!newName.trim() || newName.trim() === service.name) return;
-                          void patchService(service.id, { name: newName.trim() });
-                        }}
-                        style={ghostButtonElement}
-                      >
-                        Renombrar
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void patchService(service.id, { isLicense: !service.isLicense })}
-                        style={ghostButtonElement}
-                        title="Marca si este servicio es un producto de licencia o permiso"
-                      >
-                        {service.isLicense ? "Quitar licencia" : "Marcar licencia"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={controlsGrid}>
-                    <label style={toggleRow}>
-                      <input
-                        type="checkbox"
-                        checked={service.isActive}
-                        disabled={busy}
-                        onChange={(e) => void patchService(service.id, { isActive: e.target.checked })}
-                      />
-                      Servicio activo
-                    </label>
-
-                    <label style={toggleRow}>
-                      <input
-                        type="checkbox"
-                        checked={service.requiresPlatform}
-                        disabled={busy}
-                        onChange={(e) => void patchService(service.id, { requiresPlatform: e.target.checked })}
-                      />
-                      Requiere platform
-                    </label>
-
-                    <label style={toggleRow}>
-                      <input
-                        type="checkbox"
-                        checked={service.requiresJetski}
-                        disabled={busy}
-                        onChange={(e) => void patchService(service.id, { requiresJetski: e.target.checked })}
-                      />
-                      Requiere jetski
-                    </label>
-
-                    <label style={toggleRow}>
-                      <input
-                        type="checkbox"
-                        checked={service.requiresMonitor}
-                        disabled={busy}
-                        onChange={(e) => void patchService(service.id, { requiresMonitor: e.target.checked })}
-                      />
-                      Requiere monitor
-                    </label>
-                  </div>
-                </article>
-              );
-            })}
-
-            {filtered.length === 0 ? <div style={{ opacity: 0.7 }}>No hay servicios con esos filtros.</div> : null}
-          </div>
-        </section>
+        <AdminCatalogServicesSection
+          filtered={filtered}
+          savingId={savingId}
+          panelStyle={panelStyle}
+          ghostBtn={ghostBtn}
+          ghostButtonElement={ghostButtonElement}
+          categoryPill={categoryPill}
+          statusPill={statusPill}
+          statusOn={statusOn}
+          statusOff={statusOff}
+          licensePill={licensePill}
+          toggleRow={toggleRow}
+          onRename={(service) => {
+            const newName = window.prompt("Nuevo nombre del servicio:", service.name) ?? "";
+            if (!newName.trim() || newName.trim() === service.name) return;
+            void patchService(service.id, { name: newName.trim() });
+          }}
+          onToggleLicense={(service) => {
+            void patchService(service.id, { isLicense: !service.isLicense });
+          }}
+          onPatchService={(id, patch) => {
+            void patchService(id, patch);
+          }}
+        />
       )}
 
       <div style={footerNoteStyle}>
-        Siguiente paso natural: revisar opciones de cada servicio para definir duracion, pax y minutos contratados.
+        Siguiente paso natural: revisar opciones de cada servicio para definir duración, pax y minutos contratados.
       </div>
     </div>
   );
@@ -460,26 +317,6 @@ const filtersPanel: CSSProperties = {
   gap: 12,
 };
 
-const panelHeader: CSSProperties = {
-  padding: 14,
-  borderBottom: "1px solid #eef2f7",
-  display: "grid",
-  gap: 4,
-};
-
-const filtersGrid: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 10,
-  alignItems: "end",
-};
-
-const controlsGrid: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: 10,
-};
-
 const fieldLabel: CSSProperties = {
   display: "grid",
   gap: 6,
@@ -491,15 +328,6 @@ const inputStyle: CSSProperties = {
   ...opsStyles.field,
   padding: 10,
   borderRadius: 10,
-};
-
-const rowCard: CSSProperties = {
-  border: "1px solid #e5edf3",
-  borderRadius: 16,
-  padding: 12,
-  background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)",
-  display: "grid",
-  gap: 12,
 };
 
 const ghostBtn: CSSProperties = {

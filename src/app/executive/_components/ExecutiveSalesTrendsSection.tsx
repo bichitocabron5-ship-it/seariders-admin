@@ -114,7 +114,7 @@ export default function ExecutiveSalesTrendsSection({
       </ExecutiveSection>
 
       <div style={executiveStyles.twoCol}>
-        <ExecutiveSection title="Tendencia 30 dias" subtitle="Ritmo comercial reciente con ventas, cobro y reservas.">
+        <ExecutiveSection title="Tendencia 30 días" subtitle="Ritmo comercial reciente con ventas, cobro y reservas.">
           <div style={executiveStyles.chartMedium}>
             <ResponsiveContainer>
               <ComposedChart data={sales30d}>
