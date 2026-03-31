@@ -35,7 +35,7 @@ function assetStatusLabel(status: Asset["status"]) {
     case "MAINTENANCE":
       return "Mantenimiento";
     case "DAMAGED":
-      return "Danado";
+      return "Dañado";
     case "LOST":
       return "Perdido";
     default:
@@ -195,7 +195,7 @@ export default function AdminBarAssetsPage() {
   const headerRight = (
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
       <Link href="/admin/bar" style={ghostLink}>
-        Modulo Bar
+        Módulo Bar
       </Link>
       <Link href="/admin/bar/products" style={ghostLink}>
         Productos
@@ -228,11 +228,11 @@ export default function AdminBarAssetsPage() {
             <option value="AVAILABLE">Disponible</option>
             <option value="DELIVERED">Entregado</option>
             <option value="MAINTENANCE">Mantenimiento</option>
-            <option value="DAMAGED">Danado</option>
+            <option value="DAMAGED">Dañado</option>
             <option value="LOST">Perdido</option>
             <option value="INACTIVE">Inactivo</option>
           </Select>
-          <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ej: Equipo nuevo / revision pendiente / funda incluida" />
+          <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ej: Equipo nuevo / revisión pendiente / funda incluida" />
         </div>
 
         <div style={{ marginTop: 12 }}>
@@ -251,7 +251,7 @@ export default function AdminBarAssetsPage() {
                   <div>
                     <div style={{ fontWeight: 900 }}>{row.name}</div>
                     <div style={{ fontSize: 12, color: "#64748b" }}>
-                      {row.code ?? "Sin codigo"} {row.size ? `- Talla ${row.size}` : ""}
+                      {row.code ?? "Sin código"} {row.size ? `- Talla ${row.size}` : ""}
                     </div>
                   </div>
                   <div>{assetTypeLabel(row.type)}</div>
@@ -261,7 +261,7 @@ export default function AdminBarAssetsPage() {
                     <option value="AVAILABLE">Disponible</option>
                     <option value="DELIVERED">Entregado</option>
                     <option value="MAINTENANCE">Mantenimiento</option>
-                    <option value="DAMAGED">Danado</option>
+                    <option value="DAMAGED">Dañado</option>
                     <option value="LOST">Perdido</option>
                     <option value="INACTIVE">Inactivo</option>
                   </Select>
@@ -293,11 +293,11 @@ export default function AdminBarAssetsPage() {
                       <option value="AVAILABLE">Disponible</option>
                       <option value="DELIVERED">Entregado</option>
                       <option value="MAINTENANCE">Mantenimiento</option>
-                      <option value="DAMAGED">Danado</option>
+                      <option value="DAMAGED">Dañado</option>
                       <option value="LOST">Perdido</option>
                       <option value="INACTIVE">Inactivo</option>
                     </Select>
-                    <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="Ej: Equipo nuevo / revision pendiente / funda incluida" />
+                    <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="Ej: Equipo nuevo / revisión pendiente / funda incluida" />
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <Button onClick={() => void saveEdit(row)} disabled={busyId === row.id}>
                         {busyId === row.id ? "Guardando..." : "Guardar"}

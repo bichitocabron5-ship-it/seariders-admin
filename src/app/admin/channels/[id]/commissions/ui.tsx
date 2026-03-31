@@ -147,11 +147,11 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
           <div style={eyebrowStyle}>Canales</div>
           <h1 style={titleStyle}>Reglas por servicio</h1>
           <p style={subtitleStyle}>
-            Canal: <strong>{channel?.name ?? "..."}</strong>. Cuando una regla esta desactivada, el servicio usa el
+            Canal: <strong>{channel?.name ?? "..."}</strong>. Cuando una regla está desactivada, el servicio usa el
             fallback del canal: <strong>{channel?.commissionEnabled ? `${fallbackPct.toFixed(2)}%` : "0.00%"}</strong>.
           </p>
           <div style={helperStyle}>
-            Extras, tiempo extra y actividad extra no comisionan y no aparecen en esta configuracion.
+            Extras, tiempo extra y actividad extra no comisionan y no aparecen en esta configuración.
           </div>
         </div>
 

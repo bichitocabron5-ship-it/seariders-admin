@@ -339,7 +339,7 @@ export default function ExecutivePage() {
       setData((await res.json()) as ExecutiveResponse);
       setRefreshedAt(new Date());
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error cargando el dashboard operativo");
+      setError(e instanceof Error ? e.message : "Error cargando el panel operativo");
     } finally {
       setLoading(false);
     }
@@ -659,7 +659,7 @@ export default function ExecutivePage() {
         </div>
       </section>
 
-      {loading ? <div style={infoBox}>Cargando dashboard...</div> : null}
+      {loading ? <div style={infoBox}>Cargando panel...</div> : null}
       {error ? <div style={errorBox}>{fixText(error, "Error")}</div> : null}
 
       {!loading && data ? (
@@ -702,7 +702,7 @@ export default function ExecutivePage() {
                 <MetricCard title="Jornadas abiertas" value={fmtInt(data.health.openWorklogs)} warn={data.health.openWorklogs > 0} />
                 <MetricCard title="Incidencias abiertas" value={fmtInt(data.health.incidentsOpen)} warn={data.health.incidentsOpen > 0} />
                 <MetricCard title="Mantenimiento abierto" value={fmtInt(data.health.maintenanceOpen)} warn={data.health.maintenanceOpen > 0} />
-                <MetricCard title="Mantenimiento critico" value={fmtInt(data.health.maintenanceCritical)} warn={data.health.maintenanceCritical > 0} />
+                <MetricCard title="Mantenimiento crítico" value={fmtInt(data.health.maintenanceCritical)} warn={data.health.maintenanceCritical > 0} />
               </div>
             </Section>
 

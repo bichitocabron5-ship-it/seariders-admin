@@ -2,14 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { opsStyles } from "@/components/ops-ui";
 
-type ApiGet = {
-  ok: true;
-  policy: { id: string; intervalMinutes: number; openTime: string; closeTime: string };
-  categories: string[];
-  limits: { category: string; maxUnits: number }[];
-};
+import { opsStyles } from "@/components/ops-ui";
+import SlotsCapacitySection from "./_components/SlotsCapacitySection";
+import SlotsPolicySection from "./_components/SlotsPolicySection";
+import type { ApiGet } from "./types";
 
 const pageShell: React.CSSProperties = {
   ...opsStyles.pageShell,
@@ -56,19 +53,21 @@ export default function AdminSlotsPage() {
     setLoading(true);
     setErr(null);
     try {
-      const r = await fetch("/api/admin/slots", { cache: "no-store" });
-      if (!r.ok) throw new Error(await r.text());
-      const j = (await r.json()) as ApiGet;
-      setData(j);
-      setIntervalMinutes(j.policy.intervalMinutes ?? 30);
-      setOpenTime(j.policy.openTime ?? "09:00");
-      setCloseTime(j.policy.closeTime ?? "20:00");
-      const m: Record<string, number> = {};
-      for (const row of j.limits) m[String(row.category).toUpperCase()] = Number(row.maxUnits ?? 0);
-      for (const c of j.categories) if (m[c] == null) m[c] = c === "JETSKI" ? 10 : 1;
-      setLimitsMap(m);
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Error cargando slots");
+      const response = await fetch("/api/admin/slots", { cache: "no-store" });
+      if (!response.ok) throw new Error(await response.text());
+      const json = (await response.json()) as ApiGet;
+      setData(json);
+      setIntervalMinutes(json.policy.intervalMinutes ?? 30);
+      setOpenTime(json.policy.openTime ?? "09:00");
+      setCloseTime(json.policy.closeTime ?? "20:00");
+      const nextMap: Record<string, number> = {};
+      for (const row of json.limits) nextMap[String(row.category).toUpperCase()] = Number(row.maxUnits ?? 0);
+      for (const category of json.categories) {
+        if (nextMap[category] == null) nextMap[category] = category === "JETSKI" ? 10 : 1;
+      }
+      setLimitsMap(nextMap);
+    } catch (cause: unknown) {
+      setErr(cause instanceof Error ? cause.message : "Error cargando slots");
       setData(null);
     } finally {
       setLoading(false);
@@ -88,12 +87,12 @@ export default function AdminSlotsPage() {
     setSaving(true);
     setErr(null);
     try {
-      const limits = categories.map((c) => ({
-        category: c,
-        maxUnits: Number(limitsMap[c] ?? 0),
+      const limits = categories.map((category) => ({
+        category,
+        maxUnits: Number(limitsMap[category] ?? 0),
       }));
 
-      const r = await fetch("/api/admin/slots", {
+      const response = await fetch("/api/admin/slots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -106,18 +105,20 @@ export default function AdminSlotsPage() {
         }),
       });
 
-      if (!r.ok) throw new Error(await r.text());
-      const j = (await r.json()) as ApiGet;
-      setData(j);
-      setIntervalMinutes(j.policy.intervalMinutes ?? 30);
-      setOpenTime(j.policy.openTime ?? "09:00");
-      setCloseTime(j.policy.closeTime ?? "20:00");
-      const m: Record<string, number> = {};
-      for (const row of j.limits) m[String(row.category).toUpperCase()] = Number(row.maxUnits ?? 0);
-      for (const c of j.categories) if (m[c] == null) m[c] = c === "JETSKI" ? 10 : 1;
-      setLimitsMap(m);
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "No se pudo guardar");
+      if (!response.ok) throw new Error(await response.text());
+      const json = (await response.json()) as ApiGet;
+      setData(json);
+      setIntervalMinutes(json.policy.intervalMinutes ?? 30);
+      setOpenTime(json.policy.openTime ?? "09:00");
+      setCloseTime(json.policy.closeTime ?? "20:00");
+      const nextMap: Record<string, number> = {};
+      for (const row of json.limits) nextMap[String(row.category).toUpperCase()] = Number(row.maxUnits ?? 0);
+      for (const category of json.categories) {
+        if (nextMap[category] == null) nextMap[category] = category === "JETSKI" ? 10 : 1;
+      }
+      setLimitsMap(nextMap);
+    } catch (cause: unknown) {
+      setErr(cause instanceof Error ? cause.message : "No se pudo guardar");
     } finally {
       setSaving(false);
     }
@@ -141,7 +142,9 @@ export default function AdminSlotsPage() {
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.1, textTransform: "uppercase", color: "#0891b2" }}>
               Admin
             </div>
-            <div style={{ ...opsStyles.heroTitle, fontSize: "clamp(30px, 4vw, 38px)", lineHeight: 1.02, color: "#0f172a" }}>Slots y capacidad</div>
+            <div style={{ ...opsStyles.heroTitle, fontSize: "clamp(30px, 4vw, 38px)", lineHeight: 1.02, color: "#0f172a" }}>
+              Slots y capacidad
+            </div>
             <div style={{ fontSize: 14, color: "#475569" }}>
               Política horaria, intervalo de reserva y límites por categoría en una pantalla más ordenada.
             </div>
@@ -177,82 +180,32 @@ export default function AdminSlotsPage() {
         <MetricCard title="Capacidad total" value={String(totalCapacity)} tone="success" />
       </div>
 
-      <section style={{ ...softCard, padding: 16, display: "grid", gap: 12 }}>
-        <div style={{ fontWeight: 950, fontSize: 20 }}>Política de slots</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Intervalo (minutos)
-            <input
-              type="number"
-              min={5}
-              max={240}
-              value={intervalMinutes}
-              onChange={(e) => setIntervalMinutes(Number(e.target.value))}
-              style={inputStyle}
-            />
-          </label>
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Apertura
-            <input type="time" value={openTime} onChange={(e) => setOpenTime(e.target.value)} style={inputStyle} />
-          </label>
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Cierre
-            <input type="time" value={closeTime} onChange={(e) => setCloseTime(e.target.value)} style={inputStyle} />
-          </label>
-        </div>
-      </section>
+      <SlotsPolicySection
+        intervalMinutes={intervalMinutes}
+        openTime={openTime}
+        closeTime={closeTime}
+        inputStyle={inputStyle}
+        cardStyle={softCard}
+        onIntervalChange={setIntervalMinutes}
+        onOpenTimeChange={setOpenTime}
+        onCloseTimeChange={setCloseTime}
+      />
 
-      <section style={{ ...softCard, padding: 16, display: "grid", gap: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-          <div style={{ fontWeight: 950, fontSize: 20 }}>Capacidad por categoría</div>
-          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 900 }}>{categories.length} categoría(s)</div>
-        </div>
-
-        {!data ? (
-          <div style={{ opacity: 0.7 }}>{loading ? "Cargando..." : "Sin datos"}</div>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {categories.map((c) => (
-              <div
-                key={c}
-                style={{
-                  border: "1px solid #e5edf4",
-                  borderRadius: 18,
-                  padding: 14,
-                  background: "linear-gradient(180deg, #ffffff 0%, #fafcff 100%)",
-                  display: "grid",
-                  gridTemplateColumns: "minmax(180px, 240px) 1fr auto",
-                  gap: 10,
-                  alignItems: "center",
-                }}
-              >
-                <div style={{ display: "grid", gap: 4 }}>
-                  <div style={{ fontWeight: 950 }}>{c}</div>
-                  <div style={{ fontSize: 12, color: "#64748b" }}>
-                    {c === "JETSKI" ? "Referencia inicial recomendada: 10" : "Referencia inicial: 1"}
-                  </div>
-                </div>
-
-                <input
-                  type="number"
-                  min={0}
-                  max={999}
-                  value={limitsMap[c] ?? 0}
-                  onChange={(e) =>
-                    setLimitsMap((prev) => ({
-                      ...prev,
-                      [c]: Number(e.target.value),
-                    }))
-                  }
-                  style={{ ...inputStyle, maxWidth: 180 }}
-                />
-
-                <span style={limitBadge}>{Number(limitsMap[c] ?? 0)} ud.</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <SlotsCapacitySection
+        dataLoaded={Boolean(data)}
+        loading={loading}
+        categories={categories}
+        limitsMap={limitsMap}
+        inputStyle={inputStyle}
+        cardStyle={softCard}
+        limitBadge={limitBadge}
+        onLimitChange={(category, value) =>
+          setLimitsMap((prev) => ({
+            ...prev,
+            [category]: value,
+          }))
+        }
+      />
 
       <div style={{ fontSize: 12, color: "#64748b" }}>
         Nota: si añades una categoría nueva en Catálogo, aparecerá aquí automáticamente con un límite inicial por defecto.

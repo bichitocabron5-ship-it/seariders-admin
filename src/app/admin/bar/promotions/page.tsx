@@ -223,7 +223,7 @@ export default function AdminBarPromotionsPage() {
   const headerRight = (
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
       <Link href="/admin/bar" style={ghostLink}>
-        Modulo Bar
+        Módulo Bar
       </Link>
       <Link href="/admin/bar/products" style={ghostLink}>
         Productos

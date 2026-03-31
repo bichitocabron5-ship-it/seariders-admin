@@ -1,0 +1,250 @@
+"use client";
+
+type Row = {
+  id: string;
+  origin: "STORE" | "BOOTH" | "BAR";
+  shift: string;
+  businessDate: string;
+  windowFrom: string;
+  windowTo: string;
+  isVoided: boolean;
+  voidReason?: string | null;
+  declaredJson?: {
+    service?: Record<string, number>;
+    deposit?: Record<string, number>;
+    total?: Record<string, number>;
+  };
+  systemJson?: {
+    service?: Record<string, number>;
+    deposit?: Record<string, number>;
+    total?: Record<string, number>;
+  };
+  diffJson?: {
+    service?: Record<string, number>;
+    deposit?: Record<string, number>;
+    total?: Record<string, number>;
+  };
+};
+
+type CommissionsSummary = {
+  ok: boolean;
+  totalCommissionCents?: number;
+  rows?: Array<{
+    channelId: string;
+    name: string;
+    reservations: number;
+    baseServiceCents: number;
+    baseDepositCents: number;
+    baseTotalCents: number;
+    commissionCents: number;
+  }>;
+};
+
+type Props = {
+  panelStyle: React.CSSProperties;
+  detailStatStyle: React.CSSProperties;
+  detailStatLabel: React.CSSProperties;
+  detailStatValue: React.CSSProperties;
+  lightBtn: React.CSSProperties;
+  selected: Row | null;
+  comm: CommissionsSummary | null;
+  commLoading: boolean;
+  yyyyMmDd: (iso: string) => string;
+  euros: (cents: number) => string;
+  netFrom: (obj?: Record<string, number>) => number;
+  onVoid: (closureId: string) => void;
+};
+
+export default function CashClosureDetailSection({
+  panelStyle,
+  detailStatStyle,
+  detailStatLabel,
+  detailStatValue,
+  lightBtn,
+  selected,
+  comm,
+  commLoading,
+  yyyyMmDd,
+  euros,
+  netFrom,
+  onVoid,
+}: Props) {
+  return (
+    <div style={panelStyle}>
+      <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>Detalle</div>
+
+      {!selected ? (
+        <div style={{ padding: 12, opacity: 0.7 }}>Selecciona un cierre.</div>
+      ) : (
+        <div style={{ padding: 12, display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: 14, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <span
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontWeight: 900,
+                    background: selected.isVoided ? "#fee2e2" : "#ecfeff",
+                    color: selected.isVoided ? "#991b1b" : "#155e75",
+                    border: `1px solid ${selected.isVoided ? "#fecaca" : "#bae6fd"}`,
+                  }}
+                >
+                  {selected.origin}
+                </span>
+                {selected.origin} · {selected.shift} · {yyyyMmDd(selected.businessDate)}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+                Ventana: {new Date(selected.windowFrom).toLocaleTimeString()}–{new Date(selected.windowTo).toLocaleTimeString()}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
+                Estado: {selected.isVoided ? "ANULADO (reabierto)" : "ACTIVO"}{" "}
+                {selected.isVoided ? `· Motivo: ${selected.voidReason ?? "—"}` : ""}
+              </div>
+            </div>
+
+            {!selected.isVoided ? (
+              <button onClick={() => onVoid(selected.id)} style={lightBtn}>
+                Anular / Reabrir
+              </button>
+            ) : null}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+            <div style={detailStatStyle}>
+              <div style={detailStatLabel}>Declarado neto</div>
+              <div style={detailStatValue}>{euros(netFrom(selected.declaredJson?.total))}</div>
+            </div>
+            <div style={detailStatStyle}>
+              <div style={detailStatLabel}>Sistema neto</div>
+              <div style={detailStatValue}>{euros(netFrom(selected.systemJson?.total))}</div>
+            </div>
+            <div
+              style={{
+                ...detailStatStyle,
+                background:
+                  netFrom(selected.diffJson?.total) === 0
+                    ? "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)"
+                    : netFrom(selected.diffJson?.total) > 0
+                      ? "linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%)"
+                      : "linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%)",
+              }}
+            >
+              <div style={detailStatLabel}>Diferencia neta</div>
+              <div style={detailStatValue}>{euros(netFrom(selected.diffJson?.total))}</div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 10, border: "1px solid #e2e8f0", borderRadius: 18, padding: 14, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)" }}>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Desglose por método (céntimos)</div>
+
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Bloque</th>
+                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>CASH</th>
+                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>CARD</th>
+                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>BIZUM</th>
+                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>TRANSFER</th>
+                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>VOUCHER</th>
+                    <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>NETO</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { label: "DECLARADO · Servicio", obj: selected.declaredJson?.service },
+                    { label: "DECLARADO · Fianza", obj: selected.declaredJson?.deposit },
+                    { label: "DECLARADO · Total", obj: selected.declaredJson?.total },
+                    { label: "SISTEMA · Servicio", obj: selected.systemJson?.service },
+                    { label: "SISTEMA · Fianza", obj: selected.systemJson?.deposit },
+                    { label: "SISTEMA · Total", obj: selected.systemJson?.total },
+                    { label: "DIF · Servicio", obj: selected.diffJson?.service },
+                    { label: "DIF · Fianza", obj: selected.diffJson?.deposit },
+                    { label: "DIF · Total", obj: selected.diffJson?.total },
+                  ].map((row, index) => {
+                    const cash = Number(row.obj?.CASH ?? 0);
+                    const card = Number(row.obj?.CARD ?? 0);
+                    const biz = Number(row.obj?.BIZUM ?? 0);
+                    const transfer = Number(row.obj?.TRANSFER ?? 0);
+                    const voucher = Number(row.obj?.VOUCHER ?? 0);
+                    const net = cash + card + biz + transfer + voucher;
+
+                    return (
+                      <tr key={index}>
+                        <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", fontWeight: 800 }}>{row.label}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(cash)}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(card)}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(biz)}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(transfer)}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(voucher)}</td>
+                        <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 900 }}>{euros(net)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, padding: 14, background: "#fff" }}>
+              <div style={{ fontWeight: 900, marginBottom: 10 }}>Comisiones por canal</div>
+
+              {commLoading ? (
+                <div style={{ opacity: 0.7 }}>Cargando…</div>
+              ) : !comm ? (
+                <div style={{ opacity: 0.7 }}>Sin datos de comisiones (o no hay canales con comisión).</div>
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <div style={{ opacity: 0.75, fontSize: 12 }}>Total comisiones (estimado)</div>
+                    <div style={{ fontWeight: 900 }}>{euros(comm.totalCommissionCents ?? 0)}</div>
+                  </div>
+
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Canal</th>
+                          <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Reservas</th>
+                          <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base servicio</th>
+                          <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base fianza</th>
+                          <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base total</th>
+                          <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Comisión</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(comm.rows ?? []).map((row) => (
+                          <tr key={row.channelId}>
+                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", fontWeight: 800 }}>{row.name}</td>
+                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{row.reservations}</td>
+                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(row.baseServiceCents)}</td>
+                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(row.baseDepositCents)}</td>
+                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 800 }}>{euros(row.baseTotalCents)}</td>
+                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 900 }}>{euros(row.commissionCents)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>
+                    Nota: base calculada con pagos netos del cierre (IN−OUT). Si el canal marca “comisión sobre fianza”, se incluye.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+              Nota: “DIF” = Declarado − Sistema. Lo normal es que el mayor descuadre esté en CASH.
+            </div>
+          </div>
+
+          <div style={{ fontSize: 12, opacity: 0.8 }}>
+            Si quieres, la siguiente iteración muestra el desglose por método (CASH/CARD/BIZUM/TRANSFER/VOUCHER) y servicio/fianza.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -2,34 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
 import { opsStyles } from "@/components/ops-ui";
 import UserModal from "@/app/admin/users/_components/UserModal";
-
-type RoleName = "ADMIN" | "STORE" | "PLATFORM" | "BOOTH" | "BAR" | "MECHANIC" | "HR";
-type EmployeeLite = { id: string; code: string | null; fullName: string; kind: string; isActive: boolean };
-type UserRow = {
-  id: string;
-  employeeId: string | null;
-  fullName: string;
-  username: string;
-  email: string | null;
-  passportCode: string | null;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  employee?: EmployeeLite | null;
-  roles: Array<{ userId: string; roleId: string; role: { id: string; name: RoleName } }>;
-};
-
-const ROLE_LABEL: Record<RoleName, string> = {
-  ADMIN: "Administrador",
-  STORE: "Tienda",
-  PLATFORM: "Plataforma",
-  BOOTH: "Carpa",
-  BAR: "Bar",
-  MECHANIC: "Mecánica",
-  HR: "RR. HH.",
-};
+import AdminUsersFiltersSection from "@/app/admin/users/_components/AdminUsersFiltersSection";
+import AdminUsersListSection from "@/app/admin/users/_components/AdminUsersListSection";
+import { ROLE_LABEL, type EmployeeLite, type UserRow } from "./types";
 
 function fmtDateTime(iso: string) {
   try {
@@ -83,10 +61,10 @@ export default function AdminUsersPage() {
   const [editing, setEditing] = useState<UserRow | null>(null);
 
   const params = useMemo(() => {
-    const p = new URLSearchParams();
-    if (q.trim()) p.set("q", q.trim());
-    if (active) p.set("active", active);
-    return p.toString();
+    const searchParams = new URLSearchParams();
+    if (q.trim()) searchParams.set("q", q.trim());
+    if (active) searchParams.set("active", active);
+    return searchParams.toString();
   }, [q, active]);
 
   const load = useCallback(
@@ -117,8 +95,8 @@ export default function AdminUsersPage() {
             isActive: employee.isActive,
           }))
         );
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Error cargando usuarios");
+      } catch (cause: unknown) {
+        setError(cause instanceof Error ? cause.message : "Error cargando usuarios");
       } finally {
         if (showLoading) setLoading(false);
       }
@@ -132,15 +110,15 @@ export default function AdminUsersPage() {
 
   async function toggleActive(row: UserRow) {
     try {
-      const res = await fetch(`/api/admin/users/${row.id}`, {
+      const response = await fetch(`/api/admin/users/${row.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive: !row.isActive }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!response.ok) throw new Error(await response.text());
       await load({ showLoading: false });
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Error actualizando estado");
+    } catch (cause: unknown) {
+      alert(cause instanceof Error ? cause.message : "Error actualizando estado");
     }
   }
 
@@ -218,117 +196,30 @@ export default function AdminUsersPage() {
         <SummaryCard title="Plataforma" value={platformCount} tone="warning" />
       </div>
 
-      <section style={{ ...softCard, padding: 16, display: "grid", gap: 12 }}>
-        <div style={{ fontWeight: 950, fontSize: 18 }}>Filtros</div>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Buscar
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Nombre, username, email o código"
-              style={inputStyle}
-            />
-          </label>
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Estado
-            <select value={active} onChange={(e) => setActive(e.target.value as "" | "true" | "false")} style={inputStyle}>
-              <option value="">Todos</option>
-              <option value="true">Activos</option>
-              <option value="false">Inactivos</option>
-            </select>
-          </label>
-        </div>
-      </section>
+      <AdminUsersFiltersSection
+        q={q}
+        active={active}
+        inputStyle={inputStyle}
+        cardStyle={softCard}
+        onQueryChange={setQ}
+        onActiveChange={setActive}
+      />
 
-      <section style={{ ...softCard, padding: 16, display: "grid", gap: 12 }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 10,
-            alignItems: "baseline",
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ fontWeight: 950, fontSize: 20 }}>Listado</div>
-          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 900 }}>{rows.length} registro(s)</div>
-        </div>
-
-        {loading ? <div style={{ opacity: 0.7 }}>Cargando...</div> : null}
-        {error ? <div style={errorBox}>{error}</div> : null}
-        {!loading && !error && rows.length === 0 ? <div style={{ opacity: 0.7 }}>No hay usuarios.</div> : null}
-
-        <div style={{ display: "grid", gap: 10 }}>
-          {rows.map((row) => (
-            <article
-              key={row.id}
-              style={{
-                border: "1px solid #e5edf4",
-                borderRadius: 18,
-                padding: 14,
-                background: "linear-gradient(180deg, #ffffff 0%, #fafcff 100%)",
-                display: "grid",
-                gap: 10,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                  alignItems: "start",
-                }}
-              >
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <div style={{ fontSize: 18, fontWeight: 950 }}>{row.username}</div>
-                    <span style={row.isActive ? okBadge : mutedBadge}>{row.isActive ? "Activo" : "Inactivo"}</span>
-                    {row.passportCode ? <span style={mutedBadge}>{row.passportCode}</span> : null}
-                  </div>
-                  <div style={{ fontSize: 14, color: "#334155" }}>
-                    <b>{row.fullName}</b>
-                    {row.email ? ` · ${row.email}` : ""}
-                  </div>
-                  <div style={{ fontSize: 13, color: "#64748b" }}>
-                    {row.employee
-                      ? `Empleado: ${row.employee.fullName}${row.employee.code ? ` (${row.employee.code})` : ""} · ${row.employee.kind}`
-                      : "Sin empleado vinculado"}
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
-                  <div style={{ fontSize: 12, color: "#64748b" }}>
-                    Actualizado: <b>{fmtDateTime(row.updatedAt)}</b>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button type="button" onClick={() => setEditing(row)} style={ghostBtn}>
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void toggleActive(row)}
-                      style={row.isActive ? ghostBtn : darkBtn}
-                    >
-                      {row.isActive ? "Desactivar" : "Reactivar"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {row.roles.length === 0 ? <span style={mutedBadge}>Sin roles</span> : null}
-                {row.roles.map((role) => (
-                  <span key={role.roleId} style={roleBadge}>
-                    {ROLE_LABEL[role.role.name]}
-                  </span>
-                ))}
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      <AdminUsersListSection
+        rows={rows}
+        loading={loading}
+        error={error}
+        cardStyle={softCard}
+        ghostBtn={ghostBtn}
+        darkBtn={darkBtn}
+        errorBox={errorBox}
+        fmtDateTime={fmtDateTime}
+        roleLabel={(name) => ROLE_LABEL[name]}
+        onEdit={setEditing}
+        onToggleActive={(row) => {
+          void toggleActive(row);
+        }}
+      />
 
       {openCreate ? (
         <UserModal
@@ -402,36 +293,6 @@ const pillStyle: React.CSSProperties = {
   border: "1px solid #c7d2fe",
   background: "rgba(255,255,255,0.86)",
   color: "#312e81",
-  fontWeight: 900,
-  fontSize: 12,
-};
-
-const roleBadge: React.CSSProperties = {
-  padding: "6px 10px",
-  borderRadius: 999,
-  border: "1px solid #dbe4ea",
-  background: "#f8fafc",
-  color: "#334155",
-  fontWeight: 900,
-  fontSize: 12,
-};
-
-const mutedBadge: React.CSSProperties = {
-  padding: "6px 10px",
-  borderRadius: 999,
-  border: "1px solid #dbe4ea",
-  background: "#f8fafc",
-  color: "#64748b",
-  fontWeight: 900,
-  fontSize: 12,
-};
-
-const okBadge: React.CSSProperties = {
-  padding: "6px 10px",
-  borderRadius: 999,
-  border: "1px solid #bbf7d0",
-  background: "#f0fdf4",
-  color: "#166534",
   fontWeight: 900,
   fontSize: 12,
 };

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import React, { useEffect, useMemo, useState } from "react";
 import { opsStyles } from "@/components/ops-ui";
+import CashClosureDetailSection from "@/app/admin/cash-closures/_components/CashClosureDetailSection";
+import CashClosuresListSection from "@/app/admin/cash-closures/_components/CashClosuresListSection";
 
 type Row = {
   id: string;
@@ -238,265 +240,38 @@ export default function AdminCashClosuresPage() {
       </section>
 
       <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 12 }}>
-        <div style={panelStyle}>
-          <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>
-            Lista
-          </div>
+        <CashClosuresListSection
+          panelStyle={panelStyle}
+          lightBtn={lightBtn}
+          loading={loading}
+          rows={rows}
+          selectedId={selectedId}
+          yyyyMmDd={yyyyMmDd}
+          onSelect={setSelectedId}
+          onToggleReviewed={(row) => {
+            if (row.reviewedAt) {
+              setReviewed(row.id, false).catch(() => {});
+            } else {
+              const note = prompt("Nota de revisión (opcional):") ?? "";
+              setReviewed(row.id, true, note.trim() ? note.trim() : null).catch(() => {});
+            }
+          }}
+        />
 
-          {loading ? (
-            <div style={{ padding: 12, opacity: 0.7 }}>Cargando…</div>
-          ) : rows.length === 0 ? (
-            <div style={{ padding: 12, opacity: 0.7 }}>Sin cierres.</div>
-          ) : (
-            rows.map((r) => (
-              <div
-                key={r.id}
-                onClick={() => setSelectedId(r.id)}
-                style={{
-                  borderTop: "1px solid #eee",
-                  padding: 14,
-                  cursor: "pointer",
-                  background: selectedId === r.id ? "linear-gradient(180deg, #f0f9ff 0%, #ecfeff 100%)" : "white",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-                  <div>
-                    <div style={{ fontWeight: 900, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <span
-                        style={{
-                          padding: "4px 8px",
-                          borderRadius: 999,
-                          fontSize: 11,
-                          fontWeight: 900,
-                          background: r.isVoided ? "#fee2e2" : "#ecfeff",
-                          color: r.isVoided ? "#991b1b" : "#155e75",
-                          border: `1px solid ${r.isVoided ? "#fecaca" : "#bae6fd"}`,
-                        }}
-                      >
-                        {r.origin}
-                      </span>
-                      {r.origin} · {r.shift} · {yyyyMmDd(r.businessDate)}
-                      {r.isVoided ? " · ANULADO" : ""}
-                    </div>
-
-                    <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                      Cerró: {r.closedByUser?.fullName ?? r.closedByUser?.username ?? "—"} · {new Date(r.closedAt).toLocaleString()}
-                    </div>
-
-                    <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                      {r.reviewedAt
-                        ? `✅ Revisado por ${r.reviewedByUser?.username ?? "admin"}`
-                        : "⏳ Pendiente de revisión"}
-                      {r.reviewNote ? ` · ${r.reviewNote}` : ""}
-                    </div>
-                  </div>
-
-                  {!r.isVoided ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (r.reviewedAt) {
-                          setReviewed(r.id, false).catch(() => {});
-                        } else {
-                          const note = prompt("Nota de revisión (opcional):") ?? "";
-                          setReviewed(r.id, true, note.trim() ? note.trim() : null).catch(() => {});
-                        }
-                      }}
-                      style={lightBtn}
-                    >
-                      {r.reviewedAt ? "Quitar revisado" : "Marcar revisado"}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div style={panelStyle}>
-          <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>
-            Detalle
-          </div>
-
-          {!selected ? (
-            <div style={{ padding: 12, opacity: 0.7 }}>Selecciona un cierre.</div>
-          ) : (
-            <div style={{ padding: 12, display: "grid", gap: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-                <div>
-                  <div style={{ fontWeight: 900, fontSize: 14, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <span
-                      style={{
-                        padding: "4px 8px",
-                        borderRadius: 999,
-                        fontSize: 11,
-                        fontWeight: 900,
-                        background: selected.isVoided ? "#fee2e2" : "#ecfeff",
-                        color: selected.isVoided ? "#991b1b" : "#155e75",
-                        border: `1px solid ${selected.isVoided ? "#fecaca" : "#bae6fd"}`,
-                      }}
-                    >
-                      {selected.origin}
-                    </span>
-                    {selected.origin} · {selected.shift} · {yyyyMmDd(selected.businessDate)}
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                    Ventana: {new Date(selected.windowFrom).toLocaleTimeString()}–{new Date(selected.windowTo).toLocaleTimeString()}
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                    Estado: {selected.isVoided ? "ANULADO (reabierto)" : "ACTIVO"}{" "}
-                    {selected.isVoided ? `· Motivo: ${selected.voidReason ?? "—"}` : ""}
-                  </div>
-                </div>
-
-                {!selected.isVoided ? (
-                  <button onClick={() => voidClosure(selected.id)} style={lightBtn}>
-                    Anular / Reabrir
-                  </button>
-                ) : null}
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
-                <div style={detailStatStyle}>
-                  <div style={detailStatLabel}>Declarado neto</div>
-                  <div style={detailStatValue}>{euros(netFrom(selected.declaredJson?.total))}</div>
-                </div>
-                <div style={detailStatStyle}>
-                  <div style={detailStatLabel}>Sistema neto</div>
-                  <div style={detailStatValue}>{euros(netFrom(selected.systemJson?.total))}</div>
-                </div>
-                <div
-                  style={{
-                    ...detailStatStyle,
-                    background:
-                      netFrom(selected.diffJson?.total) === 0
-                        ? "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)"
-                        : netFrom(selected.diffJson?.total) > 0
-                          ? "linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%)"
-                          : "linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%)",
-                  }}
-                >
-                  <div style={detailStatLabel}>Diferencia neta</div>
-                  <div style={detailStatValue}>{euros(netFrom(selected.diffJson?.total))}</div>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 10, border: "1px solid #e2e8f0", borderRadius: 18, padding: 14, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)" }}>
-                <div style={{ fontWeight: 900, marginBottom: 10 }}>Desglose por método (céntimos)</div>
-
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                    <thead>
-                      <tr>
-                        <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Bloque</th>
-                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>CASH</th>
-                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>CARD</th>
-                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>BIZUM</th>
-                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>TRANSFER</th>
-                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>VOUCHER</th>
-                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>NETO</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {[
-                        { label: "DECLARADO · Servicio", obj: selected.declaredJson?.service },
-                        { label: "DECLARADO · Fianza", obj: selected.declaredJson?.deposit },
-                        { label: "DECLARADO · Total", obj: selected.declaredJson?.total },
-
-                        { label: "SISTEMA · Servicio", obj: selected.systemJson?.service },
-                        { label: "SISTEMA · Fianza", obj: selected.systemJson?.deposit },
-                        { label: "SISTEMA · Total", obj: selected.systemJson?.total },
-
-                        { label: "DIF · Servicio", obj: selected.diffJson?.service },
-                        { label: "DIF · Fianza", obj: selected.diffJson?.deposit },
-                        { label: "DIF · Total", obj: selected.diffJson?.total },
-                      ].map((row, idx) => {
-                        const cash = Number(row.obj?.CASH ?? 0);
-                        const card = Number(row.obj?.CARD ?? 0);
-                        const biz = Number(row.obj?.BIZUM ?? 0);
-                        const tr = Number(row.obj?.TRANSFER ?? 0);
-                        const v = Number(row.obj?.VOUCHER ?? 0);
-                        const net = cash + card + biz + tr + v;
-
-                        return (
-                          <tr key={idx}>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", fontWeight: 800 }}>{row.label}</td>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(cash)}</td>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(card)}</td>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(biz)}</td>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(tr)}</td>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(v)}</td>
-                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 900 }}>
-                              {euros(net)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, padding: 14, background: "#fff" }}>
-                  <div style={{ fontWeight: 900, marginBottom: 10 }}>Comisiones por canal</div>
-
-                  {commLoading ? (
-                    <div style={{ opacity: 0.7 }}>Cargando…</div>
-                  ) : !comm ? (
-                    <div style={{ opacity: 0.7 }}>Sin datos de comisiones (o no hay canales con comisión).</div>
-                  ) : (
-                    <div style={{ display: "grid", gap: 10 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                        <div style={{ opacity: 0.75, fontSize: 12 }}>Total comisiones (estimado)</div>
-                        <div style={{ fontWeight: 900 }}>{euros(comm.totalCommissionCents ?? 0)}</div>
-                      </div>
-
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                          <thead>
-                            <tr>
-                              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Canal</th>
-                              <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Reservas</th>
-                              <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base servicio</th>
-                              <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base fianza</th>
-                              <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base total</th>
-                              <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Comisión</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(comm.rows ?? []).map((x) => (
-                              <tr key={x.channelId}>
-                                <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", fontWeight: 800 }}>{x.name}</td>
-                                <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{x.reservations}</td>
-                                <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(x.baseServiceCents)}</td>
-                                <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(x.baseDepositCents)}</td>
-                                <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 800 }}>{euros(x.baseTotalCents)}</td>
-                                <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 900 }}>{euros(x.commissionCents)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div style={{ fontSize: 12, opacity: 0.75 }}>
-                        Nota: base calculada con pagos netos del cierre (IN−OUT). Si el canal marca “comisión sobre fianza”, se incluye.
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                  Nota: “DIF” = Declarado − Sistema. Lo normal es que el mayor descuadre esté en CASH.
-                </div>
-              </div>
-
-              <div style={{ fontSize: 12, opacity: 0.8 }}>
-                Si quieres, la siguiente iteración muestra el desglose por método (CASH/CARD/BIZUM/TRANSFER/VOUCHER) y servicio/fianza.
-              </div>
-            </div>
-          )}
-        </div>
+        <CashClosureDetailSection
+          panelStyle={panelStyle}
+          detailStatStyle={detailStatStyle}
+          detailStatLabel={detailStatLabel}
+          detailStatValue={detailStatValue}
+          lightBtn={lightBtn}
+          selected={selected}
+          comm={comm}
+          commLoading={commLoading}
+          yyyyMmDd={yyyyMmDd}
+          euros={euros}
+          netFrom={netFrom}
+          onVoid={voidClosure}
+        />
       </div>
     </div>
   );
