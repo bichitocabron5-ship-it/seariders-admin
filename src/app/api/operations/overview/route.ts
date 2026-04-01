@@ -546,7 +546,17 @@ export async function GET() {
   });
 
   const barPendingDeliveries = barPendingTasksDb.map((task) => {
-    const serviceName = joinItemNames(task.items);
+    const serviceName = joinItemNames(
+      task.items.map((item) => ({
+        nameSnap: item.nameSnap,
+        quantity:
+          item.quantity == null
+            ? null
+            : typeof item.quantity === "number"
+              ? item.quantity
+              : item.quantity.toNumber(),
+      }))
+    );
     const scheduledIso = task.scheduledFor?.toISOString?.() ?? null;
     const baseTime = task.scheduledFor ?? task.createdAt;
 
@@ -602,7 +612,17 @@ export async function GET() {
   });
 
   const barPendingReturns = barReturnTasksDb.map((task) => {
-    const serviceName = joinItemNames(task.items);
+    const serviceName = joinItemNames(
+      task.items.map((item) => ({
+        nameSnap: item.nameSnap,
+        quantity:
+          item.quantity == null
+            ? null
+            : typeof item.quantity === "number"
+              ? item.quantity
+              : item.quantity.toNumber(),
+      }))
+    );
     const scheduledIso = task.scheduledFor?.toISOString?.() ?? null;
     const deliveredIso = task.deliveredAt?.toISOString?.() ?? task.createdAt.toISOString();
 
