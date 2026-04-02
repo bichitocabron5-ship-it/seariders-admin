@@ -7,7 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { PaymentOrigin, ShiftName, RoleName } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
-import { originFromRoleName, shiftWindow, sumByMethod, diffTotals, emptyMethodMap, METHODS, parseBusinessDate } from "@/lib/cashClosures";
+import { originFromRoleName, shiftWindow, sumByMethod, diffTotals, emptyMethodMap, METHODS, parseBusinessDate, isOriginSplitByShift } from "@/lib/cashClosures";
 
 export const runtime = "nodejs";
 
@@ -115,16 +115,21 @@ export async function POST(req: Request) {
 
       // 3) pagos del sistema (turno por ShiftSession + compat por ventana)
       const payments = await tx.payment.findMany({
-        where: {
-          origin,
-          OR: [
-            // ✅ Turno por ShiftSession seleccionadas
-            { shiftSessionId: { in: parsed.data.shiftSessionIds } },
+        where: isOriginSplitByShift(origin)
+          ? {
+              origin,
+              OR: [
+                // ✅ Turno por ShiftSession seleccionadas
+                { shiftSessionId: { in: parsed.data.shiftSessionIds } },
 
-            // ✅ Compat: pagos viejos sin shiftSessionId, caen en la ventana
-            { shiftSessionId: null, createdAt: { gte: from, lt: to } },
-          ],
-        },
+                // ✅ Compat: pagos viejos sin shiftSessionId, caen en la ventana
+                { shiftSessionId: null, createdAt: { gte: from, lt: to } },
+              ],
+            }
+          : {
+              origin,
+              createdAt: { gte: from, lt: to },
+            },
         select: {
           amountCents: true,
           direction: true,

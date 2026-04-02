@@ -86,6 +86,10 @@ const SPLIT_BY_SHIFT: Partial<Record<PaymentOrigin, boolean>> = {
   WEB: false,
 };
 
+export function isOriginSplitByShift(origin: PaymentOrigin) {
+  return Boolean(SPLIT_BY_SHIFT[origin]);
+}
+
 function dayStart(businessDate: Date) {
   const d0 = new Date(businessDate);
   d0.setHours(0, 0, 0, 0);
@@ -104,7 +108,7 @@ export function shiftWindow(
   const d0 = dayStart(businessDate);
 
   // ✅ Si NO está partido: todo el día, independientemente de MORNING/AFTERNOON
-  if (!SPLIT_BY_SHIFT[origin]) {
+  if (!isOriginSplitByShift(origin)) {
     const from = new Date(d0);
     const to = new Date(d0);
     to.setHours(23, 59, 59, 999);

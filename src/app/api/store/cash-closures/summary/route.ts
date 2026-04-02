@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { PaymentOrigin, ShiftName, RoleName } from "@prisma/client";
-import { originFromRoleName, sumByMethod, parseBusinessDate, shiftWindow } from "@/lib/cashClosures";
+import { originFromRoleName, sumByMethod, parseBusinessDate, shiftWindow, isOriginSplitByShift } from "@/lib/cashClosures";
 
 export const runtime = "nodejs";
 
@@ -52,17 +52,30 @@ export async function GET(req: Request) {
     const shift: ShiftName = (shiftRaw ?? (session.shift as ShiftName) ?? "MORNING") as ShiftName;
     const businessDate = parseBusinessDate(date);
 
+    const { from, to } = shiftWindow(origin, businessDate, shift);
     const payments = await prisma.payment.findMany({
-      where: {
-        origin,
-        // ✅ el turno lo define la ShiftSession
-        shiftSession: {
-          is: {
-            businessDate,
-            shift,
+      where: isOriginSplitByShift(origin)
+        ? {
+            origin,
+            OR: [
+              {
+                shiftSession: {
+                  is: {
+                    businessDate,
+                    shift,
+                  },
+                },
+              },
+              {
+                shiftSessionId: null,
+                createdAt: { gte: from, lt: to },
+              },
+            ],
+          }
+        : {
+            origin,
+            createdAt: { gte: from, lt: to },
           },
-        },
-      },
       select: { amountCents: true, isDeposit: true, direction: true, method: true },
       orderBy: { createdAt: "asc" },
     });
@@ -103,8 +116,6 @@ export async function GET(req: Request) {
         isDeposit: p.isDeposit,
       }))
     );
-    const { from, to } = shiftWindow(origin, businessDate, shift);
-
     const serviceNet = net(serviceIn, serviceOut);
     const depositNet = net(depositIn, depositOut);
 

@@ -75,6 +75,22 @@ export default function CashClosureDetailSection({
   netFrom,
   onVoid,
 }: Props) {
+  const showDepositBlocks = selected?.origin !== "BOOTH";
+
+  const breakdownRows = selected
+    ? [
+        { label: "DECLARADO · Servicio", obj: selected.declaredJson?.service },
+        ...(showDepositBlocks ? [{ label: "DECLARADO · Fianza", obj: selected.declaredJson?.deposit }] : []),
+        { label: "DECLARADO · Total", obj: selected.declaredJson?.total },
+        { label: "SISTEMA · Servicio", obj: selected.systemJson?.service },
+        ...(showDepositBlocks ? [{ label: "SISTEMA · Fianza", obj: selected.systemJson?.deposit }] : []),
+        { label: "SISTEMA · Total", obj: selected.systemJson?.total },
+        { label: "DIF · Servicio", obj: selected.diffJson?.service },
+        ...(showDepositBlocks ? [{ label: "DIF · Fianza", obj: selected.diffJson?.deposit }] : []),
+        { label: "DIF · Total", obj: selected.diffJson?.total },
+      ]
+    : [];
+
   return (
     <div style={panelStyle}>
       <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>
@@ -113,11 +129,11 @@ export default function CashClosureDetailSection({
                 {selected.origin} · {selected.shift} · {yyyyMmDd(selected.businessDate)}
               </div>
               <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                Ventana: {new Date(selected.windowFrom).toLocaleTimeString()}–{new Date(selected.windowTo).toLocaleTimeString()}
+                Ventana: {new Date(selected.windowFrom).toLocaleTimeString()}-{new Date(selected.windowTo).toLocaleTimeString()}
               </div>
               <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
                 Estado: {selected.isVoided ? "ANULADO (reabierto)" : "ACTIVO"}{" "}
-                {selected.isVoided ? `· Motivo: ${selected.voidReason ?? "—"}` : ""}
+                {selected.isVoided ? `· Motivo: ${selected.voidReason ?? "-"}` : ""}
               </div>
             </div>
 
@@ -153,24 +169,26 @@ export default function CashClosureDetailSection({
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
-            <div style={detailStatStyle}>
-              <div style={detailStatLabel}>Fianza devuelta</div>
-              <div style={detailStatValue}>{euros(selected.depositSummary?.returnedCents ?? 0)}</div>
+          {showDepositBlocks ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+              <div style={detailStatStyle}>
+                <div style={detailStatLabel}>Fianza devuelta</div>
+                <div style={detailStatValue}>{euros(selected.depositSummary?.returnedCents ?? 0)}</div>
+              </div>
+              <div style={detailStatStyle}>
+                <div style={detailStatLabel}>Retenido neto</div>
+                <div style={detailStatValue}>{euros(selected.depositSummary?.retainedNetCents ?? 0)}</div>
+              </div>
+              <div style={detailStatStyle}>
+                <div style={detailStatLabel}>Retenciones</div>
+                <div style={detailStatValue}>{selected.depositSummary?.retainedCount ?? 0}</div>
+              </div>
+              <div style={detailStatStyle}>
+                <div style={detailStatLabel}>Retenciones parciales</div>
+                <div style={detailStatValue}>{selected.depositSummary?.partialRetentions ?? 0}</div>
+              </div>
             </div>
-            <div style={detailStatStyle}>
-              <div style={detailStatLabel}>Retenido neto</div>
-              <div style={detailStatValue}>{euros(selected.depositSummary?.retainedNetCents ?? 0)}</div>
-            </div>
-            <div style={detailStatStyle}>
-              <div style={detailStatLabel}>Retenciones</div>
-              <div style={detailStatValue}>{selected.depositSummary?.retainedCount ?? 0}</div>
-            </div>
-            <div style={detailStatStyle}>
-              <div style={detailStatLabel}>Retenciones parciales</div>
-              <div style={detailStatValue}>{selected.depositSummary?.partialRetentions ?? 0}</div>
-            </div>
-          </div>
+          ) : null}
 
           <div
             style={{
@@ -197,17 +215,7 @@ export default function CashClosureDetailSection({
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    { label: "DECLARADO · Servicio", obj: selected.declaredJson?.service },
-                    { label: "DECLARADO · Fianza", obj: selected.declaredJson?.deposit },
-                    { label: "DECLARADO · Total", obj: selected.declaredJson?.total },
-                    { label: "SISTEMA · Servicio", obj: selected.systemJson?.service },
-                    { label: "SISTEMA · Fianza", obj: selected.systemJson?.deposit },
-                    { label: "SISTEMA · Total", obj: selected.systemJson?.total },
-                    { label: "DIF · Servicio", obj: selected.diffJson?.service },
-                    { label: "DIF · Fianza", obj: selected.diffJson?.deposit },
-                    { label: "DIF · Total", obj: selected.diffJson?.total },
-                  ].map((row, index) => {
+                  {breakdownRows.map((row, index) => {
                     const cash = Number(row.obj?.CASH ?? 0);
                     const card = Number(row.obj?.CARD ?? 0);
                     const biz = Number(row.obj?.BIZUM ?? 0);
@@ -231,9 +239,11 @@ export default function CashClosureDetailSection({
               </table>
             </div>
 
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-              Fianza devuelta = salidas de depósito registradas en la ventana. Retenido neto = saldo de depósito que quedó bloqueado en reservas retenidas durante ese cierre.
-            </div>
+            {showDepositBlocks ? (
+              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+                Fianza devuelta = salidas de depósito registradas en la ventana. Retenido neto = saldo de depósito que quedó bloqueado en reservas retenidas durante ese cierre.
+              </div>
+            ) : null}
           </div>
 
           <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, padding: 14, background: "#fff" }}>
@@ -257,7 +267,9 @@ export default function CashClosureDetailSection({
                         <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #eee" }}>Canal</th>
                         <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Reservas</th>
                         <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base servicio</th>
-                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base fianza</th>
+                        {showDepositBlocks ? (
+                          <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base fianza</th>
+                        ) : null}
                         <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base total</th>
                         <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Comisión</th>
                       </tr>
@@ -268,7 +280,9 @@ export default function CashClosureDetailSection({
                           <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", fontWeight: 800 }}>{row.name}</td>
                           <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{row.reservations}</td>
                           <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(row.baseServiceCents)}</td>
-                          <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(row.baseDepositCents)}</td>
+                          {showDepositBlocks ? (
+                            <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(row.baseDepositCents)}</td>
+                          ) : null}
                           <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 800 }}>{euros(row.baseTotalCents)}</td>
                           <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 900 }}>{euros(row.commissionCents)}</td>
                         </tr>
@@ -278,14 +292,16 @@ export default function CashClosureDetailSection({
                 </div>
 
                 <div style={{ fontSize: 12, opacity: 0.75 }}>
-                  Base calculada con pagos netos del cierre (IN−OUT). Si el canal marca comisión sobre fianza, se incluye.
+                  {showDepositBlocks
+                    ? "Base calculada con pagos netos del cierre (IN-OUT). Si el canal marca comisión sobre fianza, se incluye."
+                    : "Base calculada con pagos netos del cierre (IN-OUT), solo sobre servicio."}
                 </div>
               </div>
             )}
           </div>
 
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-            Nota: “DIF” = Declarado − Sistema. Lo normal es que el mayor descuadre esté en CASH.
+            Nota: &quot;DIF&quot; = Declarado - Sistema. Lo normal es que el mayor descuadre esté en CASH.
           </div>
         </div>
       )}

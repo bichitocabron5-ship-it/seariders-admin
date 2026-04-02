@@ -83,6 +83,18 @@ export async function GET(req: Request) {
 
   const rowsWithDepositSummary = await Promise.all(
     rows.map(async (row) => {
+      if (row.origin === "BOOTH") {
+        return {
+          ...row,
+          depositSummary: {
+            returnedCents: 0,
+            retainedNetCents: 0,
+            retainedCount: 0,
+            partialRetentions: 0,
+          },
+        };
+      }
+
       const [depositPayments, heldReservations] = await Promise.all([
         prisma.payment.findMany({
           where: {
