@@ -6,6 +6,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { EmployeeKind, Prisma } from "@prisma/client";
+import { syncMonitorFromEmployee } from "@/lib/monitor-sync";
 
 export const runtime = "nodejs";
 
@@ -112,45 +113,55 @@ export async function POST(req: Request) {
   const b = parsed.data;
 
   try {
-    const row = await prisma.employee.create({
-      data: {
-        code: b.code?.trim() || null,
-        fullName: b.fullName.trim(),
-        phone: b.phone?.trim() || null,
-        email: b.email?.trim() || null,
-        kind: b.kind,
-        jobTitle: b.jobTitle?.trim() || null,
-        isActive: b.isActive ?? true,
-        note: b.note?.trim() || null,
-        hireDate: b.hireDate ? new Date(b.hireDate) : null,
-        terminationDate: b.terminationDate ? new Date(b.terminationDate) : null,
+    const row = await prisma.$transaction(async (tx) => {
+      const created = await tx.employee.create({
+        data: {
+          code: b.code?.trim() || null,
+          fullName: b.fullName.trim(),
+          phone: b.phone?.trim() || null,
+          email: b.email?.trim() || null,
+          kind: b.kind,
+          jobTitle: b.jobTitle?.trim() || null,
+          isActive: b.isActive ?? true,
+          note: b.note?.trim() || null,
+          hireDate: b.hireDate ? new Date(b.hireDate) : null,
+          terminationDate: b.terminationDate ? new Date(b.terminationDate) : null,
 
-        internshipHoursTotal:
-          b.kind === "INTERN" ? b.internshipHoursTotal ?? null : null,
+          internshipHoursTotal:
+            b.kind === "INTERN" ? b.internshipHoursTotal ?? null : null,
 
-        internshipStartDate:
-          b.kind === "INTERN" && b.internshipStartDate
-            ? new Date(b.internshipStartDate)
-            : null,
+          internshipStartDate:
+            b.kind === "INTERN" && b.internshipStartDate
+              ? new Date(b.internshipStartDate)
+              : null,
 
-        internshipEndDate:
-          b.kind === "INTERN" && b.internshipEndDate
-            ? new Date(b.internshipEndDate)
-            : null,
-      },
-      select: {
-        id: true,
-        code: true,
-        fullName: true,
-        phone: true,
-        email: true,
-        kind: true,
-        jobTitle: true,
-        isActive: true,
-        note: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+          internshipEndDate:
+            b.kind === "INTERN" && b.internshipEndDate
+              ? new Date(b.internshipEndDate)
+              : null,
+        },
+        select: {
+          id: true,
+          code: true,
+          fullName: true,
+          phone: true,
+          email: true,
+          kind: true,
+          jobTitle: true,
+          isActive: true,
+          note: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      await syncMonitorFromEmployee(tx, null, {
+        fullName: created.fullName,
+        kind: created.kind,
+        isActive: created.isActive,
+      });
+
+      return created;
     });
 
     return NextResponse.json({ ok: true, row });
