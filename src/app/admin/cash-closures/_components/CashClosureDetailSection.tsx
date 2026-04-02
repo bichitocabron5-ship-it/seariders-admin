@@ -9,6 +9,10 @@ type Row = {
   windowTo: string;
   isVoided: boolean;
   voidReason?: string | null;
+  users?: Array<{
+    user?: { id?: string; fullName?: string | null; username?: string | null } | null;
+    roleNameAtClose?: string | null;
+  }>;
   declaredJson?: {
     service?: Record<string, number>;
     deposit?: Record<string, number>;
@@ -189,6 +193,43 @@ export default function CashClosureDetailSection({
               </div>
             </div>
           ) : null}
+
+          <div
+            style={{
+              border: "1px solid #e2e8f0",
+              borderRadius: 16,
+              padding: 14,
+              background: "#fff",
+            }}
+          >
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Participantes del cierre</div>
+            {!selected.users || selected.users.length === 0 ? (
+              <div style={{ fontSize: 13, opacity: 0.7 }}>Este cierre no tiene participantes guardados.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {selected.users.map((entry, index) => (
+                  <div
+                    key={`${entry.user?.id ?? "user"}-${index}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      alignItems: "center",
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      border: "1px solid #e2e8f0",
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <div style={{ fontWeight: 800 }}>
+                      {entry.user?.fullName ?? entry.user?.username ?? entry.user?.id ?? "Usuario"}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.75 }}>{entry.roleNameAtClose ?? "-"}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div
             style={{

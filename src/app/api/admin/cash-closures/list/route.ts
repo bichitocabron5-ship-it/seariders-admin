@@ -74,6 +74,12 @@ export async function GET(req: Request) {
       reviewedByUser: { select: { id: true, fullName: true, username: true } },
       closedByUser: { select: { id: true, fullName: true, username: true } },
       voidedByUser: { select: { id: true, fullName: true, username: true } },
+      users: {
+        select: {
+          user: { select: { id: true, fullName: true, username: true } },
+          roleNameAtClose: true,
+        },
+      },
       // totales resumidos para la tabla
       declaredJson: true,
       systemJson: true,

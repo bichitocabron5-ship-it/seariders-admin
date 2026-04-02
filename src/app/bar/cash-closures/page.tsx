@@ -161,7 +161,12 @@ export default function BarCashClosuresPage() {
 
       const rows: Array<{ id: string; label: string }> = sessionsData.rows ?? [];
       setSsRows(rows);
-      setSelectedSs((prev) => (prev.length ? prev : rows.slice(0, 4).map((row) => row.id)));
+      setSelectedSs((prev) => {
+        const availableIds = new Set(rows.map((row) => row.id));
+        const stillValid = prev.filter((id) => availableIds.has(id));
+        if (stillValid.length) return stillValid;
+        return rows.slice(0, 4).map((row) => row.id);
+      });
 
       const untouched = VISIBLE_METHODS.every((key) => (declService[key] ?? "").trim() === "");
       if (untouched) {

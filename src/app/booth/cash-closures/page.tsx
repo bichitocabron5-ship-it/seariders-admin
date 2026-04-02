@@ -208,7 +208,9 @@ export default function BoothCashClosuresPage() {
         const rows: Array<{ id: string; label: string }> = j.rows ?? [];
         setSsRows(rows);
         setSelectedSs((prev) => {
-          if (prev?.length) return prev;
+          const availableIds = new Set(rows.map((x) => x.id));
+          const stillValid = prev.filter((id) => availableIds.has(id));
+          if (stillValid.length) return stillValid;
           return rows.slice(0, 4).map((x) => x.id);
         });
       } else {

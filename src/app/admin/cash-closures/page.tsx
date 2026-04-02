@@ -21,6 +21,10 @@ type Row = {
   voidReason?: string | null;
   closedByUser?: { fullName?: string | null; username?: string | null } | null;
   voidedByUser?: { fullName?: string | null; username?: string | null } | null;
+  users?: Array<{
+    user?: { id?: string; fullName?: string | null; username?: string | null } | null;
+    roleNameAtClose?: string | null;
+  }>;
   declaredJson?: {
     service?: Record<string, number>;
     deposit?: Record<string, number>;
