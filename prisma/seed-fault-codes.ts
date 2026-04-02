@@ -1,7 +1,6 @@
 import "dotenv/config";
-import { PrismaClient, FaultCodeVerificationStatus } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { FaultCodeVerificationStatus, type PrismaClient } from "@prisma/client";
+import { prisma } from "../src/lib/prisma";
 
 const rows = [
   {
@@ -241,9 +240,9 @@ const rows = [
   },
 ];
 
-async function main() {
+export async function seedFaultCodes(prismaClient: PrismaClient = prisma) {
   for (const row of rows) {
-    await prisma.faultCodeCatalog.upsert({
+    await prismaClient.faultCodeCatalog.upsert({
       where: {
         brand_code: {
           brand: row.brand,
@@ -269,11 +268,13 @@ async function main() {
   console.log(`Fault codes seeded: ${rows.length}`);
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+if (process.argv[1]?.endsWith("seed-fault-codes.ts")) {
+  seedFaultCodes()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
