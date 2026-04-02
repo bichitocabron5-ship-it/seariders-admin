@@ -16,7 +16,8 @@ type BoardOption = {
 type TaxiboatOperationRow = {
   id: string;
   boat: "TAXIBOAT_1" | "TAXIBOAT_2" | string;
-  status: "AT_PLATFORM" | "TO_BOOTH" | "AT_BOOTH" | string;
+  status: "TO_PLATFORM" | "AT_PLATFORM" | "TO_BOOTH" | "AT_BOOTH" | string;
+  departedBoothAt?: string | null;
   arrivedPlatformAt?: string | null;
   departedPlatformAt?: string | null;
   arrivedBoothAt?: string | null;
@@ -238,14 +239,19 @@ function TaxiboatOpsCard({
   ) => Promise<void>;
 }) {
   const isToBooth = row.status === "TO_BOOTH";
+  const isToPlatform = row.status === "TO_PLATFORM";
   const isAtBooth = row.status === "AT_BOOTH";
-  const startedAt = row.departedPlatformAt ?? row.updatedAt;
+  const startedAt = isToPlatform
+    ? row.departedBoothAt ?? row.updatedAt
+    : row.departedPlatformAt ?? row.updatedAt;
   const startedMs = new Date(startedAt).getTime();
   const elapsedMin = Number.isFinite(startedMs)
     ? Math.max(0, Math.round((nowMs - startedMs) / 60000))
     : null;
   const colors = isToBooth
     ? { bg: "#fff7ed", bd: "#fed7aa", fg: "#b45309" }
+    : isToPlatform
+      ? { bg: "#eff6ff", bd: "#bfdbfe", fg: "#1d4ed8" }
     : isAtBooth
       ? { bg: "#f0fdf4", bd: "#bbf7d0", fg: "#166534" }
       : { bg: "#ecfeff", bd: "#a5f3fc", fg: "#155e75" };
@@ -267,7 +273,7 @@ function TaxiboatOpsCard({
             {row.boat === "TAXIBOAT_1" ? "Taxiboat 1" : "Taxiboat 2"}
           </div>
           <div style={{ fontSize: 13, color: colors.fg, fontWeight: 900 }}>
-            {isToBooth ? "En camino a Booth" : isAtBooth ? "En Booth" : "En plataforma"}
+            {isToBooth ? "En camino a Booth" : isToPlatform ? "En camino a Platform" : isAtBooth ? "En Booth" : "En plataforma"}
           </div>
         </div>
 
@@ -282,7 +288,7 @@ function TaxiboatOpsCard({
             fontSize: 12,
           }}
         >
-          {isToBooth ? "TO BOOTH" : isAtBooth ? "AT BOOTH" : "AT PLATFORM"}
+          {isToBooth ? "TO BOOTH" : isToPlatform ? "TO PLATFORM" : isAtBooth ? "AT BOOTH" : "AT PLATFORM"}
         </span>
       </div>
 
@@ -290,12 +296,20 @@ function TaxiboatOpsCard({
         <div style={{ fontSize: 14, color: "#0f172a", fontWeight: 800 }}>
           {isToBooth
             ? `Salió hacia Booth hace ${elapsedMin ?? 0} min`
+            : isToPlatform
+              ? `Salió desde Booth hace ${elapsedMin ?? 0} min`
             : isAtBooth
               ? `Llegada a Booth: ${fmtDateTime(row.arrivedBoothAt ?? row.updatedAt)}`
               : `Última llegada a Platform: ${fmtDateTime(row.arrivedPlatformAt ?? row.updatedAt)}`}
         </div>
         <div style={{ padding: "10px 12px", borderRadius: 12, border: `1px solid ${colors.bd}`, background: "#fff", color: colors.fg, fontWeight: 900, fontSize: 13 }}>
-          {isToBooth ? `Trayecto activo${elapsedMin != null ? ` · ${elapsedMin} min` : ""}` : isAtBooth ? "Barco en Booth" : "Listo en Platform"}
+          {isToBooth
+            ? `Trayecto activo${elapsedMin != null ? ` · ${elapsedMin} min` : ""}`
+            : isToPlatform
+              ? `Llegando a Platform${elapsedMin != null ? ` · ${elapsedMin} min` : ""}`
+              : isAtBooth
+                ? "Barco en Booth"
+                : "Listo en Platform"}
         </div>
       </div>
 

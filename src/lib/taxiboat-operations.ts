@@ -12,8 +12,8 @@ export async function ensureTaxiboatOperations() {
         update: {},
         create: {
           boat,
-          status: "AT_PLATFORM",
-          arrivedPlatformAt: new Date(),
+          status: "AT_BOOTH",
+          arrivedBoothAt: new Date(),
         },
       })
     )

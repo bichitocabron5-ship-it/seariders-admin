@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
+import { ensureTaxiboatOperations } from "@/lib/taxiboat-operations";
 
 export const runtime = "nodejs";
 
@@ -24,19 +25,43 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
 
   const tripId = parsed.data.tripId;
+  await ensureTaxiboatOperations();
 
   const trip = await prisma.taxiboatTrip.findUnique({
     where: { id: tripId },
-    select: { id: true, status: true, departedAt: true },
+    select: { id: true, boat: true, status: true, departedAt: true },
   });
 
   if (!trip) return NextResponse.json({ error: "Viaje no existe" }, { status: 404 });
   if (trip.departedAt) return NextResponse.json({ ok: true, already: true });
 
-  await prisma.taxiboatTrip.update({
-    where: { id: tripId },
-    data: { status: "DEPARTED", departedAt: new Date() },
+  const operation = await prisma.taxiboatOperation.findUnique({
+    where: { boat: trip.boat },
+    select: { status: true },
   });
+
+  if (!operation || operation.status !== "AT_BOOTH") {
+    return NextResponse.json(
+      { error: "El taxiboat no esta en Booth, no se puede iniciar la salida" },
+      { status: 409 }
+    );
+  }
+
+  const now = new Date();
+
+  await prisma.$transaction([
+    prisma.taxiboatTrip.update({
+      where: { id: tripId },
+      data: { status: "DEPARTED", departedAt: now },
+    }),
+    prisma.taxiboatOperation.update({
+      where: { boat: trip.boat },
+      data: {
+        status: "TO_PLATFORM",
+        departedBoothAt: now,
+      },
+    }),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

@@ -875,7 +875,8 @@ model TaxiboatTrip {
 model TaxiboatOperation {
   id                String                  @id @default(cuid())
   boat              TaxiboatBoat            @unique
-  status            TaxiboatOperationStatus @default(AT_PLATFORM)
+  status            TaxiboatOperationStatus @default(AT_BOOTH)
+  departedBoothAt   DateTime?
   arrivedPlatformAt DateTime?
   departedPlatformAt DateTime?
   arrivedBoothAt    DateTime?
@@ -2101,6 +2102,7 @@ enum TaxiboatTripStatus {
 }
 
 enum TaxiboatOperationStatus {
+  TO_PLATFORM
   AT_PLATFORM
   TO_BOOTH
   AT_BOOTH

@@ -35,6 +35,7 @@ export async function GET() {
       id: true,
       boat: true,
       status: true,
+      departedBoothAt: true,
       arrivedPlatformAt: true,
       departedPlatformAt: true,
       arrivedBoothAt: true,
@@ -46,6 +47,7 @@ export async function GET() {
     ok: true,
     rows: rows.map((row) => ({
       ...row,
+      departedBoothAt: row.departedBoothAt?.toISOString() ?? null,
       arrivedPlatformAt: row.arrivedPlatformAt?.toISOString() ?? null,
       departedPlatformAt: row.departedPlatformAt?.toISOString() ?? null,
       arrivedBoothAt: row.arrivedBoothAt?.toISOString() ?? null,
@@ -87,6 +89,36 @@ export async function POST(req: Request) {
 
   const now = new Date();
 
+  const current = await prisma.taxiboatOperation.findUnique({
+    where: { boat },
+    select: { status: true },
+  });
+
+  if (!current) {
+    return NextResponse.json({ error: "Taxiboat no encontrado" }, { status: 404 });
+  }
+
+  if (action === "MARK_AT_PLATFORM" && current.status !== "TO_PLATFORM") {
+    return NextResponse.json(
+      { error: "Solo se puede marcar llegada a Platform si el taxiboat ha salido desde Booth" },
+      { status: 409 }
+    );
+  }
+
+  if (action === "DEPART_TO_BOOTH" && current.status !== "AT_PLATFORM") {
+    return NextResponse.json(
+      { error: "Solo se puede marcar salida a Booth si el taxiboat esta en Platform" },
+      { status: 409 }
+    );
+  }
+
+  if (action === "MARK_ARRIVED_BOOTH" && current.status !== "TO_BOOTH") {
+    return NextResponse.json(
+      { error: "Solo se puede marcar llegada a Booth si el taxiboat viene desde Platform" },
+      { status: 409 }
+    );
+  }
+
   const updated = await prisma.taxiboatOperation.update({
     where: { boat },
     data:
@@ -100,14 +132,15 @@ export async function POST(req: Request) {
               status: "AT_BOOTH",
               arrivedBoothAt: now,
             }
-        : {
-            status: "TO_BOOTH",
-            departedPlatformAt: now,
-          },
+          : {
+              status: "TO_BOOTH",
+              departedPlatformAt: now,
+            },
     select: {
       id: true,
       boat: true,
       status: true,
+      departedBoothAt: true,
       arrivedPlatformAt: true,
       departedPlatformAt: true,
       arrivedBoothAt: true,
@@ -119,6 +152,7 @@ export async function POST(req: Request) {
     ok: true,
     row: {
       ...updated,
+      departedBoothAt: updated.departedBoothAt?.toISOString() ?? null,
       arrivedPlatformAt: updated.arrivedPlatformAt?.toISOString() ?? null,
       departedPlatformAt: updated.departedPlatformAt?.toISOString() ?? null,
       arrivedBoothAt: updated.arrivedBoothAt?.toISOString() ?? null,

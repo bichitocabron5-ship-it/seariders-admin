@@ -47,7 +47,8 @@ type TripRow = {
 type TaxiboatOperationRow = {
   id: string;
   boat: "TAXIBOAT_1" | "TAXIBOAT_2" | string;
-  status: "AT_PLATFORM" | "TO_BOOTH" | "AT_BOOTH" | string;
+  status: "TO_PLATFORM" | "AT_PLATFORM" | "TO_BOOTH" | "AT_BOOTH" | string;
+  departedBoothAt?: string | null;
   arrivedPlatformAt?: string | null;
   departedPlatformAt?: string | null;
   arrivedBoothAt?: string | null;
@@ -133,6 +134,18 @@ function getTaxiboatReturnMeta(
       bg: "#fffbeb",
       fg: "#92400e",
       bd: "#fde68a",
+    };
+  }
+
+  if (row.status === "TO_PLATFORM") {
+    const departedMs = new Date(row.departedBoothAt ?? row.updatedAt).getTime();
+    const elapsedMs = Math.max(0, (nowMs ?? Date.now()) - departedMs);
+    return {
+      statusLabel: "HACIA PLATFORM",
+      detail: `Salio de Booth hace ${msToClock(elapsedMs)}`,
+      bg: "#eff6ff",
+      fg: "#1d4ed8",
+      bd: "#bfdbfe",
     };
   }
 

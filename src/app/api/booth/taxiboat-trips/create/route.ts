@@ -6,6 +6,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
 import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
+import { ensureTaxiboatOperations } from "@/lib/taxiboat-operations";
 
 export const runtime = "nodejs";
 
@@ -29,9 +30,41 @@ export async function POST(req: Request) {
   }
 
 const activityDate = utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
+const boat = parsed.data.boat ?? "TAXIBOAT_1";
+
+await ensureTaxiboatOperations();
+
+const [operation, openTrip] = await Promise.all([
+  prisma.taxiboatOperation.findUnique({
+    where: { boat },
+    select: { status: true },
+  }),
+  prisma.taxiboatTrip.findFirst({
+    where: {
+      activityDate,
+      boat,
+      status: "OPEN",
+    },
+    select: { id: true, tripNo: true },
+  }),
+]);
+
+if (!operation || operation.status !== "AT_BOOTH") {
+  return NextResponse.json(
+    { error: "Ese taxiboat no esta en Booth y no puede prepararse para una nueva salida" },
+    { status: 409 }
+  );
+}
+
+if (openTrip) {
+  return NextResponse.json(
+    { error: `Ese taxiboat ya tiene un viaje OPEN (viaje ${openTrip.tripNo ?? "-"})` },
+    { status: 409 }
+  );
+}
 
 const max = await prisma.taxiboatTrip.aggregate({
-  where: { activityDate, boat: parsed.data.boat ?? "TAXIBOAT_1" },
+  where: { activityDate, boat },
   _max: { tripNo: true },
 });
 
@@ -39,7 +72,7 @@ const nextTripNo = (max._max.tripNo ?? 0) + 1;
 
 const trip = await prisma.taxiboatTrip.create({
   data: {
-    boat: parsed.data.boat ?? "TAXIBOAT_1",
+    boat,
     note: parsed.data.note ?? null,
     createdByUserId: session.userId,
     status: "OPEN",

@@ -27,7 +27,8 @@ type TripRow = {
 type TaxiboatOperationRow = {
   id: string;
   boat: "TAXIBOAT_1" | "TAXIBOAT_2" | string;
-  status: "AT_PLATFORM" | "TO_BOOTH" | "AT_BOOTH" | string;
+  status: "TO_PLATFORM" | "AT_PLATFORM" | "TO_BOOTH" | "AT_BOOTH" | string;
+  departedBoothAt?: string | null;
   arrivedPlatformAt?: string | null;
   departedPlatformAt?: string | null;
   arrivedBoothAt?: string | null;
