@@ -3,6 +3,13 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { EmployeeKind, RoleName } from "@prisma/client";
 import { prisma, pgPool } from "../src/lib/prisma";
+import "dotenv/config";
+
+if (process.env.ALLOW_DEV_SEED !== "true") {
+  throw new Error(
+    "⛔ Seed de desarrollo bloqueado.\nUsa ALLOW_DEV_SEED=true solo en entorno de desarrollo."
+  );
+}
 
 // Contraseña temporal para todos
 const TEMP_PASSWORD = "SeaRiders2026!";

@@ -8,6 +8,12 @@ async function main() {
     throw new Error("Falta DATABASE_URL");
   }
 
+  if (process.env.CONFIRM_RESET_PRODUCTION !== "YES_I_UNDERSTAND") {
+    throw new Error(
+      "⛔ Reset bloqueado.\nDefine CONFIRM_RESET_PRODUCTION=YES_I_UNDERSTAND para continuar."
+    );
+  }
+
   const pool = new Pool({ connectionString: url });
   const client = await pool.connect();
 

@@ -33,6 +33,10 @@ async function main() {
     });
   }
 
+  if (!process.env.DATABASE_URL) {
+    throw new Error("Falta DATABASE_URL");
+  }
+
   const passwordHash = await bcrypt.hash(password, 10);
 
   const adminRole = await prisma.role.findUniqueOrThrow({
