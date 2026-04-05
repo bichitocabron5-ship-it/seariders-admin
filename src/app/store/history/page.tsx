@@ -69,7 +69,7 @@ function dt(v: string | null | undefined) {
 }
 
 function reservationHref(reservationId: string) {
-  return `/store/create?migrateFrom=${reservationId}`;
+  return `/store?reservationId=${reservationId}`;
 }
 
 function mechanicsDetailHref(incident: {

@@ -133,6 +133,10 @@ function rowDayKey(r: LiteRow) {
 }
 
 function actionForRow(r: LiteRow): RowAction {
+  if (r.status === "CANCELED" || r.status === "CANCELLED") {
+    return { label: "Ver", href: `/store?reservationId=${r.id}` };
+  }
+
   const dayKey = rowDayKey(r);
   const past = dayKey ? isPastDateLocal(dayKey) : false;
   const today = dayKey ? isTodayLocal(dayKey) : false;

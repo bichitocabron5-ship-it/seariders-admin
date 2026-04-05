@@ -7,7 +7,7 @@ import { useState } from "react";
 import CashChangeHelper from "@/components/cash-change-helper";
 
 import type { ExtraUiMap, PayLine, PayMethod, ReservationRow, Service } from "../types";
-import { errorMessage, euros } from "../utils";
+import { centsFromEuros, errorMessage, euros } from "../utils";
 
 type ReservationOpsPanelProps = {
   r: ReservationRow;
@@ -63,6 +63,9 @@ export function ReservationOpsPanel({
   chargeServiceSplit,
 }: ReservationOpsPanelProps) {
   const [fullCashReceivedEuros, setFullCashReceivedEuros] = useState("");
+  const [depositPayLines, setDepositPayLines] = useState<PayLine[]>([
+    { amountEuros: "", method: "CASH", receivedEuros: "" },
+  ]);
   const pendingService = Number(r.pendingServiceCents ?? 0);
   const pendingDeposit = Number(r.pendingDepositCents ?? 0);
   const paidDepositCents = Number(r.paidDepositCents ?? 0);
@@ -70,6 +73,63 @@ export function ReservationOpsPanel({
   const depositHeld = r.depositHeld === true;
   const depositHoldReason = r.depositHoldReason ?? null;
   const canRefundDeposit = refundableDepositCents > 0 && !depositHeld;
+
+  function addDepositPayLine() {
+    setDepositPayLines((prev) => [
+      ...prev,
+      { amountEuros: "", method: "CARD", receivedEuros: "" },
+    ]);
+  }
+
+  function removeDepositPayLine(idx: number) {
+    setDepositPayLines((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function updateDepositPayLine(idx: number, patch: Partial<PayLine>) {
+    setDepositPayLines((prev) => prev.map((line, i) => (i === idx ? { ...line, ...patch } : line)));
+  }
+
+  async function chargeDepositSplit() {
+    setError(null);
+
+    const lines = depositPayLines
+      .map((line) => ({
+        ...line,
+        amountCents: centsFromEuros(line.amountEuros),
+      }))
+      .filter((line) => line.amountCents > 0);
+
+    if (lines.length === 0) {
+      setError("Añade al menos un importe de fianza");
+      return;
+    }
+
+    const sumCents = lines.reduce((acc, line) => acc + line.amountCents, 0);
+    if (sumCents > pendingDeposit) {
+      setError(`La suma (${euros(sumCents)}) supera la fianza pendiente (${euros(pendingDeposit)}).`);
+      return;
+    }
+
+    try {
+      for (const line of lines) {
+        await createPayment(
+          {
+            reservationId: r.id,
+            amountCents: line.amountCents,
+            method: line.method,
+            origin: "STORE",
+            isDeposit: true,
+          },
+          { reload: false }
+        );
+      }
+
+      setDepositPayLines([{ amountEuros: "", method: "CASH", receivedEuros: "" }]);
+      await reloadDashboard();
+    } catch (e: unknown) {
+      setError(errorMessage(e, "Error cobrando fianza"));
+    }
+  }
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
@@ -84,24 +144,6 @@ export function ReservationOpsPanel({
           <option value="BIZUM">Bizum</option>
           <option value="TRANSFER">Transferencia</option>
         </select>
-
-        {pendingDeposit > 0 ? (
-          <button
-            type="button"
-            onClick={() =>
-              createPayment({
-                reservationId: r.id,
-                amountCents: pendingDeposit,
-                method,
-                origin: "STORE",
-                isDeposit: true,
-              })
-            }
-            style={{ padding: "6px 10px" }}
-          >
-            Cobrar fianza
-          </button>
-        ) : null}
 
         <button
           type="button"
@@ -135,6 +177,120 @@ export function ReservationOpsPanel({
               Marcada por plataforma. No se puede devolver desde tienda.
             </div>
           )}
+        </div>
+      ) : null}
+
+      {pendingDeposit > 0 ? (
+        <div
+          style={{
+            width: "100%",
+            marginTop: 6,
+            padding: 10,
+            border: "1px solid #e5e7eb",
+            borderRadius: 10,
+          }}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>
+            Cobrar fianza (puede ser mixto)
+            {isCashClosed ? (
+              <span style={{ marginLeft: 8, fontWeight: 700, opacity: 0.8 }}>· Caja cerrada</span>
+            ) : null}
+          </div>
+
+          <div style={{ display: "grid", gap: 8 }}>
+            {depositPayLines.map((line, idx) => (
+              <div
+                key={`deposit-${idx}`}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "140px 160px minmax(180px, 220px) 1fr",
+                  gap: 8,
+                  alignItems: "center",
+                }}
+              >
+                <select
+                  value={line.method}
+                  disabled={isCashClosed}
+                  onChange={(e) => updateDepositPayLine(idx, { method: e.target.value as PayMethod })}
+                  style={{ padding: 10, cursor: isCashClosed ? "not-allowed" : "pointer" }}
+                >
+                  <option value="CASH">Efectivo</option>
+                  <option value="CARD">Tarjeta</option>
+                  <option value="BIZUM">Bizum</option>
+                  <option value="TRANSFER">Transferencia</option>
+                </select>
+
+                <input
+                  value={line.amountEuros}
+                  disabled={isCashClosed}
+                  onChange={(e) => updateDepositPayLine(idx, { amountEuros: e.target.value })}
+                  placeholder="Importe EUR"
+                  style={{
+                    padding: 10,
+                    textAlign: "right",
+                    fontWeight: 700,
+                    cursor: isCashClosed ? "not-allowed" : "text",
+                    background: isCashClosed ? "#f3f4f6" : "white",
+                  }}
+                />
+
+                {line.method === "CASH" ? (
+                  <CashChangeHelper
+                    amountEuros={line.amountEuros}
+                    receivedEuros={line.receivedEuros ?? ""}
+                    onReceivedEurosChange={(value) => updateDepositPayLine(idx, { receivedEuros: value })}
+                  />
+                ) : (
+                  <div />
+                )}
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                  {depositPayLines.length > 1 ? (
+                    <button
+                      type="button"
+                      disabled={isCashClosed}
+                      onClick={() => removeDepositPayLine(idx)}
+                      style={{
+                        padding: "8px 12px",
+                        opacity: isCashClosed ? 0.6 : 1,
+                        cursor: isCashClosed ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      Quitar
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 10 }}>
+            <button
+              type="button"
+              disabled={isCashClosed}
+              onClick={addDepositPayLine}
+              style={{
+                padding: "8px 12px",
+                opacity: isCashClosed ? 0.6 : 1,
+                cursor: isCashClosed ? "not-allowed" : "pointer",
+              }}
+            >
+              + Añadir pago
+            </button>
+            <button
+              type="button"
+              disabled={isCashClosed}
+              onClick={() => void chargeDepositSplit()}
+              style={{
+                padding: "10px 14px",
+                fontWeight: 800,
+                opacity: isCashClosed ? 0.6 : 1,
+                cursor: isCashClosed ? "not-allowed" : "pointer",
+              }}
+            >
+              {isCashClosed ? "Caja cerrada" : "Cobrar fianza"}
+            </button>
+          </div>
         </div>
       ) : null}
 

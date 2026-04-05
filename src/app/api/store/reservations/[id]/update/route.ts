@@ -7,6 +7,8 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { computeAutoDiscountDetail } from "@/lib/discounts";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
+import { ReservationStatus } from "@prisma/client";
+import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import type { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -56,6 +58,66 @@ async function findVigentePrice(tx: PriceReader, params: { serviceId: string; op
 function capManual30(totalBeforeDiscountsCents: number, manualDiscountCents: number) {
   const maxManual = Math.floor((totalBeforeDiscountsCents * 30) / 100);
   return Math.max(0, Math.min(Math.max(0, manualDiscountCents || 0), maxManual));
+}
+
+async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: string) {
+  const reservation = await tx.reservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      id: true,
+      quantity: true,
+      isLicense: true,
+      service: { select: { category: true } },
+      items: {
+        select: {
+          quantity: true,
+          isExtra: true,
+          service: { select: { category: true } },
+        },
+      },
+      contracts: {
+        select: { unitIndex: true, status: true },
+      },
+    },
+  });
+
+  if (!reservation) throw new Error("Reserva no existe");
+
+  const requiredUnits = computeRequiredContractUnits({
+    quantity: reservation.quantity ?? 0,
+    isLicense: Boolean(reservation.isLicense),
+    serviceCategory: reservation.service?.category ?? null,
+    items: reservation.items ?? [],
+  });
+
+  if (requiredUnits <= 0) return { requiredUnits: 0, readyCount: 0 };
+
+  const existing = new Set<number>((reservation.contracts ?? []).map((contract) => Number(contract.unitIndex)));
+  const toCreate: Array<{ reservationId: string; unitIndex: number }> = [];
+  for (let i = 1; i <= requiredUnits; i++) {
+    if (!existing.has(i)) toCreate.push({ reservationId, unitIndex: i });
+  }
+
+  if (toCreate.length > 0) {
+    await tx.reservationContract.createMany({
+      data: toCreate,
+      skipDuplicates: true,
+    });
+  }
+
+  const contracts = await tx.reservationContract.findMany({
+    where: { reservationId },
+    select: { unitIndex: true, status: true },
+  });
+
+  const readyCount = contracts.filter(
+    (contract) =>
+      Number(contract.unitIndex) >= 1 &&
+      Number(contract.unitIndex) <= requiredUnits &&
+      (contract.status === "READY" || contract.status === "SIGNED")
+  ).length;
+
+  return { requiredUnits, readyCount };
 }
 
 // mismo contrato que formalize
@@ -142,6 +204,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     where: { id },
     select: {
       id: true,
+      status: true,
       serviceId: true,
       optionId: true,
       quantity: true,
@@ -171,6 +234,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     },
   });
   if (!existing) return new NextResponse("Reserva no existe", { status: 404 });
+  if (existing.status === ReservationStatus.CANCELED || existing.status === ReservationStatus.COMPLETED) {
+    return new NextResponse("La reserva cancelada o completada no se puede editar.", { status: 409 });
+  }
 
 const hasProItems = Array.isArray(b.items) && b.items.length > 0;
 
@@ -346,13 +412,16 @@ if (hasProItems) {
 
     // Compat main: primer item
     const main = lineCreates[0];
+    const totalMainQuantity = lineCreates.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0);
 
     const data: Prisma.ReservationUncheckedUpdateInput = {
       pax: b.pax,
+      quantity: totalMainQuantity,
       isLicense: b.isLicense,
       channelId: b.channelId ?? null,
       activityDate,
       scheduledTime,
+      companionsCount: Number(b.companionsCount ?? 0),
       depositCents,
 
       serviceId: main.serviceId,
@@ -378,6 +447,7 @@ if (hasProItems) {
     }
 
     await tx.reservation.update({ where: { id }, data, select: { id: true } });
+    await ensureContractsTx(tx, id);
 
     return { id };
   });
@@ -475,10 +545,13 @@ if (hasProItems) {
       data.licenseNumber = null;
     }
 
-    await prisma.reservation.update({
-      where: { id },
-      data,
-      select: { id: true },
+    await prisma.$transaction(async (tx) => {
+      await tx.reservation.update({
+        where: { id },
+        data,
+        select: { id: true },
+      });
+      await ensureContractsTx(tx, id);
     });
 
     return NextResponse.json({ ok: true, id });
@@ -635,6 +708,7 @@ if (hasProItems) {
       },
       select: { id: true },
     });
+    await ensureContractsTx(tx, id);
 
     return { id };
   });

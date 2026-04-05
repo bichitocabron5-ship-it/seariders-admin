@@ -208,6 +208,28 @@ export function ContractsSection({
         onRefresh={() => void onRefresh()}
       />
 
+      {requiredUnits > 0 && pendingCount > 0 ? (
+        <div
+          style={{
+            padding: 14,
+            borderRadius: 14,
+            border: "1px solid #fed7aa",
+            background: "#fff7ed",
+            color: "#9a3412",
+            display: "grid",
+            gap: 4,
+          }}
+        >
+          <div style={{ fontWeight: 900 }}>
+            Faltan contratos por completar: {readyCount}/{requiredUnits}
+          </div>
+          <div style={{ fontSize: 13 }}>
+            La reserva requiere {requiredUnits} contrato{requiredUnits === 1 ? "" : "s"} y todavía faltan {pendingCount}.
+            Si has subido la cantidad o añadido otra unidad, revisa y completa los contratos nuevos antes de formalizar.
+          </div>
+        </div>
+      ) : null}
+
       {contracts.map((c) => (
         <ContractCard
           key={c.id}

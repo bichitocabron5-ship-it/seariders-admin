@@ -35,7 +35,7 @@ type StoreMetricCardProps = {
 export const storeStyles = {
   shell: {
     ...opsStyles.pageShell,
-    width: "min(1240px, 100%)",
+    width: "min(1560px, 100%)",
     gap: 18,
   } as React.CSSProperties,
 

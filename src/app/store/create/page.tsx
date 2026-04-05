@@ -182,13 +182,13 @@ function StoreCreatePageInner() {
   });
 
   const {
-  contractsLoading,
+    contractsLoading,
   contractsError,
   contracts,
   requiredUnits,
   readyCount,
-  refreshContracts,
-} = useContractsState({
+    refreshContracts,
+  } = useContractsState({
   isMigrateMode,
   prefillReservationId,
   isHistorical: Boolean(migrateFlags?.isHistorical),
