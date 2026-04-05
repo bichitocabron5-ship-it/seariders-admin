@@ -14,8 +14,8 @@ const CreateBody = z.object({
   code: z.string().trim().min(1).max(50).nullable().optional(), // null/undefined = automático
   isActive: z.boolean().default(true),
 
-  kind: z.enum(["PERCENT", "FIXED"]),
-  value: z.number().int().min(0).max(10_000_000),
+  kind: z.enum(["PERCENT", "FIXED", "FINAL_PRICE"]),
+  value: z.number().min(0).max(10_000_000),
 
   scope: z.enum(["ALL", "CATEGORY", "SERVICE", "OPTION"]).default("ALL"),
   category: z.string().trim().min(1).max(50).nullable().optional(),
@@ -112,6 +112,15 @@ export async function POST(req: Request) {
   if (data.scope === "OPTION" && !data.optionId) {
     return new NextResponse("Si scope=OPTION, optionId es obligatorio", { status: 400 });
   }
+  if (data.scope === "OPTION" && !code) {
+    return new NextResponse("Las reglas OPTION deben llevar código de promoción", { status: 400 });
+  }
+  if (data.scope === "OPTION" && data.kind !== "FINAL_PRICE") {
+    return new NextResponse("Las reglas OPTION deben usar PRECIO FINAL", { status: 400 });
+  }
+  if (data.scope === "SERVICE" && data.kind !== "PERCENT") {
+    return new NextResponse("Las reglas SERVICE deben usar PORCENTAJE", { status: 400 });
+  }
 
   // Si hay horario parcial, exigimos ambos (más claro)
   const hasStart = data.startTimeMin != null;
@@ -130,7 +139,7 @@ export async function POST(req: Request) {
     return new NextResponse("requiresCountry y excludeCountry no pueden ser iguales", { status: 400 });
   }
 
-  // value: percent 0..100
+  // value: percent 0..100 (admite decimales)
   if (data.kind === "PERCENT" && (data.value < 0 || data.value > 100)) {
     return new NextResponse("PERCENT debe ser 0..100", { status: 400 });
   }

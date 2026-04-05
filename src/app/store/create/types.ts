@@ -15,6 +15,7 @@ export type Option = {
 export type Channel = {
   id: string;
   name: string;
+  allowsPromotions?: boolean | null;
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;
 };
@@ -25,6 +26,17 @@ export type CartItem = {
   optionId: string;
   quantity: number;
   pax: number;
+  applyPromo?: boolean;
+  promoCode?: string | null;
+  availablePromos?: DiscountPromoChoice[];
+};
+
+export type DiscountPromoChoice = {
+  code: string | null;
+  name: string;
+  kind: "FIXED" | "PERCENT";
+  value: number;
+  discountCents: number;
 };
 
 export type CustomerSearchRow = {
@@ -173,6 +185,8 @@ export type DiscountPreview = {
   autoDiscountCents: number;
   finalTotalCents: number;
   reason?: string | null;
+  availablePromos?: DiscountPromoChoice[];
+  appliedRule?: { id: string; name: string; code: string | null } | null;
 };
 
 export type PackPreviewItem = {

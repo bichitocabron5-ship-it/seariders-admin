@@ -3,6 +3,7 @@ type SubmitCartItem = {
   optionId: string;
   quantity: number;
   pax: number;
+  promoCode?: string | null;
 };
 
 function normTrim(v: unknown) {
@@ -25,6 +26,7 @@ export function buildEditUpdateBody(args: {
   quantity: number;
   companions: number;
   cartItems: SubmitCartItem[];
+  singlePromoCode?: string | null;
   customerPhone: string;
   customerEmail: string;
   customerCountry: string;
@@ -50,14 +52,19 @@ export function buildEditUpdateBody(args: {
     companionsCount: Number(args.companions) || 0,
   };
 
-  if (args.cartItems.length > 0) {
-    body.items = args.cartItems.map((ci) => ({
-      serviceId: ci.serviceId,
-      optionId: ci.optionId,
-      quantity: Number(ci.quantity),
-      pax: Number(ci.pax),
-    }));
-  }
+  body.items = (args.cartItems.length > 0 ? args.cartItems : [{
+    serviceId: args.serviceId,
+    optionId: args.optionId,
+    quantity: Number(args.quantity),
+    pax: Number(args.pax),
+    promoCode: args.singlePromoCode ?? null,
+  }]).map((ci) => ({
+    serviceId: ci.serviceId,
+    optionId: ci.optionId,
+    quantity: Number(ci.quantity),
+    pax: Number(ci.pax),
+    promoCode: ci.promoCode ?? null,
+  }));
 
   putIfNonEmpty(body, "customerPhone", args.customerPhone);
   putIfNonEmpty(body, "customerEmail", args.customerEmail);
@@ -122,20 +129,23 @@ export function buildItemsToSend(args: {
   optionId: string;
   quantity: number;
   pax: number;
+  promoCode?: string | null;
 }) {
   return !args.isPackMode && args.cartItems.length > 0
     ? args.cartItems.map((it) => ({
-        serviceId: it.serviceId,
-        optionId: it.optionId,
-        quantity: Number(it.quantity),
-        pax: Number(it.pax),
-      }))
+      serviceId: it.serviceId,
+      optionId: it.optionId,
+      quantity: Number(it.quantity),
+      pax: Number(it.pax),
+      promoCode: it.promoCode ?? null,
+    }))
     : [
         {
           serviceId: args.serviceId,
           optionId: args.optionId,
           quantity: Number(args.quantity),
           pax: Number(args.pax),
+          promoCode: args.promoCode ?? null,
         },
       ];
 }
@@ -162,7 +172,7 @@ export function buildCreateBody(args: {
   companions: number;
   manualDiscountCents: number;
   manualDiscountReason: string;
-  itemsToSend: Array<{ serviceId: string; optionId: string; quantity: number; pax: number }>;
+  itemsToSend: Array<{ serviceId: string; optionId: string; quantity: number; pax: number; promoCode?: string | null }>;
 }) {
   return {
     customerName: args.customerName.trim(),

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { opsStyles } from "@/components/ops-ui";
 
-type DiscountKind = "FIXED" | "PERCENT";
+type DiscountKind = "FIXED" | "PERCENT" | "FINAL_PRICE";
 type DiscountScope = "ALL" | "CATEGORY" | "SERVICE" | "OPTION";
 type Service = { id: string; code?: string | null; name?: string | null; category?: string | null };
 type Option = { id: string; code?: string | null; serviceId: string; durationMinutes: number; paxMax: number; contractedMinutes: number };
@@ -15,7 +15,7 @@ type RuleRow = {
 };
 type RuleDraft = {
   name: string; code: string; isActive: boolean; kind: DiscountKind; value: number; scope: DiscountScope; category: string;
-  serviceId: string; optionId: string; requiresCountry: string; excludeCountry: string; startHHMM: string; endHHMM: string;
+  serviceId: string; optionId: string; requiresCountry: string; excludeCountry: string; startHHMM: string; endHHMM: string; validFrom: string; validTo: string;
 };
 
 const inputStyle: CSSProperties = { ...opsStyles.field, padding: 10, borderRadius: 10 };
@@ -33,10 +33,10 @@ const errorStyle: CSSProperties = { padding: 10, borderRadius: 12, border: "1px 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const minToHHMM = (m: number | null) => (m == null ? "" : `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`);
 function hhmmToMin(s: string) { const [hhStr = "", mmStr = ""] = (s || "").trim().split(":"); const hh = Number(hhStr); const mm = Number(mmStr); return !s.trim() ? null : (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59 ? null : hh * 60 + mm); }
-const fixedValueLabel = (kind: DiscountKind, value: number) => kind === "PERCENT" ? `${value}%` : `${(Number(value || 0) / 100).toFixed(2)} EUR`;
+const fixedValueLabel = (kind: DiscountKind, value: number) => kind === "PERCENT" ? `${Number(value || 0).toFixed(1).replace(/\.0$/, "")}% dto. mensual / servicio` : kind === "FINAL_PRICE" ? `${(Number(value || 0) / 100).toFixed(2)} EUR precio final promo` : `${(Number(value || 0) / 100).toFixed(2)} EUR descuento fijo`;
 const optionLabel = (o: Option) => `${o.durationMinutes} min · máx. ${o.paxMax} pax · contratado ${o.contractedMinutes} min`;
 const serviceLabel = (s?: Service | null) => !s ? "Servicio desconocido" : (s.category ? `${s.code ?? s.name ?? s.id} · ${s.category}` : (s.code ?? s.name ?? s.id));
-const emptyDraft = (): RuleDraft => ({ name: "", code: "", isActive: true, kind: "FIXED", value: 0, scope: "ALL", category: "", serviceId: "", optionId: "", requiresCountry: "", excludeCountry: "", startHHMM: "", endHHMM: "" });
+const emptyDraft = (): RuleDraft => ({ name: "", code: "", isActive: true, kind: "FIXED", value: 0, scope: "ALL", category: "", serviceId: "", optionId: "", requiresCountry: "", excludeCountry: "", startHHMM: "", endHHMM: "", validFrom: "", validTo: "" });
 
 export default function DiscountsPage() {
   const [rules, setRules] = useState<RuleRow[]>([]), [services, setServices] = useState<Service[]>([]), [options, setOptions] = useState<Option[]>([]);
@@ -56,7 +56,7 @@ export default function DiscountsPage() {
       const dRules = await rRules.json(), dCatalog = await rCatalog.json();
       setRules(dRules.rules ?? dRules.rows ?? []); setServices(dCatalog.services ?? []); setOptions(dCatalog.options ?? []);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error cargando descuentos"); setRules([]);
+      setError(e instanceof Error ? e.message : "Error cargando reglas comerciales"); setRules([]);
     } finally { setLoading(false); }
   }
 
@@ -91,7 +91,7 @@ export default function DiscountsPage() {
 
   function startEdit(rule: RuleRow) {
     setEditId(rule.id);
-    setDraft({ name: rule.name ?? "", code: rule.code ?? "", isActive: rule.isActive ?? true, kind: rule.kind, value: rule.value ?? 0, scope: rule.scope, category: rule.category ?? "", serviceId: rule.serviceId ?? "", optionId: rule.optionId ?? "", requiresCountry: rule.requiresCountry ?? "", excludeCountry: rule.excludeCountry ?? "", startHHMM: minToHHMM(rule.startTimeMin), endHHMM: minToHHMM(rule.endTimeMin) });
+    setDraft({ name: rule.name ?? "", code: rule.code ?? "", isActive: rule.isActive ?? true, kind: rule.kind, value: rule.value ?? 0, scope: rule.scope, category: rule.category ?? "", serviceId: rule.serviceId ?? "", optionId: rule.optionId ?? "", requiresCountry: rule.requiresCountry ?? "", excludeCountry: rule.excludeCountry ?? "", startHHMM: minToHHMM(rule.startTimeMin), endHHMM: minToHHMM(rule.endTimeMin), validFrom: (rule.validFrom ?? "").slice(0, 10), validTo: (rule.validTo ?? "").slice(0, 10) });
     setError(null);
   }
   const cancelEdit = () => { setEditId(null); setDraft(null); setError(null); };
@@ -106,6 +106,15 @@ export default function DiscountsPage() {
       if (!draft.serviceId && draft.optionId) { const opt = options.find((o) => o.id === draft.optionId); if (opt) setD({ serviceId: opt.serviceId }); }
     }
   }, [draft, editId, options]);
+  useEffect(() => {
+    if (cScope === "OPTION" && cKind !== "FINAL_PRICE") setCKind("FINAL_PRICE");
+    if (cScope === "SERVICE" && cKind !== "PERCENT") setCKind("PERCENT");
+  }, [cKind, cScope]);
+  useEffect(() => {
+    if (!draft) return;
+    if (draft.scope === "OPTION" && draft.kind !== "FINAL_PRICE") setD({ kind: "FINAL_PRICE" });
+    if (draft.scope === "SERVICE" && draft.kind !== "PERCENT") setD({ kind: "PERCENT" });
+  }, [draft]);
   useEffect(() => {
     if (!editId || !draft || draft.scope !== "OPTION" || !draft.serviceId || !draft.optionId) return;
     const opt = options.find((o) => o.id === draft.optionId); if (opt && opt.serviceId !== draft.serviceId) setD({ optionId: "" });
@@ -126,13 +135,13 @@ export default function DiscountsPage() {
   async function saveEdit(id: string) {
     if (!draft) return;
     setSavingId(id); setError(null);
-    const body = { name: String(draft.name ?? "").trim(), code: String(draft.code ?? "").trim() || null, isActive: !!draft.isActive, kind: draft.kind, value: Number(draft.value ?? 0), scope: draft.scope, category: draft.scope === "CATEGORY" ? String(draft.category ?? "").trim() || null : null, serviceId: draft.scope === "SERVICE" || draft.scope === "OPTION" ? String(draft.serviceId ?? "").trim() || null : null, optionId: draft.scope === "OPTION" ? String(draft.optionId ?? "").trim() || null : null, requiresCountry: String(draft.requiresCountry ?? "").trim() || null, excludeCountry: String(draft.excludeCountry ?? "").trim() || null, startTimeMin: hhmmToMin(String(draft.startHHMM ?? "")), endTimeMin: hhmmToMin(String(draft.endHHMM ?? "")) };
+    const body = { name: String(draft.name ?? "").trim(), code: String(draft.code ?? "").trim() || null, isActive: !!draft.isActive, kind: draft.kind, value: Number(draft.value ?? 0), scope: draft.scope, category: draft.scope === "CATEGORY" ? String(draft.category ?? "").trim() || null : null, serviceId: draft.scope === "SERVICE" || draft.scope === "OPTION" ? String(draft.serviceId ?? "").trim() || null : null, optionId: draft.scope === "OPTION" ? String(draft.optionId ?? "").trim() || null : null, requiresCountry: String(draft.requiresCountry ?? "").trim() || null, excludeCountry: String(draft.excludeCountry ?? "").trim() || null, startTimeMin: hhmmToMin(String(draft.startHHMM ?? "")), endTimeMin: hhmmToMin(String(draft.endHHMM ?? "")), validFrom: draft.validFrom ? new Date(`${draft.validFrom}T00:00:00`).toISOString() : undefined, validTo: draft.validTo ? new Date(`${draft.validTo}T00:00:00`).toISOString() : null };
     try {
       const response = await fetch(`/api/admin/discounts/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!response.ok) throw new Error(await response.text());
       await loadAll(); cancelEdit();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error guardando descuento");
+      setError(e instanceof Error ? e.message : "Error guardando la regla comercial");
     } finally { setSavingId(null); }
   }
 
@@ -141,8 +150,8 @@ export default function DiscountsPage() {
       <section style={heroStyle}>
         <div style={{ display: "grid", gap: 8 }}>
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", color: "#2563eb" }}>Comercial</div>
-          <h1 style={{ ...opsStyles.heroTitle, lineHeight: 1, color: "#0f172a" }}>Descuentos</h1>
-          <p style={{ margin: 0, maxWidth: 760, fontSize: 14, lineHeight: 1.5, color: "#475569" }}>Promociones con importe fijo o porcentaje y ámbito configurable.</p>
+          <h1 style={{ ...opsStyles.heroTitle, lineHeight: 1, color: "#0f172a" }}>Reglas Comerciales</h1>
+          <p style={{ margin: 0, maxWidth: 760, fontSize: 14, lineHeight: 1.5, color: "#475569" }}>Descuento mensual automatico por porcentaje en servicio y promociones por opcion con precio final.</p>
         </div>
         <div style={opsStyles.actionGrid}>
           <Link href="/admin" style={{ ...opsStyles.ghostButton, padding: "10px 12px", border: "1px solid #dbe4ea", color: "#0f172a" }}>Volver a Admin</Link>
@@ -153,13 +162,13 @@ export default function DiscountsPage() {
       {error ? <div style={errorStyle}>{error}</div> : null}
 
       <div style={sectionStyle}>
-        <div style={{ fontWeight: 950 }}>Crear descuento</div>
+        <div style={{ fontWeight: 950 }}>Crear regla comercial</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
           <label style={fieldLabel}>Nombre<input value={cName} onChange={(e) => setCName(e.target.value)} style={inputStyle} /></label>
-          <label style={fieldLabel}>Código<input value={cCode} onChange={(e) => setCCode(e.target.value)} style={inputStyle} /></label>
-          <label style={fieldLabel}>Tipo<select value={cKind} onChange={(e) => setCKind(e.target.value as DiscountKind)} style={inputStyle}><option value="FIXED">FIJO (céntimos)</option><option value="PERCENT">PORCENTAJE (%)</option></select></label>
-          <label style={fieldLabel}>Valor<input type="number" value={Number(cValue || 0)} onChange={(e) => setCValue(Number(e.target.value || 0))} min={0} max={cKind === "PERCENT" ? 100 : 10_000_000} step={1} style={{ ...inputStyle, textAlign: "right", fontWeight: 900 }} /></label>
-          <label style={fieldLabel}>Ámbito<select value={cScope} onChange={(e) => setCScope(e.target.value as DiscountScope)} style={inputStyle}><option value="ALL">ALL</option><option value="CATEGORY">CATEGORY</option><option value="SERVICE">SERVICE</option><option value="OPTION">OPTION</option></select></label>
+          <label style={fieldLabel}>Codigo promo<input value={cCode} onChange={(e) => setCCode(e.target.value)} style={inputStyle} /></label>
+          <label style={fieldLabel}>Tipo de regla<select value={cKind} onChange={(e) => setCKind(e.target.value as DiscountKind)} style={inputStyle} disabled={cScope === "OPTION" || cScope === "SERVICE"}><option value="FINAL_PRICE">PRECIO FINAL (céntimos)</option><option value="PERCENT">DESCUENTO (%)</option><option value="FIXED">DESCUENTO FIJO (céntimos)</option></select></label>
+          <label style={fieldLabel}>Valor comercial<input type="number" value={Number(cValue || 0)} onChange={(e) => setCValue(Number(e.target.value || 0))} min={0} max={cKind === "PERCENT" ? 100 : 10_000_000} step={cKind === "PERCENT" ? 0.1 : 1} style={{ ...inputStyle, textAlign: "right", fontWeight: 900 }} /></label>
+          <label style={fieldLabel}>Aplicacion<select value={cScope} onChange={(e) => setCScope(e.target.value as DiscountScope)} style={inputStyle}><option value="ALL">General</option><option value="CATEGORY">Categoria</option><option value="SERVICE">Servicio</option><option value="OPTION">Opcion</option></select></label>
           <label style={fieldLabel}>Servicio<select value={cServiceId} onChange={(e) => setCServiceId(e.target.value)} disabled={cScope !== "SERVICE" && cScope !== "OPTION"} style={inputStyle}><option value="">Selecciona servicio</option>{services.map((s) => <option key={s.id} value={s.id}>{serviceLabel(s)}</option>)}</select></label>
           <label style={fieldLabel}>Opción<select value={cOptionId} onChange={(e) => setCOptionId(e.target.value)} disabled={cScope !== "OPTION" || !cServiceId} style={inputStyle}><option value="">{cServiceId ? "Selecciona opción" : "Selecciona antes el servicio"}</option>{(cServiceId ? optionsByServiceId.get(cServiceId) ?? [] : []).map((o) => <option key={o.id} value={o.id}>{optionLabel(o)}</option>)}</select></label>
           <label style={fieldLabel}>Categoría<input value={cCategory} onChange={(e) => setCCategory(e.target.value)} disabled={cScope !== "CATEGORY"} style={inputStyle} /></label>
@@ -180,14 +189,14 @@ export default function DiscountsPage() {
         <div style={{ fontWeight: 950 }}>Filtros</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
           <label style={fieldLabel}>Buscar<input value={query} onChange={(e) => setQuery(e.target.value)} style={inputStyle} /></label>
-          <label style={fieldLabel}>Ámbito<select value={scopeFilter} onChange={(e) => setScopeFilter(e.target.value as "" | DiscountScope)} style={inputStyle}><option value="">Todos</option><option value="ALL">ALL</option><option value="CATEGORY">CATEGORY</option><option value="SERVICE">SERVICE</option><option value="OPTION">OPTION</option></select></label>
-          <label style={fieldLabel}>Activo<select value={activeFilter} onChange={(e) => setActiveFilter(e.target.value as "" | "true" | "false")} style={inputStyle}><option value="">Todos</option><option value="true">Sí</option><option value="false">No</option></select></label>
+          <label style={fieldLabel}>Ámbito<select value={scopeFilter} onChange={(e) => setScopeFilter(e.target.value as "" | DiscountScope)} style={inputStyle}><option value="">Todas</option><option value="ALL">General</option><option value="CATEGORY">Categoria</option><option value="SERVICE">Servicio</option><option value="OPTION">Opcion</option></select></label>
+          <label style={fieldLabel}>Activo<select value={activeFilter} onChange={(e) => setActiveFilter(e.target.value as "" | "true" | "false")} style={inputStyle}><option value="">Todas</option><option value="true">Sí</option><option value="false">No</option></select></label>
         </div>
       </div>
 
       <div style={panelStyle}>
         <div style={{ padding: 12, borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ fontWeight: 950 }}>Reglas de descuento</div>
+          <div style={{ fontWeight: 950 }}>Reglas comerciales</div>
           <div style={{ fontWeight: 900, opacity: 0.8 }}>{filteredRules.length}</div>
         </div>
         <div style={{ padding: 12 }}>
@@ -205,21 +214,22 @@ export default function DiscountsPage() {
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
                       <div style={{ fontWeight: 950, fontSize: 16 }}>{rule.name}</div>
                       <div style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #e5e7eb", fontWeight: 900, fontSize: 12, background: rule.isActive ? "#ecfeff" : "#fafafa" }}>{rule.isActive ? "ACTIVA" : "INACTIVA"}</div>
-                      <div style={{ fontSize: 12, opacity: 0.8 }}>{rule.code ? `Código: ${rule.code}` : "Sin código"}</div>
+                      <div style={{ fontSize: 12, opacity: 0.8 }}>{rule.code ? `Codigo promo: ${rule.code}` : "Automatica"}</div>
                     </div>
                     <div style={{ fontWeight: 900 }}>{fixedValueLabel(rule.kind, rule.value)}</div>
                   </div>
-                  <div style={{ fontSize: 12, opacity: 0.85 }}>Ámbito: <b>{scopeLabel}</b></div>
+                  <div style={{ fontSize: 12, opacity: 0.85 }}>Aplicacion: <b>{scopeLabel}</b></div>
                   <div style={{ fontSize: 12, opacity: 0.85 }}>País: <b>{countryLabel || "-"}</b> · Horario: <b>{timeLabel}</b></div>
+                  <div style={{ fontSize: 12, opacity: 0.85 }}>Período: <b>{(rule.validFrom ?? "").slice(0, 10) || "-"}</b> · <b>{(rule.validTo ?? "").slice(0, 10) || "sin fin"}</b></div>
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}><button type="button" onClick={() => startEdit(rule)} style={{ ...lightBtn, border: "1px solid #111" }}>Editar</button></div>
                 </> : <>
-                  <div style={{ fontWeight: 950, fontSize: 16 }}>Editar descuento</div>
+                  <div style={{ fontWeight: 950, fontSize: 16 }}>Editar regla comercial</div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
                     <label style={fieldLabel}>Nombre<input value={draft?.name ?? ""} onChange={(e) => setD({ name: e.target.value })} style={inputStyle} /></label>
-                    <label style={fieldLabel}>Código<input value={draft?.code ?? ""} onChange={(e) => setD({ code: e.target.value })} style={inputStyle} /></label>
-                    <label style={fieldLabel}>Ámbito<select value={draft?.scope ?? "ALL"} onChange={(e) => setD({ scope: e.target.value as DiscountScope })} style={inputStyle}><option value="ALL">ALL</option><option value="CATEGORY">CATEGORY</option><option value="SERVICE">SERVICE</option><option value="OPTION">OPTION</option></select></label>
-                    <label style={fieldLabel}>Tipo<select value={draft?.kind ?? "FIXED"} onChange={(e) => setD({ kind: e.target.value as DiscountKind })} style={inputStyle}><option value="FIXED">FIJO (céntimos)</option><option value="PERCENT">PORCENTAJE (%)</option></select></label>
-                    <label style={fieldLabel}>Valor<input type="number" value={Number(draft?.value ?? 0)} onChange={(e) => setD({ value: Number(e.target.value || 0) })} min={0} max={draft?.kind === "PERCENT" ? 100 : 10_000_000} step={1} style={{ ...inputStyle, textAlign: "right", fontWeight: 900 }} /></label>
+                    <label style={fieldLabel}>Codigo promo<input value={draft?.code ?? ""} onChange={(e) => setD({ code: e.target.value })} style={inputStyle} /></label>
+                    <label style={fieldLabel}>Aplicacion<select value={draft?.scope ?? "ALL"} onChange={(e) => setD({ scope: e.target.value as DiscountScope })} style={inputStyle}><option value="ALL">General</option><option value="CATEGORY">Categoria</option><option value="SERVICE">Servicio</option><option value="OPTION">Opcion</option></select></label>
+                    <label style={fieldLabel}>Tipo de regla<select value={draft?.kind ?? "FIXED"} onChange={(e) => setD({ kind: e.target.value as DiscountKind })} style={inputStyle} disabled={draft?.scope === "OPTION" || draft?.scope === "SERVICE"}><option value="FINAL_PRICE">PRECIO FINAL (céntimos)</option><option value="PERCENT">DESCUENTO (%)</option><option value="FIXED">DESCUENTO FIJO (céntimos)</option></select></label>
+                    <label style={fieldLabel}>Valor comercial<input type="number" value={Number(draft?.value ?? 0)} onChange={(e) => setD({ value: Number(e.target.value || 0) })} min={0} max={draft?.kind === "PERCENT" ? 100 : 10_000_000} step={draft?.kind === "PERCENT" ? 0.1 : 1} style={{ ...inputStyle, textAlign: "right", fontWeight: 900 }} /></label>
                     <label style={fieldLabel}>Servicio<select value={draft?.serviceId ?? ""} onChange={(e) => setD({ serviceId: e.target.value })} disabled={draft?.scope !== "SERVICE" && draft?.scope !== "OPTION"} style={inputStyle}><option value="">Selecciona servicio</option>{services.map((s) => <option key={s.id} value={s.id}>{serviceLabel(s)}</option>)}</select></label>
                     <label style={fieldLabel}>Opción<select value={draft?.optionId ?? ""} onChange={(e) => setD({ optionId: e.target.value })} disabled={draft?.scope !== "OPTION" || !draft?.serviceId} style={inputStyle}><option value="">{draft?.serviceId ? "Selecciona opción" : "Selecciona antes el servicio"}</option>{(draft?.serviceId ? optionsByServiceId.get(draft.serviceId) ?? [] : []).map((o) => <option key={o.id} value={o.id}>{optionLabel(o)}</option>)}</select></label>
                     <label style={fieldLabel}>Categoría<input value={draft?.category ?? ""} onChange={(e) => setD({ category: e.target.value })} disabled={draft?.scope !== "CATEGORY"} style={inputStyle} /></label>
@@ -227,6 +237,8 @@ export default function DiscountsPage() {
                     <label style={fieldLabel}>País excluido<input value={draft?.excludeCountry ?? ""} onChange={(e) => setD({ excludeCountry: e.target.value.toUpperCase() })} style={inputStyle} /></label>
                     <label style={fieldLabel}>Inicio (HH:MM)<input value={draft?.startHHMM ?? ""} onChange={(e) => setD({ startHHMM: e.target.value })} style={inputStyle} /></label>
                     <label style={fieldLabel}>Fin (HH:MM)<input value={draft?.endHHMM ?? ""} onChange={(e) => setD({ endHHMM: e.target.value })} style={inputStyle} /></label>
+                    <label style={fieldLabel}>Válido desde<input type="date" value={draft?.validFrom ?? ""} onChange={(e) => setD({ validFrom: e.target.value })} style={inputStyle} /></label>
+                    <label style={fieldLabel}>Válido hasta<input type="date" value={draft?.validTo ?? ""} onChange={(e) => setD({ validTo: e.target.value })} style={inputStyle} /></label>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                     <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}><input type="checkbox" checked={Boolean(draft?.isActive)} onChange={(e) => setD({ isActive: e.target.checked })} />Activo</label>

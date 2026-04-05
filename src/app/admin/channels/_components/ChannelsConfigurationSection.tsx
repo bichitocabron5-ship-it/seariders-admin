@@ -7,6 +7,7 @@ type Channel = {
   id: string;
   name: string;
   isActive: boolean;
+  allowsPromotions: boolean;
   commissionEnabled: boolean;
   commissionBps: number | null;
 };
@@ -70,6 +71,9 @@ export default function ChannelsConfigurationSection({
                       <span style={{ ...statusPill, ...(channel.commissionEnabled ? statusOn : statusOff) }}>
                         {channel.commissionEnabled ? "Comisión ON" : "Comisión OFF"}
                       </span>
+                      <span style={{ ...statusPill, ...(channel.allowsPromotions ? statusOn : statusOff) }}>
+                        {channel.allowsPromotions ? "Promos ON" : "Promos OFF"}
+                      </span>
                     </div>
                     <div style={{ fontSize: 12, color: "#64748b" }}>
                       Comisión base y reglas específicas por servicio.
@@ -82,6 +86,18 @@ export default function ChannelsConfigurationSection({
                 </div>
 
                 <div style={controlsGrid}>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+                    <input
+                      type="checkbox"
+                      checked={channel.allowsPromotions}
+                      disabled={busy}
+                      onChange={(e) => {
+                        void patchChannel(channel.id, { allowsPromotions: e.target.checked });
+                      }}
+                    />
+                    Permite promociones
+                  </label>
+
                   <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
                     <input
                       type="checkbox"

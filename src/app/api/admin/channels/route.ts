@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 const CreateBody = z.object({
   name: z.string().trim().min(1).max(120),
   isActive: z.boolean().optional(),
+  allowsPromotions: z.boolean().optional(),
   commissionEnabled: z.boolean().optional(),
   commissionBps: z.number().int().min(0).max(10000).optional(),
 });
@@ -31,7 +32,7 @@ export async function GET() {
 
   const channels = await prisma.channel.findMany({
     orderBy: { name: "asc" },
-    select: { id: true, name: true, isActive: true, commissionEnabled: true, commissionBps: true },
+    select: { id: true, name: true, isActive: true, allowsPromotions: true, commissionEnabled: true, commissionBps: true },
   });
 
   return NextResponse.json({ channels });
@@ -54,10 +55,11 @@ export async function POST(req: Request) {
       data: {
         name: parsed.data.name,
         isActive: parsed.data.isActive ?? true,
+        allowsPromotions: parsed.data.allowsPromotions ?? false,
         commissionEnabled: parsed.data.commissionEnabled ?? false,
         commissionBps: parsed.data.commissionEnabled ? (parsed.data.commissionBps ?? 0) : 0,
       },
-      select: { id: true, name: true, isActive: true, commissionEnabled: true, commissionBps: true },
+      select: { id: true, name: true, isActive: true, allowsPromotions: true, commissionEnabled: true, commissionBps: true },
     });
 
     return NextResponse.json({ channel });

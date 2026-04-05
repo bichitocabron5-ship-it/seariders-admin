@@ -66,6 +66,14 @@ const ItemBody = z.object({
   optionId: z.string().min(1),
   quantity: z.number().int().min(1).max(99),
   pax: z.number().int().min(1).max(50),
+  promoCode: z.preprocess(
+    (v) => {
+      if (v == null) return null;
+      const t = String(v).trim().toUpperCase();
+      return t.length ? t : null;
+    },
+    z.string().min(1).max(50).nullable().optional()
+  ),
 });
 
 const Body = z.object({
@@ -232,6 +240,7 @@ if (hasProItems) {
       optionId: string;
       quantity: number;
       pax: number;
+      promoCode: string | null;
       servicePriceId: string;
       unitPriceCents: number;
       totalPriceCents: number;
@@ -260,6 +269,7 @@ if (hasProItems) {
         optionId: it.optionId,
         quantity: qty,
         pax: Math.max(1, Number(it.pax || b.pax)),
+        promoCode: String(it.promoCode ?? "").trim().toUpperCase() || null,
         servicePriceId: price.id,
         unitPriceCents,
         totalPriceCents: lineTotal,
@@ -298,6 +308,11 @@ if (hasProItems) {
     const totalBeforeDiscounts = serviceSubtotal + extrasTotal;
 
     // Auto-discount por item (recomendado)
+    const effectiveChannelId = b.channelId !== undefined ? b.channelId : existing.channelId;
+    const channel = effectiveChannelId
+      ? await prisma.channel.findUnique({ where: { id: effectiveChannelId }, select: { allowsPromotions: true } })
+      : null;
+    const promotionsEnabled = channel ? Boolean(channel.allowsPromotions) : true;
     const country = normalizeOptionalString(b.customerCountry) ?? existingPack.customerCountry ?? "ES";
 
     let autoDiscountCents = 0;
@@ -311,8 +326,9 @@ if (hasProItems) {
           isExtra: false,
           lineBaseCents: l.totalPriceCents,
         },
-        promoCode: null,
+        promoCode: promotionsEnabled ? (l.promoCode ?? null) : null,
         customerCountry: country,
+        promotionsEnabled,
       });
       autoDiscountCents += Number(detail.discountCents ?? 0);
     }
@@ -346,6 +362,10 @@ if (hasProItems) {
       autoDiscountCents,
       manualDiscountCents,
       manualDiscountReason: b.manualDiscountReason ?? null,
+      promoCode: promotionsEnabled ? (() => {
+        const promoCodes = Array.from(new Set(lineCreates.map((line) => line.promoCode).filter(Boolean)));
+        return promoCodes.length === 1 ? promoCodes[0] : null;
+      })() : null,
       totalPriceCents: finalTotalCents,
     };
 
@@ -524,6 +544,11 @@ if (hasProItems) {
   const depositCents = depositPerUnit * Number(b.quantity);
 
   const result = await prisma.$transaction(async (tx) => {
+    const effectiveChannelId = b.channelId !== undefined ? b.channelId : existing.channelId;
+    const channel = effectiveChannelId
+      ? await tx.channel.findUnique({ where: { id: effectiveChannelId }, select: { allowsPromotions: true } })
+      : null;
+    const promotionsEnabled = channel ? Boolean(channel.allowsPromotions) : true;
     const data: Prisma.ReservationUncheckedUpdateInput = {
       serviceId: svc.id,
       optionId: opt.id,
@@ -593,6 +618,7 @@ if (hasProItems) {
       },
       promoCode: null,
       customerCountry: customerCountry === undefined ? existing.customerCountry : customerCountry,
+      promotionsEnabled,
     });
 
     const autoDiscountCents = Number(detail.discountCents ?? 0);

@@ -125,7 +125,7 @@ export async function GET(req: Request) {
 
     prisma.channel.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, commissionEnabled: true, commissionBps: true },
+      select: { id: true, name: true, allowsPromotions: true, commissionEnabled: true, commissionBps: true },
       orderBy: { name: "asc" },
     }),
   ]);

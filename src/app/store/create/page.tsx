@@ -98,6 +98,9 @@ function StoreCreatePageInner() {
 
   const [manualDiscountEuros, setManualDiscountEuros] = useState<number>(0);
   const [manualDiscountReason, setManualDiscountReason] = useState<string>("");
+  const [selectedPromoCode, setSelectedPromoCode] = useState("");
+  const [applyPromo, setApplyPromo] = useState(false);
+  const [cartDiscountPreviews, setCartDiscountPreviews] = useState<Record<string, { baseTotalCents: number; autoDiscountCents: number; finalTotalCents: number }>>({});
 
   const applyPrefillReservation = useCallback(
     (res: {
@@ -393,10 +396,82 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     baseTotalCents,
     serviceId,
     optionId,
+    channelId,
     quantity,
     pax,
     customerCountry,
+    promoCode: applyPromo ? selectedPromoCode || null : null,
   });
+
+  useEffect(() => {
+    const availableCodes = new Set((discountPreview?.availablePromos ?? []).map((promo) => String(promo.code ?? "")));
+    if (selectedPromoCode && !availableCodes.has(selectedPromoCode)) {
+      setSelectedPromoCode("");
+      setApplyPromo(false);
+    }
+  }, [discountPreview?.availablePromos, selectedPromoCode]);
+
+  const selectedChannel = useMemo(
+    () => channels.find((ch) => ch.id === channelId) ?? null,
+    [channels, channelId]
+  );
+
+  useEffect(() => {
+    if (selectedChannel?.allowsPromotions === false) {
+      setApplyPromo(false);
+      setSelectedPromoCode("");
+    }
+  }, [selectedChannel?.allowsPromotions]);
+
+  useEffect(() => {
+    if (cartItems.length === 0 || isEditMode || isMigrateMode) {
+      setCartDiscountPreviews({});
+      return;
+    }
+
+    let active = true;
+    void (async () => {
+      const nextEntries = await Promise.all(
+        cartItems.map(async (item) => {
+          try {
+            const res = await fetch("/api/store/discounts/preview", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                serviceId: item.serviceId,
+                optionId: item.optionId,
+                channelId: channelId || null,
+                quantity: item.quantity,
+                pax: item.pax,
+                customerCountry: (customerCountry || "ES").trim().toUpperCase(),
+                promoCode: item.applyPromo ? item.promoCode ?? null : null,
+              }),
+            });
+            if (!res.ok) return [item.id, null] as const;
+            const data = await res.json();
+            return [item.id, {
+              baseTotalCents: Number(data.baseTotalCents ?? 0),
+              autoDiscountCents: Number(data.autoDiscountCents ?? 0),
+              finalTotalCents: Number(data.finalTotalCents ?? 0),
+            }] as const;
+          } catch {
+            return [item.id, null] as const;
+          }
+        })
+      );
+
+      if (!active) return;
+      const next: Record<string, { baseTotalCents: number; autoDiscountCents: number; finalTotalCents: number }> = {};
+      for (const [id, value] of nextEntries) {
+        if (value) next[id] = value;
+      }
+      setCartDiscountPreviews(next);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [cartItems, channelId, customerCountry, isEditMode, isMigrateMode]);
 
 
   useEffect(() => {
@@ -495,15 +570,15 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   const useCart = cartItems.length > 0;
   
   const shownBaseCents = useCart
-  ? cartSubtotalCents
+  ? (cartItems.reduce((sum, item) => sum + Number(cartDiscountPreviews[item.id]?.baseTotalCents ?? 0), 0) || cartSubtotalCents)
   : (discountPreview?.baseTotalCents ?? (isMigrateMode ? Number(prefillPricing?.basePriceCents ?? baseTotalCents) : baseTotalCents));
 
   const shownDiscountCents = useCart
-    ? 0
+    ? cartItems.reduce((sum, item) => sum + Number(cartDiscountPreviews[item.id]?.autoDiscountCents ?? 0), 0)
     : (discountPreview?.autoDiscountCents ?? (isMigrateMode ? Number((prefillPricing?.manualDiscountCents ?? 0) + (prefillPricing?.autoDiscountCents ?? 0)) : 0));
 
   const shownFinalCents = useCart
-    ? cartSubtotalCents
+    ? (cartItems.reduce((sum, item) => sum + Number(cartDiscountPreviews[item.id]?.finalTotalCents ?? 0), 0) || cartSubtotalCents)
     : (discountPreview?.finalTotalCents ?? (isMigrateMode ? Number(prefillPricing?.totalPriceCents ?? Math.max(0, shownBaseCents - shownDiscountCents)) : Math.max(0, shownBaseCents - shownDiscountCents)));
 
   const shownReason = discountPreview?.reason ?? (isMigrateMode && shownDiscountCents > 0 ? "Precio heredado de la pre-reserva de carpa." : null);
@@ -554,7 +629,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     }
 
     setCartItems((prev) => {
-      const idx = prev.findIndex((x) => x.serviceId === serviceId && x.optionId === optionId);
+      const effectivePromoCode = applyPromo ? selectedPromoCode || null : null;
+      const idx = prev.findIndex((x) => x.serviceId === serviceId && x.optionId === optionId && (x.promoCode ?? null) === effectivePromoCode);
       if (idx >= 0) {
         const copy = prev.slice();
         copy[idx] = { ...copy[idx], quantity: copy[idx].quantity + Number(quantity) };
@@ -569,6 +645,9 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         optionId,
         quantity: Number(quantity),
         pax: Number(pax),
+        applyPromo,
+        promoCode: effectivePromoCode,
+        availablePromos: discountPreview?.availablePromos ?? [],
       },
     ];
   });
@@ -608,6 +687,10 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     setCartItems([]);
   }
 
+  function updateCartPromo(id: string, patch: Partial<Pick<CartItem, "applyPromo" | "promoCode">>) {
+    setCartItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
   async function createReservation(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -645,6 +728,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           licenseSchool,
           licenseType,
           licenseNumber,
+          promoCode: applyPromo ? selectedPromoCode || null : null,
           router,
         });
         return;
@@ -713,6 +797,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         companions,
         manualDiscountCents,
         manualDiscountReason,
+        promoCode: applyPromo ? selectedPromoCode || null : null,
         router,
       });
       return;
@@ -1055,6 +1140,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             onClearCart={clearCart}
             onRemoveFromCart={removeFromCart}
             onUpdateCartItem={updateCartItem}
+            onUpdateCartPromo={updateCartPromo}
             onError={setError}
           />
 
@@ -1071,6 +1157,11 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             shownDiscountCents={shownDiscountCents}
             shownBaseCents={shownBaseCents}
             shownReason={shownReason ?? ""}
+            availablePromos={discountPreview?.availablePromos ?? []}
+            applyPromo={applyPromo}
+            selectedPromoCode={selectedPromoCode}
+            onApplyPromoChange={setApplyPromo}
+            onPromoCodeChange={setSelectedPromoCode}
           />
 
           <SubmitSection

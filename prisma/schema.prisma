@@ -152,6 +152,7 @@ model Channel {
   name                       String                  @unique
   commissionPct              Float                   @default(0)
   isActive                   Boolean                 @default(true)
+  allowsPromotions           Boolean                 @default(false)
   commissionEnabled          Boolean                 @default(false)
   commissionBps              Int                     @default(0)
   commissionAppliesToDeposit Boolean                 @default(false)
@@ -543,7 +544,7 @@ model DiscountRule {
 
   // tipo descuento
   kind  DiscountKind
-  value Int // PERCENT: 0..100, FIXED: cents
+  value Float // PERCENT: 0..100 (admite decimales), FIXED: cents
 
   // alcance (todo / categoría / servicio / opción)
   scope     DiscountScope @default(ALL)
@@ -1985,6 +1986,7 @@ enum IncidentStatus {
 enum DiscountKind {
   PERCENT
   FIXED
+  FINAL_PRICE
 }
 
 enum DiscountScope {

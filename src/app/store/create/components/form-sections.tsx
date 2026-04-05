@@ -112,6 +112,11 @@ export function PricingSection({
   shownDiscountCents,
   shownBaseCents,
   shownReason,
+  availablePromos,
+  applyPromo,
+  selectedPromoCode,
+  onApplyPromoChange,
+  onPromoCodeChange,
 }: {
   discountLoading: boolean;
   shownFinalCents: number;
@@ -125,6 +130,11 @@ export function PricingSection({
   shownDiscountCents: number;
   shownBaseCents: number;
   shownReason: string;
+  availablePromos: Array<{ code: string | null; name: string; discountCents: number }>;
+  applyPromo: boolean;
+  selectedPromoCode: string;
+  onApplyPromoChange: (value: boolean) => void;
+  onPromoCodeChange: (value: string) => void;
 }) {
   return (
     <section style={{ ...cardStyle, display: "grid", gap: 14, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)" }}>
@@ -149,6 +159,23 @@ export function PricingSection({
       </div>
 
       <div style={{ display: "grid", gap: 10 }}>
+        {availablePromos.length > 0 ? (
+          <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: 10 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 800 }}>
+              <input type="checkbox" checked={applyPromo} onChange={(e) => onApplyPromoChange(e.target.checked)} />
+              Aplicar promoción opcional a esta actividad
+            </label>
+            <select value={selectedPromoCode} onChange={(e) => onPromoCodeChange(e.target.value)} disabled={!applyPromo} style={inputStyle}>
+              <option value="">Selecciona promoción</option>
+              {availablePromos.map((promo) => (
+                <option key={promo.code ?? promo.name} value={promo.code ?? ""}>
+                  {promo.name} {promo.code ? `(${promo.code})` : ""} · -{euros(promo.discountCents)}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
         <label style={{ display: "grid", gap: 6 }}>
           <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
             Descuento manual opcional. Máximo {euros(maxManualDiscountCents)} (30%)

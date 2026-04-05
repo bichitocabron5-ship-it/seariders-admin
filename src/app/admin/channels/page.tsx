@@ -10,6 +10,7 @@ type Channel = {
   id: string;
   name: string;
   isActive: boolean;
+  allowsPromotions: boolean;
   commissionEnabled: boolean;
   commissionBps: number | null;
 };
@@ -22,6 +23,7 @@ export default function AdminChannelsPage() {
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newIsActive, setNewIsActive] = useState(true);
+  const [newAllowsPromotions, setNewAllowsPromotions] = useState(false);
   const [newCommissionEnabled, setNewCommissionEnabled] = useState(false);
   const [newCommissionPct, setNewCommissionPct] = useState("0");
 
@@ -99,6 +101,7 @@ export default function AdminChannelsPage() {
         body: JSON.stringify({
           name: trimmedName,
           isActive: newIsActive,
+          allowsPromotions: newAllowsPromotions,
           commissionEnabled: newCommissionEnabled,
           commissionBps,
         }),
@@ -114,6 +117,7 @@ export default function AdminChannelsPage() {
 
       setNewName("");
       setNewIsActive(true);
+      setNewAllowsPromotions(false);
       setNewCommissionEnabled(false);
       setNewCommissionPct("0");
     } catch (e: unknown) {
@@ -165,11 +169,13 @@ export default function AdminChannelsPage() {
       <CreateChannelSection
         newName={newName}
         newIsActive={newIsActive}
+        newAllowsPromotions={newAllowsPromotions}
         newCommissionEnabled={newCommissionEnabled}
         newCommissionPct={newCommissionPct}
         creating={creating}
         setNewName={setNewName}
         setNewIsActive={setNewIsActive}
+        setNewAllowsPromotions={setNewAllowsPromotions}
         setNewCommissionEnabled={setNewCommissionEnabled}
         setNewCommissionPct={setNewCommissionPct}
         createChannel={createChannel}

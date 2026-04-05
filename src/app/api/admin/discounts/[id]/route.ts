@@ -13,8 +13,8 @@ const PatchBody = z.object({
   name: z.string().optional(),
   code: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
-  kind: z.enum(["PERCENT", "FIXED"]).optional(),
-  value: z.number().int().optional(),
+  kind: z.enum(["PERCENT", "FIXED", "FINAL_PRICE"]).optional(),
+  value: z.number().optional(),
 
   scope: z.enum(["ALL", "CATEGORY", "SERVICE", "OPTION"]).optional(),
   category: z.string().nullable().optional(),
@@ -52,16 +52,31 @@ export async function PATCH(
   if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const patch = parsed.data;
+  if (patch.kind === "PERCENT" && patch.value !== undefined && (patch.value < 0 || patch.value > 100)) {
+    return new NextResponse("PERCENT debe ser 0..100", { status: 400 });
+  }
 
   // (opcional) leer current para normalizar scope si hace falta
   const current = await prisma.discountRule.findUnique({
     where: { id },
-    select: { scope: true, serviceId: true, optionId: true, category: true },
+    select: { scope: true, serviceId: true, optionId: true, category: true, code: true, kind: true },
   });
   if (!current) return new NextResponse("Regla no existe", { status: 404 });
 
   // 2) Normalización según scope (evita datos mezclados)
   const nextScope = patch.scope ?? current.scope;
+  const nextCode = patch.code !== undefined ? patch.code : current.code;
+  const nextKind = patch.kind ?? current.kind;
+
+  if (nextScope === "OPTION" && !String(nextCode ?? "").trim()) {
+    return new NextResponse("Las reglas OPTION deben llevar código de promoción", { status: 400 });
+  }
+  if (nextScope === "OPTION" && nextKind !== "FINAL_PRICE") {
+    return new NextResponse("Las reglas OPTION deben usar PRECIO FINAL", { status: 400 });
+  }
+  if (nextScope === "SERVICE" && nextKind !== "PERCENT") {
+    return new NextResponse("Las reglas SERVICE deben usar PORCENTAJE", { status: 400 });
+  }
 
   const normalized: Prisma.DiscountRuleUpdateInput = { ...patch };
 

@@ -24,6 +24,7 @@ type SubmitCartItem = {
   optionId: string;
   quantity: number;
   pax: number;
+  promoCode?: string | null;
 };
 
 export async function submitStoreCreateEditFlow(args: SharedArgs & {
@@ -44,6 +45,7 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
   licenseSchool: string;
   licenseType: string;
   licenseNumber: string;
+  promoCode?: string | null;
   router: AppRouterInstance;
 }) {
   validateBeforeSubmit({
@@ -73,6 +75,7 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
     quantity: args.quantity,
     companions: args.companions,
     cartItems: args.cartItems,
+    singlePromoCode: args.promoCode ?? null,
     customerPhone: args.customerPhone,
     customerEmail: args.customerEmail,
     customerCountry: args.customerCountry,
@@ -172,6 +175,7 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
   companions: number;
   manualDiscountCents: number;
   manualDiscountReason: string;
+  promoCode?: string | null;
   router: AppRouterInstance;
 }) {
   validateBeforeSubmit({
@@ -202,6 +206,7 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
     optionId: args.optionId,
     quantity: args.quantity,
     pax: args.pax,
+    promoCode: args.promoCode ?? null,
   });
 
   validateItemsForCreate(itemsToSend);

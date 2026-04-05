@@ -132,11 +132,17 @@ export async function POST(req: Request) {
           manualDiscountCents: true,
           promoCode: true,
           customerCountry: true,
+          channelId: true,
           serviceId: true,
           optionId: true,
         },
       });
       if (!reservationPricing) throw new Error("Reserva no existe");
+
+      const channel = reservationPricing.channelId
+        ? await tx.channel.findUnique({ where: { id: reservationPricing.channelId }, select: { allowsPromotions: true } })
+        : null;
+      const promotionsEnabled = channel ? Boolean(channel.allowsPromotions) : true;
 
       const mainSvc = await tx.service.findUnique({
         where: { id: reservationPricing.serviceId },
@@ -152,8 +158,9 @@ export async function POST(req: Request) {
           isExtra: false,
           lineBaseCents: serviceSubtotal,
         },
-        promoCode: reservationPricing.promoCode ?? null,
+        promoCode: promotionsEnabled ? (reservationPricing.promoCode ?? null) : null,
         customerCountry: reservationPricing.customerCountry ?? null,
+        promotionsEnabled,
       });
 
       const autoDiscountCents = Number(detail.discountCents ?? 0);

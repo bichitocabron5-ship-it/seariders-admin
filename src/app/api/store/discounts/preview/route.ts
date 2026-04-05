@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { computeAutoDiscountDetail, type DiscountItem } from "@/lib/discounts";
+import { computeAutoDiscountDetail, listPromotionOptions, type DiscountItem } from "@/lib/discounts";
 
 export const runtime = "nodejs";
 
@@ -18,10 +18,18 @@ const NullableCountry = z.preprocess(
 const Body = z.object({
   serviceId: z.string().min(1),
   optionId: z.string().min(1),
+  channelId: z.string().min(1).nullable().optional(),
   quantity: z.number().int().min(1).max(20).default(1),
   pax: z.number().int().min(1).max(30).default(1),
   customerCountry: NullableCountry.optional(), // "ES" | null
-  promoCode: z.string().min(1).max(50).nullable().optional(),
+  promoCode: z.preprocess(
+    (v) => {
+      if (v == null) return null;
+      const t = String(v).trim().toUpperCase();
+      return t.length ? t : null;
+    },
+    z.string().min(1).max(50).nullable().optional()
+  ),
 });
 
 function pad2(n: number) {
@@ -40,7 +48,7 @@ export async function POST(req: Request) {
     const parsed = Body.safeParse(json);
     if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
-    const { serviceId, optionId, quantity, customerCountry, promoCode } = parsed.data;
+    const { serviceId, optionId, channelId, quantity, customerCountry, promoCode } = parsed.data;
 
     // 1) option
     const opt = await prisma.serviceOption.findUnique({
@@ -74,6 +82,14 @@ export async function POST(req: Request) {
 
     if (!price) return new NextResponse("No hay precio vigente para esta opción.", { status: 400 });
 
+    const channel = channelId
+      ? await prisma.channel.findUnique({
+          where: { id: channelId },
+          select: { allowsPromotions: true },
+        })
+      : null;
+    const promotionsEnabled = channel ? Boolean(channel.allowsPromotions) : true;
+
     const baseTotalCents = Number(price.basePriceCents || 0) * quantity;
 
     // 3) categoría
@@ -96,6 +112,13 @@ export async function POST(req: Request) {
       item,
       promoCode: promoCode ?? null,
       customerCountry: customerCountry ?? null,
+      promotionsEnabled,
+    });
+    const availablePromos = await listPromotionOptions({
+      when: now,
+      item,
+      customerCountry: customerCountry ?? null,
+      promotionsEnabled,
     });
 
     const autoDiscountCents = Number(detail.discountCents || 0);
@@ -121,6 +144,13 @@ export async function POST(req: Request) {
       autoDiscountCents,
       finalTotalCents,
       reason,
+      availablePromos: availablePromos.map((promo) => ({
+        code: promo.code,
+        name: promo.name,
+        kind: promo.kind,
+        value: promo.value,
+        discountCents: promo.discountCents,
+      })),
       appliedRule: detail.rule
         ? { id: detail.rule.id, name: detail.rule.name, code: detail.rule.code ?? null }
         : null,
@@ -129,4 +159,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Error desconocido" }, { status: 500 });
   }
 }
-

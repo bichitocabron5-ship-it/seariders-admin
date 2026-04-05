@@ -5,11 +5,13 @@ import type { CSSProperties } from "react";
 type Props = {
   newName: string;
   newIsActive: boolean;
+  newAllowsPromotions: boolean;
   newCommissionEnabled: boolean;
   newCommissionPct: string;
   creating: boolean;
   setNewName: (value: string) => void;
   setNewIsActive: (value: boolean) => void;
+  setNewAllowsPromotions: (value: boolean) => void;
   setNewCommissionEnabled: (value: boolean) => void;
   setNewCommissionPct: (value: string) => void;
   createChannel: () => void | Promise<void>;
@@ -23,11 +25,13 @@ type Props = {
 export default function CreateChannelSection({
   newName,
   newIsActive,
+  newAllowsPromotions,
   newCommissionEnabled,
   newCommissionPct,
   creating,
   setNewName,
   setNewIsActive,
+  setNewAllowsPromotions,
   setNewCommissionEnabled,
   setNewCommissionPct,
   createChannel,
@@ -70,6 +74,11 @@ export default function CreateChannelSection({
               style={inputStyle}
               disabled={!newCommissionEnabled}
             />
+          </label>
+
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+            <input type="checkbox" checked={newAllowsPromotions} onChange={(e) => setNewAllowsPromotions(e.target.checked)} />
+            Permite promociones automáticas y puntuales
           </label>
 
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>

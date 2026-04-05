@@ -53,6 +53,14 @@ const Body = z.object({
       optionId: z.string().min(1), // id o code si quieres, pero ahora mismo es id
       quantity: z.number().int().min(1).max(99),
       pax: z.number().int().min(1).max(50),
+      promoCode: z.preprocess(
+        (v) => {
+          if (v == null) return null;
+          const t = String(v).trim().toUpperCase();
+          return t.length ? t : null;
+        },
+        z.string().min(1).max(50).nullable().optional()
+      ),
     })
   ).min(1),
 
@@ -80,6 +88,7 @@ export async function POST(req: Request) {
       optionIdOrCode: i.optionId,
       quantity: i.quantity,
       pax: i.pax,
+      promoCode: i.promoCode ?? null,
     }));
 
     const pricing =

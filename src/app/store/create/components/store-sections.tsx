@@ -284,6 +284,7 @@ export function CartSection({
   onClearCart,
   onRemoveFromCart,
   onUpdateCartItem,
+  onUpdateCartPromo,
   onError,
 }: {
   isPackMode: boolean;
@@ -301,6 +302,7 @@ export function CartSection({
   onClearCart: () => void;
   onRemoveFromCart: (id: string) => void;
   onUpdateCartItem: (id: string, patch: Partial<Pick<CartItem, "quantity" | "pax">>) => void;
+  onUpdateCartPromo: (id: string, patch: Partial<Pick<CartItem, "applyPromo" | "promoCode">>) => void;
   onError: (message: string | null) => void;
 }) {
 
@@ -433,6 +435,7 @@ export function CartSection({
         isAssetLimited={isAssetLimited}
         onRemoveFromCart={onRemoveFromCart}
         onUpdateCartItem={onUpdateCartItem}
+        onUpdateCartPromo={onUpdateCartPromo}
         onError={onError}
       />
     </section>

@@ -10,6 +10,7 @@ type CreateItemInput = {
   optionIdOrCode: string;
   quantity: number;
   pax: number;
+  promoCode?: string | null;
 };
 
 type CreateReservationInput = {
@@ -95,8 +96,9 @@ export async function createReservationWithItems(params: {
   dayEndExclusiveUtc.setUTCDate(dayEndExclusiveUtc.getUTCDate() + 1);
 
   // Canal
-  const ch = await tx.channel.findUnique({ where: { id: input.channelId }, select: { id: true } });
+  const ch = await tx.channel.findUnique({ where: { id: input.channelId }, select: { id: true, allowsPromotions: true } });
   if (!ch) throw new Error("Canal no existe");
+  const promotionsEnabled = Boolean(ch.allowsPromotions);
 
   const packQty = Math.max(1, Number(input.packQty ?? 1));
 
@@ -177,6 +179,7 @@ export async function createReservationWithItems(params: {
       durationMinutes: opt.durationMinutes,
       quantity: Math.max(1, Number(it.quantity ?? 1)),
       pax: Math.max(1, Number(it.pax ?? input.pax)),
+      promoCode: String(it.promoCode ?? "").trim().toUpperCase() || null,
     };
   });
 
@@ -229,6 +232,7 @@ export async function createReservationWithItems(params: {
     optionId: string;
     quantity: number;
     pax: number;
+    promoCode: string | null;
     servicePriceId: string | null;
     unitPriceCents: number;
     totalPriceCents: number;
@@ -292,8 +296,9 @@ export async function createReservationWithItems(params: {
         isExtra: false,
         lineBaseCents: basePriceCents,
       },
-      promoCode: null,
+      promoCode: promotionsEnabled ? (it.promoCode ?? null) : null,
       customerCountry,
+      promotionsEnabled,
     });
 
     autoDiscountCents = Number(detail.discountCents ?? 0);
@@ -303,6 +308,7 @@ export async function createReservationWithItems(params: {
       optionId: it.optionId,
       quantity: it.quantity,
       pax: it.pax,
+      promoCode: it.promoCode ?? null,
       servicePriceId: price.id,
       unitPriceCents,
       totalPriceCents: lineTotal,
@@ -344,8 +350,9 @@ export async function createReservationWithItems(params: {
             isExtra: false,
             lineBaseCents: lineTotal,
           },
-          promoCode: null,
+          promoCode: promotionsEnabled ? (it.promoCode ?? null) : null,
           customerCountry,
+          promotionsEnabled,
         });
         autoDiscountCents += Number(detail.discountCents ?? 0);
 
@@ -354,6 +361,7 @@ export async function createReservationWithItems(params: {
           optionId: it.optionId,
           quantity: it.quantity,
           pax: it.pax,
+          promoCode: it.promoCode ?? null,
           servicePriceId: price.id,
           unitPriceCents,
           totalPriceCents: lineTotal,
@@ -449,6 +457,15 @@ export async function createReservationWithItems(params: {
           isExtra: false, // ✅ actividades reales
           isPackParent: Boolean(it.isPackParent), // 👈 NUEVO
         },
+      });
+    }
+
+    const uniquePromoCodes = Array.from(new Set(itemCreates.map((it) => it.promoCode).filter(Boolean)));
+    if (uniquePromoCodes.length <= 1) {
+      await tx.reservation.update({
+        where: { id: reservation.id },
+        data: { promoCode: uniquePromoCodes[0] ?? null },
+        select: { id: true },
       });
     }
 

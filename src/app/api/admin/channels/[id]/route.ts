@@ -8,6 +8,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 export const runtime = "nodejs";
 
 const Body = z.object({
+  allowsPromotions: z.boolean().optional(),
   commissionEnabled: z.boolean().optional(),
   commissionBps: z.number().int().min(0).max(10000).optional(), // 0..100% en bps
   isActive: z.boolean().optional(),
@@ -34,6 +35,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       id: true,
       name: true,
       isActive: true,
+      allowsPromotions: true,
       commissionEnabled: true,
       commissionBps: true,
     },

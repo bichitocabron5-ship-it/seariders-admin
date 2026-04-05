@@ -358,6 +358,8 @@ export function useDiscountPreview(args: {
   quantity: number;
   pax: number;
   customerCountry: string;
+  channelId: string;
+  promoCode?: string | null;
 }) {
   const {
     isEditMode,
@@ -370,6 +372,8 @@ export function useDiscountPreview(args: {
     quantity,
     pax,
     customerCountry,
+    channelId,
+    promoCode,
   } = args;
 
   const [discountPreview, setDiscountPreview] = useState<DiscountPreview | null>(null);
@@ -403,10 +407,11 @@ export function useDiscountPreview(args: {
           body: JSON.stringify({
             serviceId,
             optionId,
+            channelId: channelId || null,
             quantity,
             pax,
             customerCountry: (customerCountry || "ES").trim().toUpperCase(),
-            promoCode: null,
+            promoCode: promoCode ?? null,
           }),
         });
 
@@ -425,7 +430,7 @@ export function useDiscountPreview(args: {
     })();
 
     return () => ac.abort();
-  }, [isEditMode, isMigrateMode, cartItemsLength, canCreate, baseTotalCents, serviceId, optionId, quantity, pax, customerCountry]);
+  }, [isEditMode, isMigrateMode, cartItemsLength, canCreate, baseTotalCents, serviceId, optionId, channelId, quantity, pax, customerCountry, promoCode]);
 
   return { discountPreview, discountLoading };
 }

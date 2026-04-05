@@ -15,6 +15,7 @@ type CartItemsListProps = {
   isAssetLimited: (item: CartItem) => boolean;
   onRemoveFromCart: (id: string) => void;
   onUpdateCartItem: (id: string, patch: Partial<Pick<CartItem, "quantity" | "pax">>) => void;
+  onUpdateCartPromo: (id: string, patch: Partial<Pick<CartItem, "applyPromo" | "promoCode">>) => void;
   onError: (message: string | null) => void;
 };
 
@@ -34,6 +35,7 @@ export function CartItemsList({
   isAssetLimited,
   onRemoveFromCart,
   onUpdateCartItem,
+  onUpdateCartPromo,
   onError,
 }: CartItemsListProps) {
   const hasSoldOutLimitedItems = cartItems.some((item) => {
@@ -195,6 +197,32 @@ export function CartItemsList({
                     style={inputStyle}
                   />
                 </label>
+
+                {Array.isArray(item.availablePromos) && item.availablePromos.length > 0 ? (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700 }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(item.applyPromo)}
+                        onChange={(e) => onUpdateCartPromo(item.id, { applyPromo: e.target.checked })}
+                      />
+                      Aplicar promo
+                    </label>
+                    <select
+                      value={item.promoCode ?? ""}
+                      disabled={!item.applyPromo}
+                      onChange={(e) => onUpdateCartPromo(item.id, { promoCode: e.target.value || null })}
+                      style={inputStyle}
+                    >
+                      <option value="">Selecciona promoción</option>
+                      {item.availablePromos.map((promo) => (
+                        <option key={promo.code ?? promo.name} value={promo.code ?? ""}>
+                          {promo.name} {promo.code ? `(${promo.code})` : ""} · -{(promo.discountCents / 100).toFixed(2)} EUR
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
               </div>
             </article>
           );
