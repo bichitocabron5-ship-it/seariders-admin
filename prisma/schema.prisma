@@ -190,6 +190,7 @@ model Service {
   requiresMonitor  Boolean                 @default(false)
   isLicense        Boolean                 @default(false)
   isActive         Boolean                 @default(true)
+  visibleInBooth   Boolean                 @default(false)
   options          ServiceOption[]
   servicePrices    ServicePrice[]
   discountRules    DiscountRule[]

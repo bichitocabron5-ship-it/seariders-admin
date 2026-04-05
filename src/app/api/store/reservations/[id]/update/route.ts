@@ -231,6 +231,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       manualDiscountCents: true,
       isPackParent: true,
+      source: true,
     },
   });
   if (!existing) return new NextResponse("Reserva no existe", { status: 404 });
@@ -239,12 +240,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
 const hasProItems = Array.isArray(b.items) && b.items.length > 0;
+const isBoothReservation = existing.source === "BOOTH";
 
 if (hasProItems) {
   // Si es pack padre, no debería permitir editar items aquí.
   const existingPack = await prisma.reservation.findUnique({
     where: { id },
-    select: { isPackParent: true, packId: true, manualDiscountCents: true, customerCountry: true },
+    select: { isPackParent: true, packId: true, manualDiscountCents: true, customerCountry: true, source: true },
   });
   if (!existingPack) return new NextResponse("Reserva no existe", { status: 404 });
   if (existingPack.isPackParent && existingPack.packId) {
@@ -335,7 +337,7 @@ if (hasProItems) {
         optionId: it.optionId,
         quantity: qty,
         pax: Math.max(1, Number(it.pax || b.pax)),
-        promoCode: String(it.promoCode ?? "").trim().toUpperCase() || null,
+        promoCode: existingPack.source === "BOOTH" ? null : (String(it.promoCode ?? "").trim().toUpperCase() || null),
         servicePriceId: price.id,
         unitPriceCents,
         totalPriceCents: lineTotal,
@@ -378,11 +380,13 @@ if (hasProItems) {
     const channel = effectiveChannelId
       ? await prisma.channel.findUnique({ where: { id: effectiveChannelId }, select: { allowsPromotions: true } })
       : null;
-    const promotionsEnabled = channel ? Boolean(channel.allowsPromotions) : true;
+    const promotionsEnabled =
+      existingPack.source === "BOOTH" ? false : (channel ? Boolean(channel.allowsPromotions) : true);
     const country = normalizeOptionalString(b.customerCountry) ?? existingPack.customerCountry ?? "ES";
 
     let autoDiscountCents = 0;
     for (const l of lineCreates) {
+      if (!promotionsEnabled) continue;
       const detail = await computeAutoDiscountDetail({
         when: now,
         item: {
@@ -392,7 +396,7 @@ if (hasProItems) {
           isExtra: false,
           lineBaseCents: l.totalPriceCents,
         },
-        promoCode: promotionsEnabled ? (l.promoCode ?? null) : null,
+        promoCode: l.promoCode ?? null,
         customerCountry: country,
         promotionsEnabled,
       });
@@ -400,7 +404,10 @@ if (hasProItems) {
     }
 
     // Manual discount (cap 30% del totalBeforeDiscounts)
-    const incomingManual = b.manualDiscountCents !== undefined ? Number(b.manualDiscountCents) : Number(existingPack.manualDiscountCents ?? 0);
+    const incomingManual =
+      existingPack.source === "BOOTH"
+        ? Number(existingPack.manualDiscountCents ?? 0)
+        : (b.manualDiscountCents !== undefined ? Number(b.manualDiscountCents) : Number(existingPack.manualDiscountCents ?? 0));
     const manualDiscountCents = capManual30(totalBeforeDiscounts, incomingManual);
 
     const finalTotalCents = Math.max(0, totalBeforeDiscounts - autoDiscountCents - manualDiscountCents);
@@ -621,7 +628,7 @@ if (hasProItems) {
     const channel = effectiveChannelId
       ? await tx.channel.findUnique({ where: { id: effectiveChannelId }, select: { allowsPromotions: true } })
       : null;
-    const promotionsEnabled = channel ? Boolean(channel.allowsPromotions) : true;
+    const promotionsEnabled = isBoothReservation ? false : (channel ? Boolean(channel.allowsPromotions) : true);
     const data: Prisma.ReservationUncheckedUpdateInput = {
       serviceId: svc.id,
       optionId: opt.id,
@@ -680,21 +687,21 @@ if (hasProItems) {
     const serviceSubtotal = Number(mainSum._sum.totalPriceCents ?? 0);
     const totalBeforeDiscounts = Number(allSum._sum.totalPriceCents ?? 0);
 
-    const detail = await computeAutoDiscountDetail({
-      when: new Date(),
-      item: {
-        serviceId: svc.id,
-        optionId: opt.id,
-        category: svc.category ?? null,
-        isExtra: false,
-        lineBaseCents: serviceSubtotal,
-      },
-      promoCode: null,
-      customerCountry: customerCountry === undefined ? existing.customerCountry : customerCountry,
-      promotionsEnabled,
-    });
-
-    const autoDiscountCents = Number(detail.discountCents ?? 0);
+    const autoDiscountCents = promotionsEnabled
+      ? Number((await computeAutoDiscountDetail({
+          when: new Date(),
+          item: {
+            serviceId: svc.id,
+            optionId: opt.id,
+            category: svc.category ?? null,
+            isExtra: false,
+            lineBaseCents: serviceSubtotal,
+          },
+          promoCode: null,
+          customerCountry: customerCountry === undefined ? existing.customerCountry : customerCountry,
+          promotionsEnabled,
+        })).discountCents ?? 0)
+      : 0;
     const manualDiscountCents = Number(existing.manualDiscountCents ?? 0);
 
     const finalTotalCents = Math.max(0, totalBeforeDiscounts - autoDiscountCents - manualDiscountCents);
@@ -704,6 +711,7 @@ if (hasProItems) {
       data: {
         basePriceCents: serviceSubtotal,
         autoDiscountCents,
+        promoCode: isBoothReservation ? null : undefined,
         totalPriceCents: finalTotalCents,
       },
       select: { id: true },

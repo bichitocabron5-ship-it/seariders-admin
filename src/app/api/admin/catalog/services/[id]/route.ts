@@ -20,6 +20,7 @@ const Body = z.object({
   requiresJetski: z.boolean().optional(),
   requiresMonitor: z.boolean().optional(),
   isLicense: z.boolean().optional(),
+  visibleInBooth: z.boolean().optional(),
 });
 
 export async function PATCH(
@@ -47,6 +48,7 @@ export async function PATCH(
   if (p.requiresJetski !== undefined) data.requiresJetski = p.requiresJetski;
   if (p.requiresMonitor !== undefined) data.requiresMonitor = p.requiresMonitor;
   if (p.isLicense !== undefined) data.isLicense = p.isLicense;
+  if (p.visibleInBooth !== undefined) data.visibleInBooth = p.visibleInBooth;
 
   const updated = await prisma.service.update({
     where: { id }, // ya no es undefined
@@ -60,6 +62,7 @@ export async function PATCH(
       requiresJetski: true,
       requiresMonitor: true,
       isLicense: true,
+      visibleInBooth: true,
     },
   });
 

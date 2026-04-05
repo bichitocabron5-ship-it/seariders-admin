@@ -199,12 +199,13 @@ export async function GET() {
     const manualDisc = Number(r.manualDiscountCents ?? 0);
 
     const isPack = Boolean(r.isPackParent && r.packId)
+    const legacyGrossCents = Number(r.totalPriceCents ?? 0) + autoDisc + manualDisc;
 
     const grossCents = isPack
       ? Number(r.totalPriceCents ?? 0) // ✅ packs: el total está en el padre
       : (r.items.length > 0
           ? serviceTotalCents + extrasTotalCents
-          : Number(r.totalPriceCents ?? 0));
+          : legacyGrossCents);
 
     const soldTotalCents = isPack
       ? Number(r.totalPriceCents ?? 0)
@@ -260,7 +261,7 @@ export async function GET() {
       ? null
       : (mainItem?.option?.durationMinutes ?? legacyDurationMinutes);
 
-    const pvpFromReservation = Number(r.totalPriceCents ?? 0) + autoDisc + manualDisc;
+    const pvpFromReservation = legacyGrossCents;
 
     const pvpTotalCents = isPack
       ? pvpFromReservation

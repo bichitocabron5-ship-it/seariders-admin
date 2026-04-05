@@ -582,13 +582,16 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     : (discountPreview?.finalTotalCents ?? (isMigrateMode ? Number(prefillPricing?.totalPriceCents ?? Math.max(0, shownBaseCents - shownDiscountCents)) : Math.max(0, shownBaseCents - shownDiscountCents)));
 
   const shownReason = discountPreview?.reason ?? (isMigrateMode && shownDiscountCents > 0 ? "Precio heredado de la pre-reserva de carpa." : null);
+  const canEditPricing = !isMigrateMode && !isEditMode;
 
   const MANUAL_DISC_MAX_PCT = 30;
   const maxManualDiscountCents = Math.floor((shownBaseCents * MANUAL_DISC_MAX_PCT) / 100);
 
   const manualDiscountCentsRaw = Math.round(Number(manualDiscountEuros || 0) * 100);
   const manualDiscountCents = Math.max(0, Math.min(manualDiscountCentsRaw, maxManualDiscountCents));
-  const shownFinalCentsWithManual = Math.max(0, shownFinalCents - manualDiscountCents);
+  const shownFinalCentsWithManual = canEditPricing
+    ? Math.max(0, shownFinalCents - manualDiscountCents)
+    : shownFinalCents;
 
   function addToCart() {
     if (!serviceId) throw new Error("Servicio requerido");
@@ -1146,6 +1149,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
           <PricingSection
             discountLoading={discountLoading}
+            canEditPricing={canEditPricing}
             shownFinalCents={shownFinalCents}
             maxManualDiscountCents={maxManualDiscountCents}
             manualDiscountEuros={manualDiscountEuros}
@@ -1157,7 +1161,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             shownDiscountCents={shownDiscountCents}
             shownBaseCents={shownBaseCents}
             shownReason={shownReason ?? ""}
-            availablePromos={discountPreview?.availablePromos ?? []}
+            availablePromos={canEditPricing ? (discountPreview?.availablePromos ?? []) : []}
             applyPromo={applyPromo}
             selectedPromoCode={selectedPromoCode}
             onApplyPromoChange={setApplyPromo}

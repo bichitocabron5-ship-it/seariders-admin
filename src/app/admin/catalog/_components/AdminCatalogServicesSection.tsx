@@ -157,6 +157,16 @@ export default function AdminCatalogServicesSection({
                   />
                   Requiere monitor
                 </label>
+
+                <label style={toggleRow}>
+                  <input
+                    type="checkbox"
+                    checked={service.visibleInBooth}
+                    disabled={busy}
+                    onChange={(e) => onPatchService(service.id, { visibleInBooth: e.target.checked })}
+                  />
+                  Visible en booth
+                </label>
               </div>
             </article>
           );

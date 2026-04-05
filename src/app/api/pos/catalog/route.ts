@@ -19,6 +19,7 @@ type ServiceLite = {
   category: string | null;
   isLicense: boolean;
   isActive: boolean;
+  visibleInBooth: boolean;
 };
 
 type ChannelLite = {
@@ -39,7 +40,6 @@ function uniqSorted(arr: string[]) {
 }
 
 export async function GET(req: Request) {
-  // auth (BOOTH/STORE/ADMIN)
   const cookieStore = await cookies();
   const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
   if (!session?.userId || !["STORE", "BOOTH", "ADMIN"].includes(session.role as string)) {
@@ -55,40 +55,30 @@ export async function GET(req: Request) {
   const origin = parsed.data.origin;
   const now = new Date();
 
-  // --- helpers negocio ---
   const isExtra = (s: Pick<ServiceLite, "category">) => String(s.category ?? "").toUpperCase() === "EXTRA";
 
   const isAcompanante = (s: Pick<ServiceLite, "code" | "name">) => {
     const c = normalize(String(s.code ?? ""));
     const n = normalize(String(s.name ?? ""));
-    return c === "acompañante" || c === "acompanante" || n.includes("acompañ");
+    return c === "acompanante" || n.includes("acompan");
   };
 
-  const JETSKI_TURISTA_HINTS = ["jetski turista", "turista"];
-  const isJetskiTurista = (s: Pick<ServiceLite, "code" | "name">) => {
-    const n = normalize(String(s.name ?? ""));
-    const c = normalize(String(s.code ?? ""));
-    return JETSKI_TURISTA_HINTS.some((h) => n.includes(h)) || c.includes("turista");
-  };
-
-  // “Jetski normal” (excluyendo turista)
-  const isJetskiStd = (s: Pick<ServiceLite, "code" | "name">) => {
-    if (isJetskiTurista(s)) return false;
-    const n = normalize(String(s.name ?? ""));
-    const c = normalize(String(s.code ?? ""));
-    return n.includes("jetski") || c === "jetski";
-  };
-
-  // canales booth
-  const boothAllowed = ["karim", "nomad", "port olímpic", "port olimpic", "portolimpic"];
+  const boothAllowed = ["karim", "nomad", "port olimpic", "portolimpic"];
   const isBoothChannel = (c: Pick<ChannelLite, "name">) =>
     boothAllowed.some((x) => normalize(String(c.name ?? "")).includes(normalize(x)));
 
-  // --- queries base ---
   const [servicesAll, optionsRaw, prices, channelsAll] = await Promise.all([
     prisma.service.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, code: true, category: true, isLicense: true, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        category: true,
+        isLicense: true,
+        isActive: true,
+        visibleInBooth: true,
+      },
       orderBy: [{ category: "asc" }, { name: "asc" }],
     }),
 
@@ -101,7 +91,7 @@ export async function GET(req: Request) {
         durationMinutes: true,
         paxMax: true,
         contractedMinutes: true,
-        basePriceCents: true, // legacy
+        basePriceCents: true,
         isActive: true,
       },
       orderBy: [{ serviceId: "asc" }, { durationMinutes: "asc" }],
@@ -116,7 +106,7 @@ export async function GET(req: Request) {
       select: {
         serviceId: true,
         optionId: true,
-        durationMin: true, // legacy extras
+        durationMin: true,
         basePriceCents: true,
         validFrom: true,
       },
@@ -130,59 +120,46 @@ export async function GET(req: Request) {
     }),
   ]);
 
-  // --- filtrado servicios por origin ---
-  // servicios visibles “generales”
   let servicesVisible = servicesAll.slice();
 
   if (origin === "STORE") {
-    // STORE: no jetski turista, no acompañante
-    servicesVisible = servicesVisible.filter((s) => !isJetskiTurista(s) && !isAcompanante(s));
+    servicesVisible = servicesVisible.filter((s) => !isAcompanante(s));
   } else {
-    // BOOTH: no extras, y si hay turista, sustituye al jetski normal
-    // (quitamos jetski normal, dejamos turista si existe)
-    const turista = servicesVisible.find(isJetskiTurista) ?? null;
-    servicesVisible = servicesVisible.filter((s) => !isJetskiStd(s));
-    if (turista && !servicesVisible.some((s) => s.id === turista.id)) servicesVisible.push(turista);
+    servicesVisible = servicesVisible.filter((s) => s.visibleInBooth);
   }
 
   const servicesMain = servicesVisible.filter((s) => !isExtra(s));
   let servicesExtra = servicesVisible.filter((s) => isExtra(s));
 
   if (origin === "BOOTH") {
-    servicesExtra = []; // booth sin extras
+    servicesExtra = [];
   }
 
-  // --- canales por origin ---
   let channels = channelsAll.slice();
   if (origin === "BOOTH") channels = channels.filter(isBoothChannel);
   else channels = channels.filter((c) => !isBoothChannel(c));
 
-  // --- price map vigente ---
-  // prioridad: el primero encontrado (viene ordenado por validFrom desc)
   const priceMap = new Map<string, number>();
   for (const pr of prices) {
     if (pr.optionId) {
-      const k = `${pr.serviceId}:${pr.optionId}`;
-      if (!priceMap.has(k)) priceMap.set(k, pr.basePriceCents);
+      const key = `${pr.serviceId}:${pr.optionId}`;
+      if (!priceMap.has(key)) priceMap.set(key, pr.basePriceCents);
     } else {
-      const k = `${pr.serviceId}:null`;
-      if (!priceMap.has(k)) priceMap.set(k, pr.basePriceCents);
+      const key = `${pr.serviceId}:null`;
+      if (!priceMap.has(key)) priceMap.set(key, pr.basePriceCents);
     }
   }
 
-  // --- options (solo de servicesMain visibles) ---
   const visibleMainIds = new Set(servicesMain.map((s) => s.id));
 
   const options = optionsRaw
     .filter((o) => visibleMainIds.has(o.serviceId))
     .map((o) => {
-      const k = `${o.serviceId}:${o.id}`;
-      const real = priceMap.get(k);
-
-      // BOOTH: fallback a legacy basePriceCents si no hay servicePrice
+      const key = `${o.serviceId}:${o.id}`;
+      const real = priceMap.get(key);
       const boothFallback = origin === "BOOTH" ? (Number(o.basePriceCents ?? 0) || 0) : null;
+      const base = real ?? boothFallback;
 
-      const base = real ?? boothFallback; // STORE => real o null, BOOTH => real o legacy
       return {
         ...o,
         basePriceCents: base,
@@ -190,14 +167,12 @@ export async function GET(req: Request) {
       };
     });
 
-  // --- extras: precio por serviceId (solo STORE) ---
   const extraPriceByServiceId: Record<string, number | null> = {};
   for (const s of servicesExtra) {
-    const k = `${s.id}:null`;
-    extraPriceByServiceId[s.id] = priceMap.get(k) ?? null;
+    const key = `${s.id}:null`;
+    extraPriceByServiceId[s.id] = priceMap.get(key) ?? null;
   }
 
-  // --- categorías ---
   const categoriesMain = uniqSorted(servicesMain.map((s) => String(s.category ?? "")).filter(Boolean));
   const categoriesExtra = uniqSorted(servicesExtra.map((s) => String(s.category ?? "")).filter(Boolean));
 
@@ -209,8 +184,6 @@ export async function GET(req: Request) {
     options,
     extraPriceByServiceId,
     channels,
-
-    // compat BOOTH (si tu UI antigua espera "services")
     services: servicesMain,
   });
 }

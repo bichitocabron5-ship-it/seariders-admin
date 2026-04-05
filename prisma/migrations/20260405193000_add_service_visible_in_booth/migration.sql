@@ -1,0 +1,2 @@
+ALTER TABLE "Service"
+ADD COLUMN "visibleInBooth" BOOLEAN NOT NULL DEFAULT false;

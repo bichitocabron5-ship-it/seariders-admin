@@ -105,6 +105,7 @@ export async function POST(req: Request) {
       const reservation = await tx.reservation.findUnique({
         where: { id: reservationId },
         select: {
+          source: true,
           manualDiscountCents: true,
           promoCode: true,
           customerCountry: true,
@@ -115,31 +116,32 @@ export async function POST(req: Request) {
       });
       if (!reservation) throw new Error("Reserva no existe");
 
+      const isBoothReservation = reservation.source === "BOOTH";
       const channel = reservation.channelId
         ? await tx.channel.findUnique({ where: { id: reservation.channelId }, select: { allowsPromotions: true } })
         : null;
-      const promotionsEnabled = channel ? Boolean(channel.allowsPromotions) : true;
+      const promotionsEnabled = isBoothReservation ? false : (channel ? Boolean(channel.allowsPromotions) : true);
 
       const mainSvc = await tx.service.findUnique({
         where: { id: reservation.serviceId },
         select: { category: true },
       });
 
-      const detail = await computeAutoDiscountDetail({
-        when: new Date(),
-        item: {
-          serviceId: reservation.serviceId,
-          optionId: reservation.optionId,
-          category: mainSvc?.category ?? null,
-          isExtra: false,
-          lineBaseCents: serviceSubtotal,
-        },
-        promoCode: promotionsEnabled ? (reservation.promoCode ?? null) : null,
-        customerCountry: reservation.customerCountry ?? null,
-        promotionsEnabled,
-      });
-
-      const autoDiscountCents = Number(detail.discountCents ?? 0);
+      const autoDiscountCents = isBoothReservation
+        ? 0
+        : Number((await computeAutoDiscountDetail({
+            when: new Date(),
+            item: {
+              serviceId: reservation.serviceId,
+              optionId: reservation.optionId,
+              category: mainSvc?.category ?? null,
+              isExtra: false,
+              lineBaseCents: serviceSubtotal,
+            },
+            promoCode: promotionsEnabled ? (reservation.promoCode ?? null) : null,
+            customerCountry: reservation.customerCountry ?? null,
+            promotionsEnabled,
+          })).discountCents ?? 0);
 
       const finalTotal = Math.max(
         0,
@@ -151,6 +153,7 @@ export async function POST(req: Request) {
         data: {
           basePriceCents: serviceSubtotal,
           autoDiscountCents,
+          promoCode: isBoothReservation ? null : reservation.promoCode ?? null,
           totalPriceCents: finalTotal,
         },
         select: { id: true },

@@ -101,6 +101,7 @@ export function AvailabilitySection({
 
 export function PricingSection({
   discountLoading,
+  canEditPricing,
   shownFinalCents,
   maxManualDiscountCents,
   manualDiscountEuros,
@@ -119,6 +120,7 @@ export function PricingSection({
   onPromoCodeChange,
 }: {
   discountLoading: boolean;
+  canEditPricing: boolean;
   shownFinalCents: number;
   maxManualDiscountCents: number;
   manualDiscountEuros: number;
@@ -142,7 +144,11 @@ export function PricingSection({
         <div>
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>Pricing</div>
           <div style={{ fontSize: 18, fontWeight: 900, marginTop: 4 }}>Precio</div>
-          <div style={{ fontSize: 12, color: "#64748b" }}>Cálculo automático con opción de descuento manual controlado.</div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>
+            {canEditPricing
+              ? "Cálculo automático con opción de descuento manual controlado."
+              : "Precio en solo lectura para mantener el importe ya guardado en la reserva."}
+          </div>
         </div>
         {discountLoading ? <div style={{ fontSize: 12, color: "#64748b" }}>Calculando...</div> : null}
       </div>
@@ -159,7 +165,7 @@ export function PricingSection({
       </div>
 
       <div style={{ display: "grid", gap: 10 }}>
-        {availablePromos.length > 0 ? (
+        {canEditPricing && availablePromos.length > 0 ? (
           <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: 10 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 800 }}>
               <input type="checkbox" checked={applyPromo} onChange={(e) => onApplyPromoChange(e.target.checked)} />
@@ -176,30 +182,38 @@ export function PricingSection({
           </div>
         ) : null}
 
-        <label style={{ display: "grid", gap: 6 }}>
-          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
-            Descuento manual opcional. Máximo {euros(maxManualDiscountCents)} (30%)
+        {canEditPricing ? (
+          <>
+            <label style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
+                Descuento manual opcional. Máximo {euros(maxManualDiscountCents)} (30%)
+              </div>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={manualDiscountEuros}
+                onChange={(e) => onManualDiscountEurosChange(Number(e.target.value || 0))}
+                style={inputStyle}
+                placeholder="0"
+              />
+            </label>
+
+            <input value={manualDiscountReason} onChange={(e) => onManualDiscountReasonChange(e.target.value)} style={inputStyle} placeholder="Motivo del descuento (opcional)" />
+
+            <div style={{ fontSize: 12, color: "#475569" }}>
+              {manualDiscountCentsRaw > maxManualDiscountCents ? (
+                <span style={{ color: "#b91c1c", fontWeight: 700 }}>El descuento se limita automáticamente a {euros(maxManualDiscountCents)}.</span>
+              ) : (
+                <span>Descuento aplicado correctamente.</span>
+              )}
+            </div>
+          </>
+        ) : (
+          <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", fontSize: 13, color: "#334155" }}>
+            Los ajustes de precio no se editan en esta pantalla. Si la reserva viene de Booth, se conserva el descuento ya aplicado.
           </div>
-          <input
-            type="number"
-            min={0}
-            step={1}
-            value={manualDiscountEuros}
-            onChange={(e) => onManualDiscountEurosChange(Number(e.target.value || 0))}
-            style={inputStyle}
-            placeholder="0"
-          />
-        </label>
-
-        <input value={manualDiscountReason} onChange={(e) => onManualDiscountReasonChange(e.target.value)} style={inputStyle} placeholder="Motivo del descuento (opcional)" />
-
-        <div style={{ fontSize: 12, color: "#475569" }}>
-          {manualDiscountCentsRaw > maxManualDiscountCents ? (
-            <span style={{ color: "#b91c1c", fontWeight: 700 }}>El descuento se limita automáticamente a {euros(maxManualDiscountCents)}.</span>
-          ) : (
-            <span>Descuento aplicado correctamente.</span>
-          )}
-        </div>
+        )}
       </div>
 
       {shownDiscountCents > 0 ? (
