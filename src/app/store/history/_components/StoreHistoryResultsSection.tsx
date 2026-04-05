@@ -35,6 +35,10 @@ type HistoryRow = {
   depositCents: number | null;
   depositHeld: boolean;
   depositHoldReason: string | null;
+  isManualEntry: boolean;
+  manualEntryNote: string | null;
+  financialAdjustmentNote: string | null;
+  financialAdjustedAt: string | null;
   source: string | null;
   formalizedAt: string | null;
   channelName: string | null;
@@ -75,6 +79,7 @@ type Props = {
   incidentSummary: CSSProperties;
   actionLink: CSSProperties;
   emptyState: CSSProperties;
+  onAdjustFinancials: (row: HistoryRow) => void;
 };
 
 export default function StoreHistoryResultsSection({
@@ -100,6 +105,7 @@ export default function StoreHistoryResultsSection({
   incidentSummary,
   actionLink,
   emptyState,
+  onAdjustFinancials,
 }: Props) {
   if (error) return <Alert kind="error">{error}</Alert>;
 
@@ -150,6 +156,11 @@ export default function StoreHistoryResultsSection({
                         <div style={{ fontWeight: 900, color: "#0f172a" }}>
                           {row.customerName || "Sin nombre"}
                         </div>
+                        {row.isManualEntry ? (
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <Pill bg="#fff7ed" border="#fed7aa">Reserva manual</Pill>
+                          </div>
+                        ) : null}
                         <div style={mutedStack}>
                           <span>{row.customerCountry || "-"}</span>
                           <span>{row.source || "Origen no indicado"}</span>
@@ -195,6 +206,11 @@ export default function StoreHistoryResultsSection({
                         <div style={mutedText}>
                           Formalizada: {row.formalizedAt ? dt(row.formalizedAt) : "No"}
                         </div>
+                        {row.financialAdjustedAt ? (
+                          <div style={mutedText}>
+                            Ajustada: {dt(row.financialAdjustedAt)}
+                          </div>
+                        ) : null}
                       </div>
                     </td>
 
@@ -232,6 +248,7 @@ export default function StoreHistoryResultsSection({
                           </div>
                         ) : null}
                         {row.depositHoldReason ? <div style={mutedText}>{row.depositHoldReason}</div> : null}
+                        {row.financialAdjustmentNote ? <div style={mutedText}>Ajuste: {row.financialAdjustmentNote}</div> : null}
                       </div>
                     </td>
 
@@ -309,6 +326,10 @@ export default function StoreHistoryResultsSection({
                         <a href={reservationHref(row.id)} style={actionLink}>
                           Ver ficha
                         </a>
+
+                        <button type="button" onClick={() => onAdjustFinancials(row)} style={actionLink}>
+                          Ajustar importes
+                        </button>
 
                         {row.incidents.some((incident) => incident.maintenanceEventId) ? (
                           <a

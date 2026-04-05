@@ -331,6 +331,13 @@ model Reservation {
   readyForPlatformAt   DateTime?
   departureAt          DateTime?
   arrivalAt            DateTime?
+  isManualEntry        Boolean               @default(false)
+  manualEntryNote      String?               @db.VarChar(500)
+  manualEntryCreatedByUserId String?
+  manualEntryCreatedAt DateTime?
+  financialAdjustmentNote String?            @db.VarChar(500)
+  financialAdjustedByUserId String?
+  financialAdjustedAt  DateTime?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   contracts            ReservationContract[]
@@ -2193,6 +2200,8 @@ enum OperationalOverrideAction {
   FORCE_READY
   FORCE_DEPART
   FORCE_CLOSE_RUN
+  MANUAL_RESERVATION_CREATE
+  RESERVATION_FINANCIAL_ADJUSTMENT
 }
 
 enum SparePartMovementType {

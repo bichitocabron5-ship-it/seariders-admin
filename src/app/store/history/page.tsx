@@ -38,6 +38,10 @@ type HistoryRow = {
   depositCents: number | null;
   depositHeld: boolean;
   depositHoldReason: string | null;
+  isManualEntry: boolean;
+  manualEntryNote: string | null;
+  financialAdjustmentNote: string | null;
+  financialAdjustedAt: string | null;
   source: string | null;
   formalizedAt: string | null;
   channelName: string | null;
@@ -52,6 +56,12 @@ type HistoryRow = {
   totalToChargeCents: number;
   incidents: HistoryIncident[];
 };
+
+type CatalogService = { id: string; name?: string | null; category?: string | null };
+type CatalogOption = { id: string; serviceId: string; durationMinutes?: number | null; paxMax?: number | null };
+type CatalogChannel = { id: string; name: string };
+type ManualPaymentDraft = { amountEuros: string; method: "CASH" | "CARD" | "BIZUM" | "TRANSFER"; isDeposit: boolean; direction: "IN" | "OUT" };
+type ManualPresetId = "COMPLETED_PAID" | "COMPLETED_WITH_DEPOSIT" | "PENDING_COLLECTION" | "RECORD_ONLY";
 
 function euros(cents: number | null | undefined) {
   return `${((Number(cents ?? 0)) / 100).toFixed(2)} EUR`;
@@ -70,6 +80,11 @@ function dt(v: string | null | undefined) {
 
 function reservationHref(reservationId: string) {
   return `/store?reservationId=${reservationId}`;
+}
+
+function centsFromEuros(v: string) {
+  const n = Number(String(v ?? "").replace(",", "."));
+  return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 
 function mechanicsDetailHref(incident: {
@@ -150,6 +165,36 @@ export default function StoreHistoryPage() {
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
+  const [catalogOptions, setCatalogOptions] = useState<CatalogOption[]>([]);
+  const [catalogChannels, setCatalogChannels] = useState<CatalogChannel[]>([]);
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualPreset, setManualPreset] = useState<ManualPresetId>("COMPLETED_PAID");
+  const [manualCustomerName, setManualCustomerName] = useState("");
+  const [manualDate, setManualDate] = useState("");
+  const [manualTime, setManualTime] = useState("12:00");
+  const [manualServiceId, setManualServiceId] = useState("");
+  const [manualOptionId, setManualOptionId] = useState("");
+  const [manualChannelId, setManualChannelId] = useState("");
+  const [manualQuantity, setManualQuantity] = useState(1);
+  const [manualPax, setManualPax] = useState(1);
+  const [manualStatus, setManualStatus] = useState("COMPLETED");
+  const [manualCountry, setManualCountry] = useState("ES");
+  const [manualPhone, setManualPhone] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
+  const [manualTotalEuros, setManualTotalEuros] = useState("");
+  const [manualDepositEuros, setManualDepositEuros] = useState("");
+  const [manualNote, setManualNote] = useState("");
+  const [manualPayments, setManualPayments] = useState<ManualPaymentDraft[]>([
+    { amountEuros: "", method: "CASH", isDeposit: false, direction: "IN" },
+  ]);
+  const [adjustTarget, setAdjustTarget] = useState<HistoryRow | null>(null);
+  const [adjustBusy, setAdjustBusy] = useState(false);
+  const [adjustTotalEuros, setAdjustTotalEuros] = useState("");
+  const [adjustDepositEuros, setAdjustDepositEuros] = useState("");
+  const [adjustNote, setAdjustNote] = useState("");
 
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -195,6 +240,45 @@ export default function StoreHistoryPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!manualOpen || catalogServices.length > 0) return;
+
+    let cancelled = false;
+    (async () => {
+      setCatalogLoading(true);
+      try {
+        const res = await fetch("/api/pos/catalog?origin=STORE", { cache: "no-store" });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        if (cancelled) return;
+        const services = (data.servicesMain ?? []) as CatalogService[];
+        const options = (data.options ?? []) as CatalogOption[];
+        const channels = (data.channels ?? []) as CatalogChannel[];
+        setCatalogServices(services);
+        setCatalogOptions(options);
+        setCatalogChannels(channels);
+        if (!manualServiceId && services[0]?.id) setManualServiceId(services[0].id);
+        if (!manualChannelId && channels[0]?.id) setManualChannelId(channels[0].id);
+      } catch (e: unknown) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "No se pudo cargar catálogo");
+      } finally {
+        if (!cancelled) setCatalogLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [manualOpen, catalogServices.length, manualServiceId, manualChannelId]);
+
+  useEffect(() => {
+    if (!manualOpen || !manualServiceId) return;
+    const firstOption = catalogOptions.find((option) => option.serviceId === manualServiceId);
+    if (firstOption && (!manualOptionId || !catalogOptions.some((option) => option.id === manualOptionId && option.serviceId === manualServiceId))) {
+      setManualOptionId(firstOption.id);
+    }
+  }, [manualOpen, manualServiceId, manualOptionId, catalogOptions]);
+
   const summary = useMemo(() => {
     return rows.reduce(
       (acc, row) => {
@@ -215,6 +299,40 @@ export default function StoreHistoryPage() {
     );
   }, [rows]);
 
+  const selectedService = useMemo(
+    () => catalogServices.find((service) => service.id === manualServiceId) ?? null,
+    [catalogServices, manualServiceId],
+  );
+
+  const selectedOption = useMemo(
+    () => catalogOptions.find((option) => option.id === manualOptionId) ?? null,
+    [catalogOptions, manualOptionId],
+  );
+
+  const selectedChannel = useMemo(
+    () => catalogChannels.find((channel) => channel.id === manualChannelId) ?? null,
+    [catalogChannels, manualChannelId],
+  );
+
+  const manualServiceTotalCents = useMemo(() => centsFromEuros(manualTotalEuros), [manualTotalEuros]);
+  const manualDepositTotalCents = useMemo(() => centsFromEuros(manualDepositEuros), [manualDepositEuros]);
+
+  const manualPaymentsSummary = useMemo(() => {
+    return manualPayments.reduce(
+      (acc, payment) => {
+        const amountCents = centsFromEuros(payment.amountEuros);
+        if (amountCents <= 0) return acc;
+        if (payment.isDeposit) {
+          acc.depositCents += payment.direction === "OUT" ? -amountCents : amountCents;
+        } else {
+          acc.serviceCents += payment.direction === "OUT" ? -amountCents : amountCents;
+        }
+        return acc;
+      },
+      { serviceCents: 0, depositCents: 0 },
+    );
+  }, [manualPayments]);
+
   const activeFilterCount = useMemo(() => {
     return [q.trim(), status !== "ALL", hasIncident !== "ALL", depositHeld !== "ALL", dateFrom, dateTo].filter(Boolean)
       .length;
@@ -227,6 +345,147 @@ export default function StoreHistoryPage() {
     setDepositHeld("ALL");
     setDateFrom("");
     setDateTo("");
+  }
+
+  function resetManualForm() {
+    setManualPreset("COMPLETED_PAID");
+    setManualCustomerName("");
+    setManualDate("");
+    setManualTime("12:00");
+    setManualQuantity(1);
+    setManualPax(1);
+    setManualStatus("COMPLETED");
+    setManualCountry("ES");
+    setManualPhone("");
+    setManualEmail("");
+    setManualTotalEuros("");
+    setManualDepositEuros("");
+    setManualNote("");
+    setManualPayments([{ amountEuros: "", method: "CASH", isDeposit: false, direction: "IN" }]);
+  }
+
+  function manualPresetLabel(preset: ManualPresetId) {
+    switch (preset) {
+      case "COMPLETED_PAID":
+        return "Completada y cobrada";
+      case "COMPLETED_WITH_DEPOSIT":
+        return "Completada con fianza cobrada";
+      case "PENDING_COLLECTION":
+        return "Pendiente de cobro";
+      case "RECORD_ONLY":
+        return "Solo constancia";
+      default:
+        return preset;
+    }
+  }
+
+  function buildPaymentsForPreset(preset: ManualPresetId): ManualPaymentDraft[] {
+    const serviceAmount = manualTotalEuros.trim();
+    const depositAmount = manualDepositEuros.trim();
+
+    switch (preset) {
+      case "COMPLETED_PAID":
+        return [{ amountEuros: serviceAmount, method: "CARD", isDeposit: false, direction: "IN" }];
+      case "COMPLETED_WITH_DEPOSIT":
+        return ([
+          { amountEuros: serviceAmount, method: "CARD", isDeposit: false, direction: "IN" },
+          { amountEuros: depositAmount, method: "CARD", isDeposit: true, direction: "IN" },
+        ] satisfies ManualPaymentDraft[]).filter((payment) => centsFromEuros(payment.amountEuros) > 0);
+      case "PENDING_COLLECTION":
+      case "RECORD_ONLY":
+        return [{ amountEuros: "", method: "CASH", isDeposit: false, direction: "IN" }];
+      default:
+        return [{ amountEuros: "", method: "CASH", isDeposit: false, direction: "IN" }];
+    }
+  }
+
+  function applyManualPreset(preset: ManualPresetId) {
+    setManualPreset(preset);
+    setManualStatus(preset === "PENDING_COLLECTION" ? "WAITING" : "COMPLETED");
+    setManualPayments(buildPaymentsForPreset(preset));
+  }
+
+  function refillManualPaymentsFromPreset() {
+    setManualPayments(buildPaymentsForPreset(manualPreset));
+  }
+
+  async function createManualReservation() {
+    setManualBusy(true);
+    setError(null);
+    try {
+      const payments = manualPayments
+        .map((payment) => ({
+          amountCents: centsFromEuros(payment.amountEuros),
+          method: payment.method,
+          isDeposit: payment.isDeposit,
+          direction: payment.direction,
+        }))
+        .filter((payment) => payment.amountCents > 0);
+
+      const res = await fetch("/api/admin/reservations/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          activityDate: manualDate,
+          time: manualTime || null,
+          status: manualStatus,
+          customerName: manualCustomerName,
+          customerCountry: manualCountry,
+          customerPhone: manualPhone || null,
+          customerEmail: manualEmail || null,
+          serviceId: manualServiceId,
+          optionId: manualOptionId,
+          channelId: manualChannelId || null,
+          quantity: manualQuantity,
+          pax: manualPax,
+          totalPriceCents: centsFromEuros(manualTotalEuros),
+          depositCents: centsFromEuros(manualDepositEuros),
+          note: manualNote,
+          payments,
+        }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+      resetManualForm();
+      setManualOpen(false);
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "No se pudo crear la reserva manual");
+    } finally {
+      setManualBusy(false);
+    }
+  }
+
+  function openAdjustment(row: HistoryRow) {
+    setAdjustTarget(row);
+    setAdjustTotalEuros((Number(row.totalPriceCents ?? 0) / 100).toFixed(2));
+    setAdjustDepositEuros((Number(row.depositCents ?? 0) / 100).toFixed(2));
+    setAdjustNote(row.financialAdjustmentNote ?? "");
+  }
+
+  async function submitAdjustment() {
+    if (!adjustTarget) return;
+    setAdjustBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/reservations/${adjustTarget.id}/financial-adjustment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          totalPriceCents: centsFromEuros(adjustTotalEuros),
+          depositCents: centsFromEuros(adjustDepositEuros),
+          note: adjustNote,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setAdjustTarget(null);
+      setAdjustNote("");
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "No se pudo ajustar la reserva");
+    } finally {
+      setAdjustBusy(false);
+    }
   }
 
   return (
@@ -246,6 +505,9 @@ export default function StoreHistoryPage() {
             <a href="/store" style={secondaryLink}>
               Volver a Store
             </a>
+            <button onClick={() => setManualOpen((prev) => !prev)} style={secondaryLink}>
+              {manualOpen ? "Cerrar manual" : "Nueva reserva manual"}
+            </button>
             <button onClick={load} style={primaryButton} disabled={loading}>
               {loading ? "Actualizando..." : "Refrescar"}
             </button>
@@ -260,6 +522,145 @@ export default function StoreHistoryPage() {
           <StoreMetricCard label="Pendiente total" value={euros(summary.pendingCents)} />
         </StoreMetricGrid>
       </section>
+
+      {manualOpen ? (
+        <Card title="Alta manual histórica">
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ fontSize: 13, color: "#64748b" }}>
+              Usa esta alta solo para reservas que ocurrieron de verdad pero no quedaron registradas. Quedarán marcadas como <b>reserva manual</b>.
+            </div>
+            {catalogLoading ? <div style={mutedText}>Cargando catálogo...</div> : null}
+            <div style={sectionCard}>
+              <div style={sectionHeader}>
+                <div style={sectionTitle}>Tipo de registro</div>
+                <div style={mutedText}>Aplica un preset y luego ajusta solo lo que cambie del caso real.</div>
+              </div>
+              <div style={filtersGrid}>
+                <label style={field}>
+                  <span style={fieldLabel}>Preset</span>
+                  <Select value={manualPreset} onChange={(e) => applyManualPreset(e.target.value as ManualPresetId)}>
+                    <option value="COMPLETED_PAID">Completada y cobrada</option>
+                    <option value="COMPLETED_WITH_DEPOSIT">Completada con fianza cobrada</option>
+                    <option value="PENDING_COLLECTION">Pendiente de cobro</option>
+                    <option value="RECORD_ONLY">Solo constancia sin caja</option>
+                  </Select>
+                </label>
+                <label style={field}>
+                  <span style={fieldLabel}>Estado</span>
+                  <Select value={manualStatus} onChange={(e) => setManualStatus(e.target.value)}>
+                    <option value="COMPLETED">COMPLETED</option>
+                    <option value="WAITING">WAITING</option>
+                    <option value="READY_FOR_PLATFORM">READY_FOR_PLATFORM</option>
+                    <option value="IN_SEA">IN_SEA</option>
+                    <option value="CANCELED">CANCELED</option>
+                  </Select>
+                </label>
+              </div>
+              <div style={presetHint}>
+                Preset activo: <b>{manualPresetLabel(manualPreset)}</b>. Si cambias importes, pulsa <b>Autocompletar pagos</b>.
+              </div>
+            </div>
+
+            <div style={sectionCard}>
+              <div style={sectionHeader}>
+                <div style={sectionTitle}>Reserva</div>
+                <div style={mutedText}>Datos operativos y del cliente para que quede clara en histórico.</div>
+              </div>
+              <div style={filtersGrid}>
+                <label style={field}><span style={fieldLabel}>Cliente</span><Input value={manualCustomerName} onChange={(e) => setManualCustomerName(e.target.value)} /></label>
+                <label style={field}><span style={fieldLabel}>Fecha</span><Input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} /></label>
+                <label style={field}><span style={fieldLabel}>Hora</span><Input type="time" value={manualTime} onChange={(e) => setManualTime(e.target.value)} /></label>
+                <label style={field}><span style={fieldLabel}>Servicio</span><Select value={manualServiceId} onChange={(e) => setManualServiceId(e.target.value)}>{catalogServices.map((service) => <option key={service.id} value={service.id}>{service.name ?? service.id}</option>)}</Select></label>
+                <label style={field}><span style={fieldLabel}>Opción</span><Select value={manualOptionId} onChange={(e) => setManualOptionId(e.target.value)}>{catalogOptions.filter((option) => option.serviceId === manualServiceId).map((option) => <option key={option.id} value={option.id}>{option.durationMinutes ?? "-"} min · pax {option.paxMax ?? "-"}</option>)}</Select></label>
+                <label style={field}><span style={fieldLabel}>Canal</span><Select value={manualChannelId} onChange={(e) => setManualChannelId(e.target.value)}>{catalogChannels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name}</option>)}</Select></label>
+                <label style={field}><span style={fieldLabel}>País</span><Input value={manualCountry} onChange={(e) => setManualCountry(e.target.value.toUpperCase())} maxLength={2} /></label>
+                <label style={field}><span style={fieldLabel}>Teléfono</span><Input value={manualPhone} onChange={(e) => setManualPhone(e.target.value)} /></label>
+                <label style={field}><span style={fieldLabel}>Email</span><Input value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} /></label>
+                <label style={field}><span style={fieldLabel}>Cantidad</span><Input type="number" min={1} value={manualQuantity} onChange={(e) => setManualQuantity(Number(e.target.value || 1))} /></label>
+                <label style={field}><span style={fieldLabel}>PAX</span><Input type="number" min={1} value={manualPax} onChange={(e) => setManualPax(Number(e.target.value || 1))} /></label>
+              </div>
+            </div>
+
+            <div style={sectionCard}>
+              <div style={sectionHeader}>
+                <div style={sectionTitle}>Importes y caja</div>
+                <div style={mutedText}>Registra el total real y la fianza; luego genera la caja sugerida si hace falta.</div>
+              </div>
+              <div style={filtersGrid}>
+                <label style={field}><span style={fieldLabel}>Total servicio EUR</span><Input value={manualTotalEuros} onChange={(e) => setManualTotalEuros(e.target.value)} /></label>
+                <label style={field}><span style={fieldLabel}>Fianza EUR</span><Input value={manualDepositEuros} onChange={(e) => setManualDepositEuros(e.target.value)} /></label>
+              </div>
+              <div style={summaryStrip}>
+                <Pill>Servicio {euros(manualServiceTotalCents)}</Pill>
+                <Pill>Fianza {euros(manualDepositTotalCents)}</Pill>
+                <Pill>Caja servicio {euros(manualPaymentsSummary.serviceCents)}</Pill>
+                <Pill>Caja fianza {euros(manualPaymentsSummary.depositCents)}</Pill>
+                {selectedService ? <Pill>{selectedService.name ?? selectedService.id}</Pill> : null}
+                {selectedOption ? <Pill>{selectedOption.durationMinutes ?? "-"} min</Pill> : null}
+                {selectedChannel ? <Pill>{selectedChannel.name}</Pill> : null}
+              </div>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Pagos a registrar</div>
+                <Button onClick={refillManualPaymentsFromPreset}>Autocompletar pagos</Button>
+                <Button onClick={() => setManualPayments((prev) => [...prev, { amountEuros: "", method: "CARD", isDeposit: false, direction: "IN" }])}>Añadir pago</Button>
+              </div>
+              <div style={mutedText}>Sugerencia según preset: <b>{manualPresetLabel(manualPreset)}</b>.</div>
+              {manualPayments.map((payment, index) => (
+                <div key={index} style={paymentRow}>
+                  <Select value={payment.method} onChange={(e) => setManualPayments((prev) => prev.map((line, i) => i === index ? { ...line, method: e.target.value as ManualPaymentDraft["method"] } : line))}>
+                    <option value="CASH">Efectivo</option>
+                    <option value="CARD">Tarjeta</option>
+                    <option value="BIZUM">Bizum</option>
+                    <option value="TRANSFER">Transfer</option>
+                  </Select>
+                  <Select value={payment.isDeposit ? "DEPOSIT" : "SERVICE"} onChange={(e) => setManualPayments((prev) => prev.map((line, i) => i === index ? { ...line, isDeposit: e.target.value === "DEPOSIT" } : line))}>
+                    <option value="SERVICE">Servicio</option>
+                    <option value="DEPOSIT">Fianza</option>
+                  </Select>
+                  <Select value={payment.direction} onChange={(e) => setManualPayments((prev) => prev.map((line, i) => i === index ? { ...line, direction: e.target.value as ManualPaymentDraft["direction"] } : line))}>
+                    <option value="IN">Entrada</option>
+                    <option value="OUT">Salida</option>
+                  </Select>
+                  <Input value={payment.amountEuros} onChange={(e) => setManualPayments((prev) => prev.map((line, i) => i === index ? { ...line, amountEuros: e.target.value } : line))} placeholder="Importe EUR" />
+                  <Button onClick={() => setManualPayments((prev) => prev.filter((_, i) => i !== index))} disabled={manualPayments.length === 1}>Quitar</Button>
+                </div>
+              ))}
+            </div>
+            </div>
+
+            <label style={field}>
+              <span style={fieldLabel}>Motivo / nota</span>
+              <Input value={manualNote} onChange={(e) => setManualNote(e.target.value)} placeholder="Ej: fallo de luz, registro omitido, venta recuperada a cierre..." />
+            </label>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <Button onClick={() => { setManualOpen(false); resetManualForm(); }} disabled={manualBusy}>Cancelar</Button>
+              <Button onClick={() => void createManualReservation()} disabled={manualBusy}>{manualBusy ? "Guardando..." : "Crear reserva manual"}</Button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
+      {adjustTarget ? (
+        <Card title={`Ajuste económico · ${adjustTarget.customerName || adjustTarget.id}`}>
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ fontSize: 13, color: "#64748b" }}>
+              Ajusta el total real cobrado y la fianza manteniendo trazabilidad. El sistema registrará la corrección como ajuste financiero.
+            </div>
+            <div style={filtersGrid}>
+              <label style={field}><span style={fieldLabel}>Total servicio EUR</span><Input value={adjustTotalEuros} onChange={(e) => setAdjustTotalEuros(e.target.value)} /></label>
+              <label style={field}><span style={fieldLabel}>Fianza EUR</span><Input value={adjustDepositEuros} onChange={(e) => setAdjustDepositEuros(e.target.value)} /></label>
+              <label style={{ ...field, gridColumn: "1 / -1" }}><span style={fieldLabel}>Motivo del ajuste</span><Input value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} placeholder="Ej: descuento del mes no aplicado en sistema, cobro real inferior al registrado..." /></label>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <Button onClick={() => setAdjustTarget(null)} disabled={adjustBusy}>Cancelar</Button>
+              <Button onClick={() => void submitAdjustment()} disabled={adjustBusy}>{adjustBusy ? "Guardando..." : "Aplicar ajuste"}</Button>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       <Card
         title="Filtros"
@@ -343,6 +744,7 @@ export default function StoreHistoryPage() {
         incidentSummary={incidentSummary}
         actionLink={actionLink}
         emptyState={emptyState}
+        onAdjustFinancials={openAdjustment}
       />
     </div>
   );
@@ -423,6 +825,47 @@ const fieldLabel: CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
   color: "#475569",
+};
+
+const sectionCard: CSSProperties = {
+  display: "grid",
+  gap: 14,
+  padding: 16,
+  borderRadius: 18,
+  border: "1px solid #e2e8f0",
+  background: "#f8fafc",
+};
+
+const sectionHeader: CSSProperties = {
+  display: "grid",
+  gap: 4,
+};
+
+const sectionTitle: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 900,
+  color: "#0f172a",
+};
+
+const presetHint: CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 14,
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  color: "#1e3a8a",
+  fontSize: 12,
+};
+
+const summaryStrip: CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const paymentRow: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr)) auto",
+  gap: 10,
 };
 
 const emptyState: CSSProperties = {
