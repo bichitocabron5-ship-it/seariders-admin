@@ -217,7 +217,7 @@ export default function StoreHistoryResultsSection({
                     <td style={cell}>
                       <div style={{ display: "grid", gap: 6 }}>
                         <div style={moneyValue}>{euros(countPaidServiceCents(row))}</div>
-                        <div style={mutedText}>Total servicio {euros(row.totalToChargeCents)}</div>
+                        <div style={mutedText}>Total servicio {euros(row.totalPriceCents)}</div>
                         <div
                           style={{
                             color: countPendingServiceCents(row) > 0 ? "#b45309" : "#166534",

@@ -150,15 +150,17 @@ function incidentTone(level: string) {
 }
 
 function countPaidServiceCents(row: HistoryRow) {
-  return Math.max(0, Number(row.paidCents ?? 0) - Number(row.paidDepositCents ?? 0));
+  const paidServiceCents = Math.max(0, Number(row.paidCents ?? 0) - Number(row.paidDepositCents ?? 0));
+  const adjustedServiceTotalCents = Math.max(0, Number(row.totalPriceCents ?? 0));
+  return Math.min(paidServiceCents, adjustedServiceTotalCents);
 }
 
 function countPendingServiceCents(row: HistoryRow) {
-  return Math.max(0, Number(row.totalToChargeCents ?? 0) - countPaidServiceCents(row));
+  return Math.max(0, Number(row.totalPriceCents ?? 0) - countPaidServiceCents(row));
 }
 
 function countPendingDepositCents(row: HistoryRow) {
-  return Math.max(0, Number(row.depositCents ?? 0) - Number(row.paidDepositCents ?? 0));
+  return Math.max(0, Number(row.depositCents ?? 0) - Number(row.depositCollectedCents ?? 0));
 }
 
 export default function StoreHistoryPage() {
