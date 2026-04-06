@@ -5,7 +5,13 @@ export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Rutas publicas
-  if (pathname.startsWith("/login") || pathname.startsWith("/api/login") || pathname.startsWith("/_next")) {
+  if (
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/api/login") ||
+    pathname.startsWith("/sign/contracts/") ||
+    pathname.startsWith("/api/sign/contracts/") ||
+    pathname.startsWith("/_next")
+  ) {
     return NextResponse.next();
   }
 
