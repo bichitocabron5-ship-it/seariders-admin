@@ -8,6 +8,7 @@ type ContractCardActionsProps = {
   previewBusy: boolean;
   pdfBusy: boolean;
   canDownloadFinalPdf: boolean;
+  signerLinkBusy: boolean;
   actionRowStyle: React.CSSProperties;
   secondaryButtonStyle: React.CSSProperties;
   primaryButtonStyle: React.CSSProperties;
@@ -17,6 +18,7 @@ type ContractCardActionsProps = {
   onPreview: () => void;
   onGeneratePdf: () => void;
   onDownloadFinalPdf: () => void;
+  onOpenSignerLink: () => void;
 };
 
 export function ContractCardActions({
@@ -25,6 +27,7 @@ export function ContractCardActions({
   previewBusy,
   pdfBusy,
   canDownloadFinalPdf,
+  signerLinkBusy,
   actionRowStyle,
   secondaryButtonStyle,
   primaryButtonStyle,
@@ -34,6 +37,7 @@ export function ContractCardActions({
   onPreview,
   onGeneratePdf,
   onDownloadFinalPdf,
+  onOpenSignerLink,
 }: ContractCardActionsProps) {
   return (
     <div style={actionRowStyle}>
@@ -58,6 +62,14 @@ export function ContractCardActions({
         disabled={pdfBusy || saving}
       >
         {pdfBusy ? "Generando PDF..." : "Generar PDF"}
+      </button>
+      <button
+        type="button"
+        onClick={onOpenSignerLink}
+        style={{ ...secondaryBtnStyle, width: "100%" }}
+        disabled={signerLinkBusy || saving}
+      >
+        {signerLinkBusy ? "Abriendo firma..." : "Firmar en tablet"}
       </button>
 
       {canDownloadFinalPdf ? (

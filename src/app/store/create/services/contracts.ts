@@ -112,6 +112,15 @@ export async function saveContractSignature(args: {
   return await res.json();
 }
 
+export async function getContractSignerLink(contractId: string): Promise<{ ok: true; url: string; expiresInMinutes: number }> {
+  const res = await fetch(`/api/store/contracts/${contractId}/signer-link`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
 export async function uploadMinorAuthorization(args: {
   contractId: string;
   file: File;

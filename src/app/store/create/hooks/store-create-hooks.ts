@@ -181,6 +181,19 @@ export function useContractsState(args: {
   }, [isMigrateMode, prefillReservationId, isHistorical, refreshContracts]);
 
   useEffect(() => {
+    if (!isMigrateMode) return;
+    if (!prefillReservationId) return;
+    if (isHistorical) return;
+    if (requiredUnits <= 0 || readyCount >= requiredUnits) return;
+
+    const timer = window.setInterval(() => {
+      void loadContractsBlock(prefillReservationId);
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, [isMigrateMode, prefillReservationId, isHistorical, requiredUnits, readyCount, loadContractsBlock]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.location.hash !== "#contracts") return;
     const el = document.getElementById("contracts");

@@ -8,6 +8,7 @@ import { errorMessage } from "../utils/errors";
 import type { ContractDto, ContractPatch } from "../types";
 import {
   fetchPreparedOptions,
+  getContractSignerLink,
   getSignedContractDownloadUrl,
   getSignedMinorAuthorizationDownloadUrl,
 } from "../services/contracts";
@@ -18,6 +19,7 @@ import {
   ContractLicenseSection,
   ContractPreparedResourceSection,
 } from "./contract-card-sections";
+import { ContractSignerLinkModal } from "./contract-signer-link-modal";
 
 const panelStyle: React.CSSProperties = {
   ...opsStyles.sectionCard,
@@ -64,6 +66,15 @@ const secondaryBtn: React.CSSProperties = {
   ...opsStyles.ghostButton,
   padding: "10px 12px",
   border: "1px solid #e5e7eb",
+};
+const externalSignaturePendingStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: 16,
+  border: "1px solid #fde68a",
+  background: "#fffbeb",
+  color: "#92400e",
+  display: "grid",
+  gap: 4,
 };
 
 function contractStatusStyle(status: ContractDto["status"]): React.CSSProperties {
@@ -168,6 +179,9 @@ export function ContractCard({
   minorDeleteBusy,
 }: ContractCardProps) {
   const [saving, setSaving] = React.useState(false);
+  const [signerLinkBusy, setSignerLinkBusy] = React.useState(false);
+  const [signerLinkModal, setSignerLinkModal] = React.useState<{ url: string; expiresInMinutes: number } | null>(null);
+  const [awaitingExternalSignature, setAwaitingExternalSignature] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
   const [birthYmd, setBirthYmd] = React.useState<string>(ymdFromDate(c.driverBirthDate ? new Date(c.driverBirthDate) : null));
@@ -254,6 +268,13 @@ export function ContractCard({
     setPreparedAssetId(c.preparedAssetId ?? "");
   }, [c.id, c.driverAddress, c.driverBirthDate, c.driverCountry, c.driverDocNumber, c.driverDocType, c.driverEmail, c.driverName, c.driverPhone, c.driverPostalCode, c.imageConsentAccepted, c.licenseNumber, c.licenseSchool, c.licenseType, c.minorAuthorizationProvided, c.preparedAssetId, c.preparedJetskiId]);
 
+  useEffect(() => {
+    if (c.status === "SIGNED" || c.status === "VOID") {
+      setAwaitingExternalSignature(false);
+      setSignerLinkModal(null);
+    }
+  }, [c.status]);
+
   function buildPayload() {
     return {
       driverName: driverName || null,
@@ -333,6 +354,24 @@ export function ContractCard({
     }
   }
 
+  async function handleOpenSignerLink() {
+    try {
+      setSignerLinkBusy(true);
+      setErr(null);
+      await savePartial(buildPayload());
+      const data = await getContractSignerLink(c.id);
+      setAwaitingExternalSignature(true);
+      setSignerLinkModal({
+        url: data.url,
+        expiresInMinutes: data.expiresInMinutes,
+      });
+    } catch (e: unknown) {
+      setErr(errorMessage(e, "No se pudo abrir la firma en tablet"));
+    } finally {
+      setSignerLinkBusy(false);
+    }
+  }
+
   return (
     <article style={panelStyle}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -345,6 +384,17 @@ export function ContractCard({
         </div>
         <div style={contractStatusStyle(c.status)}>{c.status}</div>
       </div>
+
+      {awaitingExternalSignature && c.status !== "SIGNED" ? (
+        <div style={externalSignaturePendingStyle}>
+          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 0.6, textTransform: "uppercase" }}>
+            Esperando firma externa
+          </div>
+          <div style={{ fontSize: 13 }}>
+            El enlace de firma ya esta generado. Escanea el QR desde tablet o movil y este contrato se actualizara automaticamente al firmarse.
+          </div>
+        </div>
+      ) : null}
 
       <ContractLegalSection
         subCardStyle={subCardStyle}
@@ -457,6 +507,7 @@ export function ContractCard({
         isUnder16={isUnder16}
         previewBusy={previewBusy}
         pdfBusy={pdfBusy}
+        signerLinkBusy={signerLinkBusy}
         canDownloadFinalPdf={canDownloadFinalPdf}
         actionRowStyle={actionRowStyle}
         secondaryButtonStyle={secondaryButtonStyle}
@@ -467,12 +518,20 @@ export function ContractCard({
         onPreview={() => void handlePreviewClick()}
         onGeneratePdf={() => void handleGeneratePdfClick()}
         onDownloadFinalPdf={() => void handleDownloadFinalPdf()}
+        onOpenSignerLink={() => void handleOpenSignerLink()}
       />
 
       {showLicenseFields ? (
         <div style={{ fontSize: 12, color: "#64748b" }}>
           Si esta actividad requiere licencia, el backend validará la licencia antes de READY.
         </div>
+      ) : null}
+      {signerLinkModal ? (
+        <ContractSignerLinkModal
+          url={signerLinkModal.url}
+          expiresInMinutes={signerLinkModal.expiresInMinutes}
+          onClose={() => setSignerLinkModal(null)}
+        />
       ) : null}
     </article>
   );
