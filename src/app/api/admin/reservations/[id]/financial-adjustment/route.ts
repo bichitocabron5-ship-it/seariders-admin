@@ -193,8 +193,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const fallbackOrigin =
         reservation.payments[0]?.origin ??
         (reservation.source === PaymentOrigin.BOOTH ||
-        reservation.source === PaymentOrigin.WEB ||
-        reservation.source === PaymentOrigin.BAR
+        reservation.source === PaymentOrigin.WEB
           ? reservation.source
           : PaymentOrigin.STORE);
       const fallbackMethod = reservation.payments[0]?.method ?? PaymentMethod.CARD;
