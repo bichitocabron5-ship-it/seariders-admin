@@ -202,7 +202,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         origin: fallbackOrigin,
         method: fallbackMethod,
         shiftSessionId: fallbackShiftSessionId,
-        createdByUserId: session.userId,
+        createdByUserId: session.userId ?? null,
       };
 
       await tx.reservation.update({
