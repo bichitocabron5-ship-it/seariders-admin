@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { z, type ZodIssue } from "zod";
 import { isOperableStatus, operabilityBlockingReason } from "@/lib/operability";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import {
@@ -12,26 +11,6 @@ import {
 } from "@prisma/client";
 
 export const runtime = "nodejs";
-
-const Body = z
-  .object({
-    override: z.boolean().optional(),
-    reason: z.string().trim().max(300).optional().nullable(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.override && !value.reason?.trim()) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["reason"],
-        message: "El motivo es obligatorio para forzar la salida.",
-      });
-    }
-  });
-
-function validationMessage(issues: ZodIssue[]) {
-  const first = issues[0];
-  return first?.message || "Body inválido";
-}
 
 function deriveReservationStatusFromUnits(
   units: Array<{ status: ReservationUnitStatus }>
@@ -53,22 +32,12 @@ function deriveReservationStatusFromUnits(
   return ReservationStatus.WAITING;
 }
 
-function appendOverrideNote(runNote: string | null | undefined, text: string) {
-  const base = runNote?.trim();
-  return base ? `${base}\n${text}`.slice(0, 500) : text.slice(0, 500);
-}
-
 export async function POST(req: Request, ctx: { params: Promise<{ runId: string }> }) {
   const session = await requirePlatformOrAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { runId } = await ctx.params;
-  const json = await req.json().catch(() => null);
-  const parsed = Body.safeParse(json ?? {});
-  if (!parsed.success) return NextResponse.json({ error: validationMessage(parsed.error.issues) }, { status: 400 });
-
-  const override = Boolean(parsed.data.override);
-  const reason = parsed.data.reason?.trim() || null;
+  await req.text().catch(() => "");
 
   try {
     const out = await prisma.$transaction(async (tx) => {
@@ -76,7 +45,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
 
       const run = await tx.monitorRun.findUnique({
         where: { id: runId },
-        select: { id: true, status: true, kind: true, monitorAssetId: true, note: true },
+        select: { id: true, status: true, kind: true, monitorAssetId: true },
       });
       if (!run) throw new Error("Run no existe");
       if (run.status === MonitorRunStatus.CLOSED) throw new Error("La salida está cerrada");
@@ -102,89 +71,62 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
         throw new Error("No hay asignaciones pendientes (QUEUED) para iniciar la salida");
       }
 
-      if (!override) {
-        for (const assignment of queued) {
-          if (assignment.jetskiId) {
-            const jetski = await tx.jetski.findUnique({
-              where: { id: assignment.jetskiId },
-              select: {
-                id: true,
-                number: true,
-                operabilityStatus: true,
-              },
-            });
+      for (const assignment of queued) {
+        if (assignment.jetskiId) {
+          const jetski = await tx.jetski.findUnique({
+            where: { id: assignment.jetskiId },
+            select: {
+              id: true,
+              number: true,
+              operabilityStatus: true,
+            },
+          });
 
-            if (!jetski) {
-              throw new Error("Una de las motos asignadas ya no existe");
-            }
-
-            if (!isOperableStatus(jetski.operabilityStatus)) {
-              throw new Error(
-                `No se puede iniciar la salida: la moto ${jetski.number} no está operativa. ` +
-                  (operabilityBlockingReason(jetski.operabilityStatus) ?? "")
-              );
-            }
+          if (!jetski) {
+            throw new Error("Una de las motos asignadas ya no existe");
           }
 
-          if (assignment.assetId) {
-            const asset = await tx.asset.findUnique({
-              where: { id: assignment.assetId },
-              select: {
-                id: true,
-                name: true,
-                operabilityStatus: true,
-              },
-            });
+          if (!isOperableStatus(jetski.operabilityStatus)) {
+            throw new Error(
+              `No se puede iniciar la salida: la moto ${jetski.number} no está operativa. ` +
+                (operabilityBlockingReason(jetski.operabilityStatus) ?? "")
+            );
+          }
+        }
 
-            if (!asset) {
-              throw new Error("Uno de los recursos asignados ya no existe");
-            }
+        if (assignment.assetId) {
+          const asset = await tx.asset.findUnique({
+            where: { id: assignment.assetId },
+            select: {
+              id: true,
+              name: true,
+              operabilityStatus: true,
+            },
+          });
 
-            if (!isOperableStatus(asset.operabilityStatus)) {
-              throw new Error(
-                `No se puede iniciar la salida: el recurso ${asset.name} no está operativo. ` +
-                  (operabilityBlockingReason(asset.operabilityStatus) ?? "")
-              );
-            }
+          if (!asset) {
+            throw new Error("Uno de los recursos asignados ya no existe");
+          }
+
+          if (!isOperableStatus(asset.operabilityStatus)) {
+            throw new Error(
+              `No se puede iniciar la salida: el recurso ${asset.name} no está operativo. ` +
+                (operabilityBlockingReason(asset.operabilityStatus) ?? "")
+            );
           }
         }
       }
 
       const now = new Date();
-      const overrideStamp = override
-        ? `[OVERRIDE SALIDA ${now.toISOString()}] ${session.username || session.userId}: ${reason}`
-        : null;
 
       await tx.monitorRun.update({
         where: { id: runId },
         data: {
           status: MonitorRunStatus.IN_SEA,
           startedAt: now,
-          ...(overrideStamp
-            ? { note: appendOverrideNote(run.note, overrideStamp) }
-            : null),
         },
         select: { id: true },
       });
-
-      if (overrideStamp && reason) {
-        const audit = tx as typeof prisma;
-        await audit.operationalOverrideLog.create({
-          data: {
-            targetType: "MONITOR_RUN",
-            action: "FORCE_DEPART",
-            targetId: run.id,
-            reason,
-            createdByUserId: session.userId,
-            payloadJson: {
-              previousStatus: run.status,
-              nextStatus: MonitorRunStatus.IN_SEA,
-              queuedAssignments: queued.length,
-            },
-          },
-          select: { id: true },
-        });
-      }
 
       const touchedReservationIds = new Set<string>();
 
@@ -232,7 +174,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
         });
       }
 
-      return { ok: true, activated: queued.length, override };
+      return { ok: true, activated: queued.length };
     });
 
     return NextResponse.json(out);

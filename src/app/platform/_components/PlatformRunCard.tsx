@@ -104,12 +104,9 @@ export default function PlatformRunCard({
   assignedQueueCriticalMinutes,
   departBusy,
   closeBusy,
-  overrideBusy,
   unassignBusyAssignmentId,
   onDepartRun,
   onCloseRun,
-  onForceDepartRun,
-  onForceCloseRun,
   onOpenAssignmentActions,
   onUnassignAssignment,
 }: {
@@ -120,12 +117,9 @@ export default function PlatformRunCard({
   assignedQueueCriticalMinutes: number;
   departBusy: boolean;
   closeBusy: boolean;
-  overrideBusy: boolean;
   unassignBusyAssignmentId: string | null;
   onDepartRun: (runId: string) => void;
   onCloseRun: (runId: string) => void;
-  onForceDepartRun: (runId: string) => void;
-  onForceCloseRun: (runId: string) => void;
   onOpenAssignmentActions: (assignment: RunOpen["assignments"][0]) => void;
   onUnassignAssignment: (assignmentId: string) => void;
 }) {
@@ -163,57 +157,18 @@ export default function PlatformRunCard({
           <button
             type="button"
             onClick={() => onCloseRun(run.id)}
-            disabled={!canCloseRun || closeBusy || departBusy || overrideBusy}
+            disabled={!canCloseRun || closeBusy || departBusy}
             title={canCloseRun ? "Cerrar salida y liberar monitor/recurso" : "Solo disponible en READY/IN_SEA y sin clientes asignados"}
             style={{
               ...dangerGhostButtonStyle,
-              background: !canCloseRun || closeBusy || departBusy || overrideBusy ? "#fecaca" : "#fff",
-              cursor: !canCloseRun || closeBusy || departBusy || overrideBusy ? "not-allowed" : "pointer",
+              background: !canCloseRun || closeBusy || departBusy ? "#fecaca" : "#fff",
+              cursor: !canCloseRun || closeBusy || departBusy ? "not-allowed" : "pointer",
             }}
           >
             {closeBusy ? "Desasignando..." : "Desasignar"}
           </button>
 
           {run.note ? <div style={smallMetaStyle}>Nota: {run.note}</div> : null}
-        </div>
-      </div>
-
-      <div style={overridePanelStyle}>
-        <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#9a3412" }}>
-            Contingencia
-          </div>
-          <div style={{ fontSize: 13, color: "#7c2d12", fontWeight: 800 }}>
-            Overrides manuales solo para desbloqueo operativo excepcional.
-          </div>
-        </div>
-        <div style={overrideActionsStyle}>
-          <button
-            type="button"
-            onClick={() => onForceDepartRun(run.id)}
-            disabled={run.status !== "READY" || departBusy || closeBusy || overrideBusy}
-            style={{
-              ...ghostButtonStyle,
-              borderColor: "#f59e0b",
-              color: "#92400e",
-              background: run.status !== "READY" || departBusy || closeBusy || overrideBusy ? "#fef3c7" : "#fff",
-              cursor: run.status !== "READY" || departBusy || closeBusy || overrideBusy ? "not-allowed" : "pointer",
-            }}
-          >
-            {overrideBusy ? "Procesando..." : "Forzar salida"}
-          </button>
-          <button
-            type="button"
-            onClick={() => onForceCloseRun(run.id)}
-            disabled={departBusy || closeBusy || overrideBusy}
-            style={{
-              ...dangerGhostButtonStyle,
-              background: departBusy || closeBusy || overrideBusy ? "#fecaca" : "#fff",
-              cursor: departBusy || closeBusy || overrideBusy ? "not-allowed" : "pointer",
-            }}
-          >
-            {overrideBusy ? "Procesando..." : "Cerrar run manual"}
-          </button>
         </div>
       </div>
 
@@ -410,22 +365,6 @@ const assignmentsGridStyle: CSSProperties = {
   marginTop: 12,
   display: "grid",
   gap: 12,
-};
-
-const overridePanelStyle: CSSProperties = {
-  marginTop: 12,
-  padding: 12,
-  borderRadius: 14,
-  border: "1px solid #fed7aa",
-  background: "#fff7ed",
-  display: "grid",
-  gap: 10,
-};
-
-const overrideActionsStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: 8,
 };
 
 const assignmentCardStyle: CSSProperties = {

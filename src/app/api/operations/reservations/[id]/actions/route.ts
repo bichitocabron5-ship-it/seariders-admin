@@ -5,10 +5,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z, type ZodIssue } from "zod";
-import {
-  ReservationStatus,
-  type Prisma,
-} from "@prisma/client";
+import { ReservationStatus, type Prisma } from "@prisma/client";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 
@@ -28,20 +25,9 @@ async function requireOpsOrAdmin() {
   return null;
 }
 
-const Body = z
-  .object({
-    action: z.enum(["mark_ready", "mark_in_sea", "force_ready"]),
-    reason: z.string().trim().max(300).optional().nullable(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.action === "force_ready" && !value.reason?.trim()) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["reason"],
-        message: "El motivo es obligatorio para forzar READY.",
-      });
-    }
-  });
+const Body = z.object({
+  action: z.enum(["mark_ready", "mark_in_sea"]),
+});
 
 function validationMessage(issues: ZodIssue[]) {
   const first = issues[0];
@@ -110,7 +96,7 @@ export async function POST(
     return NextResponse.json({ error: validationMessage(parsed.error.issues) }, { status: 400 });
   }
 
-  const { action, reason } = parsed.data;
+  const { action } = parsed.data;
 
   try {
     const row = await prisma.$transaction(async (tx) => {
@@ -140,10 +126,8 @@ export async function POST(
         throw new Error("Reserva no existe");
       }
 
-      if (action === "mark_ready" || action === "force_ready") {
-        const isOverride = action === "force_ready";
-
-        if (!reservation.formalizedAt && !isOverride) {
+      if (action === "mark_ready") {
+        if (!reservation.formalizedAt) {
           throw new Error("La reserva debe estar formalizada antes de pasar a READY_FOR_PLATFORM.");
         }
 
@@ -198,25 +182,6 @@ export async function POST(
         });
 
         await syncStoreFulfillmentTasksForReservation(tx, id);
-
-        if (isOverride && reason) {
-          const audit = tx as typeof prisma;
-          await audit.operationalOverrideLog.create({
-            data: {
-              targetType: "RESERVATION",
-              action: "FORCE_READY",
-              targetId: reservation.id,
-              reason,
-              createdByUserId: session.userId,
-              payloadJson: {
-                previousStatus: reservation.status,
-                nextStatus: ReservationStatus.READY_FOR_PLATFORM,
-                formalizedAt: reservation.formalizedAt?.toISOString?.() ?? null,
-              },
-            },
-            select: { id: true },
-          });
-        }
 
         return updated;
       }

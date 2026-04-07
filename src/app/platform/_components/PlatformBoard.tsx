@@ -9,7 +9,6 @@ import type {
   MonitorRunKind,
   OperabilityCountRow,
   OperabilitySummary,
-  PlatformOverrideLogRow,
   QueueItem,
   RunOpen,
 } from "../types/types";
@@ -18,7 +17,6 @@ import { opsStyles } from "@/components/ops-ui";
 import PlatformAssignModal from "./PlatformAssignModal";
 import PlatformAssignmentActionsModal from "./PlatformAssignmentActionsModal";
 import PlatformIncidentModal from "./PlatformIncidentModal";
-import PlatformOverrideLogSection from "./PlatformOverrideLogSection";
 import PlatformResourceRadar from "./PlatformResourceRadar";
 import PlatformRunCard from "./PlatformRunCard";
 
@@ -166,13 +164,9 @@ export default function PlatformBoard(props: Props) {
   const [createRunError, setCreateRunError] = useState<string | null>(null);
   const [departBusyRunId, setDepartBusyRunId] = useState<string | null>(null);
   const [closeBusyRunId, setCloseBusyRunId] = useState<string | null>(null);
-  const [overrideBusyRunId, setOverrideBusyRunId] = useState<string | null>(null);
   const [unassignBusyAssignmentId, setUnassignBusyAssignmentId] = useState<string | null>(null);
   const [departError, setDepartError] = useState<string | null>(null);
   const [operability, setOperability] = useState<OperabilitySummary | null>(null);
-  const [overrideLogs, setOverrideLogs] = useState<PlatformOverrideLogRow[]>([]);
-  const [overrideLogsLoading, setOverrideLogsLoading] = useState(false);
-  const [overrideLogsError, setOverrideLogsError] = useState<string | null>(null);
   const [incidentOpen, setIncidentOpen] = useState(false);
   const [incidentBusy, setIncidentBusy] = useState(false);
   const [incidentError, setIncidentError] = useState<string | null>(null);
@@ -225,7 +219,7 @@ export default function PlatformBoard(props: Props) {
       setIncidentOpen(false);
       setActionOpen(false);
       setActionAssignment(null);
-      await Promise.all([loadAll(), loadOverrideLogs()]);
+      await loadAll();
     } catch (e: unknown) {
       setIncidentError(e instanceof Error ? e.message : "Error registrando incidencia");
     } finally {
@@ -245,7 +239,7 @@ export default function PlatformBoard(props: Props) {
       }
       const res = await fetch("/api/platform/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ monitorId: createRunMonitorId, kind, monitorJetskiId: kind === "JETSKI" && selectedRunResourceId !== NO_RESOURCE_SELECTED ? selectedRunResourceId : null, monitorAssetId: kind === "NAUTICA" && selectedRunResourceId !== NO_RESOURCE_SELECTED ? selectedRunResourceId : null, note: createRunNote?.trim() ? createRunNote.trim() : null }) });
       if (!res.ok) { const txt = await res.text().catch(() => ""); throw new Error(txt || "No se pudo abrir la salida."); }
-      await Promise.all([loadAll(), loadOverrideLogs()]); setCreateRunNote(""); setCreateRunResourceId(NO_RESOURCE_SELECTED); if (createRunResourceSelectRef.current) createRunResourceSelectRef.current.value = NO_RESOURCE_SELECTED;
+      await loadAll(); setCreateRunNote(""); setCreateRunResourceId(NO_RESOURCE_SELECTED); if (createRunResourceSelectRef.current) createRunResourceSelectRef.current.value = NO_RESOURCE_SELECTED;
     } catch (e: unknown) { setCreateRunError(e instanceof Error ? e.message : "Error"); } finally { setCreateRunBusy(false); }
   }
 
@@ -276,23 +270,8 @@ export default function PlatformBoard(props: Props) {
     } catch (e: unknown) { setDepartError(e instanceof Error ? e.message : "Error cargando plataforma"); } finally { if (opts?.showLoading) setLoading(false); }
   }, [kind, categories]);
 
-  const loadOverrideLogs = useCallback(async () => {
-    try {
-      setOverrideLogsLoading(true);
-      setOverrideLogsError(null);
-      const res = await fetch("/api/platform/override-logs", { cache: "no-store" });
-      if (!res.ok) throw new Error(await res.text());
-      const json = (await res.json()) as { rows?: PlatformOverrideLogRow[] };
-      setOverrideLogs(json.rows ?? []);
-    } catch (e: unknown) {
-      setOverrideLogsError(e instanceof Error ? e.message : "Error cargando overrides");
-    } finally {
-      setOverrideLogsLoading(false);
-    }
-  }, []);
-
   async function departRun(runId: string) {
-    try { setDepartBusyRunId(runId); setDepartError(null); const res = await fetch(`/api/platform/runs/${runId}/depart`, { method: "POST", headers: { "Content-Type": "application/json" } }); if (!res.ok) throw new Error(await res.text()); await Promise.all([loadAll(), loadOverrideLogs()]); } catch (e: unknown) { setDepartError(e instanceof Error ? e.message : "Error iniciando salida"); } finally { setDepartBusyRunId(null); }
+    try { setDepartBusyRunId(runId); setDepartError(null); const res = await fetch(`/api/platform/runs/${runId}/depart`, { method: "POST", headers: { "Content-Type": "application/json" } }); if (!res.ok) throw new Error(await res.text()); await loadAll(); } catch (e: unknown) { setDepartError(e instanceof Error ? e.message : "Error iniciando salida"); } finally { setDepartBusyRunId(null); }
   }
   async function closeRun(runId: string) {
     try {
@@ -307,61 +286,13 @@ export default function PlatformBoard(props: Props) {
     }
   }
 
-  async function forceDepartRun(runId: string) {
-    const reason = window.prompt("Motivo del override para forzar la salida.");
-    if (!reason || !reason.trim()) return;
-
-    try {
-      setOverrideBusyRunId(runId);
-      setDepartError(null);
-      const res = await fetch(`/api/platform/runs/${runId}/depart`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ override: true, reason: reason.trim() }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      await Promise.all([loadAll(), loadOverrideLogs()]);
-    } catch (e: unknown) {
-      setDepartError(e instanceof Error ? e.message : "Error forzando salida");
-    } finally {
-      setOverrideBusyRunId(null);
-    }
-  }
-
-  async function forceCloseRun(runId: string) {
-    const reason = window.prompt("Motivo del override para cerrar manualmente la salida.");
-    if (!reason || !reason.trim()) return;
-
-    try {
-      setOverrideBusyRunId(runId);
-      setDepartError(null);
-      const res = await fetch(`/api/platform/runs/${runId}/close`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          endedAt: new Date().toISOString(),
-          override: true,
-          reason: reason.trim(),
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      await Promise.all([loadAll(), loadOverrideLogs()]);
-    } catch (e: unknown) {
-      setDepartError(e instanceof Error ? e.message : "Error cerrando manualmente");
-    } finally {
-      setOverrideBusyRunId(null);
-    }
-  }
-
   useEffect(() => {
     void loadAll({ showLoading: true });
-    void loadOverrideLogs();
     const poll = setInterval(() => {
       void loadAll();
-      void loadOverrideLogs();
     }, 2500);
     return () => clearInterval(poll);
-  }, [loadAll, loadOverrideLogs]);
+  }, [loadAll]);
   const openRuns = useMemo(() => runs.filter((r) => r.status === "READY" || r.status === "IN_SEA"), [runs]);
   const readyRuns = useMemo(() => runs.filter((r) => r.status === "READY"), [runs]);
   const busyJetskis = useMemo(() => { const set = new Set<string>(); for (const run of openRuns) { if (run.monitorJetskiId) set.add(run.monitorJetskiId); for (const a of run.assignments || []) { if ((a.status === "ACTIVE" || a.status === "QUEUED") && a.jetskiId) set.add(a.jetskiId); } } return set; }, [openRuns]);
@@ -504,7 +435,7 @@ export default function PlatformBoard(props: Props) {
   async function doAssign() {
     if (!assignTarget) return; setAssignError(null); if (!assignRunId) return setAssignError("Selecciona un monitor o salida."); if (!assignResourceId) return setAssignError(kind === "JETSKI" ? "Selecciona una moto." : "Selecciona un recurso.");
     setAssignBusy(true);
-    try { const body = kind === "JETSKI" ? { reservationUnitId: assignTarget.reservationUnitId ?? "", jetskiId: assignResourceId } : { reservationUnitId: assignTarget.reservationUnitId ?? "", assetId: assignResourceId }; const res = await fetch(`/api/platform/runs/${assignRunId}/assign`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) throw new Error(await res.text()); setAssignOpen(false); setAssignTarget(null); await Promise.all([loadAll(), loadOverrideLogs()]); } catch (e: unknown) { setAssignError(e instanceof Error ? e.message : "Error asignando"); } finally { setAssignBusy(false); }
+    try { const body = kind === "JETSKI" ? { reservationUnitId: assignTarget.reservationUnitId ?? "", jetskiId: assignResourceId } : { reservationUnitId: assignTarget.reservationUnitId ?? "", assetId: assignResourceId }; const res = await fetch(`/api/platform/runs/${assignRunId}/assign`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) throw new Error(await res.text()); setAssignOpen(false); setAssignTarget(null); await loadAll(); } catch (e: unknown) { setAssignError(e instanceof Error ? e.message : "Error asignando"); } finally { setAssignBusy(false); }
   }
   function openAssignmentActions(a: RunOpen["assignments"][0]) { setActionAssignment(a); setActionOpen(true); setActionError(null); }
   function openIncidentFlow() {
@@ -521,8 +452,8 @@ export default function PlatformBoard(props: Props) {
     setIncidentError(null);
     setIncidentOpen(true);
   }
-  async function finishAssignment(hasIncident: boolean) { if (!actionAssignment) return; setActionBusy(true); setActionError(null); try { const res = await fetch(`/api/platform/assignments/${actionAssignment.id}/finish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hasIncident, type: hasIncident ? "OTHER" : undefined, level: hasIncident ? "LOW" : undefined }) }); if (!res.ok) throw new Error(await res.text()); setActionOpen(false); setActionAssignment(null); await Promise.all([loadAll(), loadOverrideLogs()]); } catch (e: unknown) { setActionError(e instanceof Error ? e.message : "Error finalizando"); } finally { setActionBusy(false); } }
-  async function extendAssignment(extraMinutes: number, serviceCode: string) { if (!actionAssignment) return; setActionBusy(true); setActionError(null); try { const res = await fetch(`/api/platform/assignments/${actionAssignment.id}/extend`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ extraMinutes, serviceCode }) }); if (!res.ok) throw new Error(await res.text()); setActionOpen(false); setActionAssignment(null); await Promise.all([loadAll(), loadOverrideLogs()]); } catch (e: unknown) { setActionError(e instanceof Error ? e.message : "Error extendiendo tiempo"); } finally { setActionBusy(false); } }
+  async function finishAssignment(hasIncident: boolean) { if (!actionAssignment) return; setActionBusy(true); setActionError(null); try { const res = await fetch(`/api/platform/assignments/${actionAssignment.id}/finish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hasIncident, type: hasIncident ? "OTHER" : undefined, level: hasIncident ? "LOW" : undefined }) }); if (!res.ok) throw new Error(await res.text()); setActionOpen(false); setActionAssignment(null); await loadAll(); } catch (e: unknown) { setActionError(e instanceof Error ? e.message : "Error finalizando"); } finally { setActionBusy(false); } }
+  async function extendAssignment(extraMinutes: number, serviceCode: string) { if (!actionAssignment) return; setActionBusy(true); setActionError(null); try { const res = await fetch(`/api/platform/assignments/${actionAssignment.id}/extend`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ extraMinutes, serviceCode }) }); if (!res.ok) throw new Error(await res.text()); setActionOpen(false); setActionAssignment(null); await loadAll(); } catch (e: unknown) { setActionError(e instanceof Error ? e.message : "Error extendiendo tiempo"); } finally { setActionBusy(false); } }
   async function unassignAssignment(assignmentId: string) {
     try {
       setUnassignBusyAssignmentId(assignmentId);
@@ -532,7 +463,7 @@ export default function PlatformBoard(props: Props) {
         headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) throw new Error(await res.text());
-      await Promise.all([loadAll(), loadOverrideLogs()]);
+      await loadAll();
     } catch (e: unknown) {
       setDepartError(e instanceof Error ? e.message : "Error desasignando cliente");
     } finally {
@@ -676,12 +607,9 @@ export default function PlatformBoard(props: Props) {
                 assignedQueueCriticalMinutes={ASSIGNED_QUEUE_CRITICAL_MINUTES}
                 departBusy={departBusyRunId === run.id}
                 closeBusy={closeBusyRunId === run.id}
-                overrideBusy={overrideBusyRunId === run.id}
                 unassignBusyAssignmentId={unassignBusyAssignmentId}
                 onDepartRun={departRun}
                 onCloseRun={closeRun}
-                onForceDepartRun={forceDepartRun}
-                onForceCloseRun={forceCloseRun}
                 onOpenAssignmentActions={openAssignmentActions}
                 onUnassignAssignment={unassignAssignment}
               />
@@ -697,14 +625,6 @@ export default function PlatformBoard(props: Props) {
           items={radarItems}
         />
       </div>
-
-      <PlatformOverrideLogSection
-        rows={overrideLogs}
-        loading={overrideLogsLoading}
-        error={overrideLogsError}
-        onRefresh={loadOverrideLogs}
-      />
-
       <PlatformAssignModal
         open={assignOpen}
         busy={assignBusy}
