@@ -105,6 +105,7 @@ export async function POST(req: Request) {
       category: svc?.category ?? null,
       isExtra: false,
       lineBaseCents: baseTotalCents,
+      quantity,
     };
 
     const detail = await computeAutoDiscountDetail({

@@ -10,10 +10,21 @@ export const runtime = "nodejs";
 const CreateBody = z.object({
   name: z.string().trim().min(1).max(120),
   isActive: z.boolean().optional(),
+  visibleInStore: z.boolean().optional(),
+  visibleInBooth: z.boolean().optional(),
   allowsPromotions: z.boolean().optional(),
   commissionEnabled: z.boolean().optional(),
   commissionBps: z.number().int().min(0).max(10000).optional(),
 });
+
+function normalizeCommissionInput(input: {
+  commissionEnabled?: boolean;
+  commissionBps?: number;
+}) {
+  const commissionEnabled = input.commissionEnabled ?? false;
+  const commissionBps = commissionEnabled ? (input.commissionBps ?? 0) : 0;
+  return { commissionEnabled, commissionBps };
+}
 
 async function requireAdmin() {
   const cookieStore = await cookies();
@@ -32,7 +43,16 @@ export async function GET() {
 
   const channels = await prisma.channel.findMany({
     orderBy: { name: "asc" },
-    select: { id: true, name: true, isActive: true, allowsPromotions: true, commissionEnabled: true, commissionBps: true },
+    select: {
+      id: true,
+      name: true,
+      isActive: true,
+      visibleInStore: true,
+      visibleInBooth: true,
+      allowsPromotions: true,
+      commissionEnabled: true,
+      commissionBps: true,
+    },
   });
 
   return NextResponse.json({ channels });
@@ -51,15 +71,31 @@ export async function POST(req: Request) {
   }
 
   try {
+    const normalizedCommission = normalizeCommissionInput({
+      commissionEnabled: parsed.data.commissionEnabled,
+      commissionBps: parsed.data.commissionBps,
+    });
+
     const channel = await prisma.channel.create({
       data: {
         name: parsed.data.name,
         isActive: parsed.data.isActive ?? true,
+        visibleInStore: parsed.data.visibleInStore ?? true,
+        visibleInBooth: parsed.data.visibleInBooth ?? false,
         allowsPromotions: parsed.data.allowsPromotions ?? false,
-        commissionEnabled: parsed.data.commissionEnabled ?? false,
-        commissionBps: parsed.data.commissionEnabled ? (parsed.data.commissionBps ?? 0) : 0,
+        commissionEnabled: normalizedCommission.commissionEnabled,
+        commissionBps: normalizedCommission.commissionBps,
       },
-      select: { id: true, name: true, isActive: true, allowsPromotions: true, commissionEnabled: true, commissionBps: true },
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        visibleInStore: true,
+        visibleInBooth: true,
+        allowsPromotions: true,
+        commissionEnabled: true,
+        commissionBps: true,
+      },
     });
 
     return NextResponse.json({ channel });

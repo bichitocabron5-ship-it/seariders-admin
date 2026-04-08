@@ -10,6 +10,8 @@ type Channel = {
   id: string;
   name: string;
   isActive: boolean;
+  visibleInStore: boolean;
+  visibleInBooth: boolean;
   allowsPromotions: boolean;
   commissionEnabled: boolean;
   commissionBps: number | null;
@@ -23,6 +25,8 @@ export default function AdminChannelsPage() {
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newIsActive, setNewIsActive] = useState(true);
+  const [newVisibleInStore, setNewVisibleInStore] = useState(true);
+  const [newVisibleInBooth, setNewVisibleInBooth] = useState(false);
   const [newAllowsPromotions, setNewAllowsPromotions] = useState(false);
   const [newCommissionEnabled, setNewCommissionEnabled] = useState(false);
   const [newCommissionPct, setNewCommissionPct] = useState("0");
@@ -71,7 +75,9 @@ export default function AdminChannelsPage() {
       });
       if (!r.ok) throw new Error(await r.text());
 
-      setChannels((prev) => prev.map((ch) => (ch.id === id ? { ...ch, ...patch } : ch)));
+      const data = await r.json();
+      const updated = data.channel as Channel | undefined;
+      setChannels((prev) => prev.map((ch) => (ch.id === id ? (updated ?? { ...ch, ...patch }) : ch)));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error actualizando canal");
     } finally {
@@ -101,6 +107,8 @@ export default function AdminChannelsPage() {
         body: JSON.stringify({
           name: trimmedName,
           isActive: newIsActive,
+          visibleInStore: newVisibleInStore,
+          visibleInBooth: newVisibleInBooth,
           allowsPromotions: newAllowsPromotions,
           commissionEnabled: newCommissionEnabled,
           commissionBps,
@@ -117,6 +125,8 @@ export default function AdminChannelsPage() {
 
       setNewName("");
       setNewIsActive(true);
+      setNewVisibleInStore(true);
+      setNewVisibleInBooth(false);
       setNewAllowsPromotions(false);
       setNewCommissionEnabled(false);
       setNewCommissionPct("0");
@@ -169,12 +179,16 @@ export default function AdminChannelsPage() {
       <CreateChannelSection
         newName={newName}
         newIsActive={newIsActive}
+        newVisibleInStore={newVisibleInStore}
+        newVisibleInBooth={newVisibleInBooth}
         newAllowsPromotions={newAllowsPromotions}
         newCommissionEnabled={newCommissionEnabled}
         newCommissionPct={newCommissionPct}
         creating={creating}
         setNewName={setNewName}
         setNewIsActive={setNewIsActive}
+        setNewVisibleInStore={setNewVisibleInStore}
+        setNewVisibleInBooth={setNewVisibleInBooth}
         setNewAllowsPromotions={setNewAllowsPromotions}
         setNewCommissionEnabled={setNewCommissionEnabled}
         setNewCommissionPct={setNewCommissionPct}

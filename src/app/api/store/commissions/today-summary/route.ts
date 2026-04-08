@@ -2,25 +2,22 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { clampCommissionPct, commissionFromBase, resolveCommissionRate } from "@/lib/commission";
+import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 
 export const runtime = "nodejs";
 
-function startEndToday() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-  return { start, end };
-}
-
 export async function GET() {
   try {
-    const { start, end } = startEndToday();
+    const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
 
-    // 1) Reservas de hoy con canal + item principal (isExtra=false)
+    // 1) Reservas del día de negocio con canal + item principal (isExtra=false)
     const reservations = await prisma.reservation.findMany({
       where: {
-        activityDate: { gte: start, lte: end },
+        formalizedAt: { not: null },
+        OR: [
+          { scheduledTime: { gte: start, lt: endExclusive } },
+          { scheduledTime: null, activityDate: { gte: start, lt: endExclusive } },
+        ],
         channelId: { not: null },
       },
       select: {

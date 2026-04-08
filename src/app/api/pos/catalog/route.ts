@@ -22,13 +22,6 @@ type ServiceLite = {
   visibleInBooth: boolean;
 };
 
-type ChannelLite = {
-  id: string;
-  name: string;
-  commissionEnabled: boolean | null;
-  commissionBps: number | null;
-};
-
 function normalize(s: string) {
   return (s || "").trim().toLowerCase();
 }
@@ -62,10 +55,6 @@ export async function GET(req: Request) {
     const n = normalize(String(s.name ?? ""));
     return c === "acompanante" || n.includes("acompan");
   };
-
-  const boothAllowed = ["karim", "nomad", "port olimpic", "portolimpic"];
-  const isBoothChannel = (c: Pick<ChannelLite, "name">) =>
-    boothAllowed.some((x) => normalize(String(c.name ?? "")).includes(normalize(x)));
 
   const [servicesAll, optionsRaw, prices, channelsAll] = await Promise.all([
     prisma.service.findMany({
@@ -115,7 +104,15 @@ export async function GET(req: Request) {
 
     prisma.channel.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, allowsPromotions: true, commissionEnabled: true, commissionBps: true },
+      select: {
+        id: true,
+        name: true,
+        visibleInStore: true,
+        visibleInBooth: true,
+        allowsPromotions: true,
+        commissionEnabled: true,
+        commissionBps: true,
+      },
       orderBy: { name: "asc" },
     }),
   ]);
@@ -136,8 +133,8 @@ export async function GET(req: Request) {
   }
 
   let channels = channelsAll.slice();
-  if (origin === "BOOTH") channels = channels.filter(isBoothChannel);
-  else channels = channels.filter((c) => !isBoothChannel(c));
+  if (origin === "BOOTH") channels = channels.filter((c) => c.visibleInBooth);
+  else channels = channels.filter((c) => c.visibleInStore);
 
   const priceMap = new Map<string, number>();
   for (const pr of prices) {

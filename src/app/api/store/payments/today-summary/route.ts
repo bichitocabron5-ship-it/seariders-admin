@@ -1,19 +1,16 @@
 ﻿// src/app/api/store/payments/today-summary/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
+    const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
 
     const payments = await prisma.payment.findMany({
-      where: { createdAt: { gte: start, lte: end } },
+      where: { createdAt: { gte: start, lt: endExclusive } },
       select: {
         amountCents: true,
         method: true,

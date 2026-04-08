@@ -115,7 +115,7 @@ export async function POST(req: Request) {
       const [mainSum, allSum] = await Promise.all([
         tx.reservationItem.aggregate({
           where: { reservationId, isExtra: false },
-          _sum: { totalPriceCents: true },
+          _sum: { totalPriceCents: true, quantity: true },
         }),
         tx.reservationItem.aggregate({
           where: { reservationId },
@@ -124,6 +124,7 @@ export async function POST(req: Request) {
       ]);
 
       const serviceSubtotal = Number(mainSum._sum.totalPriceCents ?? 0);
+      const mainQuantity = Number(mainSum._sum.quantity ?? 1);
       const newTotal = Number(allSum._sum.totalPriceCents ?? 0);
 
       const reservationPricing = await tx.reservation.findUnique({
@@ -161,6 +162,7 @@ export async function POST(req: Request) {
               category: mainSvc?.category ?? null,
               isExtra: false,
               lineBaseCents: serviceSubtotal,
+              quantity: mainQuantity,
             },
             promoCode: promotionsEnabled ? (reservationPricing.promoCode ?? null) : null,
             customerCountry: reservationPricing.customerCountry ?? null,

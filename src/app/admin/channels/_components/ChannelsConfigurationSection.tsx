@@ -7,6 +7,8 @@ type Channel = {
   id: string;
   name: string;
   isActive: boolean;
+  visibleInStore: boolean;
+  visibleInBooth: boolean;
   allowsPromotions: boolean;
   commissionEnabled: boolean;
   commissionBps: number | null;
@@ -58,6 +60,7 @@ export default function ChannelsConfigurationSection({
           {channels.map((channel) => {
             const pct = (channel.commissionBps ?? 0) / 100;
             const busy = savingId === channel.id;
+            const commissionLabel = channel.commissionEnabled ? `Comisión ${pct.toFixed(2)}%` : "Sin comisión";
 
             return (
               <article key={channel.id} style={rowCard}>
@@ -69,14 +72,20 @@ export default function ChannelsConfigurationSection({
                         {channel.isActive ? "Activo" : "Inactivo"}
                       </span>
                       <span style={{ ...statusPill, ...(channel.commissionEnabled ? statusOn : statusOff) }}>
-                        {channel.commissionEnabled ? "Comisión ON" : "Comisión OFF"}
+                        {commissionLabel}
                       </span>
                       <span style={{ ...statusPill, ...(channel.allowsPromotions ? statusOn : statusOff) }}>
                         {channel.allowsPromotions ? "Promos ON" : "Promos OFF"}
                       </span>
+                      <span style={{ ...statusPill, ...(channel.visibleInStore ? statusOn : statusOff) }}>
+                        {channel.visibleInStore ? "Store ON" : "Store OFF"}
+                      </span>
+                      <span style={{ ...statusPill, ...(channel.visibleInBooth ? statusOn : statusOff) }}>
+                        {channel.visibleInBooth ? "Booth ON" : "Booth OFF"}
+                      </span>
                     </div>
                     <div style={{ fontSize: 12, color: "#64748b" }}>
-                      Comisión base y reglas específicas por servicio.
+                      Comisión base, reglas por servicio y visibilidad por origen.
                     </div>
                   </div>
 
@@ -86,6 +95,30 @@ export default function ChannelsConfigurationSection({
                 </div>
 
                 <div style={controlsGrid}>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+                    <input
+                      type="checkbox"
+                      checked={channel.visibleInStore}
+                      disabled={busy}
+                      onChange={(e) => {
+                        void patchChannel(channel.id, { visibleInStore: e.target.checked });
+                      }}
+                    />
+                    Visible en tienda
+                  </label>
+
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+                    <input
+                      type="checkbox"
+                      checked={channel.visibleInBooth}
+                      disabled={busy}
+                      onChange={(e) => {
+                        void patchChannel(channel.id, { visibleInBooth: e.target.checked });
+                      }}
+                    />
+                    Visible en booth
+                  </label>
+
                   <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
                     <input
                       type="checkbox"
@@ -104,7 +137,10 @@ export default function ChannelsConfigurationSection({
                       checked={channel.commissionEnabled}
                       disabled={busy}
                       onChange={(e) => {
-                        void patchChannel(channel.id, { commissionEnabled: e.target.checked });
+                        void patchChannel(channel.id, {
+                          commissionEnabled: e.target.checked,
+                          commissionBps: e.target.checked ? channel.commissionBps ?? 0 : 0,
+                        });
                       }}
                     />
                     Comisión activa
@@ -118,7 +154,7 @@ export default function ChannelsConfigurationSection({
                       max={100}
                       step={0.01}
                       value={pct}
-                      disabled={busy}
+                      disabled={busy || !channel.commissionEnabled}
                       onChange={(e) => {
                         const value = Number(e.target.value || 0);
                         const bps = Math.round(value * 100);

@@ -152,6 +152,8 @@ model Channel {
   name                       String                  @unique
   commissionPct              Float                   @default(0)
   isActive                   Boolean                 @default(true)
+  visibleInStore             Boolean                 @default(true)
+  visibleInBooth             Boolean                 @default(false)
   allowsPromotions           Boolean                 @default(false)
   commissionEnabled          Boolean                 @default(false)
   commissionBps              Int                     @default(0)

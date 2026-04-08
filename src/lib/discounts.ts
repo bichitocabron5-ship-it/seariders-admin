@@ -6,6 +6,7 @@ export type DiscountItem = {
   category: string | null;
   isExtra: boolean;
   lineBaseCents: number;
+  quantity?: number;
 };
 
 type Scope = "ALL" | "CATEGORY" | "SERVICE" | "OPTION";
@@ -111,8 +112,9 @@ function ruleMatchesItem(rule: DiscountRuleLite, item: DiscountItem) {
   return false;
 }
 
-function computeDiscountForItem(rule: DiscountRuleLite, itemBaseCents: number) {
-  const base = Math.max(0, Math.round(itemBaseCents));
+function computeDiscountForItem(rule: DiscountRuleLite, item: DiscountItem) {
+  const base = Math.max(0, Math.round(item.lineBaseCents));
+  const quantity = Math.max(1, Math.floor(Number(item.quantity ?? 1)));
   if (base <= 0) return 0;
 
   if (rule.kind === "FIXED") {
@@ -120,8 +122,9 @@ function computeDiscountForItem(rule: DiscountRuleLite, itemBaseCents: number) {
   }
 
   if (rule.kind === "FINAL_PRICE") {
-    const finalPriceCents = Math.max(0, Math.round(Number(rule.value ?? 0)));
-    return Math.max(0, base - Math.min(base, finalPriceCents));
+    const finalUnitPriceCents = Math.max(0, Math.round(Number(rule.value ?? 0)));
+    const finalLinePriceCents = finalUnitPriceCents * quantity;
+    return Math.max(0, base - Math.min(base, finalLinePriceCents));
   }
 
   const percent = Math.max(0, Math.min(100, Number(rule.value ?? 0)));
@@ -207,17 +210,17 @@ async function findApplicableRules(args: {
     if (requiredCountry && country !== requiredCountry) return false;
     if (excludedCountry && country === excludedCountry) return false;
 
-    return computeDiscountForItem(rule, args.item.lineBaseCents) > 0;
+    return computeDiscountForItem(rule, args.item) > 0;
   });
 }
 
-function pickBestRule(pool: DiscountRuleLite[], itemBaseCents: number) {
+function pickBestRule(pool: DiscountRuleLite[], item: DiscountItem) {
   let best: DiscountRuleLite | null = null;
   let bestDiscount = 0;
   let bestPriority = -1;
 
   for (const rule of pool) {
-    const discount = computeDiscountForItem(rule, itemBaseCents);
+    const discount = computeDiscountForItem(rule, item);
     if (discount <= 0) continue;
 
     const priority = scopePriority(rule.scope);
@@ -253,7 +256,7 @@ export async function listPromotionOptions(args: {
     const candidate: DiscountPromoOption = {
       ...toRuleSummary(rule),
       code,
-      discountCents: computeDiscountForItem(rule, args.item.lineBaseCents),
+      discountCents: computeDiscountForItem(rule, args.item),
     };
 
     const current = bestByCode.get(code);
@@ -309,7 +312,7 @@ export async function computeAutoDiscountDetail(args: {
     });
   }
 
-  const chosen = pickBestRule(chosenPool, Number(args.item.lineBaseCents || 0));
+  const chosen = pickBestRule(chosenPool, args.item);
   if (!chosen.rule || chosen.discountCents <= 0) return { discountCents: 0, rule: null };
 
   return {

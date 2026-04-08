@@ -15,6 +15,8 @@ export type Option = {
 export type Channel = {
   id: string;
   name: string;
+  visibleInStore?: boolean | null;
+  visibleInBooth?: boolean | null;
   allowsPromotions?: boolean | null;
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;

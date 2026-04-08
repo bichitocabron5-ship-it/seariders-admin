@@ -5,12 +5,16 @@ import type { CSSProperties } from "react";
 type Props = {
   newName: string;
   newIsActive: boolean;
+  newVisibleInStore: boolean;
+  newVisibleInBooth: boolean;
   newAllowsPromotions: boolean;
   newCommissionEnabled: boolean;
   newCommissionPct: string;
   creating: boolean;
   setNewName: (value: string) => void;
   setNewIsActive: (value: boolean) => void;
+  setNewVisibleInStore: (value: boolean) => void;
+  setNewVisibleInBooth: (value: boolean) => void;
   setNewAllowsPromotions: (value: boolean) => void;
   setNewCommissionEnabled: (value: boolean) => void;
   setNewCommissionPct: (value: string) => void;
@@ -25,12 +29,16 @@ type Props = {
 export default function CreateChannelSection({
   newName,
   newIsActive,
+  newVisibleInStore,
+  newVisibleInBooth,
   newAllowsPromotions,
   newCommissionEnabled,
   newCommissionPct,
   creating,
   setNewName,
   setNewIsActive,
+  setNewVisibleInStore,
+  setNewVisibleInBooth,
   setNewAllowsPromotions,
   setNewCommissionEnabled,
   setNewCommissionPct,
@@ -46,7 +54,7 @@ export default function CreateChannelSection({
       <div style={panelHeader}>
         <div style={{ fontWeight: 950 }}>Crear canal</div>
         <div style={{ fontSize: 12, color: "#64748b" }}>
-          Alta rápida de un canal comercial con estado y comisión base inicial.
+          Alta rápida de un canal comercial con visibilidad, estado y comisión base inicial.
         </div>
       </div>
 
@@ -74,6 +82,16 @@ export default function CreateChannelSection({
               style={inputStyle}
               disabled={!newCommissionEnabled}
             />
+          </label>
+
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+            <input type="checkbox" checked={newVisibleInStore} onChange={(e) => setNewVisibleInStore(e.target.checked)} />
+            Visible en tienda
+          </label>
+
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+            <input type="checkbox" checked={newVisibleInBooth} onChange={(e) => setNewVisibleInBooth(e.target.checked)} />
+            Visible en booth
           </label>
 
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
