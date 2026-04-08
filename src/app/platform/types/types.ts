@@ -1,5 +1,6 @@
 // src/app/platform/types/types.ts
 export type MonitorRunKind = "JETSKI" | "NAUTICA";
+export type MonitorRunMode = "MONITOR" | "SOLO" | "TEST";
 
 export type RunStatus = "READY" | "IN_SEA" | "CLOSED";
 export type RunAssignmentStatus = "QUEUED" | "ACTIVE" | "FINISHED";
@@ -74,17 +75,20 @@ export type QueueItem = {
   durationMinutes: number | null;
   pax: number | null;
   quantity: number | null;
+  isLicense?: boolean | null;
   label?: string;
 };
 
 export type RunOpen = {
   id: string;
   kind: MonitorRunKind;
+  mode: MonitorRunMode;
   status: RunStatus;
   startedAt: string;
   note: string | null;
+  displayName: string;
 
-  monitor: { id: string; name: string; maxCapacity?: number | null };
+  monitor?: { id: string; name: string; maxCapacity?: number | null } | null;
 
   monitorJetskiId?: string | null;
   monitorJetski?: { id: string; number: number | null; model: string | null } | null;

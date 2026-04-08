@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { JetskiStatus, MonitorRunKind, MonitorRunStatus, RunAssignmentStatus } from "@prisma/client";
+import { JetskiStatus, MonitorRunKind, MonitorRunMode, MonitorRunStatus, RunAssignmentStatus } from "@prisma/client";
 import { BUSINESS_TZ, utcDateFromYmdInTz } from "@/lib/tz-business";
 import { AssetStatus } from "@prisma/client";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
@@ -10,12 +10,22 @@ import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 export const runtime = "nodejs";
 
 const Body = z.object({
-  monitorId: z.string().min(1),
+  monitorId: z.string().min(1).optional().nullable(),
   kind: z.nativeEnum(MonitorRunKind),
+  mode: z.nativeEnum(MonitorRunMode).default(MonitorRunMode.MONITOR),
   monitorJetskiId: z.string().optional().nullable(),
   monitorAssetId: z.string().optional().nullable(),
   note: z.string().max(500).optional().nullable(),  activityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
+
+function getRunDisplayName(run: {
+  mode: MonitorRunMode;
+  monitor?: { name: string | null } | null;
+}) {
+  if (run.mode === MonitorRunMode.SOLO) return "Sin monitor";
+  if (run.mode === MonitorRunMode.TEST) return "Modo prueba";
+  return run.monitor?.name?.trim() || "Monitor";
+}
 
 // ==========================
 // GET -> listado tablero
@@ -41,6 +51,7 @@ export async function GET(req: Request) {
     select: {
       id: true,
       kind: true,
+      mode: true,
       monitorId: true,
       status: true,
       startedAt: true,
@@ -86,6 +97,8 @@ export async function GET(req: Request) {
   const normalizedRuns = runs.map((run) => ({
     ...run,
     kind: run.kind,
+    mode: run.mode,
+    displayName: getRunDisplayName(run),
   }));
 
   return NextResponse.json({ runs: normalizedRuns, monitors });
@@ -102,7 +115,14 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
 
-  const { monitorId, kind, monitorJetskiId, monitorAssetId, note, activityDate } = parsed.data;
+  const { monitorId, kind, mode, monitorJetskiId, monitorAssetId, note, activityDate } = parsed.data;
+
+  if (mode === MonitorRunMode.MONITOR && !monitorId) {
+    return NextResponse.json({ error: "MONITOR requiere monitorId" }, { status: 400 });
+  }
+  if (mode !== MonitorRunMode.MONITOR && monitorId) {
+    return NextResponse.json({ error: "SOLO/TEST no admiten monitorId" }, { status: 400 });
+  }
 
   // Validación coherente por kind
   if (kind === MonitorRunKind.JETSKI) {
@@ -127,20 +147,22 @@ export async function POST(req: Request) {
       );
 
   const result = await prisma.$transaction(async (tx) => {
-    const monitor = await tx.monitor.findUnique({
-      where: { id: monitorId },
-      select: { id: true, isActive: true },
-    });
-    if (!monitor || !monitor.isActive) return { error: "Monitor no existe o no está activo" };
+    if (mode === MonitorRunMode.MONITOR) {
+      const monitor = await tx.monitor.findUnique({
+        where: { id: monitorId! },
+        select: { id: true, isActive: true },
+      });
+      if (!monitor || !monitor.isActive) return { error: "Monitor no existe o no está activo" };
 
-    const existing = await tx.monitorRun.findFirst({
-      where: {
-        monitorId,
-        status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] },
-      },
-      select: { id: true },
-    });
-    if (existing) return { error: "El monitor ya tiene salida abierta" };
+      const existing = await tx.monitorRun.findFirst({
+        where: {
+          monitorId: monitorId!,
+          status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] },
+        },
+        select: { id: true },
+      });
+      if (existing) return { error: "El monitor ya tiene salida abierta" };
+    }
 
     if (monitorJetskiId !== null && monitorJetskiId !== undefined) {
       const jetski = await tx.jetski.findUnique({
@@ -207,7 +229,8 @@ export async function POST(req: Request) {
     
     const run = await tx.monitorRun.create({
       data: {
-        monitorId,
+        monitorId: mode === MonitorRunMode.MONITOR ? (monitorId ?? null) : null,
+        mode,
         kind,
         monitorJetskiId: kind === MonitorRunKind.JETSKI ? (monitorJetskiId ?? null) : null,
         monitorAssetId: kind === MonitorRunKind.NAUTICA ? (monitorAssetId ?? null) : null,
@@ -220,6 +243,7 @@ export async function POST(req: Request) {
       select: {
         id: true,
         kind: true,
+        mode: true,
         monitorId: true,
         monitorJetskiId: true,
         monitorAssetId: true,
@@ -235,6 +259,8 @@ export async function POST(req: Request) {
       run: {
         ...run,
         kind: run.kind,
+        mode: run.mode,
+        displayName: getRunDisplayName(run),
       },
     };
   });

@@ -7,6 +7,7 @@ import type {
   JetskiAvail,
   MonitorLite,
   MonitorRunKind,
+  MonitorRunMode,
   OperabilityCountRow,
   OperabilitySummary,
   QueueItem,
@@ -33,6 +34,19 @@ function msToClock(ms: number) {
   const m = Math.floor(s / 60);
   const r = s % 60;
   return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+}
+
+function runModeLabel(mode: MonitorRunMode) {
+  if (mode === "SOLO") return "Sin monitor";
+  if (mode === "TEST") return "Modo prueba";
+  return "Con monitor";
+}
+
+function getSuggestedRunForQueueItem(item: QueueItem, runs: RunOpen[]) {
+  if (item.isLicense) {
+    return runs.find((run) => run.mode === "SOLO") ?? runs.find((run) => run.mode === "TEST") ?? runs[0] ?? null;
+  }
+  return runs.find((run) => run.mode === "MONITOR") ?? runs[0] ?? null;
 }
 
 function mechanicsDetailHref(params: {
@@ -156,6 +170,7 @@ export default function PlatformBoard(props: Props) {
   const [actionAssignment, setActionAssignment] = useState<RunOpen["assignments"][0] | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [createRunMode, setCreateRunMode] = useState<MonitorRunMode>("MONITOR");
   const [createRunMonitorId, setCreateRunMonitorId] = useState("");
   const [createRunResourceId, setCreateRunResourceId] = useState(NO_RESOURCE_SELECTED);
   const createRunResourceSelectRef = useRef<HTMLSelectElement | null>(null);
@@ -232,19 +247,19 @@ export default function PlatformBoard(props: Props) {
       setCreateRunBusy(true); setCreateRunError(null);
       const selectedFromRef = createRunResourceSelectRef.current?.value ?? NO_RESOURCE_SELECTED;
       const selectedRunResourceId = createRunResourceId !== NO_RESOURCE_SELECTED ? createRunResourceId : selectedFromRef;
-      if (!createRunMonitorId) throw new Error("Selecciona un monitor.");
+      if (createRunMode === "MONITOR" && !createRunMonitorId) throw new Error("Selecciona un monitor.");
       if (kind === "NAUTICA" && selectedRunResourceId === NO_RESOURCE_SELECTED) {
         if (assets.length === 0) throw new Error("No hay recursos disponibles para Náutica.");
         throw new Error("Selecciona un recurso para Náutica.");
       }
-      const res = await fetch("/api/platform/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ monitorId: createRunMonitorId, kind, monitorJetskiId: kind === "JETSKI" && selectedRunResourceId !== NO_RESOURCE_SELECTED ? selectedRunResourceId : null, monitorAssetId: kind === "NAUTICA" && selectedRunResourceId !== NO_RESOURCE_SELECTED ? selectedRunResourceId : null, note: createRunNote?.trim() ? createRunNote.trim() : null }) });
+      const res = await fetch("/api/platform/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ monitorId: createRunMode === "MONITOR" ? createRunMonitorId : null, kind, mode: createRunMode, monitorJetskiId: kind === "JETSKI" && selectedRunResourceId !== NO_RESOURCE_SELECTED ? selectedRunResourceId : null, monitorAssetId: kind === "NAUTICA" && selectedRunResourceId !== NO_RESOURCE_SELECTED ? selectedRunResourceId : null, note: createRunNote?.trim() ? createRunNote.trim() : null }) });
       if (!res.ok) { const txt = await res.text().catch(() => ""); throw new Error(txt || "No se pudo abrir la salida."); }
-      await loadAll(); setCreateRunNote(""); setCreateRunResourceId(NO_RESOURCE_SELECTED); if (createRunResourceSelectRef.current) createRunResourceSelectRef.current.value = NO_RESOURCE_SELECTED;
+      await loadAll(); setCreateRunNote(""); setCreateRunMode("MONITOR"); setCreateRunMonitorId(""); setCreateRunResourceId(NO_RESOURCE_SELECTED); if (createRunResourceSelectRef.current) createRunResourceSelectRef.current.value = NO_RESOURCE_SELECTED;
     } catch (e: unknown) { setCreateRunError(e instanceof Error ? e.message : "Error"); } finally { setCreateRunBusy(false); }
   }
 
   useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
-  useEffect(() => { setCreateRunResourceId(NO_RESOURCE_SELECTED); if (createRunResourceSelectRef.current) createRunResourceSelectRef.current.value = NO_RESOURCE_SELECTED; }, [kind]);
+  useEffect(() => { setCreateRunMode("MONITOR"); setCreateRunMonitorId(""); setCreateRunResourceId(NO_RESOURCE_SELECTED); if (createRunResourceSelectRef.current) createRunResourceSelectRef.current.value = NO_RESOURCE_SELECTED; }, [kind]);
 
   const loadAll = useCallback(async (opts?: { showLoading?: boolean }) => {
     try {
@@ -336,9 +351,9 @@ export default function PlatformBoard(props: Props) {
     : Math.max(0, assets.length - assignableAssets.length);
   const assignRunOptions = useMemo(
     () =>
-      readyRuns.map((run) => ({
+        readyRuns.map((run) => ({
         id: run.id,
-        label: `${run.monitor?.name || "Monitor"} | ${run.status} | ${fmtHm(new Date(run.startedAt))}`,
+        label: `${run.displayName} | ${run.status} | ${fmtHm(new Date(run.startedAt))}`,
       })),
     [readyRuns]
   );
@@ -431,7 +446,7 @@ export default function PlatformBoard(props: Props) {
 
   useEffect(() => { if (createRunResourceId === NO_RESOURCE_SELECTED) return; const exists = kind === "JETSKI" ? jetskis.some((j) => j.id === createRunResourceId) : assets.some((a) => a.id === createRunResourceId); if (!exists) setCreateRunResourceId(NO_RESOURCE_SELECTED); }, [kind, jetskis, assets, createRunResourceId]);
   useEffect(() => { if (kind === "NAUTICA" && createRunResourceId === NO_RESOURCE_SELECTED && assets.length > 0) setCreateRunResourceId(assets[0].id); }, [kind, assets, createRunResourceId]);
-  function openAssign(item: QueueItem) { setAssignTarget(item); setAssignOpen(true); setAssignError(null); setAssignRunId(readyRuns[0]?.id || ""); const free = kind === "JETSKI" ? assignableJetskis[0] : assignableAssets[0]; setAssignResourceId(free?.id || ""); }
+  function openAssign(item: QueueItem) { setAssignTarget(item); setAssignOpen(true); setAssignError(null); const suggestedRun = getSuggestedRunForQueueItem(item, readyRuns); setAssignRunId(suggestedRun?.id || ""); const free = kind === "JETSKI" ? assignableJetskis[0] : assignableAssets[0]; setAssignResourceId(free?.id || ""); }
   async function doAssign() {
     if (!assignTarget) return; setAssignError(null); if (!assignRunId) return setAssignError("Selecciona un monitor o salida."); if (!assignResourceId) return setAssignError(kind === "JETSKI" ? "Selecciona una moto." : "Selecciona un recurso.");
     setAssignBusy(true);
@@ -564,23 +579,25 @@ export default function PlatformBoard(props: Props) {
               const queueFg = queueIsCritical ? "#b91c1c" : queueIsWarn ? "#92400e" : "#111";
               return <div key={`${q.reservationId}-${q.reservationUnitId || idx}`} style={{ border: `1px solid ${queueBd}`, background: queueBg, borderRadius: 18, padding: 14, display: "grid", gap: 8, boxShadow: "0 12px 24px rgba(15, 23, 42, 0.04)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}><div style={{ fontWeight: 950 }}>{q.customerName || "Sin nombre"}{q.reservationUnitId ? <span style={{ opacity: 0.7 }}> | Unidad</span> : null}</div><div style={{ fontSize: 12, fontWeight: 900, color: queueFg }}>{queueWaitMs !== null ? `Espera ${msToClock(queueWaitMs)}` : q.durationMinutes ? `${q.durationMinutes} min` : q.label || ""}</div></div>
-                <div style={{ fontSize: 12, opacity: 0.8 }}>{q.category ? `${q.category} | ` : ""}{q.serviceName || "Servicio"}</div>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>{q.category ? `${q.category} | ` : ""}{q.serviceName || "Servicio"}{q.isLicense ? " | Licencia" : ""}</div>
+                {q.isLicense ? <div style={{ fontSize: 12, fontWeight: 900, color: "#0369a1" }}>Sugerencia: asignar a salida sin monitor.</div> : null}
                 {queueWaitMs !== null ? <div style={{ display: "grid", gap: 6 }}><div style={{ position: "relative", height: 10, borderRadius: 999, background: queueIsCritical ? "#fee2e2" : queueIsWarn ? "#fef3c7" : "#e2e8f0", overflow: "hidden" }}><div style={{ width: `${Math.min(100, (queueWaitMs / (queueWarnMs * 2)) * 100)}%`, height: "100%", background: queueIsCritical ? "#dc2626" : queueIsWarn ? "#f59e0b" : "#0f172a" }} /></div><div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, color: queueFg, fontWeight: 800 }}><span>Entrada</span><span>{QUEUED_ALERT_MINUTES} min</span><span>{QUEUED_ALERT_MINUTES * 2} min</span></div></div> : null}
                 {queueWaitMs !== null ? <div style={{ fontSize: 12, color: queueFg, fontWeight: queueIsWarn ? 800 : 600 }}>{queueIsCritical ? `ALERTA CRITICA (${QUEUED_ALERT_MINUTES * 2}+ min)` : queueIsWarn ? `Alerta de espera (${QUEUED_ALERT_MINUTES}+ min)` : `En cola desde ${fmtHm(new Date(queueAtMs!))}`}</div> : null}
-                <button type="button" onClick={() => openAssign(q)} disabled={readyRuns.length === 0} title={readyRuns.length > 0 ? "Asignar a una salida READY" : "Primero abre una salida READY"} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #111", background: readyRuns.length === 0 ? "#9ca3af" : "#111", color: "#fff", fontWeight: 950, cursor: readyRuns.length === 0 ? "not-allowed" : "pointer" }}>Asignar</button>
+                <button type="button" onClick={() => openAssign(q)} disabled={readyRuns.length === 0} title={readyRuns.length > 0 ? (q.isLicense ? "Sugerencia: salida sin monitor" : "Asignar a una salida READY") : (q.isLicense ? "Primero abre una salida READY, sugerencia: Sin monitor" : "Primero abre una salida READY")} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #111", background: readyRuns.length === 0 ? "#9ca3af" : "#111", color: "#fff", fontWeight: 950, cursor: readyRuns.length === 0 ? "not-allowed" : "pointer" }}>Asignar</button>
               </div>;
             })}
           </div>
         </div>
 
         <div style={{ border: "1px solid #dbe4ea", borderRadius: 22, background: "#fff", boxShadow: "0 18px 40px rgba(15, 23, 42, 0.06)" }}>
-          <div style={{ padding: 16, borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", background: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)" }}><div style={{ fontWeight: 950 }}>Monitores</div><div style={{ fontSize: 12, opacity: 0.75 }}>{openRuns.length} salidas abiertas</div></div>
+          <div style={{ padding: 16, borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", background: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)" }}><div style={{ fontWeight: 950 }}>Salidas</div><div style={{ fontSize: 12, opacity: 0.75 }}>{openRuns.length} salidas abiertas</div></div>
           <div style={{ padding: 16, display: "grid", gap: 14 }}>
-            {openRuns.length === 0 ? <div style={{ gridColumn: "1 / -1", padding: 10, borderRadius: 12, border: "1px solid #fde68a", background: "#fffbeb", fontWeight: 900 }}>No hay salidas abiertas. Abre una salida en el panel de monitores y vuelve aquí.</div> : null}
+            {openRuns.length === 0 ? <div style={{ gridColumn: "1 / -1", padding: 10, borderRadius: 12, border: "1px solid #fde68a", background: "#fffbeb", fontWeight: 900 }}>No hay salidas abiertas. Abre una salida en este panel y vuelve aquí.</div> : null}
             <div style={{ border: "1px solid #e2e8f0", borderRadius: 18, padding: 16, background: "#f8fafc" }}>
-              <div style={{ fontWeight: 950, marginBottom: 8 }}>Abrir salida por monitor</div>
+              <div style={{ fontWeight: 950, marginBottom: 8 }}>Abrir salida</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Monitor<select value={createRunMonitorId} onChange={(e) => setCreateRunMonitorId(e.target.value)} style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4" }}><option value="">Selecciona...</option>{monitors.map((m: MonitorLite) => <option key={m.id} value={m.id}>{m.name} | cap {m.maxCapacity || 4}</option>)}</select></label>
+                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Modo<select value={createRunMode} onChange={(e) => setCreateRunMode(e.target.value as MonitorRunMode)} style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4" }}><option value="MONITOR">Con monitor</option><option value="SOLO">Sin monitor</option><option value="TEST">Modo prueba</option></select></label>
+                {createRunMode === "MONITOR" ? <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Monitor<select value={createRunMonitorId} onChange={(e) => setCreateRunMonitorId(e.target.value)} style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4" }}><option value="">Selecciona...</option>{monitors.map((m: MonitorLite) => <option key={m.id} value={m.id}>{m.name} | cap {m.maxCapacity || 4}</option>)}</select></label> : <div style={{ display: "grid", gap: 6, fontSize: 13 }}><div>Modo seleccionado</div><div style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", fontWeight: 900 }}>{runModeLabel(createRunMode)}</div></div>}
                 <select ref={createRunResourceSelectRef} value={createRunResourceId} onChange={(e) => setCreateRunResourceId(e.target.value)} style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4" }}><option value={NO_RESOURCE_SELECTED}>{kind === "JETSKI" ? "Sin moto fija" : "Selecciona recurso..."}</option>{kind === "JETSKI"
                   ? jetskis.map((j) => (
                       <option key={j.id} value={j.id}>
@@ -592,7 +609,7 @@ export default function PlatformBoard(props: Props) {
                         {a.name}
                       </option>
                     ))}</select>
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Nota opcional<input value={createRunNote} onChange={(e) => setCreateRunNote(e.target.value)} placeholder="Ej: grupo escuela / incidencia previa..." style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4" }} /></label>
+                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Nota opcional<input value={createRunNote} onChange={(e) => setCreateRunNote(e.target.value)} placeholder={createRunMode === "TEST" ? "Ej: prueba tras reparación / revisión..." : createRunMode === "SOLO" ? "Ej: licencia sin monitor..." : "Ej: grupo escuela / incidencia previa..."} style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4" }} /></label>
               </div>
               {createRunError ? <div style={{ marginTop: 10, padding: 10, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 900 }}>{createRunError}</div> : null}
               <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}><button type="button" onClick={createRun} disabled={createRunBusy} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #111", background: createRunBusy ? "#9ca3af" : "#111", color: "#fff", fontWeight: 950, width: "100%" }}>{createRunBusy ? "Abriendo..." : "Abrir salida"}</button></div>

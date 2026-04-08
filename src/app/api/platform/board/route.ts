@@ -30,6 +30,8 @@ export async function GET(req: Request) {
     orderBy: [{ startedAt: "asc" }],
     select: {
       id: true,
+      kind: true,
+      mode: true,
       status: true,
       startedAt: true,
       endedAt: true,

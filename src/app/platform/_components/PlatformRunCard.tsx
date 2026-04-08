@@ -30,6 +30,12 @@ function timerLabel(msLeft: number | null) {
   return msToClock(msLeft);
 }
 
+function runModeBadge(mode: RunOpen["mode"]) {
+  if (mode === "SOLO") return "SIN MONITOR";
+  if (mode === "TEST") return "PRUEBA";
+  return "MONITOR";
+}
+
 function progressTone(progress: number, msLeft: number) {
   if (msLeft <= 0) return { fill: "#dc2626", track: "#fee2e2", text: "#991b1b" };
   if (msLeft <= 5 * 60 * 1000) return { fill: "#f59e0b", track: "#fef3c7", text: "#92400e" };
@@ -131,7 +137,8 @@ export default function PlatformRunCard({
     <div style={runCardStyle}>
       <div style={runHeaderStyle}>
         <div style={runHeaderMetaStyle}>
-          <div style={{ fontWeight: 950, fontSize: 18 }}>{run.monitor?.name || "Monitor"}</div>
+          <div style={{ fontWeight: 950, fontSize: 18 }}>{run.displayName}</div>
+          <div style={{ ...statusBadgeStyle, background: "#ffffff" }}>{runModeBadge(run.mode)}</div>
           <div style={{ ...statusBadgeStyle, background: run.status === "IN_SEA" ? "#ecfeff" : "#f8fafc" }}>{run.status}</div>
           <div style={smallMetaStyle}>
             Salida iniciada: <b>{fmtHm(new Date(run.startedAt))}</b>

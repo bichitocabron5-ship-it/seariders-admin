@@ -6,6 +6,7 @@ import { isOperableStatus, operabilityBlockingReason } from "@/lib/operability";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import {
   MonitorRunKind,
+  MonitorRunMode,
   MonitorRunStatus,
   ReservationStatus,
   ReservationUnitStatus,
@@ -67,6 +68,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
         select: {
           id: true,
           kind: true,
+          mode: true,
           status: true,
           monitorId: true,
           monitor: { select: { maxCapacity: true } },
@@ -82,7 +84,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
         throw new Error(`Run no asignable en estado ${run.status}`);
       }
 
-      const cap = Number(run.monitor?.maxCapacity ?? 4);
+      const cap = run.mode === MonitorRunMode.MONITOR ? Number(run.monitor?.maxCapacity ?? 4) : 1;
       if ((run.assignments?.length ?? 0) >= cap) throw new Error(`Capacidad superada (${cap})`);
 
       // 2) Unit + Reserva

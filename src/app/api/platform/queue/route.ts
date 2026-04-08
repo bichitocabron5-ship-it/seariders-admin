@@ -155,6 +155,7 @@ export async function GET(req: Request) {
     durationMinutes: u.reservation.option?.durationMinutes ?? null,
     pax: u.reservation.pax ?? null,
     quantity: u.reservation.quantity ?? null,
+    isLicense: Boolean(u.reservation.isLicense),
   }));
 
   // 2) Jetskis activos (disponibles)
@@ -178,6 +179,7 @@ export async function GET(req: Request) {
     select: {
       id: true,
       kind: true,
+      mode: true,
       monitorId: true,
       status: true,
       startedAt: true,

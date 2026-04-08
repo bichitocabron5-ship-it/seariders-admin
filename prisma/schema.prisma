@@ -931,9 +931,10 @@ model Monitor {
 model MonitorRun {
   id   String         @id @default(cuid())
   kind MonitorRunKind @default(JETSKI)
+  mode MonitorRunMode @default(MONITOR)
 
-  monitorId       String
-  monitor         Monitor   @relation(fields: [monitorId], references: [id])
+  monitorId       String?
+  monitor         Monitor?  @relation(fields: [monitorId], references: [id])
   monitorJetskiId String?
   monitorJetski   Jetski?   @relation("MonitorRunMonitorJetski", fields: [monitorJetskiId], references: [id])
   monitorAssetId  String?
@@ -2143,6 +2144,12 @@ enum PaymentDirection {
 enum MonitorRunKind {
   JETSKI
   NAUTICA
+}
+
+enum MonitorRunMode {
+  MONITOR
+  SOLO
+  TEST
 }
 
 enum ServiceCategory {
