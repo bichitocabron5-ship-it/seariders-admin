@@ -67,6 +67,9 @@ export default function BoothOverviewSection({
             <a href="/booth/cash-closures" style={{ ...ghostBtn, background: "rgba(255,255,255,0.9)" }}>
               Cierre de caja
             </a>
+            <a href="/booth/history" style={{ ...ghostBtn, background: "rgba(255,255,255,0.9)" }}>
+              Histórico
+            </a>
             <button onClick={onReload} style={{ ...darkBtn, border: "1px solid rgba(255,255,255,0.24)", background: "#0f172a", width: "100%" }}>
               Refrescar
             </button>
