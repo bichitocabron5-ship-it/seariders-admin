@@ -37,15 +37,19 @@ type WaitMeta = {
 type Props = {
   cardStyle: React.CSSProperties;
   darkBtn: React.CSSProperties;
+  ghostBtn: React.CSSProperties;
   fieldStyle: React.CSSProperties;
   preReservationRows: ReservationLike[];
   activeTripId: string;
   activeTripLabel: string;
   payingId: string | null;
   isCashClosed: boolean;
+  reservationActionId: string | null;
   getSplit: (id: string) => [SplitLine, SplitLine];
   setSplitLine: (id: string, idx: 0 | 1, patch: Partial<SplitLine>) => void;
   assignToActiveTrip: (reservationId: string) => void | Promise<void>;
+  unassignReservationFromTrip: (reservationId: string) => void | Promise<void>;
+  cancelReservation: (reservationId: string) => void | Promise<void>;
   paySplitNow: (reservationId: string, pendingCents: number) => void | Promise<void>;
   euros: (cents: number) => string;
   formatReservationLine: (reservation: ReservationLike, opts?: { showCountry?: boolean }) => string;
@@ -55,15 +59,19 @@ type Props = {
 export default function BoothPreReservationsSection({
   cardStyle,
   darkBtn,
+  ghostBtn,
   fieldStyle,
   preReservationRows,
   activeTripId,
   activeTripLabel,
   payingId,
   isCashClosed,
+  reservationActionId,
   getSplit,
   setSplitLine,
   assignToActiveTrip,
+  unassignReservationFromTrip,
+  cancelReservation,
   paySplitNow,
   euros,
   formatReservationLine,
@@ -148,13 +156,46 @@ export default function BoothPreReservationsSection({
                       Añadir al viaje
                     </button>
                   ) : (
-                    <span style={{ padding: "4px 8px", borderRadius: 999, background: "#e0f2fe", width: "fit-content" }}>
-                      Asignado a viaje
-                    </span>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <span style={{ padding: "4px 8px", borderRadius: 999, background: "#e0f2fe", width: "fit-content" }}>
+                        Asignado a viaje
+                      </span>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={() => void unassignReservationFromTrip(reservation.id)}
+                          disabled={reservationActionId === `unassign:${reservation.id}`}
+                          style={{ ...ghostBtn, opacity: reservationActionId === `unassign:${reservation.id}` ? 0.6 : 1 }}
+                        >
+                          {reservationActionId === `unassign:${reservation.id}` ? "Desasignando..." : "Desasignar viaje"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void cancelReservation(reservation.id)}
+                          disabled={reservationActionId === `cancel:${reservation.id}`}
+                          style={{ ...ghostBtn, borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b", opacity: reservationActionId === `cancel:${reservation.id}` ? 0.6 : 1 }}
+                        >
+                          {reservationActionId === `cancel:${reservation.id}` ? "Cancelando..." : "Cancelar reserva"}
+                        </button>
+                      </div>
+                    </div>
                   )}
                   <div style={{ fontSize: 12, opacity: 0.75 }}>
                     Viaje activo: {activeTripLabel || activeTripId}
                   </div>
+                </div>
+              ) : null}
+
+              {!received && !assigned ? (
+                <div style={{ marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => void cancelReservation(reservation.id)}
+                    disabled={reservationActionId === `cancel:${reservation.id}`}
+                    style={{ ...ghostBtn, borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b", opacity: reservationActionId === `cancel:${reservation.id}` ? 0.6 : 1 }}
+                  >
+                    {reservationActionId === `cancel:${reservation.id}` ? "Cancelando..." : "Cancelar reserva"}
+                  </button>
                 </div>
               ) : null}
 

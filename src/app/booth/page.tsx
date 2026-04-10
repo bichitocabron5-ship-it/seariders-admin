@@ -209,6 +209,8 @@ export default function Booth() {
   const [activeBoat, setActiveBoat] = useState<"TAXIBOAT_1"|"TAXIBOAT_2">("TAXIBOAT_1");
   const [cashClosureSummary, setCashClosureSummary] = useState<CashClosureSummary | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [reservationActionId, setReservationActionId] = useState<string | null>(null);
+  const [tripActionId, setTripActionId] = useState<string | null>(null);
 
   // form
   const [firstName, setFirstName] = useState("");
@@ -481,6 +483,45 @@ async function assignToActiveTrip(reservationId: string) {
   await load();
 }
 
+async function unassignReservationFromTrip(reservationId: string) {
+  setError(null);
+  setReservationActionId(`unassign:${reservationId}`);
+  try {
+    const r = await fetch("/api/booth/taxiboat-trips/unassign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reservationId }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    await load();
+  } catch (e: unknown) {
+    setError(e instanceof Error ? e.message : "Error desasignando viaje");
+  } finally {
+    setReservationActionId(null);
+  }
+}
+
+async function cancelReservation(reservationId: string) {
+  if (!window.confirm("Se cancelará la reserva. Esta acción no se puede deshacer.")) {
+    return;
+  }
+
+  setError(null);
+  setReservationActionId(`cancel:${reservationId}`);
+  try {
+    const r = await fetch(`/api/booth/reservations/${reservationId}/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!r.ok) throw new Error(await r.text());
+    await load();
+  } catch (e: unknown) {
+    setError(e instanceof Error ? e.message : "Error cancelando reserva");
+  } finally {
+    setReservationActionId(null);
+  }
+}
+
 async function departTrip(tripId: string) {
   const r = await fetch("/api/booth/taxiboat-trips/depart", {
     method: "POST",
@@ -489,6 +530,29 @@ async function departTrip(tripId: string) {
   });
   if (!r.ok) throw new Error(await r.text());
   await load();
+}
+
+async function cancelTrip(tripId: string) {
+  if (!window.confirm("Se anulará el viaje abierto de taxiboat. Esta acción no se puede deshacer.")) {
+    return;
+  }
+
+  setError(null);
+  setTripActionId(`cancel-trip:${tripId}`);
+  try {
+    const r = await fetch("/api/booth/taxiboat-trips/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tripId }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    if (activeTripId === tripId) setActiveTripId("");
+    await load();
+  } catch (e: unknown) {
+    setError(e instanceof Error ? e.message : "Error anulando viaje");
+  } finally {
+    setTripActionId(null);
+  }
 }
 
 async function markArrivedBooth(boat: "TAXIBOAT_1" | "TAXIBOAT_2") {
@@ -637,15 +701,19 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
           <BoothPreReservationsSection
             cardStyle={cardStyle}
             darkBtn={darkBtn}
+            ghostBtn={ghostBtn}
             fieldStyle={fieldStyle}
             preReservationRows={preReservationRows}
             activeTripId={activeTripId}
             activeTripLabel={activeTripLabel}
             payingId={payingId}
             isCashClosed={isCashClosed}
+            reservationActionId={reservationActionId}
             getSplit={getSplit}
             setSplitLine={setSplitLine}
             assignToActiveTrip={assignToActiveTrip}
+            unassignReservationFromTrip={unassignReservationFromTrip}
+            cancelReservation={cancelReservation}
             paySplitNow={paySplitNow}
             euros={euros}
             formatReservationLine={formatReservationLine}
@@ -674,7 +742,12 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
           setActiveTripId={setActiveTripId}
           createTrip={createTrip}
           departTrip={departTrip}
+          cancelTrip={cancelTrip}
           markArrivedBooth={markArrivedBooth}
+          reservationActionId={reservationActionId}
+          tripActionId={tripActionId}
+          unassignReservationFromTrip={unassignReservationFromTrip}
+          cancelReservation={cancelReservation}
           boatLabel={boatLabel}
           formatReservationLine={formatReservationLine}
           getTaxiboatReturnMeta={getTaxiboatReturnMeta}

@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { type AppSession, sessionOptions } from "@/lib/session";
+import { BUSINESS_TZ, tzLocalToUtcDate, utcDateFromYmdInTz } from "@/lib/tz-business";
 
 export const runtime = "nodejs";
 
@@ -55,9 +56,16 @@ export async function GET(req: Request) {
   }
 
   if (dateFrom || dateTo) {
+    const endExclusive = dateTo
+      ? (() => {
+          const [y, m, d] = dateTo.split("-").map(Number);
+          return tzLocalToUtcDate(BUSINESS_TZ, y, m, d + 1, 0, 0);
+        })()
+      : undefined;
+
     where.activityDate = {
-      ...(dateFrom ? { gte: new Date(`${dateFrom}T00:00:00.000Z`) } : {}),
-      ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {}),
+      ...(dateFrom ? { gte: utcDateFromYmdInTz(BUSINESS_TZ, dateFrom) } : {}),
+      ...(endExclusive ? { lt: endExclusive } : {}),
     };
   }
 

@@ -156,10 +156,12 @@ function countPaidServiceCents(row: HistoryRow) {
 }
 
 function countPendingServiceCents(row: HistoryRow) {
+  if (row.status === "CANCELED") return 0;
   return Math.max(0, Number(row.totalPriceCents ?? 0) - countPaidServiceCents(row));
 }
 
 function countPendingDepositCents(row: HistoryRow) {
+  if (row.status === "CANCELED") return 0;
   return Math.max(0, Number(row.depositCents ?? 0) - Number(row.depositCollectedCents ?? 0));
 }
 

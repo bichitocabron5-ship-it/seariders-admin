@@ -67,7 +67,12 @@ type Props = {
   setActiveTripId: (value: string) => void;
   createTrip: () => void | Promise<void>;
   departTrip: (tripId: string) => void | Promise<void>;
+  cancelTrip: (tripId: string) => void | Promise<void>;
   markArrivedBooth: (boat: "TAXIBOAT_1" | "TAXIBOAT_2") => void | Promise<void>;
+  reservationActionId: string | null;
+  tripActionId: string | null;
+  unassignReservationFromTrip: (reservationId: string) => void | Promise<void>;
+  cancelReservation: (reservationId: string) => void | Promise<void>;
   boatLabel: (boat?: string | null) => string;
   formatReservationLine: (reservation: ReservationLike, opts?: { showCountry?: boolean }) => string;
   getTaxiboatReturnMeta: (row: TaxiboatOperationRow, nowMs?: number) => ReturnMeta;
@@ -93,7 +98,12 @@ export default function BoothTripsSection({
   setActiveTripId,
   createTrip,
   departTrip,
+  cancelTrip,
   markArrivedBooth,
+  reservationActionId,
+  tripActionId,
+  unassignReservationFromTrip,
+  cancelReservation,
   boatLabel,
   formatReservationLine,
   getTaxiboatReturnMeta,
@@ -186,9 +196,19 @@ export default function BoothTripsSection({
                 {boatLabel(trip.boat)} · Viaje {trip.tripNo} · PAX {trip.paxTotal}
               </div>
               {trip.status === "OPEN" ? (
-                <button onClick={() => departTrip(trip.id)} style={{ ...ghostBtn, width: "100%" }}>
-                  Marcar salida
-                </button>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={() => departTrip(trip.id)} style={{ ...ghostBtn, width: "100%" }}>
+                    Marcar salida
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void cancelTrip(trip.id)}
+                    disabled={tripActionId === `cancel-trip:${trip.id}`}
+                    style={{ ...ghostBtn, borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b", opacity: tripActionId === `cancel-trip:${trip.id}` ? 0.6 : 1 }}
+                  >
+                    {tripActionId === `cancel-trip:${trip.id}` ? "Anulando..." : "Desasignar taxiboat"}
+                  </button>
+                </div>
               ) : (
                 <div style={{ fontSize: 12, opacity: 0.75 }}>
                   Salió: {trip.departedAt ? new Date(trip.departedAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "-"}
@@ -222,6 +242,27 @@ export default function BoothTripsSection({
                     <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>
                       {formatReservationLine(reservation, { showCountry: true })}
                     </div>
+
+                    {!received && trip.status === "OPEN" && !trip.departedAt ? (
+                      <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={() => void unassignReservationFromTrip(reservation.id)}
+                          disabled={reservationActionId === `unassign:${reservation.id}`}
+                          style={{ ...ghostBtn, opacity: reservationActionId === `unassign:${reservation.id}` ? 0.6 : 1 }}
+                        >
+                          {reservationActionId === `unassign:${reservation.id}` ? "Desasignando..." : "Quitar de la salida"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void cancelReservation(reservation.id)}
+                          disabled={reservationActionId === `cancel:${reservation.id}`}
+                          style={{ ...ghostBtn, borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b", opacity: reservationActionId === `cancel:${reservation.id}` ? 0.6 : 1 }}
+                        >
+                          {reservationActionId === `cancel:${reservation.id}` ? "Cancelando..." : "Cancelar reserva"}
+                        </button>
+                      </div>
+                    ) : null}
 
                     {waitMeta ? (
                       <div

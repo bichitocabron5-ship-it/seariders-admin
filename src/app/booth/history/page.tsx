@@ -66,6 +66,11 @@ function statusTone(status: string) {
   }
 }
 
+function visiblePendingCents(row: HistoryRow) {
+  if (row.status === "CANCELED") return 0;
+  return Number(row.servicePendingCents ?? 0);
+}
+
 export default function BoothHistoryPage() {
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +116,7 @@ export default function BoothHistoryPage() {
       (acc, row) => {
         acc.total += 1;
         acc.charged += Number(row.servicePaidCents ?? 0);
-        acc.pending += Number(row.servicePendingCents ?? 0);
+        acc.pending += visiblePendingCents(row);
         acc.pax += Number(row.pax ?? 0);
         return acc;
       },
@@ -232,6 +237,7 @@ export default function BoothHistoryPage() {
               <tbody>
                 {rows.map((row) => {
                   const tone = statusTone(row.status);
+                  const pendingCents = visiblePendingCents(row);
                   return (
                     <tr key={row.id}>
                       <td style={styles.td}>
@@ -282,8 +288,8 @@ export default function BoothHistoryPage() {
                         </div>
                       </td>
                       <td style={styles.td}>
-                        <div style={{ fontWeight: 900, color: row.servicePendingCents > 0 ? "#b45309" : "#166534" }}>
-                          {euros(row.servicePendingCents)}
+                        <div style={{ fontWeight: 900, color: pendingCents > 0 ? "#b45309" : "#166534" }}>
+                          {euros(pendingCents)}
                         </div>
                       </td>
                       <td style={styles.td}>
