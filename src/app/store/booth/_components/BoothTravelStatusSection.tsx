@@ -23,6 +23,7 @@ type EnCaminoGroup = {
 };
 
 type Props = {
+  enEspera: BoothRow[];
   groups: EnCaminoGroup[];
   enCamino: BoothRow[];
   recibidas: BoothRow[];
@@ -33,6 +34,7 @@ type Props = {
 };
 
 export default function BoothTravelStatusSection({
+  enEspera,
   groups,
   enCamino,
   recibidas,
@@ -43,6 +45,39 @@ export default function BoothTravelStatusSection({
 }: Props) {
   return (
     <div style={columnsStyle}>
+      <section style={panelStyle}>
+        <div style={panelHeaderStyle}>
+          <div>
+            <div style={sectionTitle}>En espera en carpa</div>
+            <div style={sectionSubtitle}>Reservas creadas que todavía no han salido hacia tienda.</div>
+          </div>
+          <div style={pillStyle}>{enEspera.length} pendientes</div>
+        </div>
+
+        {enEspera.length === 0 ? (
+          <div style={emptyStateStyle}>No hay reservas esperando en carpa ahora mismo.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {enEspera.map((row) => (
+              <article key={row.id} style={itemCardStyle}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <div style={{ fontWeight: 900, fontSize: 17 }}>{row.customerName}</div>
+                    <div style={subtleTextStyle}>
+                      {row.service?.name} / {row.option?.durationMinutes} min / {row.quantity} motos / {row.pax} pax
+                    </div>
+                    <div style={subtleTextStyle}>
+                      País {row.customerCountry} / Total {euros(row.totalPriceCents)}
+                    </div>
+                  </div>
+                  <div style={codeBadgeStyle}>{row.boothCode ?? "Sin código"}</div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
       <section style={panelStyle}>
         <div style={panelHeaderStyle}>
           <div>

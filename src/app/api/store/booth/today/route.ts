@@ -5,6 +5,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
 import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
+import { ReservationStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -47,6 +48,7 @@ export async function GET() {
       source: "BOOTH",
       activityDate: { gte: start, lt: endExclusive },
       boothCode: { not: null },
+      status: { not: ReservationStatus.CANCELED },
     },
     select: {
       id: true,

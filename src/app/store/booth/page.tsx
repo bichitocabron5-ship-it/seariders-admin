@@ -139,6 +139,10 @@ function boatLabel(boat?: string | null) {
     () => rows.filter((r) => r.taxiboatDepartedAt && !r.arrivedStoreAt),
     [rows]
   );
+  const enEspera = useMemo(
+    () => rows.filter((r) => !r.taxiboatDepartedAt && !r.arrivedStoreAt),
+    [rows]
+  );
   const recibidas = useMemo(() => rows.filter((r) => !!r.arrivedStoreAt), [rows]);
   const paxEnCamino = useMemo(
     () => enCamino.reduce((total, row) => total + Number(row.pax ?? 0), 0),
@@ -192,6 +196,7 @@ function boatLabel(boat?: string | null) {
         }
       >
         <div style={heroMetaRow}>
+          <HeroBadge label="En espera" value={String(enEspera.length)} />
           <HeroBadge label="En camino" value={String(enCamino.length)} />
           <HeroBadge label="PAX en ruta" value={String(paxEnCamino)} />
           <HeroBadge label="Recibidas" value={String(recibidas.length)} />
@@ -201,6 +206,11 @@ function boatLabel(boat?: string | null) {
       {error ? <div style={errorBox}>{error}</div> : null}
 
       <StoreMetricGrid>
+        <StoreMetricCard
+          label="En espera en carpa"
+          value={String(enEspera.length)}
+          description="Pendientes de salir hacia Store"
+        />
         <StoreMetricCard
           label="Clientes en camino"
           value={String(enCamino.length)}
@@ -227,6 +237,7 @@ function boatLabel(boat?: string | null) {
 
 
       <BoothTravelStatusSection
+        enEspera={enEspera}
         groups={groups}
         enCamino={enCamino}
         recibidas={recibidas}

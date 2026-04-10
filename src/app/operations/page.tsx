@@ -169,6 +169,7 @@ type WaitTimesResponse = {
   sla: {
     boothAssignTaxiMin: number;
     taxiDepartAfterAssignMin: number;
+    boothToDepartMin: number;
     boothToStoreMin: number;
     platformToBoothLiveMin: number;
     storeQueueMin: number;
@@ -185,6 +186,7 @@ type WaitTimesResponse = {
   summary: {
     boothAssignTaxiAvgMin: number | null;
     taxiAssignToDepartAvgMin: number | null;
+    boothToDepartAvgMin: number | null;
     boothToStoreTripAvgMin: number | null;
     boothToStoreTotalAvgMin: number | null;
     platformToBoothLiveAvgMin: number | null;
@@ -443,6 +445,7 @@ export default function OperationsPage() {
     () =>
       waitTimes
         ? [
+            { title: "Booth en espera", value: waitTimes.summary.boothToDepartAvgMin, target: waitTimes.sla.boothToDepartMin },
             { title: "Taxi asignado", value: waitTimes.summary.boothAssignTaxiAvgMin, target: waitTimes.sla.boothAssignTaxiMin },
             { title: "Booth -> Store", value: waitTimes.summary.boothToStoreTotalAvgMin, target: waitTimes.sla.boothToStoreMin },
             { title: "Platform -> Booth", value: waitTimes.summary.platformToBoothLiveAvgMin, target: waitTimes.sla.platformToBoothLiveMin },

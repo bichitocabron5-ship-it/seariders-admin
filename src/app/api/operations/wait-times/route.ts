@@ -134,6 +134,7 @@ function roundOrNull(v: number | null) {
 const SLA = {
   boothAssignTaxiMin: 5,
   taxiDepartAfterAssignMin: 5,
+  boothToDepartMin: 10,
   boothToStoreMin: 20,
   platformToBoothLiveMin: 10,
 
@@ -306,6 +307,11 @@ export async function GET() {
     return diffMinutes(trip?.departedAt ?? null, r.arrivedStoreAt);
   });
 
+  const boothToDepart = reservations.map((r) => {
+    const trip = { departedAt: r.taxiboatTrip?.departedAt ?? null };
+    return diffMinutes(r.boothCreatedAt, trip?.departedAt ?? null);
+  });
+
   const boothToStoreTotal = reservations.map((r) =>
     diffMinutes(r.boothCreatedAt, r.arrivedStoreAt)
   );
@@ -391,6 +397,20 @@ export async function GET() {
         waitedMin,
         targetMin: SLA.boothAssignTaxiMin,
         overByMin: Math.max(0, waitedMin - SLA.boothAssignTaxiMin),
+        startedAt: r.boothCreatedAt.toISOString(),
+        scheduledTime,
+      });
+    }
+
+    if (r.boothCreatedAt && r.taxiboatAssignedAt && !r.taxiboatTrip?.departedAt && !r.arrivedStoreAt) {
+      const waitedMin = diffMinutes(r.boothCreatedAt, now) ?? 0;
+      activeRows.push({
+        reservationId: r.id,
+        label,
+        phase: "BOOTH | esperando salida a Store",
+        waitedMin,
+        targetMin: SLA.boothToDepartMin,
+        overByMin: Math.max(0, waitedMin - SLA.boothToDepartMin),
         startedAt: r.boothCreatedAt.toISOString(),
         scheduledTime,
       });
@@ -508,6 +528,14 @@ export async function GET() {
       slaOkPct: pctWithin(taxiAssignToDepart, SLA.taxiDepartAfterAssignMin),
     },
     {
+      phase: "Booth | creación a salida",
+      avgMin: roundOrNull(avg(boothToDepart)),
+      maxMin: roundOrNull(max(boothToDepart)),
+      cases: boothToDepart.filter((v) => typeof v === "number").length,
+      slaTargetMin: SLA.boothToDepartMin,
+      slaOkPct: pctWithin(boothToDepart, SLA.boothToDepartMin),
+    },
+    {
       phase: "Booth -> Store",
       avgMin: roundOrNull(avg(boothToStoreTotal)),
       maxMin: roundOrNull(max(boothToStoreTotal)),
@@ -614,6 +642,7 @@ export async function GET() {
     summary: {
       boothAssignTaxiAvgMin: roundOrNull(avg(boothAssignTaxi)),
       taxiAssignToDepartAvgMin: roundOrNull(avg(taxiAssignToDepart)),
+      boothToDepartAvgMin: roundOrNull(avg(boothToDepart)),
       boothToStoreTripAvgMin: roundOrNull(avg(boothToStoreTrip)),
       boothToStoreTotalAvgMin: roundOrNull(avg(boothToStoreTotal)),
       platformToBoothLiveAvgMin: roundOrNull(avg(platformToBoothCompleted)),
