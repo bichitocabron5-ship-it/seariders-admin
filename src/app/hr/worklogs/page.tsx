@@ -7,6 +7,7 @@ import { opsStyles } from "@/components/ops-ui";
 import WorklogsFiltersSection from "@/app/hr/worklogs/_components/WorklogsFiltersSection";
 import WorklogsListSection from "@/app/hr/worklogs/_components/WorklogsListSection";
 import WorklogModal from "@/app/hr/worklogs/_components/WorklogModal";
+import { todayYmdInTz } from "@/lib/tz-business";
 
 type WorkArea =
   | "PLATFORM"
@@ -99,7 +100,7 @@ const errorBox: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const todayStr = new Date().toISOString().slice(0, 10);
+const todayStr = todayYmdInTz();
 
 function fmtDateTime(iso: string | null) {
   if (!iso) return "—";
@@ -194,6 +195,7 @@ export default function HrWorklogsPage() {
   const [employees, setEmployees] = useState<EmployeeLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
 
   const [employeeId, setEmployeeId] = useState("");
   const [area, setArea] = useState<"" | WorkArea>("");
@@ -209,8 +211,8 @@ export default function HrWorklogsPage() {
     if (employeeId) p.set("employeeId", employeeId);
     if (area) p.set("area", area);
     if (status) p.set("status", status);
-    if (from) p.set("from", new Date(`${from}T00:00`).toISOString());
-    if (to) p.set("to", new Date(`${to}T23:59`).toISOString());
+    if (from) p.set("fromDate", from);
+    if (to) p.set("toDate", to);
     p.set("take", "200");
     return p.toString();
   }, [employeeId, area, status, from, to]);
@@ -267,6 +269,7 @@ export default function HrWorklogsPage() {
   async function bulkApprove(action: "approve_day_closed" | "approve_week_closed") {
     try {
       setError(null);
+      setBulkMessage(null);
 
       const targetDate = from || new Date().toISOString().slice(0, 10);
 
@@ -282,6 +285,14 @@ export default function HrWorklogsPage() {
       });
 
       if (!res.ok) throw new Error(await res.text());
+
+      const json = await res.json();
+
+      setBulkMessage(
+        action === "approve_week_closed"
+          ? `Aprobadas ${json.updatedCount ?? 0} jornadas cerradas de la semana de ${targetDate}.`
+          : `Aprobadas ${json.updatedCount ?? 0} jornadas cerradas del día ${targetDate}.`
+      );
 
       await load();
     } catch (e: unknown) {
@@ -342,6 +353,7 @@ export default function HrWorklogsPage() {
 
       {loading ? <div style={{ opacity: 0.75 }}>Cargando...</div> : null}
       {error ? <div style={errorBox}>{error}</div> : null}
+      {!error && bulkMessage ? <div style={{ marginTop: 10, padding: 12, borderRadius: 14, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534", fontWeight: 900 }}>{bulkMessage}</div> : null}
 
       <WorklogsListSection
         rows={rows}

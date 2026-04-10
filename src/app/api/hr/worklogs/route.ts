@@ -7,6 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { WorkArea, WorkLogStatus } from "@prisma/client";
 import { computeWorkedMinutes, recalculateInternshipHoursUsed } from "@/lib/hr";
+import { endOfDay, parseDateOnly, startOfDay } from "@/lib/date-only";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,8 @@ const Query = z.object({
   status: z.nativeEnum(WorkLogStatus).optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
+  fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   take: z.coerce.number().int().min(1).max(500).optional().default(100),
 });
 
@@ -41,23 +44,28 @@ export async function GET(req: Request) {
     status: (url.searchParams.get("status") ?? undefined) as WorkLogStatus | undefined,
     from: url.searchParams.get("from") ?? undefined,
     to: url.searchParams.get("to") ?? undefined,
+    fromDate: url.searchParams.get("fromDate") ?? undefined,
+    toDate: url.searchParams.get("toDate") ?? undefined,
     take: url.searchParams.get("take") ?? undefined,
   });
 
   if (!parsed.success) return new NextResponse("Query inválida", { status: 400 });
 
-  const { employeeId, area, status, from, to, take } = parsed.data;
+  const { employeeId, area, status, from, to, fromDate, toDate, take } = parsed.data;
+
+  const rangeFrom = fromDate ? startOfDay(parseDateOnly(fromDate)) : from ? new Date(from) : undefined;
+  const rangeTo = toDate ? endOfDay(parseDateOnly(toDate)) : to ? new Date(to) : undefined;
 
   const rows = await prisma.workLog.findMany({
     where: {
       ...(employeeId ? { employeeId } : {}),
       ...(area ? { area } : {}),
       ...(status ? { status } : {}),
-      ...(from || to
+      ...(rangeFrom || rangeTo
         ? {
             workDate: {
-              ...(from ? { gte: new Date(from) } : {}),
-              ...(to ? { lte: new Date(to) } : {}),
+              ...(rangeFrom ? { gte: rangeFrom } : {}),
+              ...(rangeTo ? { lte: rangeTo } : {}),
             },
           }
         : {}),

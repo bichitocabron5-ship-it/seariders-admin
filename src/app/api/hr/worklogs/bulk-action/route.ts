@@ -7,6 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { WorkArea, WorkLogStatus } from "@prisma/client";
 import { recalculateInternshipHoursUsed } from "@/lib/hr";
+import { addDays, endOfDay, formatDateOnly, mondayOfWeek, parseDateOnly, startOfDay } from "@/lib/date-only";
 
 export const runtime = "nodejs";
 
@@ -21,35 +22,9 @@ async function requireHrOrAdmin() {
   return null;
 }
 
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function endOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
-
-function mondayOfWeek(date: Date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  return startOfDay(d);
-}
-
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
 const Body = z.object({
   action: z.enum(["approve_day_closed", "approve_week_closed"]),
-  date: z.string().optional(), // YYYY-MM-DD
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   employeeId: z.string().optional().nullable(),
   area: z.nativeEnum(WorkArea).optional().nullable(),
 });
@@ -70,7 +45,7 @@ export async function POST(req: Request) {
   const { action, date, employeeId, area } = parsed.data;
 
   try {
-    const baseDate = date ? new Date(`${date}T00:00:00`) : new Date();
+    const baseDate = date ? parseDateOnly(date) : new Date();
 
     const rangeStart =
       action === "approve_week_closed"
@@ -137,6 +112,7 @@ export async function POST(req: Request) {
         end: rangeEnd.toISOString(),
       },
       updatedCount: out.updatedCount,
+      appliedDate: formatDateOnly(baseDate),
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Error";

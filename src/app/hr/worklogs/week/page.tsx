@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { opsStyles } from "@/components/ops-ui";
 import WorklogsWeekFiltersSection from "@/app/hr/worklogs/week/_components/WorklogsWeekFiltersSection";
 import WorklogsWeekTableSection from "@/app/hr/worklogs/week/_components/WorklogsWeekTableSection";
+import { addDays, formatDateOnly, mondayOfWeek, parseDateOnly } from "@/lib/date-only";
 
 type WorkArea =
   | "PLATFORM"
@@ -121,25 +122,6 @@ function fmtDayShort(iso: string) {
   return d.toLocaleDateString("es-ES", { weekday: "short", day: "2-digit", month: "2-digit" });
 }
 
-function mondayOfWeek(date: Date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function dateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
 function areaLabel(area: WorkArea) {
   switch (area) {
     case "PLATFORM":
@@ -194,7 +176,7 @@ export default function HrWorklogsWeekPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [weekStart, setWeekStart] = useState(() => dateInput(mondayOfWeek(new Date())));
+  const [weekStart, setWeekStart] = useState(() => formatDateOnly(mondayOfWeek(new Date())));
   const [employeeId, setEmployeeId] = useState("");
   const [area, setArea] = useState<"" | WorkArea>("");
   const status: "" | WorkLogStatus = "";
@@ -237,13 +219,11 @@ export default function HrWorklogsWeekPage() {
   }, [load]);
 
   const prevWeek = () => {
-    const d = new Date(`${weekStart}T00:00:00`);
-    setWeekStart(dateInput(addDays(d, -7)));
+    setWeekStart(formatDateOnly(addDays(parseDateOnly(weekStart), -7)));
   };
 
   const nextWeek = () => {
-    const d = new Date(`${weekStart}T00:00:00`);
-    setWeekStart(dateInput(addDays(d, 7)));
+    setWeekStart(formatDateOnly(addDays(parseDateOnly(weekStart), 7)));
   };
 
   const openLogsCount = data?.employees.reduce((acc, e) => acc + e.perDay.reduce((sum, d) => sum + d.openLogs, 0), 0) ?? 0;

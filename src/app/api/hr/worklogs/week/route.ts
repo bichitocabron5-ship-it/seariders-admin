@@ -6,6 +6,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { WorkArea, WorkLogStatus } from "@prisma/client";
+import { addDays, endOfDay, mondayOfWeek, parseDateOnly } from "@/lib/date-only";
 
 export const runtime = "nodejs";
 
@@ -20,32 +21,6 @@ async function requireHrOrAdmin() {
   return null;
 }
 
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function endOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
-
-function mondayOfWeek(date: Date) {
-  const d = new Date(date);
-  const day = d.getDay(); // 0 domingo ... 1 lunes
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  return startOfDay(d);
-}
-
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
 function ymd(date: Date) {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, "0");
@@ -54,7 +29,7 @@ function ymd(date: Date) {
 }
 
 const Query = z.object({
-  weekStart: z.string().optional(), // YYYY-MM-DD
+  weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   employeeId: z.string().optional(),
   area: z.nativeEnum(WorkArea).optional(),
   status: z.nativeEnum(WorkLogStatus).optional(),
@@ -79,7 +54,7 @@ export async function GET(req: Request) {
   }
 
   const baseDate = parsed.data.weekStart
-    ? new Date(`${parsed.data.weekStart}T00:00:00`)
+    ? parseDateOnly(parsed.data.weekStart)
     : new Date();
 
   const weekStart = mondayOfWeek(baseDate);
