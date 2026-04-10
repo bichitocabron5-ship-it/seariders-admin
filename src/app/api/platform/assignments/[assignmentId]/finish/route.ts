@@ -88,6 +88,10 @@ function defaultOperabilityFromIncidentLevel(
   return PlatformOperabilityStatus.OPERATIONAL;
 }
 
+function minutesToHours(minutes: number) {
+  return Math.round((minutes / 60) * 100) / 100;
+}
+
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ assignmentId: string }> }
@@ -159,6 +163,7 @@ export async function POST(
             select: {
               id: true,
               name: true,
+              currentHours: true,
               operabilityStatus: true,
             },
           },
@@ -194,6 +199,36 @@ export async function POST(
         },
         select: { id: true, status: true, endedAt: true },
       });
+
+      const hoursToAdd = minutesToHours(Number(a.durationMinutesSnapshot ?? 0));
+      const nextJetskiCurrentHours =
+        a.jetski?.currentHours != null
+          ? Number(a.jetski.currentHours) + hoursToAdd
+          : null;
+      const nextAssetCurrentHours =
+        a.asset?.currentHours != null
+          ? Number(a.asset.currentHours) + hoursToAdd
+          : null;
+
+      if (a.jetskiId && nextJetskiCurrentHours != null) {
+        await tx.jetski.update({
+          where: { id: a.jetskiId },
+          data: {
+            currentHours: nextJetskiCurrentHours,
+          },
+          select: { id: true },
+        });
+      }
+
+      if (a.assetId && nextAssetCurrentHours != null) {
+        await tx.asset.update({
+          where: { id: a.assetId },
+          data: {
+            currentHours: nextAssetCurrentHours,
+          },
+          select: { id: true },
+        });
+      }
 
       let incidentId: string | null = null;
       let maintenanceEventId: string | null = null;
@@ -286,7 +321,10 @@ export async function POST(
             status: "OPEN",
             severity: mapIncidentLevelToMaintenanceSeverity(b.level!),
 
-            hoursAtService: Number(a.jetski?.currentHours ?? 0),
+            hoursAtService:
+              a.jetskiId
+                ? Number(nextJetskiCurrentHours ?? a.jetski?.currentHours ?? 0)
+                : Number(nextAssetCurrentHours ?? a.asset?.currentHours ?? 0),
             note: b.description?.trim()
               ? `Incidencia desde Plataforma: ${b.description.trim()}`
               : b.notes?.trim()

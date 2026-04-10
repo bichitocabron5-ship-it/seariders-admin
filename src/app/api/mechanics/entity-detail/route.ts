@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { MaintenanceEntityType } from "@prisma/client";
-import { calcService } from "@/lib/mechanics";
+import { calcService, isServiceEventType } from "@/lib/mechanics";
 import { requireMechanicsOrAdmin } from "@/lib/mechanics-auth";
 
 export const runtime = "nodejs";
@@ -151,7 +151,7 @@ async function getJetskiDetail(entityId: string, take: number) {
 
   const events = withPartUsageSummary(rawEvents);
 
-  const lastEvt = events[0] ?? null;
+  const lastEvt = events.find((event) => isServiceEventType(event.type)) ?? null;
   const lastServiceHoursEffective =
     lastEvt?.hoursAtService ?? (entity.lastServiceHours ?? null);
 
@@ -277,7 +277,7 @@ async function getAssetDetail(entityId: string, take: number) {
 
   const events = withPartUsageSummary(rawEvents);
 
-  const lastEvt = events[0] ?? null;
+  const lastEvt = events.find((event) => isServiceEventType(event.type)) ?? null;
   const lastServiceHoursEffective =
     lastEvt?.hoursAtService ?? (entity.lastServiceHours ?? null);
 

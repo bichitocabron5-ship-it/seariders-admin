@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { MaintenanceEntityType } from "@prisma/client";
-import { calcService, type ServiceState } from "@/lib/mechanics";
+import { calcService, isServiceEventType, type ServiceState } from "@/lib/mechanics";
 import { requireMechanicsOrAdmin } from "@/lib/mechanics-auth";
 
 export const runtime = "nodejs";
@@ -98,6 +98,7 @@ export async function GET(req: Request) {
   >();
   for (const e of lastJetskiEvents) {
     if (!e.jetskiId) continue;
+    if (!isServiceEventType(e.type)) continue;
     if (!lastJetskiMap.has(e.jetskiId)) {
       lastJetskiMap.set(e.jetskiId, {
         hoursAtService: e.hoursAtService,
@@ -113,6 +114,7 @@ export async function GET(req: Request) {
   >();
   for (const e of lastAssetEvents) {
     if (!e.assetId) continue;
+    if (!isServiceEventType(e.type)) continue;
     if (!lastAssetMap.has(e.assetId)) {
       lastAssetMap.set(e.assetId, {
         hoursAtService: e.hoursAtService,
