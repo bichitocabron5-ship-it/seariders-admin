@@ -169,6 +169,25 @@ function countPendingDepositCents(row: HistoryRow) {
   return Math.max(0, Number(row.depositCents ?? 0) - Number(row.depositCollectedCents ?? 0));
 }
 
+function statusLabel(status: string) {
+  switch (status) {
+    case "SCHEDULED":
+      return "Programada";
+    case "WAITING":
+      return "En espera";
+    case "READY_FOR_PLATFORM":
+      return "Lista para platform";
+    case "IN_SEA":
+      return "En mar";
+    case "COMPLETED":
+      return "Completada";
+    case "CANCELED":
+      return "Cancelada";
+    default:
+      return status;
+  }
+}
+
 export default function StoreHistoryPage() {
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -425,7 +444,7 @@ export default function StoreHistoryPage() {
       if (!manualCustomerName.trim()) throw new Error("Falta el cliente");
       if (!manualDate) throw new Error("Falta la fecha");
       if (!manualServiceId) throw new Error("Falta el servicio");
-      if (!manualOptionId) throw new Error("Falta la opcion");
+      if (!manualOptionId) throw new Error("Falta la opción");
 
       const payments = manualPayments
         .map((payment) => ({
@@ -454,7 +473,7 @@ export default function StoreHistoryPage() {
           pax: manualPax,
           totalPriceCents: centsFromEuros(manualTotalEuros),
           depositCents: centsFromEuros(manualDepositEuros),
-          note: manualNote.trim() || "Alta manual historica",
+          note: manualNote.trim() || "Alta manual histórica",
           payments,
         }),
       });
@@ -554,6 +573,20 @@ export default function StoreHistoryPage() {
               Consulta devoluciones, incidencias, cobros y retenciones en una vista ordenada y alineada con la operativa
               de tienda.
             </div>
+            <div style={heroInfoGrid}>
+              <div style={heroInfoCard}>
+                <strong>Servicio</strong>
+                <span>Importe ya cobrado frente al servicio que sigue pendiente de caja.</span>
+              </div>
+              <div style={heroInfoCard}>
+                <strong>Fianza</strong>
+                <span>Se ve aparte lo cobrado, lo devuelto y lo retenido para que histórico y cierre cuadren.</span>
+              </div>
+              <div style={heroInfoCard}>
+                <strong>Trazabilidad</strong>
+                <span>Las reservas manuales quedan identificadas y pueden llevar contrato escaneado adjunto.</span>
+              </div>
+            </div>
           </div>
 
           <div style={opsStyles.actionGrid}>
@@ -603,11 +636,11 @@ export default function StoreHistoryPage() {
                 <label style={field}>
                   <span style={fieldLabel}>Estado</span>
                   <Select value={manualStatus} onChange={(e) => setManualStatus(e.target.value)}>
-                    <option value="COMPLETED">COMPLETED</option>
-                    <option value="WAITING">WAITING</option>
-                    <option value="READY_FOR_PLATFORM">READY_FOR_PLATFORM</option>
-                    <option value="IN_SEA">IN_SEA</option>
-                    <option value="CANCELED">CANCELED</option>
+                    <option value="COMPLETED">{statusLabel("COMPLETED")}</option>
+                    <option value="WAITING">{statusLabel("WAITING")}</option>
+                    <option value="READY_FOR_PLATFORM">{statusLabel("READY_FOR_PLATFORM")}</option>
+                    <option value="IN_SEA">{statusLabel("IN_SEA")}</option>
+                    <option value="CANCELED">{statusLabel("CANCELED")}</option>
                   </Select>
                 </label>
               </div>
@@ -732,6 +765,9 @@ export default function StoreHistoryPage() {
           </div>
         }
       >
+        <div style={{ ...mutedText, marginBottom: 14 }}>
+          Filtra por estado, incidencias, fianza retenida o fechas para revisar cobro y trazabilidad sin mezclar casos.
+        </div>
         <div style={filtersGrid}>
           <label style={field}>
             <span style={fieldLabel}>Buscar cliente</span>
@@ -742,12 +778,12 @@ export default function StoreHistoryPage() {
             <span style={fieldLabel}>Estado</span>
             <Select value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="ALL">Todos</option>
-              <option value="SCHEDULED">SCHEDULED</option>
-              <option value="WAITING">WAITING</option>
-              <option value="READY_FOR_PLATFORM">READY_FOR_PLATFORM</option>
-              <option value="IN_SEA">IN_SEA</option>
-              <option value="COMPLETED">COMPLETED</option>
-              <option value="CANCELED">CANCELED</option>
+              <option value="SCHEDULED">{statusLabel("SCHEDULED")}</option>
+              <option value="WAITING">{statusLabel("WAITING")}</option>
+              <option value="READY_FOR_PLATFORM">{statusLabel("READY_FOR_PLATFORM")}</option>
+              <option value="IN_SEA">{statusLabel("IN_SEA")}</option>
+              <option value="COMPLETED">{statusLabel("COMPLETED")}</option>
+              <option value="CANCELED">{statusLabel("CANCELED")}</option>
             </Select>
           </label>
 
@@ -790,6 +826,7 @@ export default function StoreHistoryPage() {
         incidentTone={incidentTone}
         countPaidServiceCents={countPaidServiceCents}
         countPendingServiceCents={countPendingServiceCents}
+        statusLabel={statusLabel}
         mechanicsDetailHref={mechanicsDetailHref}
         mechanicsEventHref={mechanicsEventHref}
         reservationHref={reservationHref}
@@ -854,6 +891,24 @@ const heroSubtitle: CSSProperties = {
   fontSize: 14,
   color: "#51627b",
   maxWidth: 760,
+};
+
+const heroInfoGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 10,
+  marginTop: 4,
+};
+
+const heroInfoCard: CSSProperties = {
+  display: "grid",
+  gap: 6,
+  padding: "12px 14px",
+  borderRadius: 16,
+  border: "1px solid #dbe4ea",
+  background: "rgba(255, 255, 255, 0.9)",
+  fontSize: 12,
+  color: "#475569",
 };
 
 const secondaryLink: CSSProperties = {

@@ -70,6 +70,7 @@ type Props = {
   incidentTone: (level: string) => Tone;
   countPaidServiceCents: (row: HistoryRow) => number;
   countPendingServiceCents: (row: HistoryRow) => number;
+  statusLabel: (status: string) => string;
   mechanicsDetailHref: (incident: HistoryIncident) => string;
   mechanicsEventHref: (incident: HistoryIncident) => string;
   reservationHref: (reservationId: string) => string;
@@ -99,6 +100,7 @@ export default function StoreHistoryResultsSection({
   incidentTone,
   countPaidServiceCents,
   countPendingServiceCents,
+  statusLabel,
   mechanicsDetailHref,
   mechanicsEventHref,
   reservationHref,
@@ -128,6 +130,9 @@ export default function StoreHistoryResultsSection({
         </div>
       }
     >
+      <div style={{ ...mutedText, marginBottom: 14 }}>
+        Cada fila separa servicio, fianza y trazabilidad operativa para detectar rápido lo que no cuadra.
+      </div>
       {loading ? (
         <div style={emptyState}>Cargando histórico...</div>
       ) : rows.length === 0 ? (
@@ -140,7 +145,7 @@ export default function StoreHistoryResultsSection({
                 <th style={styles.th}>Reserva</th>
                 <th style={styles.th}>Servicio</th>
                 <th style={styles.th}>Estado</th>
-                <th style={styles.th}>Cobro</th>
+                <th style={styles.th}>Servicio</th>
                 <th style={styles.th}>Fianza</th>
                 <th style={styles.th}>Incidencias</th>
                 <th style={styles.th}>Canal</th>
@@ -229,7 +234,7 @@ export default function StoreHistoryResultsSection({
                             color: statusUi.color,
                           }}
                         >
-                          {row.status}
+                          {statusLabel(row.status)}
                         </span>
                         <div style={mutedText}>
                           Formalizada: {row.formalizedAt ? dt(row.formalizedAt) : "No"}
@@ -245,14 +250,14 @@ export default function StoreHistoryResultsSection({
                     <td style={cell}>
                       <div style={{ display: "grid", gap: 6 }}>
                         <div style={moneyValue}>{euros(countPaidServiceCents(row))}</div>
-                        <div style={mutedText}>Total servicio {euros(row.totalPriceCents)}</div>
+                        <div style={mutedText}>Cobrado en servicio · {euros(row.totalPriceCents)}</div>
                         <div
                           style={{
                             color: countPendingServiceCents(row) > 0 ? "#b45309" : "#166534",
                             fontWeight: 800,
                           }}
                         >
-                          Pendiente {euros(countPendingServiceCents(row))}
+                          Pendiente de servicio · {euros(countPendingServiceCents(row))}
                         </div>
                       </div>
                     </td>
@@ -262,6 +267,7 @@ export default function StoreHistoryResultsSection({
                         <div style={moneyValue}>
                           {euros(row.paidDepositCents)} / {euros(row.depositCents)}
                         </div>
+                        <div style={mutedText}>Cobrada / prevista</div>
                         <div
                           style={{
                             color: row.depositHeld ? "#b91c1c" : row.depositReturnedCents > 0 ? "#166534" : "#334155",

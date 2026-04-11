@@ -220,6 +220,17 @@ export default function AdminCashClosuresPage() {
         </article>
       </section>
 
+      <section style={infoStrip}>
+        <div style={infoBlock}>
+          <div style={infoTitle}>Lectura rápida</div>
+          <div style={infoText}>`STORE` y `BAR` se revisan como cierre diario. `BOOTH` mantiene cierre por turno real.</div>
+        </div>
+        <div style={infoBlock}>
+          <div style={infoTitle}>Qué revisar primero</div>
+          <div style={infoText}>Empieza por la diferencia neta y luego baja al detalle por método, sobre todo `CASH`.</div>
+        </div>
+      </section>
+
       {error ? (
         <div style={errorStyle}>
           {error}
@@ -228,10 +239,10 @@ export default function AdminCashClosuresPage() {
 
       <section style={filtersPanel}>
         <select value={origin} onChange={(e) => setOrigin(e.target.value)} style={inputStyle}>
-          <option value="">(Todos los orígenes)</option>
-          <option value="STORE">STORE</option>
-          <option value="BOOTH">BOOTH</option>
-          <option value="BAR">BAR</option>
+          <option value="">Todos los orígenes</option>
+          <option value="STORE">STORE · Diario</option>
+          <option value="BOOTH">BOOTH · Turno</option>
+          <option value="BAR">BAR · Diario</option>
         </select>
 
         <label style={{ fontSize: 13 }}>
@@ -239,7 +250,7 @@ export default function AdminCashClosuresPage() {
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...inputStyle, width: "100%" }} />
         </label>
 
-        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "#334155" }}>
           <input type="checkbox" checked={includeVoided} onChange={(e) => setIncludeVoided(e.target.checked)} />
           Incluir anulados
         </label>
@@ -354,6 +365,35 @@ const summaryValue: React.CSSProperties = {
   fontSize: 26,
   fontWeight: 950,
   color: "#0f172a",
+};
+
+const infoStrip: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 10,
+};
+
+const infoBlock: React.CSSProperties = {
+  border: "1px solid #dbe4ea",
+  borderRadius: 16,
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+  padding: 14,
+  display: "grid",
+  gap: 4,
+};
+
+const infoTitle: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  color: "#0f766e",
+};
+
+const infoText: React.CSSProperties = {
+  fontSize: 13,
+  lineHeight: 1.45,
+  color: "#475569",
 };
 
 const ghostBtn: React.CSSProperties = {

@@ -66,6 +66,25 @@ function statusTone(status: string) {
   }
 }
 
+function statusLabel(status: string) {
+  switch (status) {
+    case "SCHEDULED":
+      return "Programada";
+    case "WAITING":
+      return "Pendiente";
+    case "READY_FOR_PLATFORM":
+      return "Lista para plataforma";
+    case "IN_SEA":
+      return "En mar";
+    case "COMPLETED":
+      return "Completada";
+    case "CANCELED":
+      return "Cancelada";
+    default:
+      return status;
+  }
+}
+
 function visiblePendingCents(row: HistoryRow) {
   if (row.status === "CANCELED") return 0;
   return Number(row.servicePendingCents ?? 0);
@@ -118,9 +137,10 @@ export default function BoothHistoryPage() {
         acc.charged += Number(row.servicePaidCents ?? 0);
         acc.pending += visiblePendingCents(row);
         acc.pax += Number(row.pax ?? 0);
+        acc.receivingPending += row.arrivedStoreAt ? 0 : 1;
         return acc;
       },
-      { total: 0, charged: 0, pending: 0, pax: 0 }
+      { total: 0, charged: 0, pending: 0, pax: 0, receivingPending: 0 }
     );
   }, [rows]);
 
@@ -132,7 +152,7 @@ export default function BoothHistoryPage() {
             <div style={eyebrowStyle}>Carpa</div>
             <h1 style={titleStyle}>Histórico de reservas</h1>
             <div style={subtitleStyle}>
-              Consulta por día qué salió desde carpa, cuánto se cobró y qué quedó pendiente en cada reserva.
+              Consulta por día qué salió desde carpa, cuánto se cobró, qué sigue pendiente y si la reserva ya quedó recibida en tienda.
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -162,6 +182,21 @@ export default function BoothHistoryPage() {
             <div style={heroStatLabelStyle}>PAX</div>
             <div style={heroStatValueStyle}>{summary.pax}</div>
           </div>
+          <div style={heroStatStyle}>
+            <div style={heroStatLabelStyle}>Sin recibir</div>
+            <div style={heroStatValueStyle}>{summary.receivingPending}</div>
+          </div>
+        </div>
+      </section>
+
+      <section style={infoStripStyle}>
+        <div style={infoCardStyle}>
+          <div style={infoTitleStyle}>Lectura</div>
+          <div style={infoTextStyle}>`Cobrado` y `Pendiente` miden solo servicio de carpa. La fianza se deja visible aparte como referencia.</div>
+        </div>
+        <div style={infoCardStyle}>
+          <div style={infoTitleStyle}>Recepción</div>
+          <div style={infoTextStyle}>La última columna indica si la reserva ya quedó recibida por tienda o si ese paso sigue pendiente.</div>
         </div>
       </section>
 
@@ -221,7 +256,7 @@ export default function BoothHistoryPage() {
           <div style={emptyStyle}>No hay reservas para los filtros actuales.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ ...styles.table, minWidth: 1180 }}>
+            <table style={{ ...styles.table, minWidth: 1220 }}>
               <thead>
                 <tr>
                   <th style={styles.th}>Reserva</th>
@@ -231,7 +266,7 @@ export default function BoothHistoryPage() {
                   <th style={styles.th}>Cobrado</th>
                   <th style={styles.th}>Pendiente</th>
                   <th style={styles.th}>Pagos</th>
-                  <th style={styles.th}>Tienda</th>
+                  <th style={styles.th}>Recepción en tienda</th>
                 </tr>
               </thead>
               <tbody>
@@ -278,13 +313,13 @@ export default function BoothHistoryPage() {
                             fontSize: 12,
                           }}
                         >
-                          {row.status}
+                          {statusLabel(row.status)}
                         </span>
                       </td>
                       <td style={styles.td}>
                         <div style={{ display: "grid", gap: 6 }}>
                           <div style={{ fontWeight: 900, color: "#0f172a" }}>{euros(row.servicePaidCents)}</div>
-                          <div style={mutedStyle}>Total {euros(row.totalPriceCents)}</div>
+                          <div style={mutedStyle}>Total servicio {euros(row.totalPriceCents)}</div>
                         </div>
                       </td>
                       <td style={styles.td}>
@@ -300,8 +335,13 @@ export default function BoothHistoryPage() {
                         </div>
                       </td>
                       <td style={styles.td}>
-                        <div style={{ fontWeight: 800 }}>
-                          {row.arrivedStoreAt ? formatDateTime(row.arrivedStoreAt) : "No recibida"}
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <div style={{ fontWeight: 800, color: row.arrivedStoreAt ? "#166534" : "#b45309" }}>
+                            {row.arrivedStoreAt ? "Recibida" : "Pendiente"}
+                          </div>
+                          <div style={mutedStyle}>
+                            {row.arrivedStoreAt ? formatDateTime(row.arrivedStoreAt) : "Aún no registrada en tienda"}
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -398,6 +438,35 @@ const heroStatValueStyle: CSSProperties = {
   fontSize: 20,
   fontWeight: 950,
   color: "#ecfeff",
+};
+
+const infoStripStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 10,
+};
+
+const infoCardStyle: CSSProperties = {
+  border: "1px solid #dbe4ea",
+  borderRadius: 16,
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+  padding: 14,
+  display: "grid",
+  gap: 4,
+};
+
+const infoTitleStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  color: "#0f766e",
+};
+
+const infoTextStyle: CSSProperties = {
+  fontSize: 13,
+  lineHeight: 1.45,
+  color: "#475569",
 };
 
 const filtersGrid: CSSProperties = {

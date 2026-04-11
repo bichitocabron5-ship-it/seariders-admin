@@ -63,13 +63,14 @@ export default function OperationsAlertsSection({
             <div>
               <div style={sectionEyebrow}>Seguimiento</div>
               <div style={sectionTitle}>Alertas operativas</div>
+              <div style={sectionNote}>Bloqueos y desajustes que aún permiten corregir la operativa sin comprometer la salida.</div>
             </div>
           </div>
 
           <div style={alertGrid}>
             {alerts.waitingTooLong.map((reservation) => (
               <div key={`wtl-${reservation.id}`} style={alertWarn}>
-                <strong>{reservation.customerName}</strong> lleva demasiado tiempo en WAITING.
+                <strong>{reservation.customerName}</strong> lleva demasiado tiempo en espera.
               </div>
             ))}
 
@@ -87,7 +88,7 @@ export default function OperationsAlertsSection({
 
             {alerts.pendingPayments.map((reservation) => (
               <div key={`pp-${reservation.id}`} style={alertInfo}>
-                <strong>{reservation.customerName}</strong> mantiene pendiente{" "}
+                <strong>{reservation.customerName}</strong> mantiene pendiente en caja{" "}
                 <strong>{formatEur(reservation.pendingCents)}</strong>.
               </div>
             ))}
@@ -108,6 +109,7 @@ export default function OperationsAlertsSection({
             <div>
               <div style={sectionEyebrow}>Prioridad alta</div>
               <div style={criticalTitle}>Alertas críticas</div>
+              <div style={sectionNote}>Casos que ya comprometen salida, seguridad documental o cobro mínimo exigible.</div>
             </div>
           </div>
 
@@ -192,6 +194,13 @@ const sectionTitle: CSSProperties = {
 const criticalTitle: CSSProperties = {
   ...sectionTitle,
   color: "#8f1d1d",
+};
+
+const sectionNote: CSSProperties = {
+  marginTop: 6,
+  fontSize: 13,
+  color: "#64748b",
+  maxWidth: 760,
 };
 
 const alertGrid: CSSProperties = {

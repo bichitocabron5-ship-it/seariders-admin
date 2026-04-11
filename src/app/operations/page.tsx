@@ -497,6 +497,20 @@ export default function OperationsPage() {
           <div style={heroText}>
             Vista unificada de reservas, alertas operativas y flujo entre Booth, Store y Platform, con contratos incompletos y extras pendientes.
           </div>
+          <div style={heroMetaGrid}>
+            <div style={heroInfoCard}>
+              <strong>Cobros pendientes</strong>
+              <span>Casos que siguen vivos en operación y todavía requieren caja o revisión en tienda.</span>
+            </div>
+            <div style={heroInfoCard}>
+              <strong>Sin formalizar</strong>
+              <span>Reservas que no deberían avanzar sin documentación y validación básica completa.</span>
+            </div>
+            <div style={heroInfoCard}>
+              <strong>Cuellos de botella</strong>
+              <span>Espera, taxi, platform y mar se leen en una sola capa para priorizar bien.</span>
+            </div>
+          </div>
           {data ? (
             <div style={heroMeta}>Fecha operativa: {fmtDate(data.businessDate)}</div>
           ) : null}
@@ -536,7 +550,7 @@ export default function OperationsPage() {
 
             <div style={kpiGrid}>
               <Kpi title="Total hoy" value={data.summary.totalToday} />
-              <Kpi title="Pendiente" value={data.summary.pending} warn={data.summary.pending > 0} />
+              <Kpi title="Pendientes" value={data.summary.pending} warn={data.summary.pending > 0} />
               <Kpi title="Próximas" value={data.summary.upcoming} />
               <Kpi title="Ready" value={data.summary.ready} />
               <Kpi title="En mar" value={data.summary.inSea} />
@@ -544,7 +558,7 @@ export default function OperationsPage() {
               <Kpi title="Cobros pendientes" value={data.summary.pendingPayments} warn={data.summary.pendingPayments > 0} />
               <Kpi title="Sin formalizar" value={data.summary.unformalized} warn={data.summary.unformalized > 0} />
               <Kpi title="Alertas críticas" value={data.summary.criticalAlerts} warn={data.summary.criticalAlerts > 0} />
-              <Kpi title="Saturación" value={data.summary.saturationWarnings} warn={data.summary.saturationWarnings > 0} />
+              <Kpi title="Servicios saturados" value={data.summary.saturationWarnings} warn={data.summary.saturationWarnings > 0} />
             </div>
           </section>
 
@@ -681,6 +695,24 @@ const heroMeta: CSSProperties = {
   fontWeight: 800,
   fontSize: 12,
   color: "#27405e",
+};
+
+const heroMetaGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 10,
+  maxWidth: 920,
+};
+
+const heroInfoCard: CSSProperties = {
+  display: "grid",
+  gap: 6,
+  padding: "12px 14px",
+  borderRadius: 16,
+  border: "1px solid #d6e1ef",
+  background: "rgba(255, 255, 255, 0.92)",
+  fontSize: 12,
+  color: "#40536c",
 };
 
 const heroActions: CSSProperties = {

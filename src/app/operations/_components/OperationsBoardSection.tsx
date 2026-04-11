@@ -50,6 +50,25 @@ type SaturationItem = {
   }>;
 };
 
+function statusLabel(status: string | null) {
+  switch (status) {
+    case "WAITING":
+      return "En espera";
+    case "READY_FOR_PLATFORM":
+      return "Lista para platform";
+    case "IN_SEA":
+      return "En mar";
+    case "COMPLETED":
+      return "Completada";
+    case "CANCELED":
+      return "Cancelada";
+    case "SCHEDULED":
+      return "Programada";
+    default:
+      return status ?? "-";
+  }
+}
+
 export default function OperationsBoardSection({
   board,
   areas,
@@ -92,14 +111,14 @@ export default function OperationsBoardSection({
         <div style={sectionHeaderRow}>
           <div>
             <div style={sectionEyebrow}>Board</div>
-            <div style={sectionTitle}>Estado de reservas</div>
+            <div style={sectionTitle}>Estado operativo</div>
           </div>
         </div>
 
         <div style={boardGrid}>
           <BoardColumn title="Pendientes" rows={board.pending} styleExtra={{ background: "#fff9ee", borderColor: "#f7d58d" }} />
           <BoardColumn title="Próximas" rows={board.upcoming} />
-          <BoardColumn title="Ready" rows={board.ready} styleExtra={{ background: "#f2f8ff", borderColor: "#cfe0ff" }} />
+          <BoardColumn title="Listas" rows={board.ready} styleExtra={{ background: "#f2f8ff", borderColor: "#cfe0ff" }} />
           <BoardColumn title="En mar" rows={board.inSea} styleExtra={{ background: "#eefcf7", borderColor: "#b8f1d7" }} />
           <BoardColumn title="Completadas" rows={board.completed} styleExtra={{ background: "#f7f7fb", borderColor: "#d9dee8" }} />
         </div>
@@ -118,7 +137,7 @@ export default function OperationsBoardSection({
             title="Store"
             sections={[
               { title: "Sin formalizar", rows: areas.store.unformalized },
-              { title: "Pendientes de cobro", rows: areas.store.pendingPayments },
+              { title: "Cobros pendientes", rows: areas.store.pendingPayments },
               { title: "Contratos incompletos", rows: areas.store.incompleteContracts },
             ]}
           />
@@ -126,7 +145,7 @@ export default function OperationsBoardSection({
           <AreaBlock
             title="Platform"
             sections={[
-              { title: "Ready", rows: areas.platform.ready },
+              { title: "Listas", rows: areas.platform.ready },
               { title: "En mar", rows: areas.platform.inSea },
               { title: "Extras pendientes", rows: areas.platform.extrasPending },
             ]}
@@ -156,7 +175,7 @@ export default function OperationsBoardSection({
             {saturation.map((service, idx) => (
               <div key={`${service.serviceName ?? "service"}-${idx}`} style={saturationItemStyle}>
                 <div style={{ fontWeight: 900 }}>
-                  {service.serviceName ?? "Servicio"} | {service.count} reservas en la misma ventana
+                  {service.serviceName ?? "Servicio"} | {service.count} reservas en la misma franja
                 </div>
 
                 <div style={{ marginTop: 8, display: "grid", gap: 6, fontSize: 12, opacity: 0.88 }}>
@@ -191,7 +210,7 @@ function BoardColumn({
       <div style={columnHeader}>
         <div style={{ display: "grid", gap: 2 }}>
           <div style={{ fontWeight: 950, fontSize: 18 }}>{title}</div>
-          <div style={{ fontSize: 12, opacity: 0.72 }}>Reservas en esta fase</div>
+          <div style={{ fontSize: 12, opacity: 0.72 }}>Reservas en esta fase operativa</div>
         </div>
         <div style={countBadge}>{rows.length}</div>
       </div>
@@ -260,12 +279,12 @@ function OperationItem({ row }: { row: OperationCard }) {
           </div>
         </div>
 
-        <div style={statusTone}>{row.status ?? "-"}</div>
+        <div style={statusTone}>{statusLabel(row.status)}</div>
       </div>
 
       <div style={metaGrid}>
         <Meta label="Hora" value={fmtDateTime(row.scheduledTime ?? row.activityDate)} />
-        <Meta label="Pendiente" value={eur(row.pendingCents)} />
+        <Meta label="Pendiente caja" value={eur(row.pendingCents)} />
         <Meta label="Pagado" value={eur(row.paidCents)} />
         <Meta label="Origen" value={row.source ?? "-"} />
       </div>
@@ -287,7 +306,7 @@ function OperationItem({ row }: { row: OperationCard }) {
       ) : null}
 
       {!row.formalizedAt ? (
-        <div style={warnBanner}>Pendiente de formalizar.</div>
+        <div style={warnBanner}>Pendiente de formalizar y validar.</div>
       ) : null}
 
       {row.minsToStart !== null ? (

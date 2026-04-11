@@ -65,6 +65,10 @@ type Props = {
   onVoid: (closureId: string) => void;
 };
 
+function scopeLabel(row: Row) {
+  return row.origin === "BOOTH" ? row.shift : "DIARIO";
+}
+
 export default function CashClosureDetailSection({
   panelStyle,
   detailStatStyle,
@@ -80,26 +84,26 @@ export default function CashClosureDetailSection({
   onVoid,
 }: Props) {
   const showDepositBlocks = selected?.origin !== "BOOTH";
+  const diffNet = selected ? netFrom(selected.diffJson?.total) : 0;
+  const diffLabel = diffNet === 0 ? "Cuadra" : diffNet > 0 ? "Sobra declarado" : "Falta declarado";
 
   const breakdownRows = selected
     ? [
-        { label: "DECLARADO · Servicio", obj: selected.declaredJson?.service },
-        ...(showDepositBlocks ? [{ label: "DECLARADO · Fianza", obj: selected.declaredJson?.deposit }] : []),
-        { label: "DECLARADO · Total", obj: selected.declaredJson?.total },
-        { label: "SISTEMA · Servicio", obj: selected.systemJson?.service },
-        ...(showDepositBlocks ? [{ label: "SISTEMA · Fianza", obj: selected.systemJson?.deposit }] : []),
-        { label: "SISTEMA · Total", obj: selected.systemJson?.total },
-        { label: "DIF · Servicio", obj: selected.diffJson?.service },
-        ...(showDepositBlocks ? [{ label: "DIF · Fianza", obj: selected.diffJson?.deposit }] : []),
-        { label: "DIF · Total", obj: selected.diffJson?.total },
+        { label: "Declarado · Servicio", obj: selected.declaredJson?.service },
+        ...(showDepositBlocks ? [{ label: "Declarado · Fianza", obj: selected.declaredJson?.deposit }] : []),
+        { label: "Declarado · Total", obj: selected.declaredJson?.total },
+        { label: "Sistema · Servicio", obj: selected.systemJson?.service },
+        ...(showDepositBlocks ? [{ label: "Sistema · Fianza", obj: selected.systemJson?.deposit }] : []),
+        { label: "Sistema · Total", obj: selected.systemJson?.total },
+        { label: "Dif · Servicio", obj: selected.diffJson?.service },
+        ...(showDepositBlocks ? [{ label: "Dif · Fianza", obj: selected.diffJson?.deposit }] : []),
+        { label: "Dif · Total", obj: selected.diffJson?.total },
       ]
     : [];
 
   return (
     <div style={panelStyle}>
-      <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>
-        Detalle
-      </div>
+      <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>Detalle</div>
 
       {!selected ? (
         <div style={{ padding: 12, opacity: 0.7 }}>Selecciona un cierre.</div>
@@ -107,16 +111,7 @@ export default function CashClosureDetailSection({
         <div style={{ padding: 12, display: "grid", gap: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
             <div>
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 14,
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
-              >
+              <div style={{ fontWeight: 900, fontSize: 14, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <span
                   style={{
                     padding: "4px 8px",
@@ -130,14 +125,14 @@ export default function CashClosureDetailSection({
                 >
                   {selected.origin}
                 </span>
-                {selected.origin} · {selected.shift} · {yyyyMmDd(selected.businessDate)}
+                {selected.origin} · {scopeLabel(selected)} · {yyyyMmDd(selected.businessDate)}
               </div>
               <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                Ventana: {new Date(selected.windowFrom).toLocaleTimeString()}-{new Date(selected.windowTo).toLocaleTimeString()}
+                Ventana auditada: {new Date(selected.windowFrom).toLocaleTimeString()}-{new Date(selected.windowTo).toLocaleTimeString()}
               </div>
               <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                Estado: {selected.isVoided ? "ANULADO (reabierto)" : "ACTIVO"}{" "}
-                {selected.isVoided ? `· Motivo: ${selected.voidReason ?? "-"}` : ""}
+                Estado: {selected.isVoided ? "ANULADO / REABIERTO" : "ACTIVO"}
+                {selected.isVoided ? ` · Motivo: ${selected.voidReason ?? "-"}` : ""}
               </div>
             </div>
 
@@ -161,15 +156,16 @@ export default function CashClosureDetailSection({
               style={{
                 ...detailStatStyle,
                 background:
-                  netFrom(selected.diffJson?.total) === 0
+                  diffNet === 0
                     ? "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)"
-                    : netFrom(selected.diffJson?.total) > 0
+                    : diffNet > 0
                       ? "linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%)"
                       : "linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%)",
               }}
             >
               <div style={detailStatLabel}>Diferencia neta</div>
-              <div style={detailStatValue}>{euros(netFrom(selected.diffJson?.total))}</div>
+              <div style={detailStatValue}>{euros(diffNet)}</div>
+              <div style={{ marginTop: 6, fontSize: 12, fontWeight: 800, color: "#475569" }}>{diffLabel}</div>
             </div>
           </div>
 
@@ -194,14 +190,7 @@ export default function CashClosureDetailSection({
             </div>
           ) : null}
 
-          <div
-            style={{
-              border: "1px solid #e2e8f0",
-              borderRadius: 16,
-              padding: 14,
-              background: "#fff",
-            }}
-          >
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, padding: 14, background: "#fff" }}>
             <div style={{ fontWeight: 900, marginBottom: 10 }}>Participantes del cierre</div>
             {!selected.users || selected.users.length === 0 ? (
               <div style={{ fontSize: 13, opacity: 0.7 }}>Este cierre no tiene participantes guardados.</div>
@@ -297,7 +286,7 @@ export default function CashClosureDetailSection({
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <div style={{ opacity: 0.75, fontSize: 12 }}>Total comisiones (estimado)</div>
+                  <div style={{ opacity: 0.75, fontSize: 12 }}>Total comisiones estimado</div>
                   <div style={{ fontWeight: 900 }}>{euros(comm.totalCommissionCents ?? 0)}</div>
                 </div>
 
@@ -342,7 +331,7 @@ export default function CashClosureDetailSection({
           </div>
 
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-            Nota: &quot;DIF&quot; = Declarado - Sistema. Lo normal es que el mayor descuadre esté en CASH.
+            Nota: `Dif` = declarado - sistema. En operación normal, el primer método a revisar suele ser `CASH`.
           </div>
         </div>
       )}

@@ -39,6 +39,8 @@ export default function BoothOverviewSection({
   darkBtn: React.CSSProperties;
   onReload: () => void;
 }) {
+  const shiftLabel = cashClosureSummary?.computed?.meta?.shift === "AFTERNOON" ? "Tarde" : "Mañana";
+
   return (
     <>
       <section
@@ -106,7 +108,7 @@ export default function BoothOverviewSection({
         <section style={cardStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontWeight: 900 }}>Cierre de caja (BOOTH · {cashClosureSummary?.computed?.meta?.shift ?? "MORNING"})</div>
+              <div style={{ fontWeight: 900 }}>Cierre de caja (BOOTH · {shiftLabel})</div>
               <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
                 Sistema neto: <b>{euros(cashClosureSummary.computed?.all?.NET ?? 0)}</b> · Estado: {cashClosureSummary.isClosed ? "CERRADO" : "ABIERTO"}
               </div>
