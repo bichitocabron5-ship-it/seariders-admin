@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Select from "react-select";
 import { StoreHero, StoreMetricCard, StoreMetricGrid, storeStyles } from "@/components/store-ui";
 import { getCountryOptionsEs, type CountryOption } from "@/lib/countries";
@@ -108,6 +108,9 @@ type PassSummaryRow = {
   salePriceCents: number;
   paidCents: number;
   pendingCents: number;
+  isVoided?: boolean;
+  voidedAt?: string | null;
+  voidReason?: string | null;
   buyerName?: string | null;
   buyerPhone?: string | null;
   minutesRemaining: number;
@@ -189,6 +192,7 @@ function SummaryCard({
 
 export default function StoreBonosPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -214,6 +218,7 @@ export default function StoreBonosPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [soldToday, setSoldToday] = useState<PassSummaryRow[]>([]);
   const [pendingTop, setPendingTop] = useState<PassSummaryRow[]>([]);
+  const [recentRows, setRecentRows] = useState<PassSummaryRow[]>([]);
 
   const [sellProductId, setSellProductId] = useState<string>("");
   const [sellMethod, setSellMethod] = useState<PassMethod>("CARD");
@@ -233,6 +238,9 @@ export default function StoreBonosPage() {
   const [paymentMethod, setPaymentMethod] = useState<PassMethod>("CARD");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [payingPending, setPayingPending] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
+  const [voidRefundMethod, setVoidRefundMethod] = useState<PassMethod>("CARD");
+  const [voiding, setVoiding] = useState(false);
 
   const countryOptions = useMemo(() => getCountryOptionsEs(), []);
   const selectedSellCountryOpt = useMemo(() => {
@@ -256,6 +264,43 @@ export default function StoreBonosPage() {
     loadProducts();
     loadSummary();
   }, []);
+
+  useEffect(() => {
+    const codeFromQuery = (searchParams.get("code") ?? "").trim().toUpperCase();
+    if (!codeFromQuery) return;
+    setCode((current) => (current ? current : codeFromQuery));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const codeFromQuery = (searchParams.get("code") ?? "").trim().toUpperCase();
+    if (!codeFromQuery || voucher || loading) return;
+    if (code.trim().toUpperCase() !== codeFromQuery) return;
+    void (async () => {
+      setErr(null);
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/store/passes/voucher?code=${encodeURIComponent(codeFromQuery)}`, { cache: "no-store" });
+        if (!r.ok) throw new Error(await r.text());
+        const j = await r.json();
+        const v: PassVoucherDto = j.voucher;
+
+        setVoucher(v);
+        setBuyerName(v.buyerName ?? "");
+        setBuyerPhone(v.buyerPhone ?? "");
+        setBuyerEmail(v.buyerEmail ?? "");
+        setCustomerCountry(v.customerCountry ?? "ES");
+        setCustomerAddress(v.customerAddress ?? "");
+        setCustomerDocType(v.customerDocType ?? "");
+        setCustomerDocNumber(v.customerDocNumber ?? "");
+        setPaymentAmount(centsToEuroInput(v.pendingCents ?? 0));
+      } catch (e: unknown) {
+        setVoucher(null);
+        setErr(e instanceof Error ? e.message : "Error buscando bono");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [code, loading, searchParams, voucher]);
 
   async function loadProducts() {
     setErr(null);
@@ -415,6 +460,36 @@ export default function StoreBonosPage() {
     }
   }
 
+  async function voidVoucher(refund: boolean) {
+    if (!voucher) return;
+    if (!voidReason.trim() || voidReason.trim().length < 3) {
+      setErr("Indica un motivo para anular el bono");
+      return;
+    }
+
+    setErr(null);
+    setVoiding(true);
+    try {
+      const r = await fetch("/api/store/passes/void", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: voucher.code,
+          reason: voidReason,
+          refund,
+          refundMethod: voidRefundMethod,
+        }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      await search();
+      await loadSummary();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Error anulando el bono");
+    } finally {
+      setVoiding(false);
+    }
+  }
+
   async function consumeAndFormalize() {
     if (!voucher) return;
     setErr(null);
@@ -450,10 +525,12 @@ export default function StoreBonosPage() {
       const j = await r.json();
       setPendingTop(j.pending ?? []);
       setSoldToday(j.soldToday ?? []);
+      setRecentRows(j.recent ?? []);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Error cargando resumen de bonos");
       setPendingTop([]);
       setSoldToday([]);
+      setRecentRows([]);
     } finally {
       setSummaryLoading(false);
     }
@@ -614,9 +691,10 @@ export default function StoreBonosPage() {
             </button>
           </div>
 
-          <StoreMetricGrid>
+            <StoreMetricGrid>
             <StoreMetricCard label="Pendientes" value={pendingTop.length} />
             <StoreMetricCard label="Vendidos hoy" value={soldToday.length} />
+            <StoreMetricCard label="Histórico" value={recentRows.length} />
             <StoreMetricCard label="Productos" value={products.length} />
           </StoreMetricGrid>
         </div>
@@ -657,11 +735,17 @@ export default function StoreBonosPage() {
                 <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Minutos totales</div>
                 <div style={{ fontSize: 24, fontWeight: 900 }}>{voucher.minutesTotal}</div>
               </div>
-            </div>
+          </div>
 
-            <div style={{ fontSize: 13, color: "#475569" }}>
+          <div style={{ fontSize: 13, color: "#475569" }}>
               Caduca: <b>{voucher.expiresAt ? new Date(voucher.expiresAt).toLocaleString("es-ES") : "-"}</b>
             </div>
+            {voucher.isVoided ? (
+              <div style={{ padding: 12, borderRadius: 14, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontSize: 13 }}>
+                Anulado{voucher.voidedAt ? ` el ${new Date(voucher.voidedAt).toLocaleString("es-ES")}` : ""}.
+                {voucher.voidReason ? ` Motivo: ${voucher.voidReason}` : ""}
+              </div>
+            ) : null}
 
             <div style={{ fontWeight: 900 }}>Cobros asociados</div>
             {(voucher.salePayments ?? []).length ? (
@@ -794,6 +878,46 @@ export default function StoreBonosPage() {
         </section>
       ) : null}
 
+      {voucher && !voucher.isVoided ? (
+        <section style={{ ...panelStyle, display: "grid", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 900 }}>Cancelar / devolver</div>
+            <div style={{ fontSize: 13, color: "#64748b" }}>Permite anular el bono y, si procede, devolver todo lo cobrado. No se puede anular si ya tiene consumos.</div>
+          </div>
+
+          <Field label="Motivo de anulación" value={voidReason} onChange={setVoidReason} placeholder="Ej. error de venta, desistimiento del cliente..." />
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+            <label style={{ display: "grid", gap: 6 }}>
+              <div style={labelTitleStyle}>Método devolución</div>
+              <select value={voidRefundMethod} onChange={(e) => setVoidRefundMethod(e.target.value as PassMethod)} style={inputStyle}>
+                <option value="CASH">Efectivo</option>
+                <option value="CARD">Tarjeta</option>
+                <option value="BIZUM">Bizum</option>
+                <option value="TRANSFER">Transferencia</option>
+              </select>
+            </label>
+            <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", alignSelf: "end" }}>
+              Se devolverían <b>{euros(voucher.paidCents)}</b>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => voidVoucher(false)} disabled={voiding} style={{ ...secondaryButtonStyle, opacity: voiding ? 0.7 : 1 }}>
+              {voiding ? "Procesando..." : "Anular sin devolución"}
+            </button>
+            <button
+              type="button"
+              onClick={() => voidVoucher(true)}
+              disabled={voiding || voucher.paidCents <= 0}
+              style={{ ...primaryButtonStyle, opacity: voiding ? 0.7 : 1 }}
+            >
+              {voiding ? "Procesando..." : "Anular y devolver cobrado"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
         <div style={{ ...panelStyle, display: "grid", gap: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
@@ -833,6 +957,34 @@ export default function StoreBonosPage() {
                   row={v}
                   onSelect={loadVoucherCode}
                   subtitle={<span>Vendido: <b>{new Date(v.soldAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</b> | Cobrado: <b>{euros(v.paidCents)}</b> | Pendiente: <b>{euros(v.pendingCents)}</b></span>}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ ...panelStyle, display: "grid", gap: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div style={{ fontSize: 20, fontWeight: 900 }}>Bonos anteriores</div>
+            <div style={{ padding: "6px 10px", borderRadius: 999, background: "#f1f5f9", fontWeight: 800 }}>{recentRows.length}</div>
+          </div>
+
+          {recentRows.length === 0 ? (
+            <div style={{ color: "#64748b" }}>Sin histórico todavía.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {recentRows.map((v) => (
+                <SummaryCard
+                  key={v.id}
+                  row={v}
+                  onSelect={loadVoucherCode}
+                  subtitle={
+                    <span>
+                      Vendido: <b>{new Date(v.soldAt).toLocaleDateString("es-ES")}</b> | Estado: <b>{v.isVoided ? "ANULADO" : v.pendingCents > 0 ? "PENDIENTE PAGO" : "ACTIVO"}</b>
+                      {` | Cobrado: ${euros(v.paidCents)}`}
+                      {v.isVoided && v.voidedAt ? ` | Anulado: ${new Date(v.voidedAt).toLocaleDateString("es-ES")}` : ""}
+                    </span>
+                  }
                 />
               ))}
             </div>

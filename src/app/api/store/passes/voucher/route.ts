@@ -109,7 +109,7 @@ export async function GET(req: Request) {
   if (!v) return new NextResponse("Bono no existe", { status: 404 });
 
   const paidCents = getPassVoucherPaidCents(v);
-  const pendingCents = getPassVoucherPendingCents(v.salePriceCents, paidCents);
+  const pendingCents = v.isVoided ? 0 : getPassVoucherPendingCents(v.salePriceCents, paidCents);
 
   return NextResponse.json({
     ok: true,

@@ -77,16 +77,31 @@ export async function GET(req: Request) {
             origin,
             createdAt: { gte: from, lt: to },
           },
-      select: { amountCents: true, isDeposit: true, direction: true, method: true },
+      select: {
+        amountCents: true,
+        isDeposit: true,
+        direction: true,
+        method: true,
+        giftVoucherSold: { select: { isVoided: true } },
+        passSoldVoucher: { select: { isVoided: true } },
+        passVoucherSale: { select: { isVoided: true } },
+      },
       orderBy: { createdAt: "asc" },
     });
+
+    const visiblePayments = payments.filter(
+      (payment) =>
+        !payment.giftVoucherSold?.isVoided &&
+        !payment.passSoldVoucher?.isVoided &&
+        !payment.passVoucherSale?.isVoided
+    );
 
     const serviceIn = emptyByMethod();
     const serviceOut = emptyByMethod();
     const depositIn = emptyByMethod();
     const depositOut = emptyByMethod();
 
-    for (const p of payments) {
+    for (const p of visiblePayments) {
       const bucket = p.isDeposit
         ? p.direction === "OUT"
           ? depositOut
@@ -110,7 +125,7 @@ export async function GET(req: Request) {
     };
 
     const systemTotals = sumByMethod(
-      payments.map((p) => ({
+      visiblePayments.map((p) => ({
         amountCents: p.amountCents,
         direction: p.direction,
         method: p.method,

@@ -8,6 +8,7 @@ import { OperationalOverrideAction, OperationalOverrideTarget } from "@prisma/cl
 import { prisma } from "@/lib/prisma";
 import { type AppSession, sessionOptions } from "@/lib/session";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { getPassVoucherPaidCents, getSignedPaymentCents } from "@/lib/pass-vouchers";
 
 export const runtime = "nodejs";
 
@@ -264,5 +265,86 @@ export async function GET(req: Request) {
     };
   });
 
-  return NextResponse.json({ ok: true, rows });
+  const passWhere: Record<string, unknown> = {};
+  const giftWhere: Record<string, unknown> = {};
+
+  if (q?.trim()) {
+    const query = q.trim();
+    passWhere.OR = [
+      { code: { contains: query, mode: "insensitive" } },
+      { buyerName: { contains: query, mode: "insensitive" } },
+      { buyerPhone: { contains: query, mode: "insensitive" } },
+    ];
+    giftWhere.OR = [
+      { code: { contains: query, mode: "insensitive" } },
+      { buyerName: { contains: query, mode: "insensitive" } },
+      { buyerPhone: { contains: query, mode: "insensitive" } },
+    ];
+  }
+
+  if (dateFrom || dateTo) {
+    const soldAt = {
+      ...(dateFrom ? { gte: new Date(`${dateFrom}T00:00:00.000Z`) } : {}),
+      ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {}),
+    };
+    passWhere.soldAt = soldAt;
+    giftWhere.soldAt = soldAt;
+  }
+
+  const [passVouchers, giftVouchers] = await Promise.all([
+    prisma.passVoucher.findMany({
+      where: passWhere,
+      orderBy: [{ soldAt: "desc" }],
+      take,
+      select: {
+        id: true,
+        code: true,
+        soldAt: true,
+        expiresAt: true,
+        salePriceCents: true,
+        minutesTotal: true,
+        minutesRemaining: true,
+        buyerName: true,
+        buyerPhone: true,
+        isVoided: true,
+        voidedAt: true,
+        voidReason: true,
+        soldPayment: { select: { amountCents: true, direction: true } },
+        salePayments: { select: { amountCents: true, direction: true } },
+        product: { select: { name: true } },
+      },
+    }),
+    prisma.giftVoucher.findMany({
+      where: giftWhere,
+      orderBy: [{ soldAt: "desc" }],
+      take,
+      select: {
+        id: true,
+        code: true,
+        soldAt: true,
+        expiresAt: true,
+        buyerName: true,
+        buyerPhone: true,
+        isVoided: true,
+        voidedAt: true,
+        voidReason: true,
+        redeemedAt: true,
+        product: { select: { name: true, priceCents: true } },
+        soldPayment: { select: { amountCents: true, direction: true } },
+      },
+    }),
+  ]);
+
+  return NextResponse.json({
+    ok: true,
+    rows,
+    passVouchers: passVouchers.map((voucher) => ({
+      ...voucher,
+      paidCents: voucher.isVoided ? 0 : getPassVoucherPaidCents(voucher),
+    })),
+    giftVouchers: giftVouchers.map((voucher) => ({
+      ...voucher,
+      paidCents: voucher.isVoided ? 0 : getSignedPaymentCents(voucher.soldPayment),
+    })),
+  });
 }

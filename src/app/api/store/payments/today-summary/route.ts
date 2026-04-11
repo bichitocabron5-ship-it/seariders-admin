@@ -17,26 +17,36 @@ export async function GET() {
         origin: true,
         isDeposit: true,
         direction: true,
+        giftVoucherSold: { select: { isVoided: true } },
+        passSoldVoucher: { select: { isVoided: true } },
+        passVoucherSale: { select: { isVoided: true } },
       },
     });
+
+    const visiblePayments = payments.filter(
+      (payment) =>
+        !payment.giftVoucherSold?.isVoided &&
+        !payment.passSoldVoucher?.isVoided &&
+        !payment.passVoucherSale?.isVoided
+    );
 
     const signed = (p: { direction: string; amountCents: number }) =>
       p.direction === "OUT" ? -p.amountCents : p.amountCents;
 
     // Totales IN/OUT/NET
-    const inCents = payments.filter((p) => p.direction !== "OUT").reduce((s, p) => s + p.amountCents, 0);
-    const outCents = payments.filter((p) => p.direction === "OUT").reduce((s, p) => s + p.amountCents, 0);
-    const totalCents = payments.reduce((s, p) => s + signed(p), 0); // neto
+    const inCents = visiblePayments.filter((p) => p.direction !== "OUT").reduce((s, p) => s + p.amountCents, 0);
+    const outCents = visiblePayments.filter((p) => p.direction === "OUT").reduce((s, p) => s + p.amountCents, 0);
+    const totalCents = visiblePayments.reduce((s, p) => s + signed(p), 0); // neto
 
     // Servicio / Fianza (neto)
-    const depositCents = payments.filter((p) => p.isDeposit).reduce((s, p) => s + signed(p), 0);
-    const serviceCents = payments.filter((p) => !p.isDeposit).reduce((s, p) => s + signed(p), 0);
+    const depositCents = visiblePayments.filter((p) => p.isDeposit).reduce((s, p) => s + signed(p), 0);
+    const serviceCents = visiblePayments.filter((p) => !p.isDeposit).reduce((s, p) => s + signed(p), 0);
 
     // Por método/origen: neto + in/out
     const byMethod: Record<string, { netCents: number; inCents: number; outCents: number }> = {};
     const byOrigin: Record<string, { netCents: number; inCents: number; outCents: number }> = {};
 
-    for (const p of payments) {
+    for (const p of visiblePayments) {
       // method
       byMethod[p.method] ??= { netCents: 0, inCents: 0, outCents: 0 };
       byMethod[p.method].netCents += signed(p);
@@ -51,7 +61,7 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      count: payments.length,
+      count: visiblePayments.length,
 
       // caja global
       inCents,

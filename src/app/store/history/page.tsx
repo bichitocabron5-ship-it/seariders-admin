@@ -61,6 +61,38 @@ type HistoryRow = {
   incidents: HistoryIncident[];
 };
 
+type PassHistoryRow = {
+  id: string;
+  code: string;
+  soldAt: string;
+  expiresAt: string | null;
+  salePriceCents: number;
+  paidCents: number;
+  minutesTotal: number;
+  minutesRemaining: number;
+  buyerName: string | null;
+  buyerPhone: string | null;
+  isVoided: boolean;
+  voidedAt: string | null;
+  voidReason: string | null;
+  product: { name: string | null };
+};
+
+type GiftHistoryRow = {
+  id: string;
+  code: string;
+  soldAt: string;
+  expiresAt: string | null;
+  paidCents: number;
+  buyerName: string | null;
+  buyerPhone: string | null;
+  isVoided: boolean;
+  voidedAt: string | null;
+  voidReason: string | null;
+  redeemedAt: string | null;
+  product: { name: string | null; priceCents: number };
+};
+
 type CatalogService = { id: string; name?: string | null; category?: string | null };
 type CatalogOption = { id: string; serviceId: string; durationMinutes?: number | null; paxMax?: number | null };
 type CatalogChannel = { id: string; name: string };
@@ -190,6 +222,8 @@ function statusLabel(status: string) {
 
 export default function StoreHistoryPage() {
   const [rows, setRows] = useState<HistoryRow[]>([]);
+  const [passRows, setPassRows] = useState<PassHistoryRow[]>([]);
+  const [giftRows, setGiftRows] = useState<GiftHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
@@ -257,6 +291,8 @@ export default function StoreHistoryPage() {
 
       const data = await res.json();
       setRows(data.rows ?? []);
+      setPassRows(data.passVouchers ?? []);
+      setGiftRows(data.giftVouchers ?? []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error cargando histórico");
     } finally {
@@ -604,6 +640,8 @@ export default function StoreHistoryPage() {
 
         <StoreMetricGrid>
           <StoreMetricCard label="Reservas listadas" value={summary.total} />
+          <StoreMetricCard label="Bonos" value={passRows.length} />
+          <StoreMetricCard label="Regalos" value={giftRows.length} />
           <StoreMetricCard label="Con incidencia" value={summary.withIncidents} />
           <StoreMetricCard label="Fianza retenida" value={summary.depositHeld} />
           <StoreMetricCard label="Servicio cobrado" value={euros(summary.serviceChargedCents)} />
@@ -816,6 +854,55 @@ export default function StoreHistoryPage() {
           </label>
         </div>
       </Card>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
+        <Card title={`Bonos (${passRows.length})`}>
+          <div style={{ display: "grid", gap: 10 }}>
+            {passRows.length === 0 ? (
+              <div style={mutedText}>Sin bonos en este rango.</div>
+            ) : (
+              passRows.map((row) => (
+                <a key={row.id} href={`/store/bonos?code=${encodeURIComponent(row.code)}`} style={historyCommerceCard}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <strong>{row.product?.name ?? "Bono"}</strong>
+                    <span>{row.code}</span>
+                  </div>
+                  <div style={mutedText}>
+                    Vendido: <b>{dt(row.soldAt)}</b> | Cobrado: <b>{euros(row.paidCents)}</b>
+                  </div>
+                  <div style={mutedText}>
+                    {row.isVoided ? `Anulado${row.voidedAt ? ` · ${dt(row.voidedAt)}` : ""}` : `Restante: ${row.minutesRemaining} / ${row.minutesTotal} min`}
+                  </div>
+                </a>
+              ))
+            )}
+          </div>
+        </Card>
+
+        <Card title={`Regalos (${giftRows.length})`}>
+          <div style={{ display: "grid", gap: 10 }}>
+            {giftRows.length === 0 ? (
+              <div style={mutedText}>Sin regalos en este rango.</div>
+            ) : (
+              giftRows.map((row) => (
+                <a key={row.id} href="/store/gifts" style={historyCommerceCard}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <strong>{row.product?.name ?? "Regalo"}</strong>
+                    <span>{row.code}</span>
+                  </div>
+                  <div style={mutedText}>
+                    Vendido: <b>{dt(row.soldAt)}</b> | Cobrado: <b>{euros(row.paidCents)}</b>
+                  </div>
+                  <div style={mutedText}>
+                    {row.isVoided ? `Anulado${row.voidedAt ? ` · ${dt(row.voidedAt)}` : ""}` : row.redeemedAt ? `Canjeado · ${dt(row.redeemedAt)}` : "Pendiente de canje"}
+                  </div>
+                </a>
+              ))
+            )}
+          </div>
+        </Card>
+      </div>
+
       <StoreHistoryResultsSection
         rows={rows}
         loading={loading}
@@ -869,6 +956,17 @@ const heroHeader: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "minmax(0, 1fr)",
   gap: 18,
+};
+
+const historyCommerceCard: CSSProperties = {
+  display: "grid",
+  gap: 6,
+  padding: 12,
+  borderRadius: 14,
+  border: "1px solid #e2e8f0",
+  background: "#fff",
+  color: "#0f172a",
+  textDecoration: "none",
 };
 
 const eyebrow: CSSProperties = {

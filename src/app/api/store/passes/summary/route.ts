@@ -136,9 +136,33 @@ export async function GET() {
     },
   });
 
+  const recent = await prisma.passVoucher.findMany({
+    orderBy: [{ soldAt: "desc" }],
+    take: 80,
+    select: {
+      id: true,
+      code: true,
+      soldAt: true,
+      expiresAt: true,
+      salePriceCents: true,
+      isVoided: true,
+      voidedAt: true,
+      voidReason: true,
+      minutesTotal: true,
+      minutesRemaining: true,
+      buyerName: true,
+      buyerPhone: true,
+      buyerEmail: true,
+      soldPayment: { select: { amountCents: true, direction: true } },
+      salePayments: { select: { amountCents: true, direction: true } },
+      product: { select: { name: true } },
+    },
+  });
+
   const enrich = <
     T extends {
       salePriceCents: number;
+      isVoided?: boolean | null;
       soldPayment?: { amountCents: number; direction: "IN" | "OUT" } | null;
       salePayments?: Array<{ amountCents: number; direction: "IN" | "OUT" }> | null;
     },
@@ -148,9 +172,14 @@ export async function GET() {
       return {
         ...row,
         paidCents,
-        pendingCents: getPassVoucherPendingCents(row.salePriceCents, paidCents),
+        pendingCents: row.isVoided ? 0 : getPassVoucherPendingCents(row.salePriceCents, paidCents),
       };
     });
 
-  return NextResponse.json({ ok: true, pending: enrich(pending), soldToday: enrich(soldToday) });
+  return NextResponse.json({
+    ok: true,
+    pending: enrich(pending),
+    soldToday: enrich(soldToday),
+    recent: enrich(recent),
+  });
 }
