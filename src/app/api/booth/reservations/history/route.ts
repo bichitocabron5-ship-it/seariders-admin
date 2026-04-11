@@ -76,6 +76,7 @@ export async function GET(req: Request) {
     select: {
       id: true,
       boothCode: true,
+      boothNote: true,
       status: true,
       activityDate: true,
       scheduledTime: true,
@@ -119,6 +120,7 @@ export async function GET(req: Request) {
     return {
       id: reservation.id,
       boothCode: reservation.boothCode,
+      boothNote: reservation.boothNote,
       status: reservation.status,
       activityDate: reservation.activityDate,
       scheduledTime: reservation.scheduledTime,

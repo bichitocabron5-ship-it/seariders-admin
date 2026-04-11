@@ -363,6 +363,7 @@ model Reservation {
   boothCode            String?               @unique
   boothCreatedAt       DateTime?
   boothCreatedByUserId String?
+  boothNote            String?               @db.VarChar(500)
   redeemedGiftVoucher  GiftVoucher?          @relation("GiftRedeemedReservation")
   giftVoucherId        String?               @unique
   giftVoucher          GiftVoucher?          @relation("GiftVoucherReedem", fields: [giftVoucherId], references: [id])

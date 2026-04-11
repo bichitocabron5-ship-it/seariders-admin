@@ -29,6 +29,7 @@ type Props = {
   countryOptions: CountryOption[];
   isJetski: boolean;
   discountEuros: string;
+  boothNote: string;
   maxManualDiscountCents: number;
   baseTotalCents: number;
   discountCentsRaw: number;
@@ -45,6 +46,7 @@ type Props = {
   setChannelId: (value: string) => void;
   setCategory: (value: string) => void;
   setDiscountEuros: (value: string) => void;
+  setBoothNote: (value: string) => void;
 };
 
 export default function BoothPreReservationFormSection({
@@ -69,6 +71,7 @@ export default function BoothPreReservationFormSection({
   countryOptions,
   isJetski,
   discountEuros,
+  boothNote,
   maxManualDiscountCents,
   baseTotalCents,
   discountCentsRaw,
@@ -85,6 +88,7 @@ export default function BoothPreReservationFormSection({
   setChannelId,
   setCategory,
   setDiscountEuros,
+  setBoothNote,
 }: Props) {
   return (
     <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
@@ -251,6 +255,18 @@ export default function BoothPreReservationFormSection({
               </option>
             ))}
           </select>
+        </label>
+
+        <label style={{ display: "grid", gap: 6 }}>
+          <span>Nota para tienda (opcional)</span>
+          <textarea
+            value={boothNote}
+            onChange={(e) => setBoothNote(e.target.value)}
+            maxLength={500}
+            rows={4}
+            placeholder="Ej: cliente viene con bebé, atención en inglés, espera a otro grupo..."
+            style={{ ...fieldStyle, minHeight: 96, resize: "vertical" }}
+          />
         </label>
 
         <button type="submit" style={{ ...darkBtn, width: "100%" }}>

@@ -11,6 +11,7 @@ type ReservationLike = {
   customerName?: string | null;
   customerCountry?: string | null;
   boothCode?: string | null;
+  boothNote?: string | null;
   quantity?: number | null;
   pax?: number | null;
   totalPriceCents?: number | null;
@@ -116,6 +117,22 @@ export default function BoothPreReservationsSection({
               <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>
                 {formatReservationLine(reservation, { showCountry: true })}
               </div>
+
+              {reservation.boothNote ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: "10px 12px",
+                    borderRadius: 14,
+                    border: "1px solid #dbeafe",
+                    background: "#f8fbff",
+                    fontSize: 13,
+                    color: "#334155",
+                  }}
+                >
+                  <strong style={{ color: "#0f172a" }}>Nota:</strong> {reservation.boothNote}
+                </div>
+              ) : null}
 
               <div style={{ marginTop: 8, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                 <div style={{ fontSize: 13 }}>

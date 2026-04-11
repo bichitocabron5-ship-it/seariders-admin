@@ -223,6 +223,7 @@ export function useReservationPrefill(args: {
   optionsLength: number;
   applyReservation: (res: {
     customerName?: string | null;
+    boothNote?: string | null;
     pax?: number | null;
     quantity?: number | null;
     isLicense?: boolean | null;

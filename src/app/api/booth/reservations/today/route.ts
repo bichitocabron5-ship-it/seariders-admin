@@ -28,6 +28,7 @@ export async function GET() {
     select: {
       id: true,
       boothCode: true,
+      boothNote: true,
       arrivedStoreAt: true,
       taxiboatTripId: true,
       taxiboatAssignedAt: true,
@@ -97,6 +98,7 @@ export async function GET() {
     return {
       id: r.id,
       boothCode: r.boothCode,
+      boothNote: r.boothNote,
       arrivedStoreAt: r.arrivedStoreAt,
       received: !!r.arrivedStoreAt,
 

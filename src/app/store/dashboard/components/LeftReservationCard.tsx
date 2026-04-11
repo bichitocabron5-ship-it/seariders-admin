@@ -177,6 +177,23 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
           </div>
         ) : null}
 
+        {r.boothNote ? (
+          <div
+            style={{
+              marginTop: 10,
+              padding: "10px 12px",
+              borderRadius: 14,
+              border: "1px solid #dbeafe",
+              background: "#f8fbff",
+              color: "#1e293b",
+              fontSize: 13,
+              lineHeight: 1.45,
+            }}
+          >
+            <strong style={{ color: "#0f172a" }}>Nota Booth:</strong> {r.boothNote}
+          </div>
+        ) : null}
+
         {r.taxiboatTrip ? (
           <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "#e0e7ff" }}>
             Taxi boat {r.taxiboatTrip.boat}

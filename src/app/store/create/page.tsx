@@ -95,6 +95,7 @@ function StoreCreatePageInner() {
   const [customerDocType, setCustomerDocType] = useState("");
   const [customerDocNumber, setCustomerDocNumber] = useState("");
   const [marketingSource, setMarketingSource] = useState("");
+  const [boothNote, setBoothNote] = useState("");
 
   const [manualDiscountEuros, setManualDiscountEuros] = useState<string>("");
   const [manualDiscountReason, setManualDiscountReason] = useState<string>("");
@@ -105,6 +106,7 @@ function StoreCreatePageInner() {
   const applyPrefillReservation = useCallback(
     (res: {
       customerName?: string | null;
+      boothNote?: string | null;
       pax?: number | null;
       quantity?: number | null;
       isLicense?: boolean | null;
@@ -133,6 +135,7 @@ function StoreCreatePageInner() {
       channel?: Channel | null;
     }) => {
       setCustomerName(res.customerName ?? "");
+      setBoothNote(res.boothNote ?? "");
       setPax(Number(res.pax ?? 1));
       setQuantity(Number(res.quantity ?? 1));
       setIsLicense(Boolean(res.isLicense));
@@ -859,6 +862,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       customerDocType,
       customerDocNumber,
       marketingSource,
+      boothNote,
       category,
       serviceId,
       optionId,

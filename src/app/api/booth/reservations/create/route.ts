@@ -17,6 +17,7 @@ const BodySchema = z.object({
   pax: z.number().int().min(1).max(20),
   channelId: z.string().optional().nullable(), // por si quieres poner "Olimpic"
   discountEuros: z.union([z.string(), z.number()]).optional().nullable(),
+  boothNote: z.string().trim().max(500).optional().nullable(),
 });
 
 function genBoothCode() {
@@ -135,6 +136,7 @@ const totalPriceCents = Math.max(0, grossTotalCents - discountCents);
       boothCode,
       boothCreatedAt: new Date(),
       boothCreatedByUserId: session.userId,
+      boothNote: parsed.data.boothNote?.trim() || null,
     },
     select: { id: true, boothCode: true, createdAt: true },
   });

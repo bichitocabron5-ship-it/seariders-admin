@@ -3,6 +3,7 @@
 type BoothRow = {
   id: string;
   boothCode: string | null;
+  boothNote?: string | null;
   arrivedStoreAt: string | null;
   customerName: string;
   customerCountry: string;
@@ -66,9 +67,8 @@ export default function BoothTravelStatusSection({
                     <div style={subtleTextStyle}>
                       {row.service?.name} / {row.option?.durationMinutes} min / {row.quantity} motos / {row.pax} pax
                     </div>
-                    <div style={subtleTextStyle}>
-                      País {row.customerCountry} / Total {euros(row.totalPriceCents)}
-                    </div>
+                    <div style={subtleTextStyle}>País {row.customerCountry} / Total {euros(row.totalPriceCents)}</div>
+                    {row.boothNote ? <div style={noteStyle}>Nota: {row.boothNote}</div> : null}
                   </div>
                   <div style={codeBadgeStyle}>{row.boothCode ?? "Sin código"}</div>
                 </div>
@@ -112,10 +112,7 @@ export default function BoothTravelStatusSection({
                       key={row.id}
                       style={{
                         ...itemCardStyle,
-                        background:
-                          row.id === lastMarkedId
-                            ? "linear-gradient(180deg, #ecfccb 0%, #ffffff 100%)"
-                            : "#fff",
+                        background: row.id === lastMarkedId ? "linear-gradient(180deg, #ecfccb 0%, #ffffff 100%)" : "#fff",
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -124,9 +121,8 @@ export default function BoothTravelStatusSection({
                           <div style={subtleTextStyle}>
                             {row.service?.name} / {row.option?.durationMinutes} min / {row.quantity} motos / {row.pax} pax
                           </div>
-                          <div style={subtleTextStyle}>
-                            País {row.customerCountry} / Total {euros(row.totalPriceCents)}
-                          </div>
+                          <div style={subtleTextStyle}>País {row.customerCountry} / Total {euros(row.totalPriceCents)}</div>
+                          {row.boothNote ? <div style={noteStyle}>Nota: {row.boothNote}</div> : null}
                         </div>
                         <div style={codeBadgeStyle}>{row.boothCode ?? "Sin código"}</div>
                       </div>
@@ -157,9 +153,8 @@ export default function BoothTravelStatusSection({
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <div style={{ display: "grid", gap: 4 }}>
                     <div style={{ fontWeight: 900, fontSize: 17 }}>{row.customerName}</div>
-                    <div style={subtleTextStyle}>
-                      Recibido a las {hhmm(row.arrivedStoreAt)} / {row.service?.name}
-                    </div>
+                    <div style={subtleTextStyle}>Recibido a las {hhmm(row.arrivedStoreAt)} / {row.service?.name}</div>
+                    {row.boothNote ? <div style={noteStyle}>Nota: {row.boothNote}</div> : null}
                   </div>
                   <div style={codeBadgeStyle}>{row.boothCode ?? "Sin código"}</div>
                 </div>
@@ -260,6 +255,15 @@ const codeBadgeStyle: React.CSSProperties = {
 const subtleTextStyle: React.CSSProperties = {
   fontSize: 13,
   color: "#64748b",
+};
+
+const noteStyle: React.CSSProperties = {
+  fontSize: 13,
+  color: "#1e293b",
+  padding: "8px 10px",
+  borderRadius: 12,
+  border: "1px solid #dbeafe",
+  background: "#f8fbff",
 };
 
 const emptyStateStyle: React.CSSProperties = {

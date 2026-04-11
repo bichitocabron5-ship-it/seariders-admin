@@ -21,6 +21,7 @@ type ReservationLike = {
   customerName?: string | null;
   customerCountry?: string | null;
   boothCode?: string | null;
+  boothNote?: string | null;
   quantity?: number | null;
   pax?: number | null;
   totalPriceCents?: number | null;
@@ -203,6 +204,7 @@ export default function Booth() {
   const [splitById, setSplitById] = useState<Record<string, [SplitLine, SplitLine]>>({});
   const [payingId, setPayingId] = useState<string | null>(null);
   const [discountEuros, setDiscountEuros] = useState<string>(""); // descuento opcional
+  const [boothNote, setBoothNote] = useState("");
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [taxiboatOps, setTaxiboatOps] = useState<TaxiboatOperationRow[]>([]);
   const [activeTripId, setActiveTripId] = useState<string>("");
@@ -443,6 +445,7 @@ useEffect(() => {
         pax,
         channelId: channelId || null,
         discountEuros: (discountCentsClamped / 100).toFixed(2),
+        boothNote: boothNote.trim() || null,
       }),
     });
 
@@ -458,6 +461,7 @@ useEffect(() => {
     setQuantity(1);
     setPax(2);
     setDiscountEuros("");
+    setBoothNote("");
 
     await load();
   }
@@ -692,6 +696,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             countryOptions={countryOptions}
             isJetski={isJetski}
             discountEuros={discountEuros}
+            boothNote={boothNote}
             maxManualDiscountCents={maxManualDiscountCents}
             baseTotalCents={baseTotalCents}
             discountCentsRaw={discountCentsRaw}
@@ -708,6 +713,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             setChannelId={setChannelId}
             setCategory={setCategory}
             setDiscountEuros={setDiscountEuros}
+            setBoothNote={setBoothNote}
           />
 
           <BoothPreReservationsSection

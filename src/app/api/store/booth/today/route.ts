@@ -12,6 +12,7 @@ export const runtime = "nodejs";
 type BoothRow = {
   id: string;
   boothCode: string | null;
+  boothNote: string | null;
   arrivedStoreAt: Date | null;
   createdAt: Date;
   customerName: string | null;
@@ -53,6 +54,7 @@ export async function GET() {
     select: {
       id: true,
       boothCode: true,
+      boothNote: true,
       arrivedStoreAt: true,
       createdAt: true,
 

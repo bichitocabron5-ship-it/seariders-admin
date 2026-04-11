@@ -49,6 +49,7 @@ export type ReservationBasicsSectionProps = {
     customerDocType: string;
     customerDocNumber: string;
     marketingSource: string;
+    boothNote?: string | null;
     category: string;
     serviceId: string;
     optionId: string;
@@ -118,6 +119,24 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
             <div style={{ fontSize: 18, fontWeight: 900, marginTop: 4 }}>Cliente y reserva</div>
             <div style={{ fontSize: 13, color: "#64748b" }}>Datos de cliente, servicio, duración, canal y cantidades.</div>
           </div>
+
+          {values.boothNote ? (
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 16,
+                border: "1px solid #cbd5e1",
+                background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
+                display: "grid",
+                gap: 6,
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#475569" }}>
+                Nota de Booth
+              </div>
+              <div style={{ fontSize: 14, color: "#0f172a", lineHeight: 1.5 }}>{values.boothNote}</div>
+            </div>
+          ) : null}
 
           <div style={subCardStyle}>
             <div style={{ display: "grid", gap: 4 }}>

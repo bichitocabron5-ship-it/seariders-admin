@@ -73,6 +73,7 @@ export async function GET() {
 
       source: true,
       boothCode: true,
+      boothNote: true,
       arrivedStoreAt: true,
 
       taxiboatTripId: true,
@@ -297,6 +298,7 @@ export async function GET() {
 
       source: r.source,
       boothCode: r.boothCode,
+      boothNote: r.boothNote,
       arrivedStoreAt: r.arrivedStoreAt,
 
       taxiboatTripId: r.taxiboatTripId,

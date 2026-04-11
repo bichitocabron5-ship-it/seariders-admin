@@ -20,6 +20,7 @@ export type ReservationRow = {
   formalizedAt?: string | null;
   source: "STORE" | "BOOTH" | "WEB";
   boothCode?: string | null;
+  boothNote?: string | null;
   arrivedStoreAt?: string | null;
   status: string;
   activityDate: string;

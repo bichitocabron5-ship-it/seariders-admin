@@ -10,6 +10,7 @@ import BoothTravelStatusSection from "@/app/store/booth/_components/BoothTravelS
 type BoothRow = {
   id: string;
   boothCode: string | null;
+  boothNote?: string | null;
   arrivedStoreAt: string | null;
   createdAt: string;
   customerName: string;
