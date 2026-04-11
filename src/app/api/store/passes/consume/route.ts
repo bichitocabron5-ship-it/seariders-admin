@@ -6,6 +6,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
+import { getPassVoucherPaidCents, getPassVoucherPendingCents } from "@/lib/pass-vouchers";
 
 export const runtime = "nodejs";
 
@@ -65,6 +66,7 @@ export async function POST(req: Request) {
           id: true,
           isVoided: true,
           expiresAt: true,
+          salePriceCents: true,
           minutesRemaining: true,
           minutesTotal: true,
 
@@ -77,6 +79,8 @@ export async function POST(req: Request) {
           customerAddress: true,
           customerDocType: true,
           customerDocNumber: true,
+          soldPayment: { select: { amountCents: true, direction: true } },
+          salePayments: { select: { amountCents: true, direction: true } },
 
           product: { select: { serviceId: true, optionId: true } },
         },
@@ -85,6 +89,9 @@ export async function POST(req: Request) {
       if (!v) throw new Error("Código no existe");
       if (v.isVoided) throw new Error("Bono anulado");
       if (v.expiresAt && new Date(v.expiresAt).getTime() < Date.now()) throw new Error("Bono caducado");
+      if (getPassVoucherPendingCents(v.salePriceCents, getPassVoucherPaidCents(v)) > 0) {
+        throw new Error("No se puede canjear el bono completo hasta que esté totalmente pagado");
+      }
 
       const remaining = Number(v.minutesRemaining ?? 0);
       if (remaining < minutesToUse) throw new Error(`Minutos insuficientes. Quedan ${remaining} min.`);

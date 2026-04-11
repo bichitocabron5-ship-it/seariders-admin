@@ -7,6 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { PaymentDirection, PaymentMethod, PaymentOrigin } from "@prisma/client";
 import { makePassCode } from "@/lib/passes";
+import { getPassVoucherPendingCents } from "@/lib/pass-vouchers";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,7 @@ const NullableStr = z.string().optional().nullable();
 const Body = z.object({
   productId: z.string().min(1),
   method: z.enum(["CASH", "CARD", "BIZUM", "TRANSFER"]).default("CASH"),
+  amountToPayNowCents: z.number().int().positive().optional(),
 
   buyerName: z.string().max(120).optional().nullable(),
   buyerPhone: z.string().max(40).optional().nullable(),
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "Body inválido" }, { status: 400 });
 
-  const { productId, method, buyerName, buyerPhone, buyerEmail, customerCountry, customerAddress, customerDocType, customerDocNumber } = parsed.data;
+  const { productId, method, amountToPayNowCents, buyerName, buyerPhone, buyerEmail, customerCountry, customerAddress, customerDocType, customerDocNumber } = parsed.data;
   const shiftSessionId = (session as AppSession & { shiftSessionId?: string | null }).shiftSessionId ?? null;
 
   try {
@@ -67,19 +69,10 @@ export async function POST(req: Request) {
       });
       if (!product || !product.isActive) throw new Error("Producto no existe o no está activo");
 
-      // 1) Payment (venta del bono)
-      const pay = await tx.payment.create({
-        data: {
-          origin: PaymentOrigin.STORE,
-          method: method as PaymentMethod,
-          amountCents: product.priceCents,
-          isDeposit: false,
-          direction: PaymentDirection.IN,
-          createdByUserId: session.userId,
-          shiftSessionId,
-        },
-        select: { id: true },
-      });
+      const chargeNowCents = amountToPayNowCents ?? product.priceCents;
+      if (chargeNowCents > product.priceCents) {
+        throw new Error(`El cobro inicial supera el precio del bono (${product.priceCents} céntimos)`);
+      }
 
       // 2) Voucher
       const expiresAt =
@@ -98,8 +91,8 @@ export async function POST(req: Request) {
               productId: product.id,
               origin: PaymentOrigin.STORE,
               soldByUserId: session.userId,
-              soldPaymentId: pay.id,
               expiresAt,
+              salePriceCents: product.priceCents,
 
               buyerName: norm(buyerName),
               buyerPhone: norm(buyerPhone),
@@ -118,10 +111,27 @@ export async function POST(req: Request) {
               id: true,
               code: true,
               expiresAt: true,
+              salePriceCents: true,
               minutesTotal: true,
               minutesRemaining: true,
             },
           });
+
+          if (chargeNowCents > 0) {
+            await tx.payment.create({
+              data: {
+                origin: PaymentOrigin.STORE,
+                method: method as PaymentMethod,
+                amountCents: chargeNowCents,
+                isDeposit: false,
+                direction: PaymentDirection.IN,
+                createdByUserId: session.userId,
+                shiftSessionId,
+                passVoucherSaleId: voucher.id,
+              },
+              select: { id: true },
+            });
+          }
 
           return voucher;
         } catch (e: unknown) {
@@ -136,7 +146,14 @@ export async function POST(req: Request) {
       throw new Error(lastErr instanceof Error ? lastErr.message : "No se pudo generar código único");
     });
 
-    return NextResponse.json({ ok: true, voucher: result });
+    return NextResponse.json({
+      ok: true,
+      voucher: {
+        ...result,
+        paidCents: amountToPayNowCents ?? result.salePriceCents,
+        pendingCents: getPassVoucherPendingCents(result.salePriceCents, amountToPayNowCents ?? result.salePriceCents),
+      },
+    });
   } catch (e: unknown) {
     return new NextResponse(e instanceof Error ? e.message : "Error", { status: 400 });
   }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
+import { getPassVoucherPaidCents, getPassVoucherPendingCents } from "@/lib/pass-vouchers";
 
 export const runtime = "nodejs";
 
@@ -98,11 +99,14 @@ export async function GET() {
       code: true,
       soldAt: true,
       expiresAt: true,
+      salePriceCents: true,
       minutesTotal: true,
       minutesRemaining: true,
       buyerName: true,
       buyerPhone: true,
       buyerEmail: true,
+      soldPayment: { select: { amountCents: true, direction: true } },
+      salePayments: { select: { amountCents: true, direction: true } },
       product: { select: { name: true } },
     },
   });
@@ -120,14 +124,33 @@ export async function GET() {
       code: true,
       soldAt: true,
       expiresAt: true,
+      salePriceCents: true,
       minutesTotal: true,
       minutesRemaining: true,
       buyerName: true,
       buyerPhone: true,
       buyerEmail: true,
+      soldPayment: { select: { amountCents: true, direction: true } },
+      salePayments: { select: { amountCents: true, direction: true } },
       product: { select: { name: true } },
     },
   });
 
-  return NextResponse.json({ ok: true, pending, soldToday });
+  const enrich = <
+    T extends {
+      salePriceCents: number;
+      soldPayment?: { amountCents: number; direction: "IN" | "OUT" } | null;
+      salePayments?: Array<{ amountCents: number; direction: "IN" | "OUT" }> | null;
+    },
+  >(rows: T[]) =>
+    rows.map((row) => {
+      const paidCents = getPassVoucherPaidCents(row);
+      return {
+        ...row,
+        paidCents,
+        pendingCents: getPassVoucherPendingCents(row.salePriceCents, paidCents),
+      };
+    });
+
+  return NextResponse.json({ ok: true, pending: enrich(pending), soldToday: enrich(soldToday) });
 }

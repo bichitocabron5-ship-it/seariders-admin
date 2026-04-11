@@ -822,8 +822,10 @@ model PassVoucher {
 
   soldPaymentId String?  @unique
   soldPayment   Payment? @relation("PassSoldPayment", fields: [soldPaymentId], references: [id])
+  salePayments  Payment[] @relation("PassVoucherPayments")
 
   expiresAt DateTime?
+  salePriceCents Int @default(0)
 
   minutesTotal     Int
   minutesRemaining Int
@@ -900,6 +902,7 @@ model TaxiboatOperation {
 model Payment {
   id              String           @id @default(cuid())
   reservationId   String?
+  passVoucherSaleId String?
   origin          PaymentOrigin
   method          PaymentMethod
   amountCents     Int
@@ -914,11 +917,13 @@ model Payment {
   shiftSession    ShiftSession? @relation(fields: [shiftSessionId], references: [id], name: "PaymentToShiftSession")
   giftVoucherSold GiftVoucher?  @relation("GiftSoldPayment")
   passSoldVoucher PassVoucher?  @relation("PassSoldPayment")
+  passVoucherSale PassVoucher?  @relation("PassVoucherPayments", fields: [passVoucherSaleId], references: [id])
 
   isStaffSale Boolean  @default(false)
   barSale     BarSale?
 
   @@index([origin, createdAt])
+  @@index([passVoucherSaleId, createdAt])
   @@index([shiftSessionId])
 }
 

@@ -21,6 +21,18 @@ function euros(cents: number) {
   return `${(Number(cents || 0) / 100).toFixed(2)} EUR`;
 }
 
+function euroInputToCents(value: string) {
+  const normalized = value.replace(",", ".").trim();
+  if (!normalized) return null;
+  const amount = Number(normalized);
+  if (!Number.isFinite(amount)) return null;
+  return Math.round(amount * 100);
+}
+
+function centsToEuroInput(cents: number) {
+  return (Number(cents || 0) / 100).toFixed(2).replace(".", ",");
+}
+
 function todayMadridYMD() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Madrid",
@@ -48,6 +60,10 @@ type PassVoucherDto = {
   code: string;
   soldAt: string;
   expiresAt: string | null;
+  salePriceCents: number;
+  paidCents: number;
+  pendingCents: number;
+  isFullyPaid: boolean;
   isVoided: boolean;
   voidedAt: string | null;
   voidReason: string | null;
@@ -69,6 +85,13 @@ type PassVoucherDto = {
     service: { id: string; name: string; category: string | null };
     option: { id: string; durationMinutes: number | null } | null;
   };
+  salePayments: Array<{
+    id: string;
+    amountCents: number;
+    method: PassMethod;
+    direction: "IN" | "OUT";
+    createdAt: string;
+  }>;
   consumes: Array<{
     id: string;
     consumedAt: string;
@@ -82,6 +105,9 @@ type PassSummaryRow = {
   code: string;
   soldAt: string;
   expiresAt: string | null;
+  salePriceCents: number;
+  paidCents: number;
+  pendingCents: number;
   buyerName?: string | null;
   buyerPhone?: string | null;
   minutesRemaining: number;
@@ -91,6 +117,7 @@ type PassSummaryRow = {
 
 type PassMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 type MinutesOption = 20 | 30 | 60 | 120 | 180;
+type SellPaymentMode = "FULL" | "PARTIAL";
 
 const shellStyle: React.CSSProperties = storeStyles.shell;
 const panelStyle: React.CSSProperties = storeStyles.panel;
@@ -190,8 +217,10 @@ export default function StoreBonosPage() {
 
   const [sellProductId, setSellProductId] = useState<string>("");
   const [sellMethod, setSellMethod] = useState<PassMethod>("CARD");
+  const [sellPaymentMode, setSellPaymentMode] = useState<SellPaymentMode>("FULL");
+  const [sellAmountNow, setSellAmountNow] = useState("");
   const [selling, setSelling] = useState(false);
-  const [lastSold, setLastSold] = useState<{ code: string; expiresAt: string | null } | null>(null);
+  const [lastSold, setLastSold] = useState<{ code: string; expiresAt: string | null; paidCents: number; pendingCents: number } | null>(null);
 
   const [sellBuyerName, setSellBuyerName] = useState("");
   const [sellBuyerPhone, setSellBuyerPhone] = useState("");
@@ -201,6 +230,9 @@ export default function StoreBonosPage() {
   const [sellCustomerAddress, setSellCustomerAddress] = useState("");
   const [sellCustomerDocType, setSellCustomerDocType] = useState("");
   const [sellCustomerDocNumber, setSellCustomerDocNumber] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PassMethod>("CARD");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [payingPending, setPayingPending] = useState(false);
 
   const countryOptions = useMemo(() => getCountryOptionsEs(), []);
   const selectedSellCountryOpt = useMemo(() => {
@@ -214,6 +246,11 @@ export default function StoreBonosPage() {
   }, [customerCountry, countryOptions]);
 
   const selectedSellProduct = useMemo(() => products.find((p) => p.id === sellProductId) ?? null, [products, sellProductId]);
+  const initialChargeCents = useMemo(() => {
+    if (!selectedSellProduct) return null;
+    if (sellPaymentMode === "FULL") return selectedSellProduct.priceCents;
+    return euroInputToCents(sellAmountNow);
+  }, [selectedSellProduct, sellPaymentMode, sellAmountNow]);
 
   useEffect(() => {
     loadProducts();
@@ -248,6 +285,7 @@ export default function StoreBonosPage() {
         body: JSON.stringify({
           productId: sellProductId,
           method: sellMethod,
+          amountToPayNowCents: initialChargeCents ?? undefined,
           buyerName: sellBuyerName,
           buyerPhone: sellBuyerPhone,
           buyerEmail: sellBuyerEmail,
@@ -262,10 +300,17 @@ export default function StoreBonosPage() {
       const j = await r.json();
       const v = j.voucher ?? j.passVoucher ?? null;
 
-      setLastSold({ code: v?.code ?? "-", expiresAt: v?.expiresAt ?? null });
+      setLastSold({
+        code: v?.code ?? "-",
+        expiresAt: v?.expiresAt ?? null,
+        paidCents: Number(v?.paidCents ?? initialChargeCents ?? 0),
+        pendingCents: Math.max(0, Number(v?.salePriceCents ?? selectedSellProduct?.priceCents ?? 0) - Number(v?.paidCents ?? initialChargeCents ?? 0)),
+      });
       setSellBuyerName("");
       setSellBuyerPhone("");
       setSellBuyerEmail("");
+      setSellPaymentMode("FULL");
+      setSellAmountNow("");
       await loadSummary();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Error vendiendo bono");
@@ -294,6 +339,7 @@ export default function StoreBonosPage() {
       setCustomerAddress(v.customerAddress ?? "");
       setCustomerDocType(v.customerDocType ?? "");
       setCustomerDocNumber(v.customerDocNumber ?? "");
+      setPaymentAmount(centsToEuroInput(v.pendingCents ?? 0));
     } catch (e: unknown) {
       setVoucher(null);
       setErr(e instanceof Error ? e.message : "Error buscando bono");
@@ -334,9 +380,40 @@ export default function StoreBonosPage() {
     if (!voucher) return false;
     if (voucher.isVoided) return false;
     if (voucher.expiresAt && new Date(voucher.expiresAt).getTime() < Date.now()) return false;
+    if ((voucher.pendingCents ?? 0) > 0) return false;
     if (voucher.minutesRemaining < minutesToUse) return false;
     return true;
   }, [voucher, minutesToUse]);
+
+  async function payPending() {
+    if (!voucher) return;
+    const amountCents = euroInputToCents(paymentAmount);
+    if (!amountCents || amountCents <= 0) {
+      setErr("Importe pendiente inválido");
+      return;
+    }
+
+    setErr(null);
+    setPayingPending(true);
+    try {
+      const r = await fetch("/api/store/passes/payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: voucher.code,
+          method: paymentMethod,
+          amountCents,
+        }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      await search();
+      await loadSummary();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Error cobrando el pendiente del bono");
+    } finally {
+      setPayingPending(false);
+    }
+  }
 
   async function consumeAndFormalize() {
     if (!voucher) return;
@@ -418,9 +495,9 @@ export default function StoreBonosPage() {
             <div style={{ fontSize: 13, color: "#64748b" }}>Selecciona producto, método de pago y datos opcionales del comprador.</div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-            <label style={{ display: "grid", gap: 6 }}>
-              <div style={labelTitleStyle}>Producto</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+              <label style={{ display: "grid", gap: 6 }}>
+                <div style={labelTitleStyle}>Producto</div>
               <select value={sellProductId} onChange={(e) => setSellProductId(e.target.value)} disabled={productsLoading} style={inputStyle}>
                 <option value="" disabled>
                   Selecciona...
@@ -442,6 +519,19 @@ export default function StoreBonosPage() {
                 <option value="TRANSFER">Transferencia</option>
               </select>
             </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <div style={labelTitleStyle}>Modo de cobro</div>
+              <select value={sellPaymentMode} onChange={(e) => setSellPaymentMode(e.target.value as SellPaymentMode)} style={inputStyle}>
+                <option value="FULL">Cobrar todo</option>
+                <option value="PARTIAL">Paga y señal / parte</option>
+              </select>
+            </label>
+            <Field
+              label="Importe a cobrar ahora"
+              value={sellPaymentMode === "FULL" ? centsToEuroInput(selectedSellProduct?.priceCents ?? 0) : sellAmountNow}
+              onChange={setSellAmountNow}
+              placeholder="0,00"
+            />
           </div>
 
           <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", display: "grid", gap: 12 }}>
@@ -483,8 +573,19 @@ export default function StoreBonosPage() {
             </div>
           </div>
 
-          <button type="button" onClick={sell} disabled={selling || !sellProductId} style={{ ...primaryButtonStyle, opacity: selling ? 0.7 : 1 }}>
-            {selling ? "Vendiendo..." : `Vender bono${selectedSellProduct ? ` (${euros(selectedSellProduct.priceCents)})` : ""}`}
+          <button
+            type="button"
+            onClick={sell}
+            disabled={
+              selling ||
+              !sellProductId ||
+              initialChargeCents == null ||
+              initialChargeCents <= 0 ||
+              Number(initialChargeCents) > Number(selectedSellProduct?.priceCents ?? 0)
+            }
+            style={{ ...primaryButtonStyle, opacity: selling ? 0.7 : 1 }}
+          >
+            {selling ? "Vendiendo..." : `Crear bono${selectedSellProduct ? ` | total ${euros(selectedSellProduct.priceCents)} | cobra ahora ${euros(initialChargeCents ?? 0)}` : ""}`}
           </button>
 
           {lastSold ? (
@@ -492,6 +593,8 @@ export default function StoreBonosPage() {
               <div style={{ fontWeight: 900 }}>Bono vendido</div>
               <div style={{ fontSize: 13, color: "#166534" }}>
                 Código: <b>{lastSold.code}</b>
+                {` | Cobrado: ${euros(lastSold.paidCents)}`}
+                {lastSold.pendingCents > 0 ? ` | Pendiente: ${euros(lastSold.pendingCents)}` : " | Totalmente pagado"}
                 {lastSold.expiresAt ? ` | Caduca: ${new Date(lastSold.expiresAt).toLocaleString("es-ES")}` : ""}
               </div>
             </div>
@@ -535,6 +638,18 @@ export default function StoreBonosPage() {
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
               <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Precio del bono</div>
+                <div style={{ fontSize: 24, fontWeight: 900 }}>{euros(voucher.salePriceCents)}</div>
+              </div>
+              <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Cobrado</div>
+                <div style={{ fontSize: 24, fontWeight: 900 }}>{euros(voucher.paidCents)}</div>
+              </div>
+              <div style={{ padding: 12, borderRadius: 14, background: "#fef3c7", border: "1px solid #fcd34d" }}>
+                <div style={{ fontSize: 12, color: "#92400e", fontWeight: 800 }}>Pendiente</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: voucher.pendingCents > 0 ? "#92400e" : "#166534" }}>{euros(voucher.pendingCents)}</div>
+              </div>
+              <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
                 <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Minutos restantes</div>
                 <div style={{ fontSize: 24, fontWeight: 900 }}>{voucher.minutesRemaining}</div>
               </div>
@@ -547,6 +662,20 @@ export default function StoreBonosPage() {
             <div style={{ fontSize: 13, color: "#475569" }}>
               Caduca: <b>{voucher.expiresAt ? new Date(voucher.expiresAt).toLocaleString("es-ES") : "-"}</b>
             </div>
+
+            <div style={{ fontWeight: 900 }}>Cobros asociados</div>
+            {(voucher.salePayments ?? []).length ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                {voucher.salePayments.map((p) => (
+                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", fontSize: 13, padding: "10px 12px", borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <span style={{ color: "#475569" }}>{new Date(p.createdAt).toLocaleString("es-ES")} | {p.method}</span>
+                    <b>{euros(p.amountCents)}</b>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: "#64748b" }}>Sin cobros registrados.</div>
+            )}
 
             <div style={{ fontWeight: 900 }}>Últimos consumos</div>
             {(voucher.consumes ?? []).length ? (
@@ -607,8 +736,36 @@ export default function StoreBonosPage() {
         <section style={{ ...panelStyle, display: "grid", gap: 12 }}>
           <div>
             <div style={{ fontSize: 20, fontWeight: 900 }}>Consumir minutos</div>
-            <div style={{ fontSize: 13, color: "#64748b" }}>Genera la reserva y abre la formalización manteniendo el bono vinculado.</div>
+            <div style={{ fontSize: 13, color: "#64748b" }}>Genera la reserva y abre la formalización manteniendo el bono vinculado. El canje sólo se habilita si el bono está completamente pagado.</div>
           </div>
+
+          {voucher.pendingCents > 0 ? (
+            <div style={{ padding: 12, borderRadius: 14, border: "1px solid #fcd34d", background: "#fffbeb", display: "grid", gap: 12 }}>
+              <div style={{ fontWeight: 800, color: "#92400e" }}>
+                Pendiente de cobro: {euros(voucher.pendingCents)}. Hay que liquidarlo antes de consumir el bono completo.
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+                <label style={{ display: "grid", gap: 6 }}>
+                  <div style={labelTitleStyle}>Método</div>
+                  <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PassMethod)} style={inputStyle}>
+                    <option value="CASH">Efectivo</option>
+                    <option value="CARD">Tarjeta</option>
+                    <option value="BIZUM">Bizum</option>
+                    <option value="TRANSFER">Transferencia</option>
+                  </select>
+                </label>
+                <Field label="Importe a cobrar" value={paymentAmount} onChange={setPaymentAmount} placeholder="0,00" />
+              </div>
+              <button
+                type="button"
+                onClick={payPending}
+                disabled={payingPending}
+                style={{ ...primaryButtonStyle, opacity: payingPending ? 0.7 : 1 }}
+              >
+                {payingPending ? "Cobrando..." : "Cobrar pendiente"}
+              </button>
+            </div>
+          ) : null}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
             <Field label="Fecha" value={consumeDate} onChange={setConsumeDate} placeholder="YYYY-MM-DD" />
@@ -630,7 +787,7 @@ export default function StoreBonosPage() {
             onClick={consumeAndFormalize}
             disabled={!canConsume || consuming}
             style={{ ...primaryButtonStyle, background: canConsume ? "#0f172a" : "#cbd5e1", borderColor: canConsume ? "#0f172a" : "#cbd5e1", color: canConsume ? "#fff" : "#334155", opacity: consuming ? 0.7 : 1 }}
-            title={!canConsume ? "No se puede consumir: minutos insuficientes, bono caducado o anulado." : ""}
+            title={!canConsume ? "No se puede consumir: queda pendiente de pago, faltan minutos o el bono está caducado/anulado." : ""}
           >
             {consuming ? "Consumiendo..." : `Consumir ${minutesToUse} min y formalizar`}
           </button>
@@ -653,7 +810,7 @@ export default function StoreBonosPage() {
                   key={v.id}
                   row={v}
                   onSelect={loadVoucherCode}
-                  subtitle={<span>Restante: <b>{v.minutesRemaining}</b> / {v.minutesTotal} min | Caduca: {v.expiresAt ? new Date(v.expiresAt).toLocaleDateString("es-ES") : "-"}</span>}
+                  subtitle={<span>Restante: <b>{v.minutesRemaining}</b> / {v.minutesTotal} min | Pendiente pago: <b>{euros(v.pendingCents)}</b> | Caduca: {v.expiresAt ? new Date(v.expiresAt).toLocaleDateString("es-ES") : "-"}</span>}
                 />
               ))}
             </div>
@@ -675,7 +832,7 @@ export default function StoreBonosPage() {
                   key={v.id}
                   row={v}
                   onSelect={loadVoucherCode}
-                  subtitle={<span>Vendido: <b>{new Date(v.soldAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</b> | Restante: <b>{v.minutesRemaining}</b> / {v.minutesTotal} min</span>}
+                  subtitle={<span>Vendido: <b>{new Date(v.soldAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</b> | Cobrado: <b>{euros(v.paidCents)}</b> | Pendiente: <b>{euros(v.pendingCents)}</b></span>}
                 />
               ))}
             </div>

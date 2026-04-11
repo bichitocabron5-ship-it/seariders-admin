@@ -6,6 +6,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
+import { getPassVoucherPaidCents, getPassVoucherPendingCents } from "@/lib/pass-vouchers";
 
 export const runtime = "nodejs";
 
@@ -38,6 +39,7 @@ export async function GET(req: Request) {
       code: true,
       soldAt: true,
       expiresAt: true,
+      salePriceCents: true,
       isVoided: true,
       voidedAt: true,
       voidReason: true,
@@ -54,6 +56,26 @@ export async function GET(req: Request) {
       customerAddress: true,
       customerDocType: true,
       customerDocNumber: true,
+      soldPayment: {
+        select: {
+          id: true,
+          amountCents: true,
+          method: true,
+          direction: true,
+          createdAt: true,
+        },
+      },
+      salePayments: {
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          amountCents: true,
+          method: true,
+          direction: true,
+          createdAt: true,
+        },
+      },
 
       product: {
         select: {
@@ -86,7 +108,18 @@ export async function GET(req: Request) {
 
   if (!v) return new NextResponse("Bono no existe", { status: 404 });
 
-  return NextResponse.json({ ok: true, voucher: v });
+  const paidCents = getPassVoucherPaidCents(v);
+  const pendingCents = getPassVoucherPendingCents(v.salePriceCents, paidCents);
+
+  return NextResponse.json({
+    ok: true,
+    voucher: {
+      ...v,
+      paidCents,
+      pendingCents,
+      isFullyPaid: pendingCents <= 0,
+    },
+  });
 }
 
 const NullableStr = z.string().optional().nullable();
