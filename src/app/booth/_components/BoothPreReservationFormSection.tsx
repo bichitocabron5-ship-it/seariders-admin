@@ -32,6 +32,8 @@ type Props = {
   maxManualDiscountCents: number;
   baseTotalCents: number;
   discountCentsRaw: number;
+  discountCentsClamped: number;
+  finalTotalCents: number;
   euros: (cents: number) => string;
   onSubmit: (e: React.FormEvent) => void | Promise<void>;
   setFirstName: (value: string) => void;
@@ -70,6 +72,8 @@ export default function BoothPreReservationFormSection({
   maxManualDiscountCents,
   baseTotalCents,
   discountCentsRaw,
+  discountCentsClamped,
+  finalTotalCents,
   euros,
   onSubmit,
   setFirstName,
@@ -199,6 +203,42 @@ export default function BoothPreReservationFormSection({
           {discountCentsRaw > maxManualDiscountCents ? (
             <span style={{ marginLeft: 8, color: "#b91c1c" }}>limitado a {euros(maxManualDiscountCents)}</span>
           ) : null}
+        </div>
+
+        <div
+          style={{
+            padding: 12,
+            borderRadius: 14,
+            border: "1px solid #dbeafe",
+            background: "#f8fbff",
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          <div style={{ fontSize: 12, color: "#475569", fontWeight: 800 }}>Resumen antes de crear</div>
+          <div style={{ fontSize: 13, color: "#334155" }}>
+            Precio base: <strong>{euros(baseTotalCents)}</strong>
+          </div>
+          <div style={{ fontSize: 13, color: discountCentsClamped > 0 ? "#0f172a" : "#64748b" }}>
+            Descuento aplicado: <strong>-{euros(discountCentsClamped)}</strong>
+          </div>
+          <div style={{ fontSize: 15, color: "#0f172a", fontWeight: 900 }}>
+            Precio final de la reserva: {euros(finalTotalCents)}
+          </div>
+          {isJetski && quantity > 1 ? (
+            <div style={{ fontSize: 13, color: "#334155" }}>
+              Precio final por moto: <strong>{euros(Math.round(finalTotalCents / quantity))}</strong>
+            </div>
+          ) : null}
+          {discountCentsRaw > maxManualDiscountCents ? (
+            <div style={{ fontSize: 12, color: "#b91c1c" }}>
+              El descuento introducido supera el máximo permitido y se aplicará el importe limitado.
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              Este será el total que se guardará al crear la reserva.
+            </div>
+          )}
         </div>
 
         <label>

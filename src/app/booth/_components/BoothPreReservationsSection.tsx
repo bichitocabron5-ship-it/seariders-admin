@@ -149,11 +149,21 @@ export default function BoothPreReservationsSection({
                 </div>
               ) : null}
 
-              {!received && activeTripId ? (
+              {!received ? (
                 <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
                   {!assigned ? (
-                    <button onClick={() => assignToActiveTrip(reservation.id)} style={{ ...darkBtn, width: "100%" }}>
-                      Añadir al viaje
+                    <button
+                      type="button"
+                      onClick={() => void assignToActiveTrip(reservation.id)}
+                      disabled={!activeTripId}
+                      style={{
+                        ...darkBtn,
+                        width: "100%",
+                        opacity: activeTripId ? 1 : 0.5,
+                        cursor: activeTripId ? "pointer" : "not-allowed",
+                      }}
+                    >
+                      {activeTripId ? "Añadir al viaje" : "Selecciona un viaje OPEN"}
                     </button>
                   ) : (
                     <div style={{ display: "grid", gap: 8 }}>
@@ -173,7 +183,13 @@ export default function BoothPreReservationsSection({
                           type="button"
                           onClick={() => void cancelReservation(reservation.id)}
                           disabled={reservationActionId === `cancel:${reservation.id}`}
-                          style={{ ...ghostBtn, borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b", opacity: reservationActionId === `cancel:${reservation.id}` ? 0.6 : 1 }}
+                          style={{
+                            ...ghostBtn,
+                            borderColor: "#fecaca",
+                            background: "#fff1f2",
+                            color: "#991b1b",
+                            opacity: reservationActionId === `cancel:${reservation.id}` ? 0.6 : 1,
+                          }}
                         >
                           {reservationActionId === `cancel:${reservation.id}` ? "Cancelando..." : "Cancelar reserva"}
                         </button>
@@ -181,7 +197,7 @@ export default function BoothPreReservationsSection({
                     </div>
                   )}
                   <div style={{ fontSize: 12, opacity: 0.75 }}>
-                    Viaje activo: {activeTripLabel || activeTripId}
+                    Viaje activo: {activeTripLabel || activeTripId || "sin seleccionar"}
                   </div>
                 </div>
               ) : null}
@@ -192,7 +208,13 @@ export default function BoothPreReservationsSection({
                     type="button"
                     onClick={() => void cancelReservation(reservation.id)}
                     disabled={reservationActionId === `cancel:${reservation.id}`}
-                    style={{ ...ghostBtn, borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b", opacity: reservationActionId === `cancel:${reservation.id}` ? 0.6 : 1 }}
+                    style={{
+                      ...ghostBtn,
+                      borderColor: "#fecaca",
+                      background: "#fff1f2",
+                      color: "#991b1b",
+                      opacity: reservationActionId === `cancel:${reservation.id}` ? 0.6 : 1,
+                    }}
                   >
                     {reservationActionId === `cancel:${reservation.id}` ? "Cancelando..." : "Cancelar reserva"}
                   </button>

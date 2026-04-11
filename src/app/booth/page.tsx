@@ -285,6 +285,10 @@ const discountCentsClamped = useMemo(
   () => Math.max(0, Math.min(discountCentsRaw, maxManualDiscountCents)),
   [discountCentsRaw, maxManualDiscountCents]
 );
+const finalTotalCents = useMemo(
+  () => Math.max(0, baseTotalCents - discountCentsClamped),
+  [baseTotalCents, discountCentsClamped]
+);
 
 async function load() {
   setError(null);
@@ -338,6 +342,7 @@ async function load() {
 }
 
 const activeTrip = trips.find((t) => t.id === activeTripId);
+const openTripOptions = useMemo(() => trips.filter((t) => t.status === "OPEN"), [trips]);
 
 const activeTripLabel = activeTrip
   ? `${activeTrip.boat} · ${activeTrip.status} · PAX ${activeTrip.paxTotal ?? 0}${
@@ -348,7 +353,7 @@ const activeTripLabel = activeTrip
   : "";
 const reservationsPending = useMemo(() => rows.filter((r) => (r.pendingCents ?? 0) > 0).length, [rows]);
 const reservationsReceived = useMemo(() => rows.filter((r) => Boolean(r.arrivedStoreAt)).length, [rows]);
-const openTrips = useMemo(() => trips.filter((t) => t.status === "OPEN").length, [trips]);
+const openTrips = openTripOptions.length;
 const queueWaiting = useMemo(
   () => rows.filter((r) => !r.arrivedStoreAt && !r.taxiboatDepartedAt && !r.taxiboatTripId).length,
   [rows]
@@ -394,6 +399,15 @@ function boatLabel(boat?: string | null) {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (activeTripId && openTripOptions.some((trip) => trip.id === activeTripId)) return;
+
+    const firstOpenTripId = openTripOptions[0]?.id ?? "";
+    if (activeTripId !== firstOpenTripId) {
+      setActiveTripId(firstOpenTripId);
+    }
+  }, [activeTripId, openTripOptions]);
 
   useEffect(() => {
     // si cambia el servicio, selecciona primera opcion
@@ -681,6 +695,8 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             maxManualDiscountCents={maxManualDiscountCents}
             baseTotalCents={baseTotalCents}
             discountCentsRaw={discountCentsRaw}
+            discountCentsClamped={discountCentsClamped}
+            finalTotalCents={finalTotalCents}
             euros={euros}
             onSubmit={createPre}
             setFirstName={setFirstName}
