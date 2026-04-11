@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 
 export const runtime = "nodejs";
 
@@ -348,6 +349,17 @@ export async function GET() {
       }, 0);
 
     const refundableDepositCents = Math.max(0, paidDepositCents);
+    const depositCents = computeReservationDepositCents({
+      storedDepositCents: r.depositCents,
+      quantity: r.quantity,
+      isLicense: Boolean(r.isLicense),
+      serviceCategory: r.service?.category ?? null,
+      items: (r.items ?? []).map((item) => ({
+        quantity: item.quantity ?? 0,
+        isExtra: Boolean(item.isExtra),
+        service: item.service ? { category: item.service.category ?? null } : null,
+      })),
+    });
 
     const mainItem = r.items.find((it) => !it.isExtra) ?? null;
     const extras = r.items.filter((it) => it.isExtra);
@@ -377,7 +389,7 @@ export async function GET() {
       : Math.max(0, grossCents - autoDisc - manualDisc);
 
     const pendingServiceCents = Math.max(0, soldTotalCents - paidServiceCents);
-    const pendingDepositCents = Math.max(0, (r.depositCents ?? 0) - refundableDepositCents);
+    const pendingDepositCents = Math.max(0, depositCents - refundableDepositCents);
     const pendingCents = pendingServiceCents + pendingDepositCents;
 
     const requiredUnits = computeRequiredContractUnits({
@@ -505,6 +517,7 @@ export async function GET() {
 
       depositStatus,
       depositHeld: r.depositHeld,
+      depositCents,
       depositHoldReason: r.depositHoldReason ?? null,
 
       contractsBadge,

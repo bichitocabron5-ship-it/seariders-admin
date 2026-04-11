@@ -4,6 +4,7 @@ import { computeAutoDiscountDetail } from "@/lib/discounts";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz, shouldAutoFormalize, todayYmdInTz } from "@/lib/tz-business";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
 
 type CreateItemInput = {
   serviceIdOrCode: string;
@@ -206,26 +207,6 @@ export async function createReservationWithItems(params: {
 
   // Depósito (misma lógica actual: jetski units)
 
-  function computeDepositCents(params: {
-    isLicense: boolean;
-    resolvedItems: Array<{ category: string; quantity: number }>;
-  }) {
-    const { isLicense, resolvedItems } = params;
-
-    const byCat = new Map<string, number>();
-    for (const it of resolvedItems) {
-      const cat = String(it.category ?? "UNKNOWN").toUpperCase();
-      byCat.set(cat, (byCat.get(cat) ?? 0) + Number(it.quantity ?? 1));
-    }
-
-    const jetskiUnits = byCat.get("JETSKI") ?? 0;
-
-    // tu regla actual
-    const depositPerJetCents = isLicense ? 50000 : 10000;
-
-    return depositPerJetCents * jetskiUnits;
-}
-
   // Crear reservationItems con precios (según modo)
     type ItemCreate = {
     serviceId: string;
@@ -384,7 +365,7 @@ export async function createReservationWithItems(params: {
 
       const finalTotalCents = Math.max(0, totalBeforeDiscounts - autoDiscountCents - manualDiscountCents);
 
-      const depositCents = computeDepositCents({ isLicense: input.isLicense, resolvedItems });
+      const depositCents = computeDepositFromResolvedItems({ isLicense: input.isLicense, resolvedItems });
       
       // Service/option “main” obligatorios en Reservation (por compatibilidad)
       const main = packMeta

@@ -90,6 +90,10 @@ export function isOriginSplitByShift(origin: PaymentOrigin) {
   return Boolean(SPLIT_BY_SHIFT[origin]);
 }
 
+export function normalizeClosureShift(origin: PaymentOrigin, shift: ShiftName): ShiftName {
+  return isOriginSplitByShift(origin) ? shift : "MORNING";
+}
+
 function dayStart(businessDate: Date) {
   const d0 = new Date(businessDate);
   d0.setHours(0, 0, 0, 0);

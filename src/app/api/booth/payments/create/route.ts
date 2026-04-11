@@ -7,6 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
+import { BUSINESS_TZ, utcDateFromYmdInTz, todayYmdInTz } from "@/lib/tz-business";
 
 const BodySchema = z.object({
   reservationId: z.string().min(1),
@@ -61,22 +62,31 @@ export async function POST(req: Request) {
     );
   }
 
-  const businessDate = new Date();
-  businessDate.setHours(0, 0, 0, 0);
+  const businessDate = utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
 
-  const shiftSession = await prisma.shiftSession.findFirst({
-    where: {
-      userId: session.userId,
-      businessDate,
-      shift: session.shift ?? "MORNING",
-      role: { name: "BOOTH" },
-    },
-    select: { id: true },
-    orderBy: { startedAt: "desc" },
-  });
+  const shiftSession =
+    (await prisma.shiftSession.findFirst({
+      where: {
+        userId: session.userId,
+        endedAt: null,
+        role: { name: "BOOTH" },
+      },
+      select: { id: true },
+      orderBy: { startedAt: "desc" },
+    })) ??
+    (await prisma.shiftSession.findFirst({
+      where: {
+        userId: session.userId,
+        businessDate,
+        shift: session.shift ?? "MORNING",
+        role: { name: "BOOTH" },
+      },
+      select: { id: true },
+      orderBy: { startedAt: "desc" },
+    }));
 
   if (!shiftSession && String(session.role) !== "ADMIN") {
-    return NextResponse.json({ error: "No hay shift session activa de carpa para este turno." }, { status: 400 });
+    return NextResponse.json({ error: "No hay shift session de carpa válida para este cobro." }, { status: 400 });
   }
 
   const payment = await prisma.payment.create({
@@ -90,7 +100,7 @@ export async function POST(req: Request) {
       createdByUserId: session.userId,
       shiftSessionId: shiftSession?.id ?? null,
     },
-    select: { id: true, createdAt: true },
+    select: { id: true },
   });
 
   return NextResponse.json({ ok: true, paymentId: payment.id, paidNowCents: amountCents });

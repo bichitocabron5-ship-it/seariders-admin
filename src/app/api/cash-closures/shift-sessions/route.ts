@@ -7,7 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { PaymentOrigin, ShiftName, RoleName } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
-import { originFromRoleName, parseBusinessDate } from "@/lib/cashClosures";
+import { originFromRoleName, parseBusinessDate, isOriginSplitByShift } from "@/lib/cashClosures";
 
 export const runtime = "nodejs";
 
@@ -46,9 +46,11 @@ export async function GET(req: Request) {
   d1.setHours(23, 59, 59, 999);
 
   const where: Prisma.ShiftSessionWhereInput = {
-    shift,
     startedAt: { gte: d0, lte: d1 },
   };
+  if (isOriginSplitByShift(origin)) {
+    where.shift = shift;
+  }
   if (String(session.role) !== "ADMIN") {
     where.role = { name: session.role as RoleName };
   }
@@ -59,6 +61,7 @@ export async function GET(req: Request) {
     where,
     select: {
       id: true,
+      shift: true,
       startedAt: true,
       endedAt: true,
       user: { select: { id: true, fullName: true, username: true } },
@@ -75,7 +78,9 @@ export async function GET(req: Request) {
     rows: filtered.map((r) => ({
       id: r.id,
       userId: r.user.id,
-      label: r.user.fullName ?? r.user.username ?? r.user.id,
+      label: isOriginSplitByShift(origin)
+        ? (r.user.fullName ?? r.user.username ?? r.user.id)
+        : `${r.user.fullName ?? r.user.username ?? r.user.id} · ${r.shift === "AFTERNOON" ? "Tarde" : "Mañana"}`,
       role: r.role.name,
       startedAt: r.startedAt,
       endedAt: r.endedAt,

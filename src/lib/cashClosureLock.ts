@@ -1,7 +1,7 @@
 // src/lib/cashClosureLock.ts
 import { prisma } from "@/lib/prisma";
 import { PaymentOrigin, RoleName, ShiftName } from "@prisma/client";
-import { originFromRoleName } from "@/lib/cashClosures";
+import { normalizeClosureShift, originFromRoleName } from "@/lib/cashClosures";
 
 function businessDateFrom(d: Date) {
   const x = new Date(d);
@@ -36,7 +36,7 @@ export async function getLockKeyForUser(userId: string, role: RoleName) {
   });
 
   const now = new Date();
-  const shift = ss?.shift ?? shiftFromNow(now);
+  const shift = normalizeClosureShift(origin, ss?.shift ?? shiftFromNow(now));
   const businessDate = businessDateFrom(now);
 
   return { origin: origin as PaymentOrigin, shift: shift as ShiftName, businessDate };
@@ -49,9 +49,9 @@ export async function assertCashOpenForUser(userId: string, role: RoleName) {
   const activeClosure = await prisma.cashClosure.findFirst({
     where: {
       origin: key.origin,
-      shift: key.shift,
       businessDate: key.businessDate,
       isVoided: false,
+      ...(key.origin === "BOOTH" ? { shift: key.shift } : {}),
     },
     select: { id: true, closedAt: true },
   });

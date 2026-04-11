@@ -11,6 +11,7 @@
     "seed:faults": "tsx prisma/seed-fault-code.ts",
     "db:reset-production": "tsx scripts/reset-production.ts",
     "db:cleanup-production-seed": "tsx scripts/cleanup-seed-production.ts",
+    "cash:repair-legacy-closures": "tsx scripts/repair-legacy-cash-closures.ts",
     "postinstall": "prisma generate",
     "lint": "eslint",
     "prisma:seed": "tsx prisma/seed.ts",

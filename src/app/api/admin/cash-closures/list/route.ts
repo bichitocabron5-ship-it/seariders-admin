@@ -117,10 +117,19 @@ export async function GET(req: Request) {
           where: {
             depositHeld: true,
             depositHeldAt: { gte: row.windowFrom, lt: row.windowTo },
+            payments: {
+              some: {
+                origin: row.origin,
+                isDeposit: true,
+              },
+            },
           },
           select: {
             payments: {
-              where: { isDeposit: true },
+              where: {
+                isDeposit: true,
+                origin: row.origin,
+              },
               select: {
                 amountCents: true,
                 direction: true,

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, Input, Page, Select, Stat, styles } from "@/components/ui";
+import { Alert, Button, Card, Input, Page, Stat, styles } from "@/components/ui";
 import { getBarCashSummary, getBarShiftSessions } from "../services/bar";
 
 type Method = "CASH" | "CARD" | "BIZUM" | "TRANSFER" | "VOUCHER";
@@ -101,7 +101,7 @@ export default function BarCashClosuresPage() {
   const origin = "BAR" as const;
   const today = useMemo(() => businessDateToday(), []);
 
-  const [shift, setShift] = useState<Shift>("MORNING");
+  const shift: Shift = "MORNING";
   const [loading, setLoading] = useState(true);
   const [sum, setSum] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -239,10 +239,9 @@ export default function BarCashClosuresPage() {
 
   const headerRight = (
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-      <Select value={shift} onChange={(e) => setShift(e.target.value as Shift)}>
-        <option value="MORNING">Mañana</option>
-        <option value="AFTERNOON">Tarde</option>
-      </Select>
+      <span style={{ ...styles.pill, background: "#fff", border: "1px solid #dbe4ea", color: "#0f172a" }}>
+        Cierre diario
+      </span>
       <Link href="/admin/cash-closures?origin=BAR" style={{ ...styles.btn, textDecoration: "none" }}>
         Ver en admin
       </Link>
@@ -299,7 +298,7 @@ export default function BarCashClosuresPage() {
                 Fecha: {today}
               </span>
               <span style={{ ...styles.pill, background: "rgba(15, 23, 42, 0.2)", border: "1px solid rgba(148, 163, 184, 0.3)", color: "#fff" }}>
-                Turno: {shift === "MORNING" ? "Mañana" : "Tarde"}
+                Alcance: día completo
               </span>
               <span style={{ ...styles.pill, background: "rgba(15, 23, 42, 0.2)", border: "1px solid rgba(148, 163, 184, 0.3)", color: "#fff" }}>
                 Estado: {sum?.isClosed ? "Cerrado" : "Abierto"}

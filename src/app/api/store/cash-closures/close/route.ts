@@ -7,7 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { PaymentOrigin, ShiftName, RoleName } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
-import { originFromRoleName, shiftWindow, sumByMethod, diffTotals, emptyMethodMap, METHODS, parseBusinessDate, isOriginSplitByShift } from "@/lib/cashClosures";
+import { originFromRoleName, shiftWindow, sumByMethod, diffTotals, emptyMethodMap, METHODS, parseBusinessDate, isOriginSplitByShift, normalizeClosureShift } from "@/lib/cashClosures";
 
 export const runtime = "nodejs";
 
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const origin = parsed.data.origin;
-  const shift = parsed.data.shift;
+  const shift = normalizeClosureShift(origin, parsed.data.shift);
   const businessDate = parseBusinessDate(parsed.data.date);
 
   // Permisos: role->origin o ADMIN
@@ -64,14 +64,27 @@ export async function POST(req: Request) {
     const result = await prisma.$transaction(async (tx) => {
       // 1) evitar doble cierre “activo”
       const existing = await tx.cashClosure.findFirst({
-        where: { origin, shift, businessDate, isVoided: false },
+        where: {
+          origin,
+          businessDate,
+          isVoided: false,
+          ...(isOriginSplitByShift(origin) ? { shift } : {}),
+        },
         select: { id: true },
       });
       if (existing) throw new Error("Ya existe un cierre para ese origin/turno/día (no anulado).");
 
       // 2) validar shift sessions (1–4)
+      const shiftSessionWhere: Prisma.ShiftSessionWhereInput = {
+        id: { in: parsed.data.shiftSessionIds },
+      };
+
+      if (isOriginSplitByShift(origin)) {
+        shiftSessionWhere.shift = parsed.data.shift;
+      }
+
       const ss = await tx.shiftSession.findMany({
-        where: { id: { in: parsed.data.shiftSessionIds } },
+        where: shiftSessionWhere,
         select: {
           id: true,
           userId: true,
@@ -96,7 +109,9 @@ export async function POST(req: Request) {
 
       for (const s of ssUnique) {
         // shift debe coincidir
-        if (String(s.shift) !== String(shift)) throw new Error("ShiftSession no coincide con shift del cierre.");
+        if (isOriginSplitByShift(origin) && String(s.shift) !== String(parsed.data.shift)) {
+          throw new Error("ShiftSession no coincide con shift del cierre.");
+        }
 
         // rol debe mapear a origin
         const o = originFromRoleName(s.role.name as RoleName);
@@ -187,6 +202,7 @@ export async function POST(req: Request) {
         meta: {
           origin,
           shift,
+          requestedShift: parsed.data.shift,
           businessDate,
           windowFrom: from,
           windowTo: to,

@@ -7,6 +7,7 @@ import { OperationalOverrideAction, OperationalOverrideTarget } from "@prisma/cl
 
 import { prisma } from "@/lib/prisma";
 import { type AppSession, sessionOptions } from "@/lib/session";
+import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 
 export const runtime = "nodejs";
 
@@ -107,6 +108,13 @@ export async function GET(req: Request) {
       channel: { select: { name: true } },
       service: { select: { name: true, category: true } },
       option: { select: { durationMinutes: true } },
+      items: {
+        select: {
+          quantity: true,
+          isExtra: true,
+          service: { select: { category: true } },
+        },
+      },
       payments: {
         select: {
           amountCents: true,
@@ -215,7 +223,13 @@ export async function GET(req: Request) {
       pax: reservation.pax,
       isLicense: reservation.isLicense,
       totalPriceCents: reservation.totalPriceCents,
-      depositCents: reservation.depositCents,
+      depositCents: computeReservationDepositCents({
+        storedDepositCents: reservation.depositCents,
+        quantity: reservation.quantity,
+        isLicense: Boolean(reservation.isLicense),
+        serviceCategory: reservation.service?.category ?? null,
+        items: reservation.items ?? [],
+      }),
       depositHeld: reservation.depositHeld,
       depositHoldReason: reservation.depositHoldReason,
       isManualEntry: reservation.isManualEntry,
@@ -238,7 +252,14 @@ export async function GET(req: Request) {
       depositReturnedCents,
       depositRetainedCents: reservation.depositHeld ? Math.max(0, paidDepositCents) : 0,
       totalToChargeCents:
-        Number(reservation.totalPriceCents ?? 0) + Number(reservation.depositCents ?? 0),
+        Number(reservation.totalPriceCents ?? 0) +
+        computeReservationDepositCents({
+          storedDepositCents: reservation.depositCents,
+          quantity: reservation.quantity,
+          isLicense: Boolean(reservation.isLicense),
+          serviceCategory: reservation.service?.category ?? null,
+          items: reservation.items ?? [],
+        }),
       incidents: reservation.incidents,
     };
   });

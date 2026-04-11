@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { AppSession, sessionOptions } from "@/lib/session";
+import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 
 export const runtime = "nodejs";
 
@@ -17,12 +18,14 @@ type ReservationMetricInput = {
   marketing?: string | null;
   scheduledTime: Date | null;
   activityDate: Date | null;
-  service: { name: string | null } | null;
+  service: { name: string | null; category?: string | null } | null;
   channel: { name: string | null } | null;
   totalPriceCents: number | null;
   autoDiscountCents: number | null;
   manualDiscountCents: number | null;
   depositCents: number | null;
+  quantity?: number | null;
+  isLicense?: boolean | null;
   payments: Array<{
     amountCents: number;
     direction: "IN" | "OUT";
@@ -30,8 +33,9 @@ type ReservationMetricInput = {
   }>;
   items: Array<{
     isExtra: boolean;
+    quantity?: number | null;
     totalPriceCents: number | null;
-    service: { name: string | null } | null;
+    service: { name: string | null; category?: string | null } | null;
   }>;
   depositHeld?: boolean;
   createdAt?: Date;
@@ -79,6 +83,8 @@ const reservationExecutiveSelect =
     autoDiscountCents: true,
     manualDiscountCents: true,
     depositCents: true,
+    quantity: true,
+    isLicense: true,
     depositHeld: true,
     createdAt: true,
     payments: {
@@ -89,12 +95,13 @@ const reservationExecutiveSelect =
       },
     },
     channel: { select: { name: true } },
-    service: { select: { name: true } },
+    service: { select: { name: true, category: true } },
     items: {
       select: {
         isExtra: true,
+        quantity: true,
         totalPriceCents: true,
-        service: { select: { name: true } },
+        service: { select: { name: true, category: true } },
       },
     },
   });
@@ -492,6 +499,20 @@ function monthKeyForDate(date: Date, tz: string) {
 
 function reservationTimestamp(reservation: ReservationMetricInput) {
   return reservation.scheduledTime ?? reservation.activityDate ?? null;
+}
+
+function reservationDepositDueCents(reservation: ReservationMetricInput) {
+  return computeReservationDepositCents({
+    storedDepositCents: reservation.depositCents,
+    quantity: reservation.quantity ?? null,
+    isLicense: Boolean(reservation.isLicense),
+    serviceCategory: reservation.service?.category ?? null,
+    items: reservation.items.map((item) => ({
+      quantity: item.quantity ?? 0,
+      isExtra: item.isExtra,
+      service: { category: item.service?.category ?? null },
+    })),
+  });
 }
 
 function reservationInRange(
@@ -1439,8 +1460,7 @@ export async function GET() {
       }, 0),
       depositsHeldCents: reservationsToday.reduce(
         (sum, reservation) =>
-          sum +
-          (reservation.depositHeld ? Number(reservation.depositCents ?? 0) : 0),
+          sum + (reservation.depositHeld ? reservationDepositDueCents(reservation) : 0),
         0
       ),
       depositsLiberableCents: reservationsToday.reduce(

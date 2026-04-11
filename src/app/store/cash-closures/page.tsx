@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { opsStyles } from "@/components/ops-ui";
 import { StoreHero, StoreMetricCard, StoreMetricGrid } from "@/components/store-ui";
-import { Page, Card, Button, Input, Select, Alert, Stat, styles } from "@/components/ui";
+import { Page, Card, Button, Input, Alert, Stat, styles } from "@/components/ui";
 
 type Summary = {
   ok: boolean;
@@ -105,7 +105,7 @@ function MethodKeyPill({ m }: { m: Method }) {
 export default function StoreCashClosuresPage() {
   const origin = "STORE" as const;
 
-  const [shift, setShift] = useState<"MORNING" | "AFTERNOON">("MORNING");
+  const shift = "MORNING" as const;
 
   const [loading, setLoading] = useState(true);
   const [sum, setSum] = useState<Summary | null>(null);
@@ -307,10 +307,9 @@ export default function StoreCashClosuresPage() {
   const diffNetTone = diffTone(diffLive.netTotal);
   const headerRight = (
     <div style={opsStyles.actionGrid}>
-      <Select value={shift} onChange={(e) => setShift(e.target.value as "MORNING" | "AFTERNOON")}>
-        <option value="MORNING">Mañana</option>
-        <option value="AFTERNOON">Tarde</option>
-      </Select>
+      <span style={{ ...opsStyles.heroPill, background: "#fff", border: "1px solid #dbe4ea", color: "#0f172a" }}>
+        Cierre diario
+      </span>
       <Button onClick={load}>Refrescar</Button>
     </div>
   );
@@ -360,6 +359,9 @@ export default function StoreCashClosuresPage() {
                   Fecha: {today}
                 </span>
                 <span style={{ ...opsStyles.heroPill, background: "rgba(15, 23, 42, 0.24)", border: "1px solid rgba(148, 163, 184, 0.35)", color: "#fff" }}>
+                  Alcance: día completo
+                </span>
+                <span style={{ ...opsStyles.heroPill, background: "rgba(15, 23, 42, 0.24)", border: "1px solid rgba(148, 163, 184, 0.35)", color: "#fff" }}>
                   Ventana: {sum?.ok ? `${hhmm(windowFrom)}-${hhmm(windowTo)}` : "--"}
                 </span>
               </div>
@@ -406,7 +408,7 @@ export default function StoreCashClosuresPage() {
         <Card
           title={
             <span>
-              Cierre de caja ({origin} · {shift}) · Estado: <b>{isClosed ? "CERRADO" : "ABIERTO"}</b>
+              Cierre de caja ({origin} · día completo) · Estado: <b>{isClosed ? "CERRADO" : "ABIERTO"}</b>
             </span>
           }
           right={
@@ -493,7 +495,7 @@ export default function StoreCashClosuresPage() {
             <div style={styles.hr} />
 
             <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ fontWeight: 950 }}>Participantes (1–4)</div>
+              <div style={{ fontWeight: 950 }}>Participantes del día (1–4)</div>
 
               <div style={{ display: "grid", gap: 8 }}>
                 {ssRows.map((s) => {

@@ -10,6 +10,7 @@ import type { Prisma } from "@prisma/client";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { validateReusableAssetsAvailability } from "@/lib/store-rental-assets";
+import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 
 export const runtime = "nodejs";
 
@@ -59,31 +60,6 @@ function firstNonEmpty(...values: Array<string | null | undefined>) {
     if (normalized) return normalized;
   }
   return null;
-}
-
-function computeDepositCents(params: {
-  storedDepositCents?: number | null;
-  quantity: number | null;
-  isLicense: boolean;
-  serviceCategory?: string | null;
-  items?: Array<{ quantity: number | null; isExtra: boolean; service: { category: string | null } | null }>;
-}) {
-  const stored = Number(params.storedDepositCents ?? 0);
-  if (stored > 0) return stored;
-
-  const jetskiUnitsFromItems = (params.items ?? [])
-    .filter((item) => !item.isExtra && String(item.service?.category ?? "").toUpperCase() === "JETSKI")
-    .reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
-
-  const fallbackUnits =
-    jetskiUnitsFromItems > 0
-      ? jetskiUnitsFromItems
-      : String(params.serviceCategory ?? "").toUpperCase() === "JETSKI"
-        ? Math.max(0, Number(params.quantity ?? 0))
-        : 0;
-
-  if (fallbackUnits <= 0) return stored;
-  return (params.isLicense ? 50000 : 10000) * fallbackUnits;
 }
 
 function toYmdInTz(d: Date, tz: string) {
@@ -441,7 +417,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (!Number.isFinite(companionsCount) || companionsCount < 0 || companionsCount > 20) {
         throw new Error("Acompanantes invalido.");
       }
-      const depositCents = computeDepositCents({
+      const depositCents = computeReservationDepositCents({
         storedDepositCents: current.depositCents,
         quantity,
         isLicense: Boolean(isLicense),

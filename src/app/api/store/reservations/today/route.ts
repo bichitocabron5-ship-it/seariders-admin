@@ -5,33 +5,9 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 
 export const runtime = "nodejs";
-
-function computeDepositCents(params: {
-  storedDepositCents?: number | null;
-  quantity: number | null;
-  isLicense: boolean;
-  serviceCategory?: string | null;
-  items?: Array<{ quantity: number | null; isExtra: boolean; service: { category: string | null } | null }>;
-}) {
-  const stored = Number(params.storedDepositCents ?? 0);
-  if (stored > 0) return stored;
-
-  const jetskiUnitsFromItems = (params.items ?? [])
-    .filter((item) => !item.isExtra && String(item.service?.category ?? "").toUpperCase() === "JETSKI")
-    .reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
-
-  const fallbackUnits =
-    jetskiUnitsFromItems > 0
-      ? jetskiUnitsFromItems
-      : String(params.serviceCategory ?? "").toUpperCase() === "JETSKI"
-        ? Math.max(0, Number(params.quantity ?? 0))
-        : 0;
-
-  if (fallbackUnits <= 0) return stored;
-  return (params.isLicense ? 50000 : 10000) * fallbackUnits;
-}
 
 export async function GET() {
   // ✅ App Router: cookies() + getIronSession(cookieStore)
@@ -169,7 +145,7 @@ export async function GET() {
       }, 0);
 
     const refundableDepositCents = Math.max(0, paidDepositCents);
-    const depositCents = computeDepositCents({
+    const depositCents = computeReservationDepositCents({
       storedDepositCents: r.depositCents,
       quantity: r.quantity,
       isLicense: Boolean(r.isLicense),

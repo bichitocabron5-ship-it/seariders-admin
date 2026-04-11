@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { PaymentOrigin, ShiftName, RoleName } from "@prisma/client";
-import { originFromRoleName, sumByMethod, parseBusinessDate, shiftWindow, isOriginSplitByShift } from "@/lib/cashClosures";
+import { originFromRoleName, sumByMethod, parseBusinessDate, shiftWindow, isOriginSplitByShift, normalizeClosureShift } from "@/lib/cashClosures";
 
 export const runtime = "nodejs";
 
@@ -49,7 +49,8 @@ export async function GET(req: Request) {
     if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
     // Si no viene shift, elegimos uno por defecto (pero mejor mandarlo siempre desde UI)
-    const shift: ShiftName = (shiftRaw ?? (session.shift as ShiftName) ?? "MORNING") as ShiftName;
+    const requestedShift: ShiftName = (shiftRaw ?? (session.shift as ShiftName) ?? "MORNING") as ShiftName;
+    const shift = normalizeClosureShift(origin, requestedShift);
     const businessDate = parseBusinessDate(date);
 
     const { from, to } = shiftWindow(origin, businessDate, shift);
@@ -123,18 +124,18 @@ export async function GET(req: Request) {
       service: { IN: serviceIn, OUT: serviceOut, NET: serviceNet },
       deposit: { IN: depositIn, OUT: depositOut, NET: depositNet },
       all: { NET: serviceNet.total + depositNet.total },
-      meta: { origin, shift, businessDate, windowFrom: from, windowTo: to },
+      meta: { origin, shift, requestedShift, businessDate, windowFrom: from, windowTo: to },
     };
 
     // ¿ya está cerrado? (por origin+shift+día)
-    const existing = await prisma.cashClosure.findUnique({
+    const existing = await prisma.cashClosure.findFirst({
       where: {
-        businessDate_origin_shift: {
-          businessDate,
-          origin,
-          shift,
-        },
+        businessDate,
+        origin,
+        isVoided: false,
+        ...(isOriginSplitByShift(origin) ? { shift } : {}),
       },
+      orderBy: [{ closedAt: "desc" }],
       select: { id: true, closedAt: true, isVoided: true },
     });
 

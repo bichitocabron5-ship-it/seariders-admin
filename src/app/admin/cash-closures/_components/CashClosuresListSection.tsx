@@ -24,6 +24,10 @@ type Props = {
   onToggleReviewed: (row: Row) => void;
 };
 
+function shiftLabel(row: Row) {
+  return row.origin === "BOOTH" ? row.shift : "DIARIO";
+}
+
 export default function CashClosuresListSection({
   panelStyle,
   lightBtn,
@@ -39,7 +43,7 @@ export default function CashClosuresListSection({
       <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>Lista</div>
 
       {loading ? (
-        <div style={{ padding: 12, opacity: 0.7 }}>Cargando…</div>
+        <div style={{ padding: 12, opacity: 0.7 }}>Cargando...</div>
       ) : rows.length === 0 ? (
         <div style={{ padding: 12, opacity: 0.7 }}>Sin cierres.</div>
       ) : (
@@ -71,17 +75,17 @@ export default function CashClosuresListSection({
                   >
                     {row.origin}
                   </span>
-                  {row.origin} · {row.shift} · {yyyyMmDd(row.businessDate)}
+                  {row.origin} · {shiftLabel(row)} · {yyyyMmDd(row.businessDate)}
                   {row.isVoided ? " · ANULADO" : ""}
                 </div>
 
                 <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                  Cerró: {row.closedByUser?.fullName ?? row.closedByUser?.username ?? "—"} ·{" "}
+                  Cerró: {row.closedByUser?.fullName ?? row.closedByUser?.username ?? "-"} ·{" "}
                   {new Date(row.closedAt).toLocaleString()}
                 </div>
 
                 <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                  {row.reviewedAt ? `✅ Revisado por ${row.reviewedByUser?.username ?? "admin"}` : "⏳ Pendiente de revisión"}
+                  {row.reviewedAt ? `Revisado por ${row.reviewedByUser?.username ?? "admin"}` : "Pendiente de revisión"}
                   {row.reviewNote ? ` · ${row.reviewNote}` : ""}
                 </div>
               </div>
