@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
+import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,13 @@ function parseCategories(req: Request): string[] | null {
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean);
   return cats.length ? cats : null;
+}
+
+function parseKind(req: Request): "JETSKI" | "NAUTICA" | null {
+  const url = new URL(req.url);
+  const raw = url.searchParams.get("kind")?.trim().toUpperCase();
+  if (raw === "JETSKI" || raw === "NAUTICA") return raw;
+  return null;
 }
 
 function deriveReservationStatusFromUnits(
@@ -86,15 +94,94 @@ async function repairClosedQueuedAssignments() {
   }
 }
 
+async function repairMissingReadyPlatformUnits(params: {
+  start: Date;
+  endExclusive: Date;
+  kind: "JETSKI" | "NAUTICA" | null;
+  categories: string[] | null;
+}) {
+  const reservations = await prisma.reservation.findMany({
+    where: {
+      status: ReservationStatus.READY_FOR_PLATFORM,
+      OR: [
+        { scheduledTime: { gte: params.start, lt: params.endExclusive } },
+        { scheduledTime: null, activityDate: { gte: params.start, lt: params.endExclusive } },
+      ],
+      service: params.categories
+        ? { category: { in: params.categories } }
+        : params.kind === "JETSKI"
+          ? { category: "JETSKI" }
+          : params.kind === "NAUTICA"
+            ? { category: { not: "JETSKI" } }
+            : undefined,
+    },
+    select: {
+      id: true,
+      quantity: true,
+      readyForPlatformAt: true,
+      isPackParent: true,
+      parentReservationId: true,
+      service: { select: { category: true } },
+      items: {
+        select: {
+          quantity: true,
+          isExtra: true,
+          service: { select: { category: true } },
+        },
+      },
+      units: {
+        select: { unitIndex: true },
+      },
+    },
+  });
+
+  for (const reservation of reservations) {
+    if (reservation.isPackParent && !reservation.parentReservationId) continue;
+
+    const requiredUnits = computeRequiredPlatformUnits({
+      quantity: reservation.quantity,
+      serviceCategory: reservation.service?.category ?? null,
+      items: (reservation.items ?? []).map((item) => ({
+        quantity: item.quantity ?? 0,
+        isExtra: Boolean(item.isExtra),
+        service: item.service ? { category: item.service.category ?? null } : null,
+      })),
+    });
+    if (requiredUnits <= 0) continue;
+
+    const existing = new Set((reservation.units ?? []).map((unit) => Number(unit.unitIndex)));
+    const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
+
+    for (let i = 1; i <= requiredUnits; i++) {
+      if (!existing.has(i)) {
+        toCreate.push({
+          reservationId: reservation.id,
+          unitIndex: i,
+          ...(reservation.readyForPlatformAt ? { readyForPlatformAt: reservation.readyForPlatformAt } : {}),
+        });
+      }
+    }
+
+    if (toCreate.length > 0) {
+      await prisma.reservationUnit.createMany({
+        data: toCreate,
+        skipDuplicates: true,
+      });
+    }
+  }
+}
+
 export async function GET(req: Request) {
   const session = await requirePlatformOrAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
+  const kind = parseKind(req);
   const categories = parseCategories(req);
   await repairClosedQueuedAssignments();
 
   // 1) Units en cola
   const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
+  await repairMissingReadyPlatformUnits({ start, endExclusive, kind, categories });
   const units = await prisma.reservationUnit.findMany({
     where: {
       status: ReservationUnitStatus.READY_FOR_PLATFORM,
@@ -107,13 +194,19 @@ export async function GET(req: Request) {
       },
       reservation: {
         status: { notIn: [ReservationStatus.CANCELED, ReservationStatus.COMPLETED] },
-        ...(categories
+        service: categories
           ? {
-              service: {
-                category: { in: categories as unknown as string[] },
-              },
+              category: { in: categories as unknown as string[] },
             }
-          : {}),
+          : kind === "JETSKI"
+            ? {
+                category: "JETSKI",
+              }
+            : kind === "NAUTICA"
+              ? {
+                  category: { not: "JETSKI" },
+                }
+              : undefined,
         OR: [
           { scheduledTime: { gte: start, lt: endExclusive } },
           { scheduledTime: null, activityDate: { gte: start, lt: endExclusive } },

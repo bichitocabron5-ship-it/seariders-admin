@@ -40,3 +40,19 @@ export function operabilityBlockingReason(
 
   return "La unidad no está operativa.";
 }
+
+export function platformAssignmentBlockingReason(params: {
+  operabilityStatus: PlatformOperabilityStatus | null | undefined;
+  hasOpenMaintenanceEvent?: boolean;
+  hasOpenIncident?: boolean;
+}) {
+  if (params.hasOpenMaintenanceEvent) {
+    return "Tiene un evento mecánico abierto y no puede asignarse.";
+  }
+
+  if (params.hasOpenIncident) {
+    return "Tiene una incidencia abierta de plataforma y no puede asignarse.";
+  }
+
+  return operabilityBlockingReason(params.operabilityStatus);
+}

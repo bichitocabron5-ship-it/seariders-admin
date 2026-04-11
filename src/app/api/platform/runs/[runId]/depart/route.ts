@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isOperableStatus, operabilityBlockingReason } from "@/lib/operability";
+import { platformAssignmentBlockingReason } from "@/lib/operability";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import {
   MonitorRunKind,
@@ -79,6 +79,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
               id: true,
               number: true,
               operabilityStatus: true,
+              maintenanceEvents: {
+                where: { status: { in: ["OPEN", "IN_PROGRESS", "EXTERNAL"] } },
+                select: { id: true },
+                take: 1,
+              },
+              incidents: {
+                where: { isOpen: true },
+                select: { id: true },
+                take: 1,
+              },
             },
           });
 
@@ -86,10 +96,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
             throw new Error("Una de las motos asignadas ya no existe");
           }
 
-          if (!isOperableStatus(jetski.operabilityStatus)) {
+          const blockReason = platformAssignmentBlockingReason({
+            operabilityStatus: jetski.operabilityStatus,
+            hasOpenMaintenanceEvent: Boolean(jetski.maintenanceEvents?.[0]),
+            hasOpenIncident: Boolean(jetski.incidents?.[0]),
+          });
+
+          if (blockReason) {
             throw new Error(
-              `No se puede iniciar la salida: la moto ${jetski.number} no está operativa. ` +
-                (operabilityBlockingReason(jetski.operabilityStatus) ?? "")
+              `No se puede iniciar la salida: la moto ${jetski.number}. ${blockReason}`
             );
           }
         }
@@ -101,6 +116,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
               id: true,
               name: true,
               operabilityStatus: true,
+              maintenanceEvents: {
+                where: { status: { in: ["OPEN", "IN_PROGRESS", "EXTERNAL"] } },
+                select: { id: true },
+                take: 1,
+              },
+              incidents: {
+                where: { isOpen: true },
+                select: { id: true },
+                take: 1,
+              },
             },
           });
 
@@ -108,10 +133,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
             throw new Error("Uno de los recursos asignados ya no existe");
           }
 
-          if (!isOperableStatus(asset.operabilityStatus)) {
+          const blockReason = platformAssignmentBlockingReason({
+            operabilityStatus: asset.operabilityStatus,
+            hasOpenMaintenanceEvent: Boolean(asset.maintenanceEvents?.[0]),
+            hasOpenIncident: Boolean(asset.incidents?.[0]),
+          });
+
+          if (blockReason) {
             throw new Error(
-              `No se puede iniciar la salida: el recurso ${asset.name} no está operativo. ` +
-                (operabilityBlockingReason(asset.operabilityStatus) ?? "")
+              `No se puede iniciar la salida: el recurso ${asset.name}. ${blockReason}`
             );
           }
         }

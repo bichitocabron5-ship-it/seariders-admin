@@ -35,7 +35,7 @@ const BOARD_OPTIONS: BoardOption[] = [
     key: "NAUTICA",
     title: "Plataforma - Náutica",
     kind: "NAUTICA",
-    categories: ["TOWABLE", "WAKEBOARD", "FLYBOARD", "PARASAILING", "JETCAR", "BOAT"],
+    categories: [],
   },
 ];
 

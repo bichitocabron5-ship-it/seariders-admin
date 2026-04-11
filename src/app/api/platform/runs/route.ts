@@ -6,6 +6,7 @@ import { JetskiStatus, MonitorRunKind, MonitorRunMode, MonitorRunStatus, RunAssi
 import { BUSINESS_TZ, utcDateFromYmdInTz } from "@/lib/tz-business";
 import { AssetStatus } from "@prisma/client";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
+import { platformAssignmentBlockingReason } from "@/lib/operability";
 
 export const runtime = "nodejs";
 
@@ -167,10 +168,32 @@ export async function POST(req: Request) {
     if (monitorJetskiId !== null && monitorJetskiId !== undefined) {
       const jetski = await tx.jetski.findUnique({
         where: { id: monitorJetskiId },
-        select: { id: true, status: true },
+        select: {
+          id: true,
+          status: true,
+          operabilityStatus: true,
+          maintenanceEvents: {
+            where: { status: { in: ["OPEN", "IN_PROGRESS", "EXTERNAL"] } },
+            select: { id: true },
+            take: 1,
+          },
+          incidents: {
+            where: { isOpen: true },
+            select: { id: true },
+            take: 1,
+          },
+        },
       });
       if (!jetski || jetski.status !== JetskiStatus.OPERATIONAL) {
         return { error: "La moto del monitor no está disponible" };
+      }
+      const blockReason = platformAssignmentBlockingReason({
+        operabilityStatus: jetski.operabilityStatus,
+        hasOpenMaintenanceEvent: Boolean(jetski.maintenanceEvents?.[0]),
+        hasOpenIncident: Boolean(jetski.incidents?.[0]),
+      });
+      if (blockReason) {
+        return { error: `La moto del monitor no es asignable. ${blockReason}` };
       }
 
       const busyAssignment = await tx.monitorRunAssignment.findFirst({
@@ -196,10 +219,38 @@ export async function POST(req: Request) {
         if (monitorAssetId !== null && monitorAssetId !== undefined) {
       const asset = await tx.asset.findUnique({
         where: { id: monitorAssetId },
-        select: { id: true, status: true, type: true, name: true },
+        select: {
+          id: true,
+          status: true,
+          type: true,
+          name: true,
+          platformUsage: true,
+          operabilityStatus: true,
+          maintenanceEvents: {
+            where: { status: { in: ["OPEN", "IN_PROGRESS", "EXTERNAL"] } },
+            select: { id: true },
+            take: 1,
+          },
+          incidents: {
+            where: { isOpen: true },
+            select: { id: true },
+            take: 1,
+          },
+        },
       });
       if (!asset || asset.status !== AssetStatus.OPERATIONAL) {
         return { error: "El recurso del monitor no está disponible" };
+      }
+      if (asset.platformUsage === "HIDDEN") {
+        return { error: "El recurso está oculto para Platform y no puede usarse en una salida." };
+      }
+      const blockReason = platformAssignmentBlockingReason({
+        operabilityStatus: asset.operabilityStatus,
+        hasOpenMaintenanceEvent: Boolean(asset.maintenanceEvents?.[0]),
+        hasOpenIncident: Boolean(asset.incidents?.[0]),
+      });
+      if (blockReason) {
+        return { error: `El recurso del monitor no es asignable. ${blockReason}` };
       }
 
       const busyAssignment = await tx.monitorRunAssignment.findFirst({

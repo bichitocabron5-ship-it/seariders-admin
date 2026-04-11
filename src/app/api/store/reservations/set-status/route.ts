@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import type { Prisma } from "@prisma/client";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 
 export const runtime = "nodejs";
@@ -51,9 +51,8 @@ async function ensureUnitsTx(tx: Prisma.TransactionClient, reservationId: string
   if (!r) return;
   if (r.isPackParent && !r.parentReservationId) return;
 
-  const requiredUnits = computeRequiredContractUnits({
+  const requiredUnits = computeRequiredPlatformUnits({
     quantity: r.quantity,
-    isLicense: Boolean(r.isLicense),
     serviceCategory: r.service?.category ?? null,
     items: (r.items ?? []).map((it): ItemForUnits => ({
       quantity: it.quantity ?? 0,

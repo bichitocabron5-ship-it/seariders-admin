@@ -6,7 +6,7 @@ export default function PlatformNauticaPage() {
     <PlatformBoard
       title="Plataforma - Nautica"
       kind="NAUTICA"
-      categories={["TOWABLE", "WAKEBOARD", "FLYBOARD", "PARASAILING", "JETCAR", "BOAT"]}
+      categories={[]}
     />
   );
 }

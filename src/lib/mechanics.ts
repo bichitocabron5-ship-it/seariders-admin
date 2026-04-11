@@ -2,6 +2,28 @@ export type ServiceState = "UNKNOWN" | "OK" | "WARN" | "DUE";
 
 export const SERVICE_EVENT_TYPES = new Set(["SERVICE", "OIL_CHANGE"]);
 
+export function roundHours(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+export function minutesToHours(minutes: number) {
+  return roundHours(minutes / 60);
+}
+
+export function diffHours(startedAt: Date, endedAt: Date) {
+  const diffMs = endedAt.getTime() - startedAt.getTime();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) return 0;
+  return roundHours(diffMs / 3_600_000);
+}
+
+export function applyLiveHours(
+  currentHours: number | null,
+  activeHours: number
+) {
+  if (currentHours === null || Number.isNaN(currentHours)) return null;
+  return roundHours(currentHours + Math.max(0, activeHours));
+}
+
 export function calcService(o: {
   currentHours: number | null;
   lastServiceHours: number | null;

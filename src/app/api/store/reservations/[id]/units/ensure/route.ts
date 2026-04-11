@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { ReservationUnitStatus, type ReservationUnit } from "@prisma/client";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
 
 export const runtime = "nodejs";
 
@@ -54,9 +54,8 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
         return { reservationId: id, requiredUnits: 0, readyCount: 0, units: [] as ReservationUnit[], hint: "Pack padre: generar units en hijas" };
       }
 
-      const requiredUnits = computeRequiredContractUnits({
+      const requiredUnits = computeRequiredPlatformUnits({
         quantity: r.quantity,
-        isLicense: Boolean(r.isLicense),
         serviceCategory: r.service?.category ?? null,
         items: (r.items ?? []).map((it) => ({
           quantity: it.quantity ?? 0,

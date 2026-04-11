@@ -2,8 +2,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { MaintenanceEntityType } from "@prisma/client";
-import { calcService, isServiceEventType } from "@/lib/mechanics";
+import { MaintenanceEntityType, RunAssignmentStatus } from "@prisma/client";
+import { applyLiveHours, calcService, diffHours, isServiceEventType } from "@/lib/mechanics";
 import { requireMechanicsOrAdmin } from "@/lib/mechanics-auth";
 
 export const runtime = "nodejs";
@@ -154,9 +154,27 @@ async function getJetskiDetail(entityId: string, take: number) {
   const lastEvt = events.find((event) => isServiceEventType(event.type)) ?? null;
   const lastServiceHoursEffective =
     lastEvt?.hoursAtService ?? (entity.lastServiceHours ?? null);
+  const activeAssignments = await prisma.monitorRunAssignment.findMany({
+    where: {
+      status: RunAssignmentStatus.ACTIVE,
+      endedAt: null,
+      startedAt: { not: null },
+      jetskiId: entityId,
+    },
+    select: {
+      startedAt: true,
+    },
+  });
+  const now = new Date();
+  const activeHours = activeAssignments.reduce(
+    (acc, assignment) =>
+      acc + (assignment.startedAt ? diffHours(assignment.startedAt, now) : 0),
+    0
+  );
+  const currentHoursEffective = applyLiveHours(entity.currentHours ?? null, activeHours);
 
   const service = calcService({
-    currentHours: entity.currentHours ?? null,
+    currentHours: currentHoursEffective,
     lastServiceHours: lastServiceHoursEffective,
     serviceIntervalHours: Number(entity.serviceIntervalHours ?? 85),
     serviceWarnHours: Number(entity.serviceWarnHours ?? 70),
@@ -167,6 +185,7 @@ async function getJetskiDetail(entityId: string, take: number) {
     entityType: MaintenanceEntityType.JETSKI,
     entity: {
       ...entity,
+      currentHours: currentHoursEffective,
       displayName: `Moto ${entity.number}`,
     },
     service,
@@ -280,9 +299,27 @@ async function getAssetDetail(entityId: string, take: number) {
   const lastEvt = events.find((event) => isServiceEventType(event.type)) ?? null;
   const lastServiceHoursEffective =
     lastEvt?.hoursAtService ?? (entity.lastServiceHours ?? null);
+  const activeAssignments = await prisma.monitorRunAssignment.findMany({
+    where: {
+      status: RunAssignmentStatus.ACTIVE,
+      endedAt: null,
+      startedAt: { not: null },
+      assetId: entityId,
+    },
+    select: {
+      startedAt: true,
+    },
+  });
+  const now = new Date();
+  const activeHours = activeAssignments.reduce(
+    (acc, assignment) =>
+      acc + (assignment.startedAt ? diffHours(assignment.startedAt, now) : 0),
+    0
+  );
+  const currentHoursEffective = applyLiveHours(entity.currentHours ?? null, activeHours);
 
   const service = calcService({
-    currentHours: entity.currentHours ?? null,
+    currentHours: currentHoursEffective,
     lastServiceHours: lastServiceHoursEffective,
     serviceIntervalHours: Number(entity.serviceIntervalHours ?? 85),
     serviceWarnHours: Number(entity.serviceWarnHours ?? 70),
@@ -293,6 +330,7 @@ async function getAssetDetail(entityId: string, take: number) {
     entityType: MaintenanceEntityType.ASSET,
     entity: {
       ...entity,
+      currentHours: currentHoursEffective,
       displayName: entity.name,
     },
     service,

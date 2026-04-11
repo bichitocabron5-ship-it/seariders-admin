@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z, type ZodIssue } from "zod";
 import { ReservationStatus, type Prisma } from "@prisma/client";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 
 export const runtime = "nodejs";
@@ -49,9 +49,8 @@ async function ensureUnitsTx(
 ) {
   if (reservation.isPackParent && !reservation.parentReservationId) return;
 
-  const requiredUnits = computeRequiredContractUnits({
+  const requiredUnits = computeRequiredPlatformUnits({
     quantity: reservation.quantity,
-    isLicense: Boolean(reservation.isLicense),
     serviceCategory: reservation.serviceCategory ?? null,
     items: reservation.items ?? [],
   });

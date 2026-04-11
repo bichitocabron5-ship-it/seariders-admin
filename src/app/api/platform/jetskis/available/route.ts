@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { MonitorRunStatus, RunAssignmentStatus } from "@prisma/client";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
+import { platformAssignmentBlockingReason } from "@/lib/operability";
 
 export const runtime = "nodejs";
 
@@ -99,16 +100,11 @@ export async function GET(req: NextRequest) {
   });
 
   const rows = jetskis.map((j) => {
-    let blockReason: string | null = null;
-    
-
-    if (j.maintenanceEvents?.[0]) {
-      blockReason = "Evento mecánico abierto";
-    } else if (j.incidents?.[0]) {
-      blockReason = "Incidencia abierta de plataforma";
-    } else if (j.operabilityStatus && j.operabilityStatus !== "OPERATIONAL") {
-      blockReason = "Bloqueada por operatividad";
-    }
+    const blockReason = platformAssignmentBlockingReason({
+      operabilityStatus: j.operabilityStatus,
+      hasOpenMaintenanceEvent: Boolean(j.maintenanceEvents?.[0]),
+      hasOpenIncident: Boolean(j.incidents?.[0]),
+    });
 
     const activeMaintenanceEventId = j.maintenanceEvents?.[0]?.id ?? null;
     const activeIncidentId = j.incidents?.[0]?.id ?? null;

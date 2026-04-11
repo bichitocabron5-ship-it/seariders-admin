@@ -23,6 +23,7 @@ async function requireAdmin() {
 const PatchBody = z.object({
   type: z.nativeEnum(AssetType).optional(),
   status: z.nativeEnum(AssetStatus).optional(),
+  platformUsage: z.enum(["CUSTOMER_ASSIGNABLE", "RUN_BASE_ONLY", "HIDDEN"]).optional(),
 
   name: z.string().trim().min(1).max(80).optional(),
   code: z.string().trim().min(1).max(30).optional().nullable(),
@@ -58,6 +59,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       data: {
         ...(b.type ? { type: b.type } : {}),
         ...(b.status ? { status: b.status } : {}),
+        ...(b.platformUsage ? { platformUsage: b.platformUsage } : {}),
         ...(typeof b.name === "string" ? { name: b.name } : {}),
 
         ...(b.code !== undefined ? { code: b.code } : {}),
@@ -78,6 +80,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         id: true,
         type: true,
         status: true,
+        platformUsage: true,
         name: true,
         code: true,
         model: true,

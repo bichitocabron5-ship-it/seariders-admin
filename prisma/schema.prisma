@@ -1077,6 +1077,7 @@ model Asset {
   id     String      @id @default(cuid())
   type   AssetType
   status AssetStatus @default(OPERATIONAL)
+  platformUsage AssetPlatformUsage @default(CUSTOMER_ASSIGNABLE)
 
   name                 String
   code                 String?
@@ -2085,6 +2086,12 @@ enum AssetType {
   FLYBOARD
   TOWABLE
   OTHER
+}
+
+enum AssetPlatformUsage {
+  CUSTOMER_ASSIGNABLE
+  RUN_BASE_ONLY
+  HIDDEN
 }
 
 enum JetskiStatus {

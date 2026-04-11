@@ -20,6 +20,11 @@ export type OperabilityStatus =
   | "DAMAGED"
   | "OUT_OF_SERVICE";
 
+export type AssetPlatformUsage =
+  | "CUSTOMER_ASSIGNABLE"
+  | "RUN_BASE_ONLY"
+  | "HIDDEN";
+
 export type OperabilityCountRow = {
   operabilityStatus: OperabilityStatus;
   _count: number;
@@ -47,6 +52,7 @@ export type AssetAvail = {
   name: string;
   type: AssetType;
   status: "OPERATIONAL" | string;
+  platformUsage: AssetPlatformUsage;
   operabilityStatus: OperabilityStatus;
   blockReason?: string | null;
   activeMaintenanceEventId?: string | null;

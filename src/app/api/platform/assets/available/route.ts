@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { AssetType, MonitorRunStatus, RunAssignmentStatus } from "@prisma/client";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
+import { platformAssignmentBlockingReason } from "@/lib/operability";
 
 export const runtime = "nodejs";
 
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
 
   const assets = await prisma.asset.findMany({
     where: {
+      platformUsage: { not: "HIDDEN" },
       ...(includeBlocked ? {} : { operabilityStatus: "OPERATIONAL" }),
     },
     orderBy: [{ name: "asc" }],
@@ -75,6 +77,7 @@ export async function GET(req: NextRequest) {
       name: true,
       code: true,
       type: true,
+      platformUsage: true,
       model: true,
       year: true,
       plate: true,
@@ -116,15 +119,11 @@ export async function GET(req: NextRequest) {
   });
 
   const rows = assets.map((a) => {
-    let blockReason: string | null = null;
-
-    if (a.maintenanceEvents?.[0]) {
-      blockReason = "Evento mecánico abierto";
-    } else if (a.incidents?.[0]) {
-      blockReason = "Incidencia abierta de plataforma";
-    } else if (a.operabilityStatus && a.operabilityStatus !== "OPERATIONAL") {
-      blockReason = "Bloqueada por operatividad";
-    }
+    const blockReason = platformAssignmentBlockingReason({
+      operabilityStatus: a.operabilityStatus,
+      hasOpenMaintenanceEvent: Boolean(a.maintenanceEvents?.[0]),
+      hasOpenIncident: Boolean(a.incidents?.[0]),
+    });
 
     const activeMaintenanceEventId = a.maintenanceEvents?.[0]?.id ?? null;
     const activeIncidentId = a.incidents?.[0]?.id ?? null;

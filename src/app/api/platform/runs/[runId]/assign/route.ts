@@ -2,7 +2,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { isOperableStatus, operabilityBlockingReason } from "@/lib/operability";
+import { platformAssignmentBlockingReason } from "@/lib/operability";
+import { assetCompatibilityReason, isAssetCompatibleWithServiceCategory } from "@/lib/platform-resource-compat";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import {
   MonitorRunKind,
@@ -100,6 +101,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
               id: true,
               status: true,
               option: { select: { durationMinutes: true } },
+              service: { select: { category: true, name: true } },
             },
           },
         },
@@ -133,6 +135,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
             id: true,
             operabilityStatus: true,
             status: true,
+            maintenanceEvents: {
+              where: { status: { in: ["OPEN", "IN_PROGRESS", "EXTERNAL"] } },
+              select: { id: true },
+              take: 1,
+            },
+            incidents: {
+              where: { isOpen: true },
+              select: { id: true },
+              take: 1,
+            },
           },
         });
 
@@ -140,11 +152,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           throw new Error("La moto no existe");
         }
 
-        if (!isOperableStatus(jetski.operabilityStatus)) {
-          throw new Error(
-            operabilityBlockingReason(jetski.operabilityStatus) ??
-              "La moto no está operativa"
-          );
+        const blockReason = platformAssignmentBlockingReason({
+          operabilityStatus: jetski.operabilityStatus,
+          hasOpenMaintenanceEvent: Boolean(jetski.maintenanceEvents?.[0]),
+          hasOpenIncident: Boolean(jetski.incidents?.[0]),
+        });
+
+        if (blockReason) {
+          throw new Error(blockReason);
         }
 
         if (unit.jetskiId && unit.jetskiId !== b.jetskiId) {
@@ -217,8 +232,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           where: { id: b.assetId },
           select: {
             id: true,
+            type: true,
             operabilityStatus: true,
             status: true,
+            maintenanceEvents: {
+              where: { status: { in: ["OPEN", "IN_PROGRESS", "EXTERNAL"] } },
+              select: { id: true },
+              take: 1,
+            },
+            incidents: {
+              where: { isOpen: true },
+              select: { id: true },
+              take: 1,
+            },
           },
         });
 
@@ -226,11 +252,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           throw new Error("Asset no existe");
         }
 
-        if (!isOperableStatus(asset.operabilityStatus)) {
+        if (
+          !isAssetCompatibleWithServiceCategory({
+            assetType: asset.type,
+            serviceCategory: unit.reservation.service?.category ?? null,
+          })
+        ) {
           throw new Error(
-            operabilityBlockingReason(asset.operabilityStatus) ??
-              "El recurso no está operativa"
+            assetCompatibilityReason(unit.reservation.service?.category ?? null) ??
+              `El recurso no es compatible con ${unit.reservation.service?.name ?? "este servicio"}.`
           );
+        }
+
+        const blockReason = platformAssignmentBlockingReason({
+          operabilityStatus: asset.operabilityStatus,
+          hasOpenMaintenanceEvent: Boolean(asset.maintenanceEvents?.[0]),
+          hasOpenIncident: Boolean(asset.incidents?.[0]),
+        });
+
+        if (blockReason) {
+          throw new Error(blockReason);
         }
 
         const dup = await tx.monitorRunAssignment.findFirst({

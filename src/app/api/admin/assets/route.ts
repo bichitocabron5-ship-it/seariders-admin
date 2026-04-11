@@ -52,6 +52,7 @@ export async function GET(req: Request) {
       id: true,
       type: true,
       status: true,
+      platformUsage: true,
       name: true,
       code: true,
       model: true,
@@ -78,6 +79,7 @@ export async function GET(req: Request) {
 const CreateBody = z.object({
   type: z.nativeEnum(AssetType),
   status: z.nativeEnum(AssetStatus).optional(),
+  platformUsage: z.enum(["CUSTOMER_ASSIGNABLE", "RUN_BASE_ONLY", "HIDDEN"]).optional(),
 
   name: z.string().trim().min(1).max(80),
   code: z.string().trim().min(1).max(30).optional().nullable(),
@@ -115,6 +117,7 @@ export async function POST(req: Request) {
       data: {
         type: b.type,
         status: b.status ?? AssetStatus.OPERATIONAL,
+        platformUsage: b.platformUsage ?? "CUSTOMER_ASSIGNABLE",
 
         name: b.name,
         code: b.code ?? null,
@@ -185,6 +188,7 @@ export async function PATCH(req: Request) {
       data: {
         ...(b.type ? { type: b.type } : {}),
         ...(b.status ? { status: b.status } : {}),
+        ...(b.platformUsage ? { platformUsage: b.platformUsage } : {}),
         ...(typeof b.name === "string" ? { name: b.name } : {}),
         ...(b.code !== undefined ? { code: b.code } : {}),
         ...(b.model !== undefined ? { model: b.model } : {}),
@@ -203,6 +207,7 @@ export async function PATCH(req: Request) {
         id: true,
         type: true,
         status: true,
+        platformUsage: true,
         name: true,
         code: true,
         model: true,

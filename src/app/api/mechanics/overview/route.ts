@@ -2,8 +2,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { MaintenanceEntityType } from "@prisma/client";
-import { calcService, isServiceEventType, type ServiceState } from "@/lib/mechanics";
+import { MaintenanceEntityType, RunAssignmentStatus } from "@prisma/client";
+import {
+  applyLiveHours,
+  calcService,
+  diffHours,
+  isServiceEventType,
+  type ServiceState,
+} from "@/lib/mechanics";
 import { requireMechanicsOrAdmin } from "@/lib/mechanics-auth";
 
 export const runtime = "nodejs";
@@ -45,7 +51,7 @@ export async function GET(req: Request) {
       where: {
         OR: [
           { isMotorized: true },
-          { type: { in: ["BOAT", "TOWBOAT", "JETCAR"] } },
+          { type: { in: ["BOAT", "TOWBOAT", "JETCAR", "PARASAILING", "FLYBOARD", "TOWABLE"] } },
         ],
       },
       orderBy: [{ type: "asc" }, { name: "asc" }],
@@ -68,6 +74,54 @@ export async function GET(req: Request) {
       },
     }),
   ]);
+
+  const now = new Date();
+  const [activeJetskiAssignments, activeAssetAssignments] = await Promise.all([
+    prisma.monitorRunAssignment.findMany({
+      where: {
+        status: RunAssignmentStatus.ACTIVE,
+        endedAt: null,
+        startedAt: { not: null },
+        jetskiId: { not: null },
+      },
+      select: {
+        jetskiId: true,
+        startedAt: true,
+      },
+    }),
+    prisma.monitorRunAssignment.findMany({
+      where: {
+        status: RunAssignmentStatus.ACTIVE,
+        endedAt: null,
+        startedAt: { not: null },
+        assetId: { not: null },
+      },
+      select: {
+        assetId: true,
+        startedAt: true,
+      },
+    }),
+  ]);
+
+  const activeJetskiHoursMap = new Map<string, number>();
+  for (const assignment of activeJetskiAssignments) {
+    if (!assignment.jetskiId || !assignment.startedAt) continue;
+    activeJetskiHoursMap.set(
+      assignment.jetskiId,
+      (activeJetskiHoursMap.get(assignment.jetskiId) ?? 0) +
+        diffHours(assignment.startedAt, now)
+    );
+  }
+
+  const activeAssetHoursMap = new Map<string, number>();
+  for (const assignment of activeAssetAssignments) {
+    if (!assignment.assetId || !assignment.startedAt) continue;
+    activeAssetHoursMap.set(
+      assignment.assetId,
+      (activeAssetHoursMap.get(assignment.assetId) ?? 0) +
+        diffHours(assignment.startedAt, now)
+    );
+  }
 
   const [lastJetskiEvents, lastAssetEvents] = await Promise.all([
     prisma.maintenanceEvent.findMany({
@@ -127,9 +181,13 @@ export async function GET(req: Request) {
   const jetskiOut = jetskis.map((j) => {
     const lastEvt = lastJetskiMap.get(j.id) ?? null;
     const lastServiceHoursEffective = lastEvt?.hoursAtService ?? (j.lastServiceHours ?? null);
+    const currentHoursEffective = applyLiveHours(
+      j.currentHours ?? null,
+      activeJetskiHoursMap.get(j.id) ?? 0
+    );
 
     const svc = calcService({
-      currentHours: j.currentHours ?? null,
+      currentHours: currentHoursEffective,
       lastServiceHours: lastServiceHoursEffective,
       serviceIntervalHours: Number(j.serviceIntervalHours ?? 85),
       serviceWarnHours: Number(j.serviceWarnHours ?? 70),
@@ -137,6 +195,7 @@ export async function GET(req: Request) {
 
     return {
       ...j,
+      currentHours: currentHoursEffective,
       lastServiceEventAt: lastEvt?.createdAt ?? null,
       lastServiceEventType: lastEvt?.type ?? null,
       lastServiceHoursEffective,
@@ -147,9 +206,13 @@ export async function GET(req: Request) {
   const assetOut = assets.map((a) => {
     const lastEvt = lastAssetMap.get(a.id) ?? null;
     const lastServiceHoursEffective = lastEvt?.hoursAtService ?? (a.lastServiceHours ?? null);
+    const currentHoursEffective = applyLiveHours(
+      a.currentHours ?? null,
+      activeAssetHoursMap.get(a.id) ?? 0
+    );
 
     const svc = calcService({
-      currentHours: a.currentHours ?? null,
+      currentHours: currentHoursEffective,
       lastServiceHours: lastServiceHoursEffective,
       serviceIntervalHours: Number(a.serviceIntervalHours ?? 85),
       serviceWarnHours: Number(a.serviceWarnHours ?? 70),
@@ -157,6 +220,7 @@ export async function GET(req: Request) {
 
     return {
       ...a,
+      currentHours: currentHoursEffective,
       lastServiceEventAt: lastEvt?.createdAt ?? null,
       lastServiceEventType: lastEvt?.type ?? null,
       lastServiceHoursEffective,

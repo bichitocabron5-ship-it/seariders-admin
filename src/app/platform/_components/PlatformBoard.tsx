@@ -14,6 +14,7 @@ import type {
   RunOpen,
 } from "../types/types";
 import { operabilityBadgeStyle, operabilityLabel } from "@/lib/operability-ui";
+import { isAssetCompatibleWithServiceCategory } from "@/lib/platform-resource-compat";
 import { opsStyles } from "@/components/ops-ui";
 import PlatformAssignModal from "./PlatformAssignModal";
 import PlatformAssignmentActionsModal from "./PlatformAssignmentActionsModal";
@@ -329,6 +330,18 @@ export default function PlatformBoard(props: Props) {
         (a) =>
           a.id &&
           !busyAssets.has(a.id) &&
+          a.platformUsage === "CUSTOMER_ASSIGNABLE" &&
+          a.operabilityStatus === "OPERATIONAL"
+      ),
+    [assets, busyAssets]
+  );
+  const runBaseAssets = useMemo(
+    () =>
+      assets.filter(
+        (a) =>
+          a.id &&
+          !busyAssets.has(a.id) &&
+          a.platformUsage !== "HIDDEN" &&
           a.operabilityStatus === "OPERATIONAL"
       ),
     [assets, busyAssets]
@@ -364,11 +377,18 @@ export default function PlatformBoard(props: Props) {
             id: jetski.id,
             label: `Moto ${jetski.number || "-"}`,
           }))
-        : assignableAssets.map((asset) => ({
-            id: asset.id,
-            label: asset.name,
-          })),
-    [assignableAssets, assignableJetskis, kind]
+        : assignableAssets
+            .filter((asset) =>
+              isAssetCompatibleWithServiceCategory({
+                assetType: asset.type,
+                serviceCategory: assignTarget?.category ?? null,
+              })
+            )
+            .map((asset) => ({
+              id: asset.id,
+              label: `${asset.name} · ${asset.type}`,
+            })),
+    [assignTarget?.category, assignableAssets, assignableJetskis, kind]
   );
   const radarItems = useMemo(
     () =>
@@ -405,13 +425,22 @@ export default function PlatformBoard(props: Props) {
           })
         : assets.map((asset) => {
             const busy = busyAssets.has(asset.id);
-            const assignable = !busy && asset.operabilityStatus === "OPERATIONAL";
+            const assignable =
+              !busy &&
+              asset.operabilityStatus === "OPERATIONAL" &&
+              asset.platformUsage === "CUSTOMER_ASSIGNABLE";
+            const usageBlockedLabel =
+              asset.platformUsage === "RUN_BASE_ONLY"
+                ? "Solo base de salida"
+                : asset.platformUsage === "HIDDEN"
+                  ? "Oculto en Platform"
+                  : null;
 
             return {
               id: asset.id,
               title: asset.name,
-              subtitle: !assignable ? (busy ? "En uso / salida activa" : asset.blockReason || "No asignable") : null,
-              titleHint: assignable ? "Asignable" : busy ? "Ocupado en salida" : "Bloqueado por mecánica",
+              subtitle: !assignable ? (busy ? "En uso / salida activa" : usageBlockedLabel || asset.blockReason || "No asignable") : null,
+              titleHint: assignable ? "Asignable" : busy ? "Ocupado en salida" : usageBlockedLabel || "Bloqueado por mecánica",
               stateLabel: radarStateLabel({
                 operabilityStatus: asset.operabilityStatus,
                 busy,
@@ -420,7 +449,7 @@ export default function PlatformBoard(props: Props) {
                 operabilityStatus: asset.operabilityStatus,
                 busy,
               }),
-              availabilityLabel: assignable ? "Asignable" : busy ? "En uso" : "No asignable",
+              availabilityLabel: assignable ? "Asignable" : busy ? "En uso" : usageBlockedLabel || "No asignable",
               availabilityActive: assignable,
               detailHref: !assignable ? mechanicsDetailHref({ kind, assetId: asset.id }) : null,
               eventHref:
@@ -444,9 +473,9 @@ export default function PlatformBoard(props: Props) {
     }).length;
   }, [queue, now]);
 
-  useEffect(() => { if (createRunResourceId === NO_RESOURCE_SELECTED) return; const exists = kind === "JETSKI" ? jetskis.some((j) => j.id === createRunResourceId) : assets.some((a) => a.id === createRunResourceId); if (!exists) setCreateRunResourceId(NO_RESOURCE_SELECTED); }, [kind, jetskis, assets, createRunResourceId]);
-  useEffect(() => { if (kind === "NAUTICA" && createRunResourceId === NO_RESOURCE_SELECTED && assets.length > 0) setCreateRunResourceId(assets[0].id); }, [kind, assets, createRunResourceId]);
-  function openAssign(item: QueueItem) { setAssignTarget(item); setAssignOpen(true); setAssignError(null); const suggestedRun = getSuggestedRunForQueueItem(item, readyRuns); setAssignRunId(suggestedRun?.id || ""); const free = kind === "JETSKI" ? assignableJetskis[0] : assignableAssets[0]; setAssignResourceId(free?.id || ""); }
+  useEffect(() => { if (createRunResourceId === NO_RESOURCE_SELECTED) return; const exists = kind === "JETSKI" ? assignableJetskis.some((j) => j.id === createRunResourceId) : runBaseAssets.some((a) => a.id === createRunResourceId); if (!exists) setCreateRunResourceId(NO_RESOURCE_SELECTED); }, [kind, assignableJetskis, runBaseAssets, createRunResourceId]);
+  useEffect(() => { if (kind === "NAUTICA" && createRunResourceId === NO_RESOURCE_SELECTED && runBaseAssets.length > 0) setCreateRunResourceId(runBaseAssets[0].id); }, [kind, runBaseAssets, createRunResourceId]);
+  function openAssign(item: QueueItem) { setAssignTarget(item); setAssignOpen(true); setAssignError(null); const suggestedRun = getSuggestedRunForQueueItem(item, readyRuns); setAssignRunId(suggestedRun?.id || ""); const free = kind === "JETSKI" ? assignableJetskis[0] : assignableAssets.find((asset) => isAssetCompatibleWithServiceCategory({ assetType: asset.type, serviceCategory: item.category ?? null })); setAssignResourceId(free?.id || ""); }
   async function doAssign() {
     if (!assignTarget) return; setAssignError(null); if (!assignRunId) return setAssignError("Selecciona un monitor o salida."); if (!assignResourceId) return setAssignError(kind === "JETSKI" ? "Selecciona una moto." : "Selecciona un recurso.");
     setAssignBusy(true);
@@ -599,14 +628,14 @@ export default function PlatformBoard(props: Props) {
                 <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Modo<select value={createRunMode} onChange={(e) => setCreateRunMode(e.target.value as MonitorRunMode)} style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4" }}><option value="MONITOR">Con monitor</option><option value="SOLO">Sin monitor</option><option value="TEST">Modo prueba</option></select></label>
                 {createRunMode === "MONITOR" ? <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Monitor<select value={createRunMonitorId} onChange={(e) => setCreateRunMonitorId(e.target.value)} style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4" }}><option value="">Selecciona...</option>{monitors.map((m: MonitorLite) => <option key={m.id} value={m.id}>{m.name} | cap {m.maxCapacity || 4}</option>)}</select></label> : <div style={{ display: "grid", gap: 6, fontSize: 13 }}><div>Modo seleccionado</div><div style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", fontWeight: 900 }}>{runModeLabel(createRunMode)}</div></div>}
                 <select ref={createRunResourceSelectRef} value={createRunResourceId} onChange={(e) => setCreateRunResourceId(e.target.value)} style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4" }}><option value={NO_RESOURCE_SELECTED}>{kind === "JETSKI" ? "Sin moto fija" : "Selecciona recurso..."}</option>{kind === "JETSKI"
-                  ? jetskis.map((j) => (
+                  ? assignableJetskis.map((j) => (
                       <option key={j.id} value={j.id}>
                         {`Moto ${j.number ?? "-"}`}
                       </option>
                     ))
-                  : assets.map((a) => (
+                  : runBaseAssets.map((a) => (
                       <option key={a.id} value={a.id}>
-                        {a.name}
+                        {`${a.name}${a.platformUsage === "RUN_BASE_ONLY" ? " · SOLO BASE" : ""}`}
                       </option>
                     ))}</select>
                 <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Nota opcional<input value={createRunNote} onChange={(e) => setCreateRunNote(e.target.value)} placeholder={createRunMode === "TEST" ? "Ej: prueba tras reparación / revisión..." : createRunMode === "SOLO" ? "Ej: licencia sin monitor..." : "Ej: grupo escuela / incidencia previa..."} style={{ padding: 12, borderRadius: 12, border: "1px solid #d0d9e4" }} /></label>

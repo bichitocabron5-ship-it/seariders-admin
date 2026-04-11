@@ -8,7 +8,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import type { Prisma } from "@prisma/client";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { computeRequiredContractUnits, computeRequiredPlatformUnits } from "@/lib/reservation-rules";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 
 export const runtime = "nodejs";
@@ -60,13 +60,12 @@ async function ensureUnitsTx(
   // Pack padre: la operativa vive en hijas
   if (reservation.isPackParent && !reservation.parentReservationId) return;
 
-  const requiredUnits = computeRequiredContractUnits({
+  const requiredPlatformUnits = computeRequiredPlatformUnits({
     quantity: reservation.quantity,
-    isLicense: Boolean(reservation.isLicense),
     serviceCategory: reservation.serviceCategory ?? null,
     items: reservation.items ?? [],
   });
-  if (requiredUnits <= 0) return;
+  if (requiredPlatformUnits <= 0) return;
 
   const existing = await tx.reservationUnit.findMany({
     where: { reservationId: reservation.id },
@@ -75,7 +74,7 @@ async function ensureUnitsTx(
 
   const existingSet = new Set(existing.map((u: { unitIndex: number }) => Number(u.unitIndex)));
   const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
-  for (let i = 1; i <= requiredUnits; i++) {
+  for (let i = 1; i <= requiredPlatformUnits; i++) {
     if (!existingSet.has(i)) {
       toCreate.push({
         reservationId: reservation.id,

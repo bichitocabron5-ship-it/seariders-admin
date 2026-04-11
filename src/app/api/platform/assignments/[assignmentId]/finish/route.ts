@@ -17,6 +17,7 @@ import {
 } from "@prisma/client";
 
 import { createMaintenanceEventLog } from "@/lib/mechanics-event-log";
+import { diffHours } from "@/lib/mechanics";
 
 export const runtime = "nodejs";
 
@@ -86,10 +87,6 @@ function defaultOperabilityFromIncidentLevel(
     return PlatformOperabilityStatus.MAINTENANCE;
   }
   return PlatformOperabilityStatus.OPERATIONAL;
-}
-
-function minutesToHours(minutes: number) {
-  return Math.round((minutes / 60) * 100) / 100;
 }
 
 export async function POST(
@@ -200,14 +197,24 @@ export async function POST(
         select: { id: true, status: true, endedAt: true },
       });
 
-      const hoursToAdd = minutesToHours(Number(a.durationMinutesSnapshot ?? 0));
+      const hoursToAdd =
+        a.startedAt instanceof Date
+          ? diffHours(a.startedAt, endedAt)
+          : 0;
+      const fallbackHoursToAdd =
+        hoursToAdd > 0
+          ? hoursToAdd
+          : diffHours(
+              new Date(endedAt.getTime() - Number(a.durationMinutesSnapshot ?? 0) * 60_000),
+              endedAt
+            );
       const nextJetskiCurrentHours =
         a.jetski?.currentHours != null
-          ? Number(a.jetski.currentHours) + hoursToAdd
+          ? Number(a.jetski.currentHours) + fallbackHoursToAdd
           : null;
       const nextAssetCurrentHours =
         a.asset?.currentHours != null
-          ? Number(a.asset.currentHours) + hoursToAdd
+          ? Number(a.asset.currentHours) + fallbackHoursToAdd
           : null;
 
       if (a.jetskiId && nextJetskiCurrentHours != null) {

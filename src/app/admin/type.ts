@@ -9,11 +9,13 @@ export type AssetType =
   | "OTHER";
 
 export type AssetStatus = "OPERATIONAL" | "MAINTENANCE" | "DAMAGED" | "OUT_OF_SERVICE";
+export type AssetPlatformUsage = "CUSTOMER_ASSIGNABLE" | "RUN_BASE_ONLY" | "HIDDEN";
 
 export type AssetRow = {
   id: string;
   type: AssetType;
   status: AssetStatus;
+  platformUsage: AssetPlatformUsage;
 
   name: string;
   code: string | null;

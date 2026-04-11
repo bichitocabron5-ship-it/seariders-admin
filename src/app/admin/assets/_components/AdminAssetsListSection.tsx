@@ -60,6 +60,7 @@ export default function AdminAssetsListSection({
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <div style={{ fontWeight: 950, fontSize: 18 }}>{row.name}</div>
                   <span style={statusBadge(row.status)}>{row.status}</span>
+                  <span style={usageBadge(row.platformUsage)}>{usageLabel(row.platformUsage)}</span>
                 </div>
                 <div style={{ fontSize: 13, color: "#475569" }}>
                   {row.type}
@@ -100,4 +101,20 @@ function statusBadge(status: AssetStatus): React.CSSProperties {
     return { ...badgeBase, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8" };
   }
   return { ...badgeBase, border: "1px solid #fde68a", background: "#fffbeb", color: "#92400e" };
+}
+
+function usageBadge(usage: "CUSTOMER_ASSIGNABLE" | "RUN_BASE_ONLY" | "HIDDEN"): React.CSSProperties {
+  if (usage === "CUSTOMER_ASSIGNABLE") {
+    return { ...badgeBase, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534" };
+  }
+  if (usage === "RUN_BASE_ONLY") {
+    return { ...badgeBase, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8" };
+  }
+  return { ...badgeBase, border: "1px solid #e5e7eb", background: "#f8fafc", color: "#475569" };
+}
+
+function usageLabel(usage: "CUSTOMER_ASSIGNABLE" | "RUN_BASE_ONLY" | "HIDDEN") {
+  if (usage === "CUSTOMER_ASSIGNABLE") return "Asignable";
+  if (usage === "RUN_BASE_ONLY") return "Solo base";
+  return "Oculto";
 }

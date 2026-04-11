@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AssetRow, AssetStatus, AssetType } from "@/app/admin/types";
+import type { AssetPlatformUsage, AssetRow, AssetStatus, AssetType } from "@/app/admin/types";
 
 const ASSET_TYPES: AssetType[] = ["BOAT", "TOWBOAT", "JETCAR", "PARASAILING", "FLYBOARD", "TOWABLE", "OTHER"];
 const ASSET_STATUSES: AssetStatus[] = ["OPERATIONAL", "MAINTENANCE", "DAMAGED", "OUT_OF_SERVICE"];
+const ASSET_PLATFORM_USAGES: AssetPlatformUsage[] = ["CUSTOMER_ASSIGNABLE", "RUN_BASE_ONLY", "HIDDEN"];
+const ASSET_PLATFORM_USAGE_LABEL: Record<AssetPlatformUsage, string> = {
+  CUSTOMER_ASSIGNABLE: "Asignable a clientes",
+  RUN_BASE_ONLY: "Solo base de salida",
+  HIDDEN: "Oculto en Platform",
+};
 
 type Props = {
   initial: AssetRow | null;
@@ -41,6 +47,7 @@ export default function AssetModal({
   const isEdit = !!initial;
   const [type, setType] = useState<AssetType>(initial?.type ?? "OTHER");
   const [status, setStatus] = useState<AssetStatus>(initial?.status ?? "OPERATIONAL");
+  const [platformUsage, setPlatformUsage] = useState<AssetPlatformUsage>(initial?.platformUsage ?? "CUSTOMER_ASSIGNABLE");
   const [name, setName] = useState(initial?.name ?? "");
   const [code, setCode] = useState(initial?.code ?? "");
   const [model, setModel] = useState(initial?.model ?? "");
@@ -109,6 +116,7 @@ export default function AssetModal({
         originalCode: initial?.code?.trim() || null,
         type,
         status,
+        platformUsage,
         name: name.trim(),
         code: code.trim() || null,
         model: model.trim() || null,
@@ -175,6 +183,16 @@ export default function AssetModal({
               {ASSET_STATUSES.map((assetStatus) => (
                 <option key={assetStatus} value={assetStatus}>
                   {assetStatus}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Uso en Platform">
+            <select value={platformUsage} onChange={(e) => setPlatformUsage(e.target.value as AssetPlatformUsage)} style={inputStyle}>
+              {ASSET_PLATFORM_USAGES.map((value) => (
+                <option key={value} value={value}>
+                  {ASSET_PLATFORM_USAGE_LABEL[value]}
                 </option>
               ))}
             </select>

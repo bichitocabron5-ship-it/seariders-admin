@@ -246,7 +246,7 @@ export default function MechanicsPage() {
 
   const filteredAssets = useMemo(() => {
     const base = assets.filter((a) =>
-    ["BOAT", "TOWBOAT", "JETCAR"].includes(a.type)
+    ["BOAT", "TOWBOAT", "JETCAR", "PARASAILING", "FLYBOARD", "TOWABLE"].includes(a.type)
     );
 
     const qq = q.trim().toLowerCase();
