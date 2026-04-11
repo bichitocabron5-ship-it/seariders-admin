@@ -105,3 +105,18 @@ export function buildMinorAuthorizationKey(args: {
 
   return `contracts/${yyyy}/${mm}/reservation_${args.reservationId}/minor_auth_${safeDisplayName}_${args.contractId}_${safeName}`;
 }
+
+export function buildManualReservationContractKey(args: {
+  reservationId: string;
+  displayName?: string | null;
+  fileName: string;
+  date?: Date;
+}) {
+  const d = args.date ?? new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const safeDisplayName = slugPart(args.displayName, "manual_contract");
+  const safeName = args.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+  return `contracts/${yyyy}/${mm}/reservation_${args.reservationId}/manual_signed_contract_${safeDisplayName}_${safeName}`;
+}

@@ -3,6 +3,7 @@ import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { OperationalOverrideAction, OperationalOverrideTarget } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { type AppSession, sessionOptions } from "@/lib/session";
@@ -135,7 +136,53 @@ export async function GET(req: Request) {
     },
   });
 
+  const reservationIds = rowsDb.map((reservation) => reservation.id);
+  const attachmentLogs = reservationIds.length
+    ? await prisma.operationalOverrideLog.findMany({
+        where: {
+          targetType: OperationalOverrideTarget.RESERVATION,
+          action: OperationalOverrideAction.MANUAL_RESERVATION_CREATE,
+          targetId: { in: reservationIds },
+          reason: "Adjunto contrato manual",
+        },
+        orderBy: [{ targetId: "asc" }, { createdAt: "desc" }],
+        select: {
+          targetId: true,
+          payloadJson: true,
+          createdAt: true,
+        },
+      })
+    : [];
+
+  const attachmentMap = new Map<
+    string,
+    {
+      fileKey: string | null;
+      fileUrl: string | null;
+      fileName: string | null;
+      uploadedAt: Date | null;
+    }
+  >();
+
+  for (const log of attachmentLogs) {
+    if (attachmentMap.has(log.targetId)) continue;
+    const payload =
+      log.payloadJson && typeof log.payloadJson === "object"
+        ? (log.payloadJson as Record<string, unknown>)
+        : null;
+    attachmentMap.set(log.targetId, {
+      fileKey: typeof payload?.fileKey === "string" ? payload.fileKey : null,
+      fileUrl: typeof payload?.fileUrl === "string" ? payload.fileUrl : null,
+      fileName: typeof payload?.fileName === "string" ? payload.fileName : null,
+      uploadedAt:
+        typeof payload?.uploadedAt === "string"
+          ? new Date(payload.uploadedAt)
+          : log.createdAt,
+    });
+  }
+
   const rows = rowsDb.map((reservation) => {
+    const attachment = attachmentMap.get(reservation.id);
     const paidCents = reservation.payments.reduce((sum, payment) => {
       const sign = payment.direction === "OUT" ? -1 : 1;
       return sum + sign * payment.amountCents;
@@ -173,6 +220,10 @@ export async function GET(req: Request) {
       depositHoldReason: reservation.depositHoldReason,
       isManualEntry: reservation.isManualEntry,
       manualEntryNote: reservation.manualEntryNote,
+      manualContractFileKey: attachment?.fileKey ?? null,
+      manualContractFileUrl: attachment?.fileUrl ?? null,
+      manualContractFileName: attachment?.fileName ?? null,
+      manualContractUploadedAt: attachment?.uploadedAt ?? null,
       financialAdjustmentNote: reservation.financialAdjustmentNote,
       financialAdjustedAt: reservation.financialAdjustedAt,
       source: reservation.source,

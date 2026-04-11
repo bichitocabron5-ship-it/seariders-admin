@@ -32,15 +32,27 @@ const PaymentLineSchema = z.object({
   direction: z.nativeEnum(PaymentDirection).default(PaymentDirection.IN),
 });
 
+const emptyToNull = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => {
+    if (value == null) return null;
+    if (typeof value === "string" && value.trim() === "") return null;
+    return value;
+  }, schema.nullable().optional());
+
 const Body = z.object({
   activityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  time: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  time: emptyToNull(z.string().regex(/^\d{2}:\d{2}$/)),
   status: z.nativeEnum(ReservationStatus).default(ReservationStatus.COMPLETED),
   customerName: z.string().trim().min(1),
-  customerCountry: z.string().trim().min(2).max(2).default("ES"),
-  customerPhone: z.string().trim().max(50).nullable().optional(),
-  customerEmail: z.string().trim().max(200).nullable().optional(),
-  channelId: z.string().trim().min(1).nullable().optional(),
+  customerCountry: z
+    .preprocess((value) => {
+      const text = String(value ?? "").trim().toUpperCase();
+      return text || "ES";
+    }, z.string().min(2).max(2))
+    .default("ES"),
+  customerPhone: emptyToNull(z.string().trim().max(50)),
+  customerEmail: emptyToNull(z.string().trim().max(200)),
+  channelId: emptyToNull(z.string().trim().min(1)),
   serviceId: z.string().trim().min(1),
   optionId: z.string().trim().min(1),
   quantity: z.number().int().min(1).max(20),
@@ -48,7 +60,10 @@ const Body = z.object({
   isLicense: z.boolean().default(false),
   totalPriceCents: z.number().int().min(0),
   depositCents: z.number().int().min(0).default(0),
-  note: z.string().trim().min(3).max(500),
+  note: z.preprocess((value) => {
+    const text = String(value ?? "").trim();
+    return text || "Alta manual historica";
+  }, z.string().min(1).max(500)),
   payments: z.array(PaymentLineSchema).max(12).default([]),
 });
 
@@ -58,7 +73,11 @@ export async function POST(req: Request) {
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const path = issue?.path?.length ? `${issue.path.join(".")}: ` : "";
+    return new NextResponse(`${path}${issue?.message ?? "Datos invalidos"}`, { status: 400 });
+  }
 
   const body = parsed.data;
   const tz = BUSINESS_TZ;
@@ -78,8 +97,8 @@ export async function POST(req: Request) {
   ]);
 
   if (!service) return new NextResponse("Servicio no existe", { status: 400 });
-  if (!option) return new NextResponse("Opción no existe", { status: 400 });
-  if (option.serviceId !== service.id) return new NextResponse("La opción no pertenece al servicio", { status: 400 });
+  if (!option) return new NextResponse("Opcion no existe", { status: 400 });
+  if (option.serviceId !== service.id) return new NextResponse("La opcion no pertenece al servicio", { status: 400 });
 
   try {
     const result = await prisma.$transaction(async (tx) => {

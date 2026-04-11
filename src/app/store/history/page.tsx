@@ -40,6 +40,10 @@ type HistoryRow = {
   depositHoldReason: string | null;
   isManualEntry: boolean;
   manualEntryNote: string | null;
+  manualContractFileKey: string | null;
+  manualContractFileUrl: string | null;
+  manualContractFileName: string | null;
+  manualContractUploadedAt: string | null;
   financialAdjustmentNote: string | null;
   financialAdjustedAt: string | null;
   source: string | null;
@@ -199,6 +203,7 @@ export default function StoreHistoryPage() {
   const [adjustTotalEuros, setAdjustTotalEuros] = useState("");
   const [adjustDepositEuros, setAdjustDepositEuros] = useState("");
   const [adjustNote, setAdjustNote] = useState("");
+  const [manualContractBusyId, setManualContractBusyId] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -417,6 +422,11 @@ export default function StoreHistoryPage() {
     setManualBusy(true);
     setError(null);
     try {
+      if (!manualCustomerName.trim()) throw new Error("Falta el cliente");
+      if (!manualDate) throw new Error("Falta la fecha");
+      if (!manualServiceId) throw new Error("Falta el servicio");
+      if (!manualOptionId) throw new Error("Falta la opcion");
+
       const payments = manualPayments
         .map((payment) => ({
           amountCents: centsFromEuros(payment.amountEuros),
@@ -444,7 +454,7 @@ export default function StoreHistoryPage() {
           pax: manualPax,
           totalPriceCents: centsFromEuros(manualTotalEuros),
           depositCents: centsFromEuros(manualDepositEuros),
-          note: manualNote,
+          note: manualNote.trim() || "Alta manual historica",
           payments,
         }),
       });
@@ -489,6 +499,47 @@ export default function StoreHistoryPage() {
       setError(e instanceof Error ? e.message : "No se pudo ajustar la reserva");
     } finally {
       setAdjustBusy(false);
+    }
+  }
+
+  async function uploadManualContract(row: HistoryRow, file: File) {
+    setManualContractBusyId(row.id);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+
+      const res = await fetch(`/api/admin/reservations/${row.id}/manual-contract`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "No se pudo adjuntar el contrato manual");
+    } finally {
+      setManualContractBusyId(null);
+    }
+  }
+
+  async function downloadManualContract(row: HistoryRow) {
+    setManualContractBusyId(row.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/reservations/${row.id}/manual-contract/download`, {
+        cache: "no-store",
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      if (data.url) {
+        window.open(data.url, "_blank", "noopener,noreferrer");
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "No se pudo descargar el contrato manual");
+    } finally {
+      setManualContractBusyId(null);
     }
   }
 
@@ -639,6 +690,10 @@ export default function StoreHistoryPage() {
               <Input value={manualNote} onChange={(e) => setManualNote(e.target.value)} placeholder="Ej: fallo de luz, registro omitido, venta recuperada a cierre..." />
             </label>
 
+            <div style={mutedText}>
+              Tras crear la reserva manual, verás en su fila del histórico el botón <b>Adjuntar contrato</b> para subir el escaneado.
+            </div>
+
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
               <Button onClick={() => { setManualOpen(false); resetManualForm(); }} disabled={manualBusy}>Cancelar</Button>
               <Button onClick={() => void createManualReservation()} disabled={manualBusy}>{manualBusy ? "Guardando..." : "Crear reserva manual"}</Button>
@@ -749,6 +804,9 @@ export default function StoreHistoryPage() {
         actionLink={actionLink}
         emptyState={emptyState}
         onAdjustFinancials={openAdjustment}
+        onUploadManualContract={uploadManualContract}
+        onDownloadManualContract={downloadManualContract}
+        manualContractBusyId={manualContractBusyId}
       />
     </div>
   );

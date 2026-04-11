@@ -37,6 +37,10 @@ type HistoryRow = {
   depositHoldReason: string | null;
   isManualEntry: boolean;
   manualEntryNote: string | null;
+  manualContractFileKey: string | null;
+  manualContractFileUrl: string | null;
+  manualContractFileName: string | null;
+  manualContractUploadedAt: string | null;
   financialAdjustmentNote: string | null;
   financialAdjustedAt: string | null;
   source: string | null;
@@ -80,6 +84,9 @@ type Props = {
   actionLink: CSSProperties;
   emptyState: CSSProperties;
   onAdjustFinancials: (row: HistoryRow) => void;
+  onUploadManualContract: (row: HistoryRow, file: File) => void | Promise<void>;
+  onDownloadManualContract: (row: HistoryRow) => void | Promise<void>;
+  manualContractBusyId: string | null;
 };
 
 export default function StoreHistoryResultsSection({
@@ -106,6 +113,9 @@ export default function StoreHistoryResultsSection({
   actionLink,
   emptyState,
   onAdjustFinancials,
+  onUploadManualContract,
+  onDownloadManualContract,
+  manualContractBusyId,
 }: Props) {
   if (error) return <Alert kind="error">{error}</Alert>;
 
@@ -159,6 +169,9 @@ export default function StoreHistoryResultsSection({
                         {row.isManualEntry ? (
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             <Pill bg="#fff7ed" border="#fed7aa">Reserva manual</Pill>
+                            {row.manualContractFileKey ? (
+                              <Pill bg="#ecfdf5" border="#bbf7d0">Contrato adjunto</Pill>
+                            ) : null}
                           </div>
                         ) : null}
                         <div style={mutedStack}>
@@ -174,6 +187,21 @@ export default function StoreHistoryResultsSection({
                             <strong>Devuelta</strong>
                             <div>{dt(row.arrivalAt)}</div>
                           </div>
+                          {row.manualEntryNote ? (
+                            <div>
+                              <strong>Nota manual</strong>
+                              <div>{row.manualEntryNote}</div>
+                            </div>
+                          ) : null}
+                          {row.manualContractFileName ? (
+                            <div>
+                              <strong>Contrato escaneado</strong>
+                              <div>
+                                {row.manualContractFileName}
+                                {row.manualContractUploadedAt ? ` · ${dt(row.manualContractUploadedAt)}` : ""}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </td>
@@ -330,6 +358,36 @@ export default function StoreHistoryResultsSection({
                         <button type="button" onClick={() => onAdjustFinancials(row)} style={actionLink}>
                           Ajustar importes
                         </button>
+
+                        {row.isManualEntry ? (
+                          <label style={{ ...actionLink, cursor: manualContractBusyId === row.id ? "wait" : "pointer" }}>
+                            {manualContractBusyId === row.id ? "Subiendo..." : row.manualContractFileKey ? "Reemplazar contrato" : "Adjuntar contrato"}
+                            <input
+                              type="file"
+                              accept=".pdf,image/jpeg,image/png,image/webp"
+                              style={{ display: "none" }}
+                              disabled={manualContractBusyId === row.id}
+                              onChange={(e) => {
+                                const file = e.currentTarget.files?.[0];
+                                if (file) {
+                                  void onUploadManualContract(row, file);
+                                }
+                                e.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                        ) : null}
+
+                        {row.isManualEntry && row.manualContractFileKey ? (
+                          <button
+                            type="button"
+                            onClick={() => void onDownloadManualContract(row)}
+                            style={actionLink}
+                            disabled={manualContractBusyId === row.id}
+                          >
+                            {manualContractBusyId === row.id ? "Abriendo..." : "Ver contrato"}
+                          </button>
+                        ) : null}
 
                         {row.incidents.some((incident) => incident.maintenanceEventId) ? (
                           <a
