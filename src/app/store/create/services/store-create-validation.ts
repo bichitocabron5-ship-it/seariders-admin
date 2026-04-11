@@ -5,6 +5,10 @@ import { throwValidationError } from "../utils/errors";
 export function validateBeforeSubmit(args: {
   flow: SubmitFlow;
   customerName: string;
+  customerCountry: string;
+  customerAddress: string;
+  customerDocType: string;
+  customerDocNumber: string;
   quantity: number;
   pax: number;
   isVoucherFormalizeFlow: boolean;
@@ -20,6 +24,10 @@ export function validateBeforeSubmit(args: {
   const {
     flow,
     customerName,
+    customerCountry,
+    customerAddress,
+    customerDocType,
+    customerDocNumber,
     quantity,
     pax,
     isVoucherFormalizeFlow,
@@ -34,6 +42,9 @@ export function validateBeforeSubmit(args: {
   } = args;
 
   if (!customerName.trim()) throwValidationError("Nombre requerido");
+  if (!customerAddress.trim()) throwValidationError("Dirección requerida");
+  if (!customerCountry.trim()) throwValidationError("País requerido");
+  if (!customerDocType.trim() || !customerDocNumber.trim()) throwValidationError("Documento requerido");
   if (Number(quantity) < 1) throwValidationError("Cantidad inválida");
   if (Number(pax) < 1) throwValidationError("PAX inválido");
 

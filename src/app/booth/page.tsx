@@ -214,7 +214,6 @@ export default function Booth() {
 
   // form
   const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
   const [customerCountry, setCustomerCountry] = useState("ES");
   const [serviceId, setServiceId] = useState("");
   const [optionId, setOptionId] = useState("");
@@ -412,7 +411,7 @@ useEffect(() => {
   async function createPre(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const customerName = `${String(firstName ?? "").trim()} ${String(lastName ?? "").trim()}`.trim();
+    const customerName = String(firstName ?? "").trim();
     if (!customerName) {
       setError("Nombre requerido");
       return;
@@ -442,7 +441,6 @@ useEffect(() => {
     alert(`Creada. Código: ${j.boothCode}`);
 
     setFirstName("");
-    setLastName("");
     setQuantity(1);
     setPax(2);
     setDiscountEuros("");
@@ -663,7 +661,6 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             darkBtn={darkBtn}
             fieldStyle={fieldStyle}
             firstName={firstName}
-            lastName={lastName}
             customerCountry={customerCountry}
             serviceId={serviceId}
             optionId={optionId}
@@ -687,7 +684,6 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             euros={euros}
             onSubmit={createPre}
             setFirstName={setFirstName}
-            setLastName={setLastName}
             setCustomerCountry={setCustomerCountry}
             setServiceId={setServiceId}
             setOptionId={setOptionId}

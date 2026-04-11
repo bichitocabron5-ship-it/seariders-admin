@@ -113,6 +113,7 @@ export function PricingSection({
   shownDiscountCents,
   shownBaseCents,
   shownReason,
+  channelPricingSummary,
   availablePromos,
   applyPromo,
   selectedPromoCode,
@@ -123,8 +124,8 @@ export function PricingSection({
   canEditPricing: boolean;
   shownFinalCents: number;
   maxManualDiscountCents: number;
-  manualDiscountEuros: number;
-  onManualDiscountEurosChange: (value: number) => void;
+  manualDiscountEuros: string;
+  onManualDiscountEurosChange: (value: string) => void;
   manualDiscountReason: string;
   onManualDiscountReasonChange: (value: string) => void;
   shownFinalCentsWithManual: number;
@@ -132,6 +133,12 @@ export function PricingSection({
   shownDiscountCents: number;
   shownBaseCents: number;
   shownReason: string;
+  channelPricingSummary?: {
+    channelName: string;
+    basePriceCents: number;
+    referencePriceCents: number;
+    optionLabel: string;
+  } | null;
   availablePromos: Array<{ code: string | null; name: string; discountCents: number }>;
   applyPromo: boolean;
   selectedPromoCode: string;
@@ -189,11 +196,10 @@ export function PricingSection({
                 Descuento manual opcional. Máximo {euros(maxManualDiscountCents)} (30%)
               </div>
               <input
-                type="number"
-                min={0}
-                step={1}
+                type="text"
+                inputMode="decimal"
                 value={manualDiscountEuros}
-                onChange={(e) => onManualDiscountEurosChange(Number(e.target.value || 0))}
+                onChange={(e) => onManualDiscountEurosChange(e.target.value)}
                 style={inputStyle}
                 placeholder="0"
               />
@@ -227,6 +233,17 @@ export function PricingSection({
       ) : (
         <div style={{ fontSize: 12, color: "#64748b" }}>Sin descuento automático.</div>
       )}
+
+      {channelPricingSummary ? (
+        <div style={{ padding: 12, borderRadius: 14, background: "#fff7ed", border: "1px solid #fed7aa", fontSize: 13, color: "#7c2d12", display: "grid", gap: 6 }}>
+          <div style={{ fontWeight: 900 }}>Canal {channelPricingSummary.channelName}: PVP comercial configurado</div>
+          <div>
+            {channelPricingSummary.optionLabel}: Admin/precios <strong>{euros(channelPricingSummary.basePriceCents)}</strong> ·
+            PVP canal <strong>{euros(channelPricingSummary.referencePriceCents)}</strong>
+          </div>
+          <div>Resumen solo informativo para comisiones. No modifica el cobro ni el precio final de la reserva.</div>
+        </div>
+      ) : null}
     </section>
   );
 }

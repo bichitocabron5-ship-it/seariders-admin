@@ -12,7 +12,6 @@ type Props = {
   darkBtn: React.CSSProperties;
   fieldStyle: React.CSSProperties;
   firstName: string;
-  lastName: string;
   customerCountry: string;
   serviceId: string;
   optionId: string;
@@ -36,7 +35,6 @@ type Props = {
   euros: (cents: number) => string;
   onSubmit: (e: React.FormEvent) => void | Promise<void>;
   setFirstName: (value: string) => void;
-  setLastName: (value: string) => void;
   setCustomerCountry: (value: string) => void;
   setServiceId: (value: string) => void;
   setOptionId: (value: string) => void;
@@ -52,7 +50,6 @@ export default function BoothPreReservationFormSection({
   darkBtn,
   fieldStyle,
   firstName,
-  lastName,
   customerCountry,
   serviceId,
   optionId,
@@ -76,7 +73,6 @@ export default function BoothPreReservationFormSection({
   euros,
   onSubmit,
   setFirstName,
-  setLastName,
   setCustomerCountry,
   setServiceId,
   setOptionId,
@@ -100,10 +96,6 @@ export default function BoothPreReservationFormSection({
           <label>
             Nombre
             <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required style={fieldStyle} />
-          </label>
-          <label>
-            Apellidos
-            <input value={lastName} onChange={(e) => setLastName(e.target.value)} required style={fieldStyle} />
           </label>
         </div>
 
@@ -194,9 +186,10 @@ export default function BoothPreReservationFormSection({
         <label>
           Descuento opcional (EUR)
           <input
+            inputMode="decimal"
             value={discountEuros}
             onChange={(e) => setDiscountEuros(e.target.value)}
-            placeholder="0"
+            placeholder="0.00"
             style={fieldStyle}
           />
         </label>

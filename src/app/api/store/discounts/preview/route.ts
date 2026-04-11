@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { computeAutoDiscountDetail, listPromotionOptions, type DiscountItem } from "@/lib/discounts";
 
 export const runtime = "nodejs";
@@ -40,6 +41,14 @@ function fmtHM(min: number | null) {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return `${pad2(h)}:${pad2(m)}`;
+}
+
+function isMissingChannelOptionPriceTable(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2021" &&
+    String(error.meta?.modelName ?? "") === "ChannelOptionPrice"
+  );
 }
 
 export async function POST(req: Request) {
@@ -85,7 +94,7 @@ export async function POST(req: Request) {
     const channel = channelId
       ? await prisma.channel.findUnique({
           where: { id: channelId },
-          select: { allowsPromotions: true },
+          select: { id: true, name: true, allowsPromotions: true },
         })
       : null;
     const promotionsEnabled = channel ? Boolean(channel.allowsPromotions) : true;
@@ -125,6 +134,21 @@ export async function POST(req: Request) {
     const autoDiscountCents = Number(detail.discountCents || 0);
     const finalTotalCents = Math.max(0, baseTotalCents - autoDiscountCents);
 
+    const channelOptionPrice = channel
+      ? await prisma.channelOptionPrice.findUnique({
+          where: {
+            channelId_optionId: {
+              channelId: channel.id,
+              optionId,
+            },
+          },
+          select: { priceCents: true, isActive: true },
+        }).catch((error: unknown) => {
+          if (isMissingChannelOptionPriceTable(error)) return null;
+          throw error;
+        })
+      : null;
+
     const start = fmtHM(detail.rule?.startTimeMin ?? null);
     const end = fmtHM(detail.rule?.endTimeMin ?? null);
 
@@ -145,6 +169,15 @@ export async function POST(req: Request) {
       autoDiscountCents,
       finalTotalCents,
       reason,
+      channelPricingSummary:
+        channel && channelOptionPrice?.isActive
+          ? {
+              channelName: channel.name,
+              basePriceCents: baseTotalCents,
+              referencePriceCents: Number(channelOptionPrice.priceCents ?? 0) * quantity,
+              optionLabel: `${opt.durationMinutes} min · ${parsed.data.pax} pax`,
+            }
+          : null,
       availablePromos: availablePromos.map((promo) => ({
         code: promo.code,
         name: promo.name,

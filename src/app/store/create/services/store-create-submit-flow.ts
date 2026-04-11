@@ -51,6 +51,10 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
   validateBeforeSubmit({
     flow: "EDIT",
     customerName: args.customerName,
+    customerCountry: args.customerCountry,
+    customerAddress: args.customerAddress,
+    customerDocType: args.customerDocType,
+    customerDocNumber: args.customerDocNumber,
     quantity: args.quantity,
     pax: args.pax,
     isVoucherFormalizeFlow: args.isVoucherFormalizeFlow,
@@ -106,6 +110,9 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
   customerPhone: string;
   customerEmail: string;
   customerCountry: string;
+  customerAddress: string;
+  customerDocType: string;
+  customerDocNumber: string;
   marketingSource: string;
   companions: number;
   timeStr: string;
@@ -114,6 +121,10 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
   validateBeforeSubmit({
     flow: "MIGRATE",
     customerName: args.customerName,
+    customerCountry: args.customerCountry,
+    customerAddress: args.customerAddress,
+    customerDocType: args.customerDocType,
+    customerDocNumber: args.customerDocNumber,
     quantity: args.quantity,
     pax: args.pax,
     isVoucherFormalizeFlow: args.isVoucherFormalizeFlow,
@@ -132,6 +143,9 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
     customerPhone: args.customerPhone,
     customerEmail: args.customerEmail,
     customerCountry: args.customerCountry,
+    customerAddress: args.customerAddress,
+    customerDocType: args.customerDocType,
+    customerDocNumber: args.customerDocNumber,
     marketingSource: args.marketingSource,
     isVoucherFormalizeFlow: args.isVoucherFormalizeFlow,
     serviceId: args.serviceId,
@@ -181,6 +195,10 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
   validateBeforeSubmit({
     flow: "CREATE",
     customerName: args.customerName,
+    customerCountry: args.customerCountry,
+    customerAddress: args.customerAddress,
+    customerDocType: args.customerDocType,
+    customerDocNumber: args.customerDocNumber,
     quantity: args.quantity,
     pax: args.pax,
     isVoucherFormalizeFlow: args.isVoucherFormalizeFlow,

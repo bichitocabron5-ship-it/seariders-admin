@@ -187,6 +187,12 @@ export type DiscountPreview = {
   autoDiscountCents: number;
   finalTotalCents: number;
   reason?: string | null;
+  channelPricingSummary?: {
+    channelName: string;
+    basePriceCents: number;
+    referencePriceCents: number;
+    optionLabel: string;
+  } | null;
   availablePromos?: DiscountPromoChoice[];
   appliedRule?: { id: string; name: string; code: string | null } | null;
 };

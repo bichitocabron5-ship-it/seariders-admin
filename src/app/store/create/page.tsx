@@ -96,7 +96,7 @@ function StoreCreatePageInner() {
   const [customerDocNumber, setCustomerDocNumber] = useState("");
   const [marketingSource, setMarketingSource] = useState("");
 
-  const [manualDiscountEuros, setManualDiscountEuros] = useState<number>(0);
+  const [manualDiscountEuros, setManualDiscountEuros] = useState<string>("");
   const [manualDiscountReason, setManualDiscountReason] = useState<string>("");
   const [selectedPromoCode, setSelectedPromoCode] = useState("");
   const [applyPromo, setApplyPromo] = useState(false);
@@ -525,19 +525,24 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     return needsContractForCategory(selectedCategory, false);
   }, [selectedCategory]);
 
-  const phoneRequired = isFormalizeMode || (!isMigrateMode && !isEditMode);
-  const formalizeAllRequired = isFormalizeMode && formalizeNeedsFullData;
+  const customerCountryRequired = isCreateMode || (isFormalizeMode && formalizeNeedsFullData);
+  const customerAddressRequired = isCreateMode || isFormalizeMode;
+  const customerDocumentRequired = isCreateMode || isFormalizeMode;
 
   const requiredCreateMissing =
-    isCreateMode && (!customerName.trim() || !customerPhone.trim());
+    isCreateMode &&
+    (!customerName.trim() ||
+      !customerAddress.trim() ||
+      !customerCountry.trim() ||
+      !customerDocType.trim() ||
+      !customerDocNumber.trim());
 
   const requiredFormalizeMissing = isFormalizeMode && (
     !customerName.trim() ||
-    !customerPhone.trim() ||
-    (formalizeAllRequired && (
-      !customerEmail.trim() ||
-      !customerCountry.trim()
-    ))
+    !customerAddress.trim() ||
+    !customerCountry.trim() ||
+    !customerDocType.trim() ||
+    !customerDocNumber.trim()
   );
   const contractsReadyForFormalize =
     !isMigrateMode || requiredUnits <= 0 || readyCount >= requiredUnits;
@@ -550,11 +555,9 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         : isFormalizeMode && !contractsReadyForFormalize
           ? `Faltan contratos por completar: ${readyCount}/${requiredUnits} listos.`
         : requiredFormalizeMissing
-          ? (formalizeAllRequired
-              ? "Para formalizar con contrato faltan datos básicos del cliente (teléfono, email y país). Los datos legales se completan en contratos."
-              : "Para formalizar faltan datos mínimos (nombre y teléfono).")
+          ? "Para formalizar faltan datos mínimos (nombre, dirección, país y documento)."
           : requiredCreateMissing
-            ? "Para crear faltan datos mínimos (nombre y teléfono)."
+            ? "Para crear faltan datos mínimos (nombre, dirección, país y documento)."
             : (isCreateMode && !canCreate)
               ? "Esta opción no tiene precio vigente."
               : null;
@@ -587,7 +590,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   const MANUAL_DISC_MAX_PCT = 30;
   const maxManualDiscountCents = Math.floor((shownBaseCents * MANUAL_DISC_MAX_PCT) / 100);
 
-  const manualDiscountCentsRaw = Math.round(Number(manualDiscountEuros || 0) * 100);
+  const manualDiscountCentsRaw = Math.round(Number(String(manualDiscountEuros || "").replace(",", ".")) * 100) || 0;
   const manualDiscountCents = Math.max(0, Math.min(manualDiscountCentsRaw, maxManualDiscountCents));
   const shownFinalCentsWithManual = canEditPricing
     ? Math.max(0, shownFinalCents - manualDiscountCents)
@@ -760,6 +763,9 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           customerPhone,
           customerEmail,
           customerCountry,
+          customerAddress,
+          customerDocType,
+          customerDocNumber,
           marketingSource,
           companions,
           timeStr,
@@ -848,7 +854,10 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       customerPhone,
       customerEmail,
       customerCountry,
+      customerAddress,
       customerPostalCode,
+      customerDocType,
+      customerDocNumber,
       marketingSource,
       category,
       serviceId,
@@ -860,8 +869,9 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     },
     flags: {
       isEditMode,
-      phoneRequired,
-      formalizeAllRequired,
+      customerCountryRequired,
+      customerAddressRequired,
+      customerDocumentRequired,
       isVoucherFormalizeFlow,
       selectedCategory,
     },
@@ -1161,6 +1171,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             shownDiscountCents={shownDiscountCents}
             shownBaseCents={shownBaseCents}
             shownReason={shownReason ?? ""}
+            channelPricingSummary={discountPreview?.channelPricingSummary ?? null}
             availablePromos={canEditPricing ? (discountPreview?.availablePromos ?? []) : []}
             applyPromo={applyPromo}
             selectedPromoCode={selectedPromoCode}

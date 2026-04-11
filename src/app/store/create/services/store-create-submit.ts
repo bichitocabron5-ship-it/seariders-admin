@@ -94,6 +94,9 @@ export function buildFormalizeBody(args: {
   customerPhone: string;
   customerEmail: string;
   customerCountry: string;
+  customerAddress: string;
+  customerDocType: string;
+  customerDocNumber: string;
   marketingSource: string;
   isVoucherFormalizeFlow: boolean;
   serviceId: string;
@@ -110,6 +113,9 @@ export function buildFormalizeBody(args: {
     customerPhone: args.customerPhone.trim(),
     customerEmail: args.customerEmail.trim(),
     customerCountry: (args.customerCountry || "").trim().toUpperCase() || null,
+    customerAddress: args.customerAddress.trim() || null,
+    customerDocType: args.customerDocType.trim() || null,
+    customerDocNumber: args.customerDocNumber.trim() || null,
     marketing: args.marketingSource.trim() || null,
     serviceId: args.isVoucherFormalizeFlow ? undefined : args.serviceId,
     optionId: args.isVoucherFormalizeFlow ? undefined : args.optionId,

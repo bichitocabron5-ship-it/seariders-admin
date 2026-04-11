@@ -44,7 +44,10 @@ export type ReservationBasicsSectionProps = {
     customerPhone: string;
     customerEmail: string;
     customerCountry: string;
+    customerAddress: string;
     customerPostalCode: string;
+    customerDocType: string;
+    customerDocNumber: string;
     marketingSource: string;
     category: string;
     serviceId: string;
@@ -56,8 +59,9 @@ export type ReservationBasicsSectionProps = {
   };
   flags: {
     isEditMode: boolean;
-    phoneRequired: boolean;
-    formalizeAllRequired: boolean;
+    customerCountryRequired: boolean;
+    customerAddressRequired: boolean;
+    customerDocumentRequired: boolean;
     isVoucherFormalizeFlow: boolean;
     selectedCategory: string;
   };
@@ -77,7 +81,10 @@ export type ReservationBasicsSectionProps = {
     onCustomerPhoneChange: (value: string) => void;
     onCustomerEmailChange: (value: string) => void;
     onCustomerCountryChange: (value: string) => void;
+    onCustomerAddressChange: (value: string) => void;
     onCustomerPostalCodeChange: (value: string) => void;
+    onCustomerDocTypeChange: (value: string) => void;
+    onCustomerDocNumberChange: (value: string) => void;
     onMarketingSourceChange: (value: string) => void;
     onCategoryChange: (value: string) => void;
     onServiceChange: (value: string) => void;
@@ -144,29 +151,27 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
               </label>
 
               <label style={labelStyle}>
-                <span>Teléfono {flags.phoneRequired ? "*" : "(opcional)"}</span>
+                <span>Teléfono (opcional)</span>
                 <input
                   value={values.customerPhone}
                   onChange={(e) => handlers.onCustomerPhoneChange(e.target.value)}
-                  required={flags.phoneRequired}
                   style={inputStyle}
                   placeholder="Ej: +34 6xx xxx xxx"
                 />
               </label>
 
               <label style={labelStyle}>
-                <span>Email {flags.formalizeAllRequired ? "*" : "(opcional)"}</span>
+                <span>Email (opcional)</span>
                 <input
                   value={values.customerEmail}
                   onChange={(e) => handlers.onCustomerEmailChange(e.target.value)}
-                  required={flags.formalizeAllRequired}
                   style={inputStyle}
                   placeholder="cliente@email.com"
                 />
               </label>
 
               <div style={{ ...labelStyle, ...fullRow }}>
-                <span>País {flags.formalizeAllRequired ? "*" : "(opcional)"}</span>
+                <span>País {flags.customerCountryRequired ? "*" : "(opcional)"}</span>
                 <Select<CountryOption, false>
                   instanceId="customer-country"
                   inputId="customer-country"
@@ -175,13 +180,24 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                   onChange={(opt) => handlers.onCustomerCountryChange((opt?.value ?? "").toUpperCase())}
                   placeholder="Escribe para buscar..."
                 />
-                {flags.formalizeAllRequired && !values.customerCountry ? (
+                {flags.customerCountryRequired && !values.customerCountry ? (
                   <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 700 }}>Selecciona un país.</div>
                 ) : null}
               </div>
             </div>
 
             <div style={gridStyle}>
+              <label style={{ ...labelStyle, ...fullRow }}>
+                <span>Dirección {flags.customerAddressRequired ? "*" : "(opcional)"}</span>
+                <input
+                  value={values.customerAddress}
+                  onChange={(e) => handlers.onCustomerAddressChange(e.target.value)}
+                  required={flags.customerAddressRequired}
+                  style={inputStyle}
+                  placeholder="Dirección completa"
+                />
+              </label>
+
               <label style={labelStyle}>
                 <span>Código postal (opcional)</span>
                 <input
@@ -189,6 +205,28 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                   onChange={(e) => handlers.onCustomerPostalCodeChange(e.target.value)}
                   style={inputStyle}
                   placeholder="Ej: 08303"
+                />
+              </label>
+
+              <label style={labelStyle}>
+                <span>Tipo de documento {flags.customerDocumentRequired ? "*" : "(opcional)"}</span>
+                <input
+                  value={values.customerDocType}
+                  onChange={(e) => handlers.onCustomerDocTypeChange(e.target.value)}
+                  required={flags.customerDocumentRequired}
+                  style={inputStyle}
+                  placeholder="DNI, NIE, Pasaporte..."
+                />
+              </label>
+
+              <label style={labelStyle}>
+                <span>Número de documento {flags.customerDocumentRequired ? "*" : "(opcional)"}</span>
+                <input
+                  value={values.customerDocNumber}
+                  onChange={(e) => handlers.onCustomerDocNumberChange(e.target.value)}
+                  required={flags.customerDocumentRequired}
+                  style={inputStyle}
+                  placeholder="Número o referencia"
                 />
               </label>
 

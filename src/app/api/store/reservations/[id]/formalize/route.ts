@@ -49,6 +49,7 @@ function normalizeOptionalString(v: string | null | undefined) {
   if (v === undefined) return undefined; // no tocar
   if (v === null) return null; // borrar
   const t = String(v).trim();
+  if (t === "-") return null;
   return t.length ? t : null;
 }
 
@@ -423,27 +424,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         items: itemsToValidate,
       });
 
-      const requiredUnitsForValidation = computeRequiredContractUnits({
-        quantity,
-        isLicense: Boolean(isLicense),
-        serviceCategory,
-        items: (current.items ?? []).map((it) => ({
-          quantity: it.quantity ?? 0,
-          isExtra: Boolean(it.isExtra),
-          service: it.service ? { category: it.service.category ?? null } : null,
-        })),
-      });
-      const requiresFullCustomerData = requiredUnitsForValidation > 0;
-
       if (!customerName) throw new Error("Nombre requerido.");
-      if (!customerPhone) throw new Error("Telefono requerido para formalizar.");
-      if (requiresFullCustomerData) {
-        if (!customerEmail || !z.string().email().safeParse(customerEmail).success) {
-          throw new Error("Email invalido para formalizar.");
-        }
-        if (!customerCountry || customerCountry.trim().length < 2) {
-          throw new Error("Pais requerido para formalizar.");
-        }
+      if (!customerAddress) throw new Error("Direccion requerida para formalizar.");
+      if (!customerCountry || customerCountry.trim().length < 2) {
+        throw new Error("Pais requerido para formalizar.");
+      }
+      if (!customerDocType || !customerDocNumber) {
+        throw new Error("Documento requerido para formalizar.");
+      }
+      if (customerEmail && !z.string().email().safeParse(customerEmail).success) {
+        throw new Error("Email invalido para formalizar.");
       }
       if (!serviceId || !optionId) throw new Error("Servicio y duracion requeridos.");
       if (!Number.isFinite(quantity) || quantity < 1 || quantity > 20) throw new Error("Cantidad invalida.");

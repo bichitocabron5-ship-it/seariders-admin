@@ -1,14 +1,21 @@
-// src/app/admin/channels/[id]/commissions/ui.tsx
 "use client";
 
 import Link from "next/link";
 import { useEffect, useEffectEvent, useMemo, useState, type CSSProperties } from "react";
 import ChannelCommissionRulesSection from "@/app/admin/channels/[id]/commissions/_components/ChannelCommissionRulesSection";
 
+type ServiceOption = {
+  id: string;
+  durationMinutes: number;
+  paxMax: number;
+  basePriceCents: number;
+};
+
 type Service = {
   id: string;
   name: string;
   category: string;
+  options: ServiceOption[];
 };
 
 type Rule = {
@@ -18,6 +25,12 @@ type Rule = {
   isActive: boolean;
 };
 
+type OptionPriceRule = {
+  optionId: string;
+  useDefault: boolean;
+  overridePriceEuros: string;
+};
+
 type Channel = {
   id: string;
   name: string;
@@ -25,23 +38,28 @@ type Channel = {
   commissionBps: number | null;
 };
 
+function eurosFromCents(cents: number) {
+  return (Number(cents || 0) / 100).toFixed(2);
+}
+
+function centsFromEurosStr(v: string) {
+  const n = Number(String(v ?? "").replace(",", "."));
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100);
+}
+
 export default function ChannelCommissionsClient({ channelId }: { channelId: string }) {
   const [channel, setChannel] = useState<Channel | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [rules, setRules] = useState<Record<string, Rule>>({});
+  const [optionPrices, setOptionPrices] = useState<Record<string, OptionPriceRule>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function fetchCommissionRules() {
-    const r = await fetch(`/api/admin/channels/${channelId}/commission-rules`, {
-      cache: "no-store",
-    });
-
-    if (!r.ok) {
-      throw new Error(await r.text());
-    }
-
+    const r = await fetch(`/api/admin/channels/${channelId}/commission-rules`, { cache: "no-store" });
+    if (!r.ok) throw new Error(await r.text());
     return r.json();
   }
 
@@ -49,19 +67,35 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
     channel?: Channel | null;
     services?: Service[];
     rules?: Array<{ id?: string; serviceId: string; commissionPct?: number; isActive?: boolean }>;
+    optionPrices?: Array<{ optionId: string; priceCents?: number | null }>;
   }) {
     setChannel(data.channel ?? null);
     setServices(data.services ?? []);
-    const map: Record<string, Rule> = {};
-    for (const rr of data.rules ?? []) {
-      map[rr.serviceId] = {
-        id: rr.id,
-        serviceId: rr.serviceId,
-        commissionPct: rr.commissionPct ?? 0,
-        isActive: rr.isActive ?? true,
+
+    const nextRules: Record<string, Rule> = {};
+    for (const rule of data.rules ?? []) {
+      nextRules[rule.serviceId] = {
+        id: rule.id,
+        serviceId: rule.serviceId,
+        commissionPct: rule.commissionPct ?? 0,
+        isActive: rule.isActive ?? true,
       };
     }
-    setRules(map);
+    setRules(nextRules);
+
+    const optionOverrides = new Map((data.optionPrices ?? []).map((row) => [row.optionId, Number(row.priceCents ?? 0)]));
+    const nextOptionPrices: Record<string, OptionPriceRule> = {};
+    for (const service of data.services ?? []) {
+      for (const option of service.options ?? []) {
+        const overrideCents = optionOverrides.get(option.id);
+        nextOptionPrices[option.id] = {
+          optionId: option.id,
+          useDefault: overrideCents == null,
+          overridePriceEuros: overrideCents == null ? eurosFromCents(option.basePriceCents) : eurosFromCents(overrideCents),
+        };
+      }
+    }
+    setOptionPrices(nextOptionPrices);
   }
 
   const load = useEffectEvent(async () => {
@@ -83,26 +117,31 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
 
   const fallbackPct = useMemo(() => {
     if (!channel?.commissionEnabled) return 0;
-    const bps = channel.commissionBps ?? 0;
-    return bps / 100;
+    return (channel.commissionBps ?? 0) / 100;
   }, [channel]);
 
   const summary = useMemo(() => {
     const activeRules = services.filter((service) => rules[service.id]?.isActive === true);
+    const overriddenOptions = Object.values(optionPrices).filter((option) => !option.useDefault).length;
     return {
       total: services.length,
       withRule: activeRules.length,
       fallback: services.length - activeRules.length,
+      optionOverrides: overriddenOptions,
     };
-  }, [rules, services]);
+  }, [optionPrices, rules, services]);
 
   function setRule(serviceId: string, patch: Partial<Rule>) {
     setRules((prev) => {
       const cur = prev[serviceId] ?? { serviceId, commissionPct: 0, isActive: false };
-      return {
-        ...prev,
-        [serviceId]: { ...cur, ...patch },
-      };
+      return { ...prev, [serviceId]: { ...cur, ...patch } };
+    });
+  }
+
+  function setOptionRule(optionId: string, patch: Partial<OptionPriceRule>) {
+    setOptionPrices((prev) => {
+      const cur = prev[optionId] ?? { optionId, useDefault: true, overridePriceEuros: "0.00" };
+      return { ...prev, [optionId]: { ...cur, ...patch } };
     });
   }
 
@@ -110,19 +149,31 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
     setSaving(true);
     setError(null);
 
-    const payload: Rule[] = services.map((service) => {
-      const rr = rules[service.id] ?? { serviceId: service.id, commissionPct: 0, isActive: false };
+    const payloadRules: Rule[] = services.map((service) => {
+      const rule = rules[service.id] ?? { serviceId: service.id, commissionPct: 0, isActive: false };
       return {
         serviceId: service.id,
-        commissionPct: Math.max(0, Math.min(100, Math.trunc(rr.commissionPct ?? 0))),
-        isActive: rr.isActive === true,
+        commissionPct: Math.max(0, Math.min(100, Math.trunc(rule.commissionPct ?? 0))),
+        isActive: rule.isActive === true,
       };
     });
+
+    const payloadOptionPrices = Object.values(optionPrices).map((option) => ({
+      optionId: option.optionId,
+      useDefault: option.useDefault,
+      priceCents: option.useDefault ? null : centsFromEurosStr(option.overridePriceEuros),
+    }));
+
+    if (payloadOptionPrices.some((row) => !row.useDefault && (row.priceCents == null || row.priceCents < 0))) {
+      setError("Revisa los PVP por canal. Hay importes inválidos.");
+      setSaving(false);
+      return;
+    }
 
     const r = await fetch(`/api/admin/channels/${channelId}/commission-rules`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rules: payload }),
+      body: JSON.stringify({ rules: payloadRules, optionPrices: payloadOptionPrices }),
     });
 
     if (!r.ok) {
@@ -145,13 +196,14 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
       <section style={heroStyle}>
         <div style={{ display: "grid", gap: 8 }}>
           <div style={eyebrowStyle}>Canales</div>
-          <h1 style={titleStyle}>Reglas por servicio</h1>
+          <h1 style={titleStyle}>Reglas comerciales por servicio</h1>
           <p style={subtitleStyle}>
-            Canal: <strong>{channel?.name ?? "..."}</strong>. Cuando una regla está desactivada, el servicio usa el
-            fallback del canal: <strong>{channel?.commissionEnabled ? `${fallbackPct.toFixed(2)}%` : "0.00%"}</strong>.
+            Canal: <strong>{channel?.name ?? "..."}</strong>. La comisión sigue funcionando por servicio y, además,
+            puedes definir un PVP comercial por duración/pax para cada opción.
           </p>
           <div style={helperStyle}>
-            Extras, tiempo extra y actividad extra no comisionan y no aparecen en esta configuración.
+            El PVP por canal es informativo para seguimiento comercial y liquidaciones. No modifica el precio real que
+            se cobra en reserva.
           </div>
         </div>
 
@@ -178,6 +230,10 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
           <div style={summaryLabel}>Usando fallback</div>
           <div style={summaryValue}>{summary.fallback}</div>
         </article>
+        <article style={summaryCard}>
+          <div style={summaryLabel}>PVP canal</div>
+          <div style={summaryValue}>{summary.optionOverrides}</div>
+        </article>
       </section>
 
       {error ? <div style={errorStyle}>{error}</div> : null}
@@ -185,15 +241,12 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
       <ChannelCommissionRulesSection
         services={services}
         rules={rules}
+        optionPrices={optionPrices}
         fallbackPct={fallbackPct}
         loading={loading}
         onSetRule={setRule}
+        onSetOptionRule={setOptionRule}
       />
-
-      <div style={footerNoteStyle}>
-        Consejo operativo: para canales como <strong>Brutal</strong>, activa solo los servicios que realmente
-        comisionan y deja el resto heredando el fallback.
-      </div>
     </div>
   );
 }
@@ -305,9 +358,4 @@ const errorStyle: CSSProperties = {
   color: "#991b1b",
   fontWeight: 900,
   whiteSpace: "pre-wrap",
-};
-
-const footerNoteStyle: CSSProperties = {
-  fontSize: 12,
-  color: "#64748b",
 };

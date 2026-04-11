@@ -159,6 +159,7 @@ model Channel {
   commissionBps              Int                     @default(0)
   commissionAppliesToDeposit Boolean                 @default(false)
   commissionRules            ChannelCommissionRule[]
+  optionPrices               ChannelOptionPrice[]
 
   reservations Reservation[]
 }
@@ -225,6 +226,7 @@ model ServiceOption {
   packOptionOf      Pack?             @relation("PackOption")
   servicePrices     ServicePrice[]
   passProducts      PassProduct[]     @relation("PassProductOption")
+  channelPrices     ChannelOptionPrice[]
 
   @@unique([serviceId, durationMinutes, paxMax]) // opcional pero MUY útil
   @@index([serviceId])
@@ -1998,6 +2000,22 @@ enum DiscountKind {
   PERCENT
   FIXED
   FINAL_PRICE
+}
+
+model ChannelOptionPrice {
+  id        String        @id @default(cuid())
+  channelId String
+  channel   Channel       @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  optionId  String
+  option    ServiceOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  priceCents Int
+  isActive   Boolean      @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([channelId, optionId])
+  @@index([channelId])
+  @@index([optionId])
 }
 
 enum DiscountScope {

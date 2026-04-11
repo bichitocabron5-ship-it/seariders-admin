@@ -2,10 +2,18 @@
 
 import type { CSSProperties } from "react";
 
+type ServiceOption = {
+  id: string;
+  durationMinutes: number;
+  paxMax: number;
+  basePriceCents: number;
+};
+
 type Service = {
   id: string;
   name: string;
   category: string;
+  options: ServiceOption[];
 };
 
 type Rule = {
@@ -15,20 +23,34 @@ type Rule = {
   isActive: boolean;
 };
 
+type OptionPriceRule = {
+  optionId: string;
+  useDefault: boolean;
+  overridePriceEuros: string;
+};
+
 type Props = {
   services: Service[];
   rules: Record<string, Rule>;
+  optionPrices: Record<string, OptionPriceRule>;
   fallbackPct: number;
   loading: boolean;
   onSetRule: (serviceId: string, patch: Partial<Rule>) => void;
+  onSetOptionRule: (optionId: string, patch: Partial<OptionPriceRule>) => void;
 };
+
+function eurosFromCents(cents: number) {
+  return `${(Number(cents || 0) / 100).toFixed(2)} EUR`;
+}
 
 export default function ChannelCommissionRulesSection({
   services,
   rules,
+  optionPrices,
   fallbackPct,
   loading,
   onSetRule,
+  onSetOptionRule,
 }: Props) {
   if (loading) {
     return (
@@ -41,9 +63,9 @@ export default function ChannelCommissionRulesSection({
   return (
     <section style={panelStyle}>
       <div style={panelHeader}>
-        <div style={{ fontWeight: 950 }}>Configuración de comisiones por servicio</div>
+        <div style={{ fontWeight: 950 }}>Comisión y PVP por servicio</div>
         <div style={{ fontSize: 12, color: "#64748b" }}>
-          Activa una regla solo cuando el porcentaje de ese servicio deba ser distinto al fallback del canal.
+          En cada opción puedes usar el PVP de Admin &gt; Precios o definir un PVP comercial específico del canal.
         </div>
       </div>
 
@@ -66,21 +88,13 @@ export default function ChannelCommissionRulesSection({
                   </div>
                   <div style={{ fontSize: 12, color: "#64748b" }}>
                     {active
-                      ? `Este servicio usa una regla propia del ${pct}%`
-                      : `Este servicio hereda el fallback del canal (${fallbackPct.toFixed(2)}%)`}
+                      ? `Este servicio usa una comisión propia del ${pct}%`
+                      : `Este servicio hereda la comisión base del canal (${fallbackPct.toFixed(2)}%)`}
                   </div>
                 </div>
 
                 <div style={resultBox}>
-                  {active ? (
-                    <span>
-                      Resultado: <strong>{pct}%</strong>
-                    </span>
-                  ) : (
-                    <span>
-                      Resultado: <strong>{fallbackPct.toFixed(2)}%</strong>
-                    </span>
-                  )}
+                  Resultado comisión: <strong>{active ? `${pct}%` : `${fallbackPct.toFixed(2)}%`}</strong>
                 </div>
               </div>
 
@@ -93,17 +107,15 @@ export default function ChannelCommissionRulesSection({
                       const next = e.target.checked;
                       onSetRule(service.id, {
                         isActive: next,
-                        commissionPct: next
-                          ? (rules[service.id]?.commissionPct ?? Math.round(fallbackPct))
-                          : (rules[service.id]?.commissionPct ?? 0),
+                        commissionPct: next ? (rules[service.id]?.commissionPct ?? Math.round(fallbackPct)) : (rules[service.id]?.commissionPct ?? 0),
                       });
                     }}
                   />
-                  Activar regla propia
+                  Activar comisión propia
                 </label>
 
                 <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Porcentaje de la regla
+                  Comisión del servicio (%)
                   <input
                     type="number"
                     min={0}
@@ -117,9 +129,69 @@ export default function ChannelCommissionRulesSection({
                     }
                     style={inputStyle}
                     disabled={!active}
-                    title={!active ? "Activa la regla para editar el porcentaje" : ""}
                   />
                 </label>
+              </div>
+
+              <div style={{ display: "grid", gap: 10 }}>
+                {service.options.map((option) => {
+                  const optionRule = optionPrices[option.id] ?? {
+                    optionId: option.id,
+                    useDefault: true,
+                    overridePriceEuros: (option.basePriceCents / 100).toFixed(2),
+                  };
+
+                  return (
+                    <div key={option.id} style={optionRow}>
+                      <div style={{ display: "grid", gap: 4 }}>
+                        <div style={{ fontWeight: 800, color: "#0f172a" }}>
+                          {option.durationMinutes} min · {option.paxMax} pax
+                        </div>
+                        <div style={{ fontSize: 12, color: "#64748b" }}>
+                          PVP Admin: <strong>{eurosFromCents(option.basePriceCents)}</strong>
+                        </div>
+                      </div>
+
+                      <div style={optionControlsGrid}>
+                        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 700 }}>
+                          <input
+                            type="radio"
+                            checked={optionRule.useDefault}
+                            onChange={() => onSetOptionRule(option.id, { useDefault: true })}
+                          />
+                          Usar Admin
+                        </label>
+
+                        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 700 }}>
+                          <input
+                            type="radio"
+                            checked={!optionRule.useDefault}
+                            onChange={() =>
+                              onSetOptionRule(option.id, {
+                                useDefault: false,
+                                overridePriceEuros:
+                                  optionRule.overridePriceEuros || (option.basePriceCents / 100).toFixed(2),
+                              })
+                            }
+                          />
+                          Usar PVP canal
+                        </label>
+
+                        <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                          PVP canal (EUR)
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={optionRule.overridePriceEuros}
+                            onChange={(e) => onSetOptionRule(option.id, { overridePriceEuros: e.target.value })}
+                            style={inputStyle}
+                            disabled={optionRule.useDefault}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </article>
           );
@@ -156,6 +228,24 @@ const controlsGrid: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 10,
+  alignItems: "center",
+};
+
+const optionControlsGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 10,
+  alignItems: "center",
+};
+
+const optionRow: CSSProperties = {
+  border: "1px solid #e2e8f0",
+  borderRadius: 14,
+  padding: 12,
+  background: "#f8fafc",
+  display: "grid",
+  gridTemplateColumns: "minmax(180px, 240px) 1fr",
+  gap: 12,
   alignItems: "center",
 };
 
