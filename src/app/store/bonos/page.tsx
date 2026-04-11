@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Select from "react-select";
 import { StoreHero, StoreMetricCard, StoreMetricGrid, storeStyles } from "@/components/store-ui";
 import { getCountryOptionsEs, type CountryOption } from "@/lib/countries";
@@ -192,7 +192,6 @@ function SummaryCard({
 
 export default function StoreBonosPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -266,13 +265,15 @@ export default function StoreBonosPage() {
   }, []);
 
   useEffect(() => {
-    const codeFromQuery = (searchParams.get("code") ?? "").trim().toUpperCase();
+    if (typeof window === "undefined") return;
+    const codeFromQuery = (new URLSearchParams(window.location.search).get("code") ?? "").trim().toUpperCase();
     if (!codeFromQuery) return;
     setCode((current) => (current ? current : codeFromQuery));
-  }, [searchParams]);
+  }, []);
 
   useEffect(() => {
-    const codeFromQuery = (searchParams.get("code") ?? "").trim().toUpperCase();
+    if (typeof window === "undefined") return;
+    const codeFromQuery = (new URLSearchParams(window.location.search).get("code") ?? "").trim().toUpperCase();
     if (!codeFromQuery || voucher || loading) return;
     if (code.trim().toUpperCase() !== codeFromQuery) return;
     void (async () => {
@@ -300,7 +301,7 @@ export default function StoreBonosPage() {
         setLoading(false);
       }
     })();
-  }, [code, loading, searchParams, voucher]);
+  }, [code, loading, voucher]);
 
   async function loadProducts() {
     setErr(null);
