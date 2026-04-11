@@ -232,11 +232,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       manualDiscountCents: true,
       isPackParent: true,
       source: true,
+      contracts: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
     },
   });
   if (!existing) return new NextResponse("Reserva no existe", { status: 404 });
   if (existing.status === ReservationStatus.CANCELED || existing.status === ReservationStatus.COMPLETED) {
     return new NextResponse("La reserva cancelada o completada no se puede editar.", { status: 409 });
+  }
+  const hasLockedContracts = (existing.contracts ?? []).some(
+    (contract) => contract.status === "READY" || contract.status === "SIGNED"
+  );
+  if (hasLockedContracts) {
+    return new NextResponse(
+      "La reserva ya tiene contratos preparados o firmados. Edita la reserva antes de formalizar contratos o anula/regenera la documentación con un flujo específico.",
+      { status: 409 }
+    );
   }
 
 const hasProItems = Array.isArray(b.items) && b.items.length > 0;

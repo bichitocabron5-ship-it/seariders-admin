@@ -192,10 +192,10 @@ function StoreCreatePageInner() {
   readyCount,
     refreshContracts,
   } = useContractsState({
-  isMigrateMode,
-  prefillReservationId,
-  isHistorical: Boolean(migrateFlags?.isHistorical),
-});
+    enabled: Boolean(prefillReservationId),
+    prefillReservationId,
+    isHistorical: Boolean(migrateFlags?.isHistorical),
+  });
 
   const { availability, availabilityLoading, availabilityError } = useAvailability(dateStr, availabilityTick);
 
@@ -553,6 +553,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   const primaryDisabledReason =
     migrateFlags?.isHistorical
       ? "Reserva histórica: no se puede formalizar."
+      : uiMode === "EDIT" && contracts.some((contract) => contract.status === "READY" || contract.status === "SIGNED")
+        ? "La reserva ya tiene contratos preparados o firmados. Para evitar desajustes, la edición queda bloqueada desde este flujo."
       : strictFormalizeBlocked
         ? "Solo puedes formalizar el mismo día."
         : isFormalizeMode && !contractsReadyForFormalize
@@ -975,7 +977,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             </h1>
             <div style={{ fontSize: 14, color: "#bae6fd", maxWidth: 700 }}>
               {uiMode === "EDIT"
-                ? "Actualiza la reserva sin alterar el flujo operativo. El formulario mantiene el comportamiento actual."
+                ? "Puedes editar la reserva antes de preparar contratos. Si ya existen contratos listos o firmados, la edición se bloquea para no dejar documentación desalineada."
                 : uiMode === "FORMALIZE"
                   ? "Completa los datos mínimos, valida contratos y deja la reserva lista para la operativa de tienda."
                   : "Prepara la reserva, revisa precio y disponibilidad y continúa después con el cobro y la operación."}
@@ -998,6 +1000,27 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       </section>
 
       <StoreCreateSummaryStrip cards={summaryCards} />
+
+      {uiMode === "EDIT" && contracts.some((contract) => contract.status === "READY" || contract.status === "SIGNED") ? (
+        <section
+          style={{
+            ...panelStyle,
+            padding: 16,
+            border: "1px solid #fed7aa",
+            background: "#fff7ed",
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          <div style={{ ...badgeStyle, color: "#9a3412" }}>Edición bloqueada</div>
+          <div style={{ fontWeight: 900, color: "#7c2d12" }}>
+            Esta reserva ya tiene contratos preparados o firmados.
+          </div>
+          <div style={{ fontSize: 13, color: "#9a3412" }}>
+            La regla operativa queda así: la reserva se puede editar antes de formalizar contratos. Una vez hay contratos en estado listo o firmado, el sistema bloquea la edición para evitar tener que regenerarlos manualmente.
+          </div>
+        </section>
+      ) : null}
 
       {(isMigrateMode || showBoothBadge || showGiftBadge) ? (
         <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>

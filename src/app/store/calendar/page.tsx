@@ -134,7 +134,7 @@ function rowDayKey(r: LiteRow) {
 
 function actionForRow(r: LiteRow): RowAction {
   if (r.status === "CANCELED" || r.status === "CANCELLED") {
-    return { label: "Ver", href: `/store?reservationId=${r.id}` };
+    return { label: "Ver ficha", href: `/store?reservationId=${r.id}` };
   }
 
   const dayKey = rowDayKey(r);
@@ -143,16 +143,26 @@ function actionForRow(r: LiteRow): RowAction {
 
   if (isPendingFormalization(r)) {
     if (today) return { label: "Formalizar", href: `/store/create?migrateFrom=${r.id}` };
-    return { label: "Editar", href: `/store/create?editFrom=${r.id}` };
+    return { label: "Editar reserva", href: `/store/create?editFrom=${r.id}` };
   }
 
-  if (past) return { label: "Ver", href: `/store?reservationId=${r.id}` };
+  if (past) return { label: "Ver ficha", href: `/store?reservationId=${r.id}` };
 
   return {
-    label: "Abrir",
+    label: "Abrir ficha",
     href: `/store?reservationId=${r.id}`,
-    secondary: { label: "Editar", href: `/store/create?editFrom=${r.id}` },
+    secondary: { label: "Editar / reagendar", href: `/store/create?editFrom=${r.id}` },
   };
+}
+
+function actionHintForRow(r: LiteRow) {
+  const status = displayStatus(r);
+  if (status === "CANCELED" || status === "COMPLETED") return "Consulta y seguimiento de la ficha.";
+  if (isHistoricalRow(r)) return "Consulta de la reserva histórica.";
+  if (isPendingFormalization(r)) {
+    return "Antes de formalizar puedes ajustar actividad, cantidad, fecha u hora.";
+  }
+  return "Puedes editar actividad, cantidad, fecha, hora, reagendar o cancelar.";
 }
 
 function hhmm(iso?: string | null) {
@@ -222,6 +232,10 @@ function RowCard({
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 13, color: "#334155" }}>
         {typeof r.totalCents !== "undefined" ? <span>Total: <b>{euros(r.totalCents)}</b></span> : null}
         {typeof r.pendingCents !== "undefined" ? <span>Pendiente: <b>{euros(r.pendingCents)}</b></span> : null}
+      </div>
+
+      <div style={{ fontSize: 12, color: "#64748b" }}>
+        {actionHintForRow(r)}
       </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

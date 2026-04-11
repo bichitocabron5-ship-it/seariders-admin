@@ -21,11 +21,11 @@ import { ensureContracts as ensureContractsRequest, fetchContracts, patchContrac
 import { getAssetAvailability, type AssetAvailability } from "../../services/assets";
 
 export function useContractsState(args: {
-  isMigrateMode: boolean;
+  enabled: boolean;
   prefillReservationId: string | null;
   isHistorical: boolean;
 }) {
-  const { isMigrateMode, prefillReservationId, isHistorical } = args;
+  const { enabled, prefillReservationId, isHistorical } = args;
 
   const [contractsLoading, setContractsLoading] = useState(false);
   const [contractsBusy, setContractsBusy] = useState(false);
@@ -174,14 +174,14 @@ export function useContractsState(args: {
   );
 
   useEffect(() => {
-    if (!isMigrateMode) return;
+    if (!enabled) return;
     if (!prefillReservationId) return;
     if (isHistorical) return;
     void refreshContracts(prefillReservationId);
-  }, [isMigrateMode, prefillReservationId, isHistorical, refreshContracts]);
+  }, [enabled, prefillReservationId, isHistorical, refreshContracts]);
 
   useEffect(() => {
-    if (!isMigrateMode) return;
+    if (!enabled) return;
     if (!prefillReservationId) return;
     if (isHistorical) return;
     if (requiredUnits <= 0 || readyCount >= requiredUnits) return;
@@ -191,7 +191,7 @@ export function useContractsState(args: {
     }, 5000);
 
     return () => window.clearInterval(timer);
-  }, [isMigrateMode, prefillReservationId, isHistorical, requiredUnits, readyCount, loadContractsBlock]);
+  }, [enabled, prefillReservationId, isHistorical, requiredUnits, readyCount, loadContractsBlock]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
