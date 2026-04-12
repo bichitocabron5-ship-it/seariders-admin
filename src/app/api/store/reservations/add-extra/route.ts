@@ -9,6 +9,28 @@ import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-
 
 export const runtime = "nodejs";
 
+function normalizeText(value: string | null | undefined) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function inferExtraTarget(service: {
+  code?: string | null;
+  name?: string | null;
+}): "JETSKI" | "BOAT" | null {
+  const code = normalizeText(service.code);
+  const name = normalizeText(service.name);
+  const haystack = `${code} ${name}`;
+
+  if (!haystack.trim()) return null;
+  if (haystack.includes("jetski") || haystack.includes("moto")) return "JETSKI";
+  if (haystack.includes("boat") || haystack.includes("barco") || haystack.includes("nautica")) return "BOAT";
+  return null;
+}
+
 const Body = z.object({
   reservationId: z.string().min(1),
   extraServiceId: z.string().min(1),
@@ -35,19 +57,32 @@ export async function POST(req: Request) {
 
     const res = await prisma.reservation.findUnique({
       where: { id: reservationId },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        service: { select: { category: true, code: true, name: true } },
+      },
     });
     if (!res) return new NextResponse("Reserva no existe", { status: 404 });
 
     const extraSvc = await prisma.service.findUnique({
       where: { id: extraServiceId },
-      select: { id: true, name: true, category: true, isActive: true },
+      select: { id: true, name: true, code: true, category: true, isActive: true },
     });
     if (!extraSvc || !extraSvc.isActive) {
       return new NextResponse("Extra no existe o está inactivo", { status: 404 });
     }
     if (extraSvc.category !== "EXTRA") {
       return new NextResponse("El servicio seleccionado no es un extra", { status: 400 });
+    }
+
+    const reservationCategory = String(res.service?.category ?? "").toUpperCase();
+    const extraTarget = inferExtraTarget(extraSvc);
+    if (extraTarget === "JETSKI" && reservationCategory !== "JETSKI") {
+      return new NextResponse("Este extra es solo para reservas de jetski", { status: 400 });
+    }
+    if (extraTarget === "BOAT" && reservationCategory === "JETSKI") {
+      return new NextResponse("Este extra no es compatible con una reserva de jetski", { status: 400 });
     }
 
     const now = new Date();

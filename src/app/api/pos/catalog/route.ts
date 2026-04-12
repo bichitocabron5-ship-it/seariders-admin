@@ -23,7 +23,11 @@ type ServiceLite = {
 };
 
 function normalize(s: string) {
-  return (s || "").trim().toLowerCase();
+  return (s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
 }
 
 function uniqSorted(arr: string[]) {
