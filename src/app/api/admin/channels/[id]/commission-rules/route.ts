@@ -40,6 +40,18 @@ function isMissingChannelOptionPriceTable(error: unknown) {
   );
 }
 
+async function hasChannelOptionPriceTable() {
+  try {
+    await prisma.channelOptionPrice.findFirst({
+      select: { id: true },
+    });
+    return true;
+  } catch (error: unknown) {
+    if (isMissingChannelOptionPriceTable(error)) return false;
+    throw error;
+  }
+}
+
 export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string }> | { id: string } }
@@ -93,13 +105,13 @@ export async function GET(
 
   if (!channel) return new NextResponse("Canal no existe", { status: 404 });
 
-  const optionPrices = await prisma.channelOptionPrice.findMany({
-    where: { channelId, isActive: true },
-    select: { id: true, optionId: true, priceCents: true, isActive: true },
-  }).catch((error: unknown) => {
-    if (isMissingChannelOptionPriceTable(error)) return [];
-    throw error;
-  });
+  const optionPricingAvailable = await hasChannelOptionPriceTable();
+  const optionPrices = optionPricingAvailable
+    ? await prisma.channelOptionPrice.findMany({
+        where: { channelId, isActive: true },
+        select: { id: true, optionId: true, priceCents: true, isActive: true },
+      })
+    : [];
 
   const priceMap = new Map<string, number>();
   for (const price of prices) {
@@ -120,7 +132,7 @@ export async function GET(
       })),
   }));
 
-  return NextResponse.json({ channel, services: serviceRows, rules, optionPrices });
+  return NextResponse.json({ channel, services: serviceRows, rules, optionPrices, optionPricingAvailable });
 }
 
 export async function PUT(
@@ -145,6 +157,14 @@ export async function PUT(
     if (!channel) return new NextResponse("Canal no existe", { status: 404 });
 
     const fallbackPct = (channel.commissionBps ?? 0) / 100;
+    const optionPricingAvailable = await hasChannelOptionPriceTable();
+    const requestedOptionOverrides = parsed.data.optionPrices.filter((optionPrice) => !optionPrice.useDefault && optionPrice.priceCents != null);
+
+    if (!optionPricingAvailable && requestedOptionOverrides.length > 0) {
+      return new NextResponse("El PVP por canal no está disponible todavía en esta base de datos. Falta aplicar la migración.", {
+        status: 409,
+      });
+    }
 
     await prisma.$transaction(async (tx) => {
       for (const rule of parsed.data.rules) {
@@ -171,24 +191,26 @@ export async function PUT(
         });
       }
 
-      for (const optionPrice of parsed.data.optionPrices) {
-        if (optionPrice.useDefault || optionPrice.priceCents == null) {
-          await tx.channelOptionPrice.deleteMany({
-            where: { channelId, optionId: optionPrice.optionId },
-          });
-          continue;
-        }
+      if (optionPricingAvailable) {
+        for (const optionPrice of parsed.data.optionPrices) {
+          if (optionPrice.useDefault || optionPrice.priceCents == null) {
+            await tx.channelOptionPrice.deleteMany({
+              where: { channelId, optionId: optionPrice.optionId },
+            });
+            continue;
+          }
 
-        await tx.channelOptionPrice.upsert({
-          where: { channelId_optionId: { channelId, optionId: optionPrice.optionId } },
-          update: { priceCents: optionPrice.priceCents, isActive: true },
-          create: {
-            channelId,
-            optionId: optionPrice.optionId,
-            priceCents: optionPrice.priceCents,
-            isActive: true,
-          },
-        });
+          await tx.channelOptionPrice.upsert({
+            where: { channelId_optionId: { channelId, optionId: optionPrice.optionId } },
+            update: { priceCents: optionPrice.priceCents, isActive: true },
+            create: {
+              channelId,
+              optionId: optionPrice.optionId,
+              priceCents: optionPrice.priceCents,
+              isActive: true,
+            },
+          });
+        }
       }
     });
 

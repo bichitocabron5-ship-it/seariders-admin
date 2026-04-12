@@ -33,6 +33,7 @@ type Props = {
   services: Service[];
   rules: Record<string, Rule>;
   optionPrices: Record<string, OptionPriceRule>;
+  optionPricingAvailable: boolean;
   fallbackPct: number;
   loading: boolean;
   onSetRule: (serviceId: string, patch: Partial<Rule>) => void;
@@ -47,6 +48,7 @@ export default function ChannelCommissionRulesSection({
   services,
   rules,
   optionPrices,
+  optionPricingAvailable,
   fallbackPct,
   loading,
   onSetRule,
@@ -63,10 +65,15 @@ export default function ChannelCommissionRulesSection({
   return (
     <section style={panelStyle}>
       <div style={panelHeader}>
-        <div style={{ fontWeight: 950 }}>Comisión y PVP por servicio</div>
+        <div style={{ fontWeight: 950 }}>Comision y PVP por servicio</div>
         <div style={{ fontSize: 12, color: "#64748b" }}>
-          En cada opción puedes usar el PVP de Admin &gt; Precios o definir un PVP comercial específico del canal.
+          En cada opcion puedes usar el PVP de Admin &gt; Precios o definir un PVP comercial especifico del canal.
         </div>
+        {!optionPricingAvailable ? (
+          <div style={warningStyle}>
+            El bloque de PVP canal esta en solo lectura porque la migracion de base de datos todavia no esta aplicada.
+          </div>
+        ) : null}
       </div>
 
       <div style={{ padding: 14, display: "grid", gap: 12 }}>
@@ -88,13 +95,13 @@ export default function ChannelCommissionRulesSection({
                   </div>
                   <div style={{ fontSize: 12, color: "#64748b" }}>
                     {active
-                      ? `Este servicio usa una comisión propia del ${pct}%`
-                      : `Este servicio hereda la comisión base del canal (${fallbackPct.toFixed(2)}%)`}
+                      ? `Este servicio usa una comision propia del ${pct}%`
+                      : `Este servicio hereda la comision base del canal (${fallbackPct.toFixed(2)}%)`}
                   </div>
                 </div>
 
                 <div style={resultBox}>
-                  Resultado comisión: <strong>{active ? `${pct}%` : `${fallbackPct.toFixed(2)}%`}</strong>
+                  Resultado comision: <strong>{active ? `${pct}%` : `${fallbackPct.toFixed(2)}%`}</strong>
                 </div>
               </div>
 
@@ -111,11 +118,11 @@ export default function ChannelCommissionRulesSection({
                       });
                     }}
                   />
-                  Activar comisión propia
+                  Activar comision propia
                 </label>
 
                 <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Comisión del servicio (%)
+                  Comision del servicio (%)
                   <input
                     type="number"
                     min={0}
@@ -158,6 +165,7 @@ export default function ChannelCommissionRulesSection({
                             type="radio"
                             checked={optionRule.useDefault}
                             onChange={() => onSetOptionRule(option.id, { useDefault: true })}
+                            disabled={!optionPricingAvailable}
                           />
                           Usar Admin
                         </label>
@@ -173,6 +181,7 @@ export default function ChannelCommissionRulesSection({
                                   optionRule.overridePriceEuros || (option.basePriceCents / 100).toFixed(2),
                               })
                             }
+                            disabled={!optionPricingAvailable}
                           />
                           Usar PVP canal
                         </label>
@@ -185,7 +194,7 @@ export default function ChannelCommissionRulesSection({
                             value={optionRule.overridePriceEuros}
                             onChange={(e) => onSetOptionRule(option.id, { overridePriceEuros: e.target.value })}
                             style={inputStyle}
-                            disabled={optionRule.useDefault}
+                            disabled={optionRule.useDefault || !optionPricingAvailable}
                           />
                         </label>
                       </div>
@@ -213,6 +222,17 @@ const panelHeader: CSSProperties = {
   borderBottom: "1px solid #eef2f7",
   display: "grid",
   gap: 4,
+};
+
+const warningStyle: CSSProperties = {
+  marginTop: 4,
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "1px solid #fed7aa",
+  background: "#fff7ed",
+  color: "#9a3412",
+  fontSize: 12,
+  fontWeight: 700,
 };
 
 const rowCard: CSSProperties = {

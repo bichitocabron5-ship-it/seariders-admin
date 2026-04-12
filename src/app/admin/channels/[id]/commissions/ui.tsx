@@ -53,6 +53,7 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
   const [services, setServices] = useState<Service[]>([]);
   const [rules, setRules] = useState<Record<string, Rule>>({});
   const [optionPrices, setOptionPrices] = useState<Record<string, OptionPriceRule>>({});
+  const [optionPricingAvailable, setOptionPricingAvailable] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,9 +69,11 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
     services?: Service[];
     rules?: Array<{ id?: string; serviceId: string; commissionPct?: number; isActive?: boolean }>;
     optionPrices?: Array<{ optionId: string; priceCents?: number | null }>;
+    optionPricingAvailable?: boolean;
   }) {
     setChannel(data.channel ?? null);
     setServices(data.services ?? []);
+    setOptionPricingAvailable(data.optionPricingAvailable !== false);
 
     const nextRules: Record<string, Rule> = {};
     for (const rule of data.rules ?? []) {
@@ -164,6 +167,12 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
       priceCents: option.useDefault ? null : centsFromEurosStr(option.overridePriceEuros),
     }));
 
+    if (!optionPricingAvailable && payloadOptionPrices.some((row) => !row.useDefault)) {
+      setError("El PVP por canal no estÃ¡ disponible en esta base de datos. Falta aplicar la migraciÃ³n.");
+      setSaving(false);
+      return;
+    }
+
     if (payloadOptionPrices.some((row) => !row.useDefault && (row.priceCents == null || row.priceCents < 0))) {
       setError("Revisa los PVP por canal. Hay importes inválidos.");
       setSaving(false);
@@ -242,6 +251,7 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
         services={services}
         rules={rules}
         optionPrices={optionPrices}
+        optionPricingAvailable={optionPricingAvailable}
         fallbackPct={fallbackPct}
         loading={loading}
         onSetRule={setRule}
