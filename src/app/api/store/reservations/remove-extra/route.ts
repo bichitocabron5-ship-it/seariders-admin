@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { ReservationStatus } from "@prisma/client";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
+import { computeAutoDiscountDetail } from "@/lib/discounts";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,17 @@ export async function POST(req: Request) {
     const result = await prisma.$transaction(async (tx) => {
       const r = await tx.reservation.findFirst({
         where: { id: reservationId },
-        select: { id: true, status: true },
+        select: {
+          id: true,
+          status: true,
+          source: true,
+          manualDiscountCents: true,
+          promoCode: true,
+          customerCountry: true,
+          channelId: true,
+          serviceId: true,
+          optionId: true,
+        },
       });
       if (!r) throw new Error("Reserva no existe");
 
@@ -83,14 +94,62 @@ export async function POST(req: Request) {
 
       await tx.reservationItem.delete({ where: { id: itemId } });
 
-      const sum = await tx.reservationItem.aggregate({
-        where: { reservationId },
-        _sum: { totalPriceCents: true },
+      const [mainSum, allSum] = await Promise.all([
+        tx.reservationItem.aggregate({
+          where: { reservationId, isExtra: false },
+          _sum: { totalPriceCents: true, quantity: true },
+        }),
+        tx.reservationItem.aggregate({
+          where: { reservationId },
+          _sum: { totalPriceCents: true },
+        }),
+      ]);
+
+      const serviceSubtotal = Number(mainSum._sum.totalPriceCents ?? 0);
+      const mainQuantity = Number(mainSum._sum.quantity ?? 1);
+      const newTotal = Number(allSum._sum.totalPriceCents ?? 0);
+
+      const isBoothReservation = r.source === "BOOTH";
+      const channel = r.channelId
+        ? await tx.channel.findUnique({ where: { id: r.channelId }, select: { allowsPromotions: true } })
+        : null;
+      const promotionsEnabled = isBoothReservation ? false : (channel ? Boolean(channel.allowsPromotions) : true);
+
+      const mainSvc = await tx.service.findUnique({
+        where: { id: r.serviceId },
+        select: { category: true },
       });
+
+      const autoDiscountCents = isBoothReservation
+        ? 0
+        : Number((await computeAutoDiscountDetail({
+            when: new Date(),
+            item: {
+              serviceId: r.serviceId,
+              optionId: r.optionId,
+              category: mainSvc?.category ?? null,
+              isExtra: false,
+              lineBaseCents: serviceSubtotal,
+              quantity: mainQuantity,
+            },
+            promoCode: promotionsEnabled ? (r.promoCode ?? null) : null,
+            customerCountry: r.customerCountry ?? null,
+            promotionsEnabled,
+          })).discountCents ?? 0);
+
+      const finalTotal = Math.max(
+        0,
+        newTotal - Number(r.manualDiscountCents ?? 0) - autoDiscountCents
+      );
 
       const updated = await tx.reservation.update({
         where: { id: reservationId },
-        data: { totalPriceCents: sum._sum.totalPriceCents ?? 0 },
+        data: {
+          basePriceCents: serviceSubtotal,
+          autoDiscountCents,
+          promoCode: isBoothReservation ? null : r.promoCode ?? null,
+          totalPriceCents: finalTotal,
+        },
         select: { id: true, totalPriceCents: true },
       });
 

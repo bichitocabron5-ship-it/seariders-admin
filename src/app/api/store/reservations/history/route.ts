@@ -106,14 +106,22 @@ export async function GET(req: Request) {
       financialAdjustedAt: true,
       source: true,
       formalizedAt: true,
+      parentReservationId: true,
       channel: { select: { name: true } },
       service: { select: { name: true, category: true } },
       option: { select: { durationMinutes: true } },
+      parentReservation: {
+        select: {
+          service: { select: { name: true, category: true } },
+          option: { select: { durationMinutes: true } },
+        },
+      },
       items: {
         select: {
           quantity: true,
           isExtra: true,
-          service: { select: { category: true } },
+          service: { select: { name: true, category: true } },
+          option: { select: { durationMinutes: true } },
         },
       },
       payments: {
@@ -192,6 +200,18 @@ export async function GET(req: Request) {
 
   const rows = rowsDb.map((reservation) => {
     const attachment = attachmentMap.get(reservation.id);
+    const mainItem = reservation.items.find((item) => !item.isExtra) ?? null;
+    const shouldUseParentService =
+      String(mainItem?.service?.category ?? reservation.service?.category ?? "").toUpperCase() === "EXTRA" &&
+      Boolean(reservation.parentReservationId) &&
+      Boolean(reservation.parentReservation?.service);
+    const displayService = shouldUseParentService
+      ? reservation.parentReservation?.service ?? reservation.service
+      : mainItem?.service ?? reservation.service;
+    const displayDurationMinutes = shouldUseParentService
+      ? reservation.parentReservation?.option?.durationMinutes ?? reservation.option?.durationMinutes ?? null
+      : mainItem?.option?.durationMinutes ?? reservation.option?.durationMinutes ?? null;
+
     const paidCents = reservation.payments.reduce((sum, payment) => {
       const sign = payment.direction === "OUT" ? -1 : 1;
       return sum + sign * payment.amountCents;
@@ -244,9 +264,9 @@ export async function GET(req: Request) {
       source: reservation.source,
       formalizedAt: reservation.formalizedAt,
       channelName: reservation.channel?.name ?? null,
-      serviceName: reservation.service?.name ?? null,
-      serviceCategory: reservation.service?.category ?? null,
-      durationMinutes: reservation.option?.durationMinutes ?? null,
+      serviceName: displayService?.name ?? null,
+      serviceCategory: displayService?.category ?? null,
+      durationMinutes: displayDurationMinutes,
       paidCents,
       paidDepositCents,
       depositCollectedCents,

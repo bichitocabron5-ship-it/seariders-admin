@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
+import { computeAutoDiscountDetail } from "@/lib/discounts";
 
 // Si tu enum se llama distinto, ajusta aquí:
 import { ExtraTimeStatus } from "@prisma/client";
@@ -41,7 +42,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       // 0) Validar reserva existe (y opcionalmente estado)
       const res = await tx.reservation.findUnique({
         where: { id: reservationId },
-        select: { id: true, status: true, pax: true },
+        select: {
+          id: true,
+          status: true,
+          pax: true,
+          source: true,
+          manualDiscountCents: true,
+          promoCode: true,
+          customerCountry: true,
+          channelId: true,
+          serviceId: true,
+          optionId: true,
+        },
       });
       if (!res) throw new Error("Reserva no existe");
 
@@ -147,6 +159,64 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             serviceName: svc.name,
           });
         }
+
+        const [mainSum, allSum] = await Promise.all([
+          tx.reservationItem.aggregate({
+            where: { reservationId, isExtra: false },
+            _sum: { totalPriceCents: true, quantity: true },
+          }),
+          tx.reservationItem.aggregate({
+            where: { reservationId },
+            _sum: { totalPriceCents: true },
+          }),
+        ]);
+
+        const serviceSubtotal = Number(mainSum._sum.totalPriceCents ?? 0);
+        const mainQuantity = Number(mainSum._sum.quantity ?? 1);
+        const newTotal = Number(allSum._sum.totalPriceCents ?? 0);
+
+        const isBoothReservation = res.source === "BOOTH";
+        const channel = res.channelId
+          ? await tx.channel.findUnique({ where: { id: res.channelId }, select: { allowsPromotions: true } })
+          : null;
+        const promotionsEnabled = isBoothReservation ? false : (channel ? Boolean(channel.allowsPromotions) : true);
+
+        const mainSvc = await tx.service.findUnique({
+          where: { id: res.serviceId },
+          select: { category: true },
+        });
+
+        const autoDiscountCents = isBoothReservation
+          ? 0
+          : Number((await computeAutoDiscountDetail({
+              when: new Date(),
+              item: {
+                serviceId: res.serviceId,
+                optionId: res.optionId,
+                category: mainSvc?.category ?? null,
+                isExtra: false,
+                lineBaseCents: serviceSubtotal,
+                quantity: mainQuantity,
+              },
+              promoCode: promotionsEnabled ? (res.promoCode ?? null) : null,
+              customerCountry: res.customerCountry ?? null,
+              promotionsEnabled,
+            })).discountCents ?? 0);
+
+        const finalTotal = Math.max(
+          0,
+          newTotal - Number(res.manualDiscountCents ?? 0) - autoDiscountCents
+        );
+
+        await tx.reservation.update({
+          where: { id: reservationId },
+          data: {
+            basePriceCents: serviceSubtotal,
+            autoDiscountCents,
+            promoCode: isBoothReservation ? null : res.promoCode ?? null,
+            totalPriceCents: finalTotal,
+          },
+        });
 
         // 5) Marcar eventos como CHARGED
         // OJO: CHARGED significa "ya aplicado a reserva para cobro", no "pagado".
