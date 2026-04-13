@@ -148,7 +148,7 @@ export default function StoreDashboard() {
     try {
       const [r, s, c, sum] = await Promise.all([
         fetch("/api/store/reservations/today", { cache: "no-store" }),
-        fetch("/api/store/payments/today-summary", { cache: "no-store" }),
+        fetch(`/api/store/payments/today-summary?origin=STORE&date=${todayLocalYMD()}`, { cache: "no-store" }),
         fetch("/api/store/commissions/today-summary", { cache: "no-store" }),
         fetch("/api/store/cash-closures/summary?origin=STORE", { cache: "no-store" }),
       ]);
@@ -174,6 +174,23 @@ export default function StoreDashboard() {
 
   useEffect(() => {
     load();
+    const intervalId = window.setInterval(() => {
+      void load();
+    }, 30_000);
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === "hidden") return;
+      void load();
+    };
+
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

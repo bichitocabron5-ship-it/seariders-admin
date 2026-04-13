@@ -1,16 +1,46 @@
 ﻿// src/app/api/store/payments/today-summary/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
+import { BUSINESS_TZ, tzDayRangeUtc, utcDateFromYmdInTz, todayYmdInTz } from "@/lib/tz-business";
+import { PaymentOrigin } from "@prisma/client";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+const Query = z.object({
+  origin: z.nativeEnum(PaymentOrigin).optional(),
+  date: z.string().min(10).max(10).optional(),
+});
+
+function dayRangeFromYmd(ymd: string) {
+  const start = utcDateFromYmdInTz(BUSINESS_TZ, ymd);
+  const next = new Date(start);
+  next.setUTCDate(next.getUTCDate() + 1);
+  const nextYmd = todayYmdInTz(BUSINESS_TZ, next);
+  const endExclusive = utcDateFromYmdInTz(BUSINESS_TZ, nextYmd);
+  return { start, endExclusive };
+}
+
+export async function GET(req: Request) {
   try {
-    const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
+    const url = new URL(req.url);
+    const parsed = Query.safeParse({
+      origin: url.searchParams.get("origin") ?? undefined,
+      date: url.searchParams.get("date") ?? undefined,
+    });
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Parámetros inválidos" }, { status: 400 });
+    }
+
+    const { start, endExclusive } = parsed.data.date
+      ? dayRangeFromYmd(parsed.data.date)
+      : tzDayRangeUtc(BUSINESS_TZ);
 
     const payments = await prisma.payment.findMany({
-      where: { createdAt: { gte: start, lt: endExclusive } },
+      where: {
+        createdAt: { gte: start, lt: endExclusive },
+        ...(parsed.data.origin ? { origin: parsed.data.origin } : {}),
+      },
       select: {
         amountCents: true,
         method: true,
