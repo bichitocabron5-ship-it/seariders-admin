@@ -18,6 +18,7 @@ type SplitLine = { amount: string; method: PayMethod; received?: string };
 
 type ReservationLike = {
   id: string;
+  status?: string;
   customerName?: string | null;
   customerCountry?: string | null;
   boothCode?: string | null;
@@ -539,13 +540,29 @@ async function cancelReservation(reservationId: string) {
 }
 
 async function departTrip(tripId: string) {
-  const r = await fetch("/api/booth/taxiboat-trips/depart", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tripId }),
-  });
-  if (!r.ok) throw new Error(await r.text());
-  await load();
+  setError(null);
+  setTripActionId(`depart:${tripId}`);
+  try {
+    const r = await fetch("/api/booth/taxiboat-trips/depart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tripId }),
+    });
+    if (!r.ok) {
+      const raw = await r.text();
+      let message = raw;
+      try {
+        const parsed = JSON.parse(raw) as { error?: string };
+        if (parsed?.error) message = parsed.error;
+      } catch {}
+      throw new Error(message || "Error marcando salida");
+    }
+    await load();
+  } catch (e: unknown) {
+    setError(e instanceof Error ? e.message : "Error marcando salida");
+  } finally {
+    setTripActionId(null);
+  }
 }
 
 async function cancelTrip(tripId: string) {

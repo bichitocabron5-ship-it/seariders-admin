@@ -29,7 +29,18 @@ export async function POST(req: Request) {
 
   const trip = await prisma.taxiboatTrip.findUnique({
     where: { id: tripId },
-    select: { id: true, boat: true, status: true, departedAt: true },
+    select: {
+      id: true,
+      boat: true,
+      status: true,
+      departedAt: true,
+      reservations: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
+    },
   });
 
   if (!trip) return NextResponse.json({ error: "Viaje no existe" }, { status: 404 });
@@ -43,6 +54,15 @@ export async function POST(req: Request) {
   if (!operation || operation.status !== "AT_BOOTH") {
     return NextResponse.json(
       { error: "El taxiboat no esta en Booth, no se puede iniciar la salida" },
+      { status: 409 }
+    );
+  }
+
+  const activeReservationsCount = trip.reservations.filter((reservation) => reservation.status !== "CANCELED").length;
+
+  if (activeReservationsCount < 1) {
+    return NextResponse.json(
+      { error: "No se puede marcar salida sin clientes asignados. El viaje debe tener al menos 1 reserva." },
       { status: 409 }
     );
   }

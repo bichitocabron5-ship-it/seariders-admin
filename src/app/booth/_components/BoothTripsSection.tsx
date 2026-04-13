@@ -2,6 +2,7 @@
 
 type ReservationLike = {
   id: string;
+  status?: string;
   customerName?: string | null;
   customerCountry?: string | null;
   boothCode?: string | null;
@@ -189,7 +190,11 @@ export default function BoothTripsSection({
       </div>
 
       <div style={{ display: "grid", gap: 10 }}>
-        {trips.map((trip) => (
+        {trips.map((trip) => {
+          const activeReservationsCount = (trip.reservations ?? []).filter((reservation) => reservation.status !== "CANCELED").length;
+          const canDepart = activeReservationsCount > 0;
+
+          return (
           <div key={trip.id} style={{ padding: 14, border: "1px solid #e5e7eb", borderRadius: 16, background: "#fff" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, alignItems: "center" }}>
               <div style={{ fontWeight: 900 }}>
@@ -197,8 +202,12 @@ export default function BoothTripsSection({
               </div>
               {trip.status === "OPEN" ? (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={() => departTrip(trip.id)} style={{ ...ghostBtn, width: "100%" }}>
-                    Marcar salida
+                  <button
+                    onClick={() => void departTrip(trip.id)}
+                    disabled={!canDepart || tripActionId === `depart:${trip.id}`}
+                    style={{ ...ghostBtn, width: "100%", opacity: !canDepart || tripActionId === `depart:${trip.id}` ? 0.6 : 1 }}
+                  >
+                    {tripActionId === `depart:${trip.id}` ? "Marcando salida..." : "Marcar salida"}
                   </button>
                   <button
                     type="button"
@@ -216,8 +225,15 @@ export default function BoothTripsSection({
               )}
             </div>
 
+            {trip.status === "OPEN" && !canDepart ? (
+              <div style={{ marginTop: 8, fontSize: 12, color: "#991b1b", fontWeight: 700 }}>
+                No se puede marcar salida sin clientes asignados.
+              </div>
+            ) : null}
+
             <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
               {(trip.reservations ?? []).map((reservation) => {
+                const canceled = reservation.status === "CANCELED";
                 const grouped = !!reservation.taxiboatAssignedAt && !trip.departedAt && !reservation.arrivedStoreAt;
                 const enCamino = !!trip.departedAt && !reservation.arrivedStoreAt;
                 const received = !!reservation.arrivedStoreAt;
@@ -227,8 +243,8 @@ export default function BoothTripsSection({
                   reservation.arrivedStoreAt,
                   nowMs
                 );
-                const label = received ? "RECIBIDO" : enCamino ? "EN CAMINO" : grouped ? "AGRUPADO" : "PREPARANDO";
-                const bg = received ? "#dcfce7" : enCamino ? "#fef9c3" : grouped ? "#e0f2fe" : "#f3f4f6";
+                const label = canceled ? "CANCELADA" : received ? "RECIBIDO" : enCamino ? "EN CAMINO" : grouped ? "AGRUPADO" : "PREPARANDO";
+                const bg = canceled ? "#e2e8f0" : received ? "#dcfce7" : enCamino ? "#fef9c3" : grouped ? "#e0f2fe" : "#f3f4f6";
 
                 return (
                   <div key={reservation.id} style={{ padding: 10, border: "1px solid #eee", borderRadius: 12 }}>
@@ -243,7 +259,7 @@ export default function BoothTripsSection({
                       {formatReservationLine(reservation, { showCountry: true })}
                     </div>
 
-                    {!received && trip.status === "OPEN" && !trip.departedAt ? (
+                    {!canceled && !received && trip.status === "OPEN" && !trip.departedAt ? (
                       <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <button
                           type="button"
@@ -264,7 +280,7 @@ export default function BoothTripsSection({
                       </div>
                     ) : null}
 
-                    {waitMeta ? (
+                    {!canceled && waitMeta ? (
                       <div
                         style={{
                           marginTop: 8,
@@ -290,7 +306,7 @@ export default function BoothTripsSection({
               {(trip.reservations ?? []).length === 0 ? <div style={{ opacity: 0.7 }}>Sin reservas asignadas.</div> : null}
             </div>
           </div>
-        ))}
+        )})}
       </div>
     </section>
   );

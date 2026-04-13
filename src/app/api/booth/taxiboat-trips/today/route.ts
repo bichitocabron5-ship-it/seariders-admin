@@ -35,6 +35,7 @@ export async function GET() {
       reservations: {
         select: {
           id: true,
+          status: true,
           boothCode: true,
           customerName: true,
           pax: true,
