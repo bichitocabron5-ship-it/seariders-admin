@@ -605,7 +605,10 @@ export function useStoreCreateCatalog(args: {
         if (!migrateReservationId) {
           const main0 = sm[0] ?? null;
           const firstOpt = main0 ? op.find((o) => o.serviceId === main0.id) ?? null : null;
-          const ch0 = ch[0] ?? null;
+          const ch0 =
+            ch.find((channel) => String(channel.name ?? "").trim().toLowerCase() === "directo") ??
+            ch[0] ??
+            null;
 
           setInitialDefaults({
             serviceId: main0?.id ?? "",

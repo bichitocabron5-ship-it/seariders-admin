@@ -125,7 +125,7 @@ export function StoreCreateCustomerProfileSection({
                 }}
               >
                 <div style={{ display: "grid", gap: 4 }}>
-                  <div style={{ fontWeight: 800 }}>{customer.customerName || "Sin nombre"}</div>
+                  <div style={{ fontWeight: 800 }}>{customer.customerName?.trim() || customer.customerDocNumber?.trim() || customer.phone?.trim() || customer.email?.trim() || "Cliente previo"}</div>
                   <div style={{ fontSize: 13, opacity: 0.75 }}>
                     {customer.customerDocNumber || "Sin documento"} · {customer.phone || "Sin teléfono"} · {customer.email || "Sin email"}
                   </div>

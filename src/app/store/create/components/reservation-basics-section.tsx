@@ -229,13 +229,18 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
 
               <label style={labelStyle}>
                 <span>Tipo de documento {flags.customerDocumentRequired ? "*" : "(opcional)"}</span>
-                <input
+                <select
                   value={values.customerDocType}
                   onChange={(e) => handlers.onCustomerDocTypeChange(e.target.value)}
                   required={flags.customerDocumentRequired}
                   style={inputStyle}
-                  placeholder="DNI, NIE, Pasaporte..."
-                />
+                >
+                  <option value="">Selecciona...</option>
+                  <option value="DNI">DNI</option>
+                  <option value="NIE">NIE</option>
+                  <option value="PASSPORT">Pasaporte</option>
+                  <option value="ID_CARD">Documento nacional</option>
+                </select>
               </label>
 
               <label style={labelStyle}>
