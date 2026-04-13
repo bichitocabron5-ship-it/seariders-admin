@@ -10,6 +10,7 @@ import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib
 import { ReservationStatus } from "@prisma/client";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import type { Prisma } from "@prisma/client";
+import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 
 export const runtime = "nodejs";
 
@@ -58,6 +59,14 @@ async function findVigentePrice(tx: PriceReader, params: { serviceId: string; op
 function capManual30(totalBeforeDiscountsCents: number, manualDiscountCents: number) {
   const maxManual = Math.floor((totalBeforeDiscountsCents * 30) / 100);
   return Math.max(0, Math.min(Math.max(0, manualDiscountCents || 0), maxManual));
+}
+
+function accumulateLineQuantity(
+  map: Map<string, number>,
+  args: { serviceId: string; optionId: string; quantity: number }
+) {
+  const key = `${args.serviceId}::${args.optionId}`;
+  map.set(key, (map.get(key) ?? 0) + Math.max(0, Number(args.quantity ?? 0)));
 }
 
 async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: string) {
@@ -232,9 +241,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       manualDiscountCents: true,
       isPackParent: true,
       source: true,
+      items: {
+        select: {
+          serviceId: true,
+          optionId: true,
+          quantity: true,
+          isExtra: true,
+          service: { select: { category: true } },
+        },
+      },
       contracts: {
         select: {
           id: true,
+          unitIndex: true,
           status: true,
         },
       },
@@ -244,18 +263,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (existing.status === ReservationStatus.CANCELED || existing.status === ReservationStatus.COMPLETED) {
     return new NextResponse("La reserva cancelada o completada no se puede editar.", { status: 409 });
   }
-  const hasLockedContracts = (existing.contracts ?? []).some(
-    (contract) => contract.status === "READY" || contract.status === "SIGNED"
-  );
-  if (hasLockedContracts) {
-    return new NextResponse(
-      "La reserva ya tiene contratos preparados o firmados. Edita la reserva antes de formalizar contratos o anula/regenera la documentación con un flujo específico.",
-      { status: 409 }
-    );
-  }
+  const lockedContractsCount = (existing.contracts ?? []).filter(
+    (contract) =>
+      Number(contract.unitIndex ?? 0) >= 1 &&
+      (contract.status === "READY" || contract.status === "SIGNED")
+  ).length;
 
 const hasProItems = Array.isArray(b.items) && b.items.length > 0;
 const isBoothReservation = existing.source === "BOOTH";
+const boothUnitDiscountCents = getBoothUnitDiscountCents({
+  source: existing.source,
+  matchingQuantity: existing.quantity,
+  manualDiscountCents: existing.manualDiscountCents,
+});
 
 if (hasProItems) {
   // Si es pack padre, no debería permitir editar items aquí.
@@ -298,6 +318,36 @@ if (hasProItems) {
 
     if (opt.serviceId !== svc.id) {
       return new NextResponse("La opción no pertenece al servicio", { status: 400 });
+    }
+  }
+
+  if (lockedContractsCount > 0) {
+    const existingLineQty = new Map<string, number>();
+    const nextLineQty = new Map<string, number>();
+
+    for (const item of existing.items ?? []) {
+      if (item.isExtra) continue;
+      accumulateLineQuantity(existingLineQty, {
+        serviceId: item.serviceId,
+        optionId: item.optionId,
+        quantity: Number(item.quantity ?? 0),
+      });
+    }
+
+    for (const item of b.items!) {
+      accumulateLineQuantity(nextLineQty, {
+        serviceId: item.serviceId,
+        optionId: item.optionId,
+        quantity: Number(item.quantity ?? 0),
+      });
+    }
+
+    const isReducingLockedBase = Array.from(existingLineQty.entries()).some(([key, qty]) => (nextLineQty.get(key) ?? 0) < qty);
+    if (isReducingLockedBase) {
+      return new NextResponse(
+        "La reserva tiene contratos preparados o firmados. Solo puedes ampliar cantidad o añadir actividades nuevas; no reducir ni sustituir las ya contratadas.",
+        { status: 409 }
+      );
     }
   }
 
@@ -420,9 +470,20 @@ if (hasProItems) {
     }
 
     // Manual discount (cap 30% del totalBeforeDiscounts)
+    const originalLineKey = `${existing.serviceId}::${existing.optionId}`;
+    const matchingBoothLineQty = lineCreates.reduce(
+      (sum, line) =>
+        `${line.serviceId}::${line.optionId}` === originalLineKey
+          ? sum + Number(line.quantity ?? 0)
+          : sum,
+      0
+    );
     const incomingManual =
       existingPack.source === "BOOTH"
-        ? Number(existingPack.manualDiscountCents ?? 0)
+        ? getScaledBoothDiscountCents({
+            boothUnitDiscountCents,
+            nextMatchingQuantity: matchingBoothLineQty,
+          })
         : (b.manualDiscountCents !== undefined ? Number(b.manualDiscountCents) : Number(existingPack.manualDiscountCents ?? 0));
     const manualDiscountCents = capManual30(totalBeforeDiscounts, incomingManual);
 
@@ -470,9 +531,13 @@ if (hasProItems) {
     }
 
     await tx.reservation.update({ where: { id }, data, select: { id: true } });
-    await ensureContractsTx(tx, id);
+    const contracts = await ensureContractsTx(tx, id);
 
-    return { id };
+    if (lockedContractsCount > 0 && contracts.requiredUnits < lockedContractsCount) {
+      throw new Error("La edición dejaría la reserva con menos unidades contratables que contratos ya preparados o firmados.");
+    }
+
+    return { id, ...contracts };
   });
 
   return NextResponse.json({ ok: true, ...result });
@@ -548,6 +613,13 @@ if (hasProItems) {
 
   // Si no hay cambio de precio, solo update de campos
   if (!priceSensitiveChanged) {
+    if (lockedContractsCount > 0 && Number(b.quantity ?? existing.quantity ?? 0) < Number(existing.quantity ?? 0)) {
+      return new NextResponse(
+        "La reserva tiene contratos preparados o firmados. No puedes reducir la cantidad ya contratada.",
+        { status: 409 }
+      );
+    }
+
     const data: Prisma.ReservationUncheckedUpdateInput = {
       pax: b.pax,
       channelId: b.channelId ?? null,
@@ -568,16 +640,23 @@ if (hasProItems) {
       data.licenseNumber = null;
     }
 
-    await prisma.$transaction(async (tx) => {
+    const contracts = await prisma.$transaction(async (tx) => {
       await tx.reservation.update({
         where: { id },
         data,
         select: { id: true },
       });
-      await ensureContractsTx(tx, id);
+      return await ensureContractsTx(tx, id);
     });
 
-    return NextResponse.json({ ok: true, id });
+    if (lockedContractsCount > 0 && contracts.requiredUnits < lockedContractsCount) {
+      return new NextResponse(
+        "La reserva tiene contratos preparados o firmados. No puedes reducir la cantidad ya contratada.",
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, id, ...contracts });
   }
 
   if (priceSensitiveChanged && isMultiOrPack) {
@@ -632,6 +711,21 @@ if (hasProItems) {
   }
 
   if (!price) return new NextResponse("No hay precio vigente para este servicio/duración.", { status: 400 });
+
+  if (lockedContractsCount > 0) {
+    if (existing.serviceId !== b.serviceId || existing.optionId !== b.optionId) {
+      return new NextResponse(
+        "La reserva tiene contratos preparados o firmados. No puedes cambiar la actividad o duración ya contratada; solo ampliar cantidad o añadir nuevas actividades.",
+        { status: 409 }
+      );
+    }
+    if (Number(b.quantity) < Number(existing.quantity ?? 0)) {
+      return new NextResponse(
+        "La reserva tiene contratos preparados o firmados. No puedes reducir la cantidad ya contratada.",
+        { status: 409 }
+      );
+    }
+  }
 
   const unitPriceCents = Number(price.basePriceCents) || 0;
   const principalCents = unitPriceCents * Number(b.quantity);
@@ -719,7 +813,12 @@ if (hasProItems) {
           promotionsEnabled,
         })).discountCents ?? 0)
       : 0;
-    const manualDiscountCents = Number(existing.manualDiscountCents ?? 0);
+    const manualDiscountCents = isBoothReservation
+      ? getScaledBoothDiscountCents({
+          boothUnitDiscountCents,
+          nextMatchingQuantity: existing.serviceId === b.serviceId && existing.optionId === b.optionId ? b.quantity : 0,
+        })
+      : Number(existing.manualDiscountCents ?? 0);
 
     const finalTotalCents = Math.max(0, totalBeforeDiscounts - autoDiscountCents - manualDiscountCents);
 
@@ -733,9 +832,13 @@ if (hasProItems) {
       },
       select: { id: true },
     });
-    await ensureContractsTx(tx, id);
+    const contracts = await ensureContractsTx(tx, id);
 
-    return { id };
+    if (lockedContractsCount > 0 && contracts.requiredUnits < lockedContractsCount) {
+      throw new Error("La edición dejaría la reserva con menos unidades contratables que contratos ya preparados o firmados.");
+    }
+
+    return { id, ...contracts };
   });
 
   return NextResponse.json({ ok: true, ...result });

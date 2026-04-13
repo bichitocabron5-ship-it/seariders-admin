@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { BUSINESS_TZ, tzLocalToUtcDate, todayYmdInTz } from "@/lib/tz-business";
+import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
 
 export const runtime = "nodejs";
 
@@ -67,6 +68,7 @@ export async function GET(req: Request) {
       status: true,
       activityDate: true,
       scheduledTime: true,
+      arrivalAt: true,
       customerName: true,
       formalizedAt: true,
       totalPriceCents: true, // servicio final
@@ -106,8 +108,10 @@ export async function GET(req: Request) {
   type MonthRow = {
     id: string;
     status: string;
+    storeFlowStage: string;
     activityDate: Date;
     scheduledTime: Date | null;
+    arrivalAt: Date | null;
     formalizedAt: Date | null;
     customerName: string | null;
     totalCents: number;
@@ -138,8 +142,10 @@ export async function GET(req: Request) {
     days[k].rows.push({
       id: r.id,
       status: r.status,
+      storeFlowStage: deriveStoreFlowStage(r.status, r.arrivalAt),
       activityDate: r.activityDate,
       scheduledTime: r.scheduledTime,
+      arrivalAt: r.arrivalAt,
       formalizedAt: r.formalizedAt,
       customerName: r.customerName,
       totalCents,

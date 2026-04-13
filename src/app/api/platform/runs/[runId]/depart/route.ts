@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { platformAssignmentBlockingReason } from "@/lib/operability";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
+import { deriveReservationStatusFromUnits } from "@/lib/reservation-status";
 import {
   MonitorRunKind,
   MonitorRunStatus,
@@ -11,26 +12,6 @@ import {
 } from "@prisma/client";
 
 export const runtime = "nodejs";
-
-function deriveReservationStatusFromUnits(
-  units: Array<{ status: ReservationUnitStatus }>
-): ReservationStatus {
-  if (!units.length) return ReservationStatus.WAITING;
-
-  const hasInSea = units.some((u) => u.status === ReservationUnitStatus.IN_SEA);
-  const hasReady = units.some((u) => u.status === ReservationUnitStatus.READY_FOR_PLATFORM);
-  const hasWaiting = units.some((u) => u.status === ReservationUnitStatus.WAITING);
-  const allCompleted = units.every((u) => u.status === ReservationUnitStatus.COMPLETED);
-  const allCanceled = units.every((u) => u.status === ReservationUnitStatus.CANCELED);
-
-  if (hasInSea) return ReservationStatus.IN_SEA;
-  if (hasReady) return ReservationStatus.READY_FOR_PLATFORM;
-  if (hasWaiting) return ReservationStatus.WAITING;
-  if (allCompleted) return ReservationStatus.COMPLETED;
-  if (allCanceled) return ReservationStatus.CANCELED;
-
-  return ReservationStatus.WAITING;
-}
 
 export async function POST(req: Request, ctx: { params: Promise<{ runId: string }> }) {
   const session = await requirePlatformOrAdmin();

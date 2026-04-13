@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { platformAssignmentBlockingReason } from "@/lib/operability";
 import { assetCompatibilityReason, isAssetCompatibleWithServiceCategory } from "@/lib/platform-resource-compat";
+import { deriveReservationStatusFromUnits } from "@/lib/reservation-status";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import {
   MonitorRunKind,
@@ -27,21 +28,6 @@ const Body = z.object({
   jetskiId: z.string().min(1).optional().nullable(),
   assetId: z.string().min(1).optional().nullable(),
 });
-
-function deriveReservationStatusFromUnits(
-  units: Array<{ status: ReservationUnitStatus }>
-): ReservationStatus {
-  if (!units.length) return ReservationStatus.WAITING;
-
-  if (units.some((u) => u.status === ReservationUnitStatus.IN_SEA)) return ReservationStatus.IN_SEA;
-  if (units.some((u) => u.status === ReservationUnitStatus.READY_FOR_PLATFORM)) return ReservationStatus.READY_FOR_PLATFORM;
-  if (units.some((u) => u.status === ReservationUnitStatus.WAITING)) return ReservationStatus.WAITING;
-
-  if (units.every((u) => u.status === ReservationUnitStatus.COMPLETED)) return ReservationStatus.COMPLETED;
-  if (units.every((u) => u.status === ReservationUnitStatus.CANCELED)) return ReservationStatus.CANCELED;
-
-  return ReservationStatus.WAITING;
-}
 
 export async function POST(req: Request, ctx: { params: Promise<{ runId: string }> }) {
   const session = await requirePlatformOrAdmin();

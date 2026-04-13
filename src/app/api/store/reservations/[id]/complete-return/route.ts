@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
-import { PaymentMethod, ReservationStatus, ReservationUnitStatus, RoleName } from "@prisma/client";
+import {
+  MonitorRunStatus,
+  PaymentMethod,
+  ReservationStatus,
+  ReservationUnitStatus,
+  RoleName,
+  RunAssignmentStatus,
+} from "@prisma/client";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
+import { hasPendingOperationalUnits } from "@/lib/reservation-status";
 
 export const runtime = "nodejs";
 
@@ -70,6 +78,11 @@ export async function POST(
           arrivalAt: true,
           depositHeld: true,
           depositHoldReason: true,
+          units: {
+            select: {
+              status: true,
+            },
+          },
           payments: {
             select: {
               isDeposit: true,
@@ -86,6 +99,24 @@ export async function POST(
 
       if (reservation.status !== ReservationStatus.WAITING || !reservation.arrivalAt) {
         throw new Error("La reserva no está en estado de devolución pendiente de cierre");
+      }
+
+      if (hasPendingOperationalUnits(reservation.units ?? [])) {
+        throw new Error("La reserva aún tiene unidades pendientes en plataforma o en el mar. No se puede cerrar la devolución.");
+      }
+
+      const openAssignments = await tx.monitorRunAssignment.count({
+        where: {
+          reservationId: reservation.id,
+          status: { in: [RunAssignmentStatus.QUEUED, RunAssignmentStatus.ACTIVE] },
+          run: {
+            status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] },
+          },
+        },
+      });
+
+      if (openAssignments > 0) {
+        throw new Error("La reserva aún tiene asignaciones abiertas en plataforma. No se puede cerrar la devolución.");
       }
 
       const depositInCents = reservation.payments
@@ -210,11 +241,7 @@ export async function POST(
         where: {
           reservationId: reservation.id,
           status: {
-            in: [
-              ReservationUnitStatus.WAITING,
-              ReservationUnitStatus.READY_FOR_PLATFORM,
-              ReservationUnitStatus.IN_SEA,
-            ],
+            in: [ReservationUnitStatus.WAITING],
           },
         },
         data: {

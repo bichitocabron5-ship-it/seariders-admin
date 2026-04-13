@@ -78,6 +78,18 @@ function depositColor(depositStatus: DepositStatus) {
   return "#fecaca";
 }
 
+function flowStageLabel(reservation: ReservationRow) {
+  if (reservation.storeFlowStage === "RETURN_PENDING_CLOSE") return "Devuelta";
+  if (reservation.storeFlowStage === "QUEUE") return "Pendiente";
+  return reservation.status;
+}
+
+function flowStageColor(reservation: ReservationRow) {
+  if (reservation.storeFlowStage === "RETURN_PENDING_CLOSE") return "#fde68a";
+  if (reservation.storeFlowStage === "QUEUE") return "#e5e7eb";
+  return statusColor(reservation.status);
+}
+
 export function StoreReservationCardSummary({
   reservation,
   btnSecondary,
@@ -114,7 +126,7 @@ export function StoreReservationCardSummary({
         <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
           <strong>{reservation.customerName || "Sin nombre"}</strong>
           <span style={{ fontSize: 12, opacity: 0.7 }}>{timeLabel}</span>
-          <Badge label={reservation.status} color={statusColor(reservation.status)} />
+          <Badge label={flowStageLabel(reservation)} color={flowStageColor(reservation)} />
 
           {showContracts ? (
             <div

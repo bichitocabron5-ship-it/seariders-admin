@@ -8,8 +8,10 @@ import { StoreHero, StoreMetricCard, StoreMetricGrid, storeStyles } from "@/comp
 type LiteRow = {
   id: string;
   status: string;
+  storeFlowStage: string | null;
   activityDate: string;
   scheduledTime: string | null;
+  arrivalAt?: string | null;
   customerName: string;
   formalizedAt?: string | null;
   pendingCents?: number;
@@ -114,7 +116,32 @@ function isPendingFormalization(r: LiteRow) {
 
 function displayStatus(r: LiteRow) {
   if (!isHistoricalRow(r) && isPendingFormalization(r)) return "PENDING";
-  return r.status;
+  return r.storeFlowStage || r.status;
+}
+
+function displayStatusLabel(r: LiteRow) {
+  const status = displayStatus(r);
+  switch (status) {
+    case "PENDING":
+      return "Pendiente";
+    case "QUEUE":
+      return "Pendiente de salida";
+    case "RETURN_PENDING_CLOSE":
+      return "Devuelta pendiente de cierre";
+    case "READY_FOR_PLATFORM":
+      return "Lista para platform";
+    case "IN_SEA":
+      return "En mar";
+    case "COMPLETED":
+      return "Completada";
+    case "CANCELED":
+    case "CANCELLED":
+      return "Cancelada";
+    case "WAITING":
+      return "En espera";
+    default:
+      return status;
+  }
 }
 
 function isTodayLocal(yyyyMmDd: string) {
@@ -158,6 +185,7 @@ function actionForRow(r: LiteRow): RowAction {
 function actionHintForRow(r: LiteRow) {
   const status = displayStatus(r);
   if (status === "CANCELED" || status === "COMPLETED") return "Consulta y seguimiento de la ficha.";
+  if (status === "RETURN_PENDING_CLOSE") return "La reserva ya volvió y queda pendiente de cierre en tienda.";
   if (isHistoricalRow(r)) return "Consulta de la reserva histórica.";
   if (isPendingFormalization(r)) {
     return "Antes de formalizar puedes ajustar actividad, cantidad, fecha u hora.";
@@ -183,6 +211,8 @@ function statusBadgeStyle(status: string): React.CSSProperties {
   if (status === "PENDING") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d" };
   if (status === "CANCELED" || status === "CANCELLED") return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
   if (status === "COMPLETED") return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (status === "RETURN_PENDING_CLOSE") return { background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d" };
+  if (status === "QUEUE") return { background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa" };
   if (status === "WAITING") return { background: "#e5e7eb", color: "#374151", border: "1px solid #d1d5db" };
   if (status === "READY_FOR_PLATFORM") return { background: "#e0f2fe", color: "#075985", border: "1px solid #bae6fd" };
   if (status === "IN_SEA") return { background: "#ede9fe", color: "#5b21b6", border: "1px solid #ddd6fe" };
@@ -218,7 +248,7 @@ function RowCard({
           {(hhmm(r.scheduledTime) || "Sin hora") + " | " + (r.customerName || "Sin nombre")}
         </div>
         <span style={{ fontSize: 12, padding: "4px 10px", borderRadius: 999, fontWeight: 800, ...statusBadgeStyle(displayStatus(r)) }}>
-          {displayStatus(r)}
+          {displayStatusLabel(r)}
         </span>
       </div>
 
@@ -228,6 +258,12 @@ function RowCard({
         {r.option?.durationMinutes ? ` | ${r.option.durationMinutes} min` : ""}
         {r.option?.paxMax ? ` | pax ${r.option.paxMax}` : ""}
       </div>
+
+      {displayStatus(r) === "RETURN_PENDING_CLOSE" && r.arrivalAt ? (
+        <div style={{ fontSize: 12, color: "#92400e" }}>
+          Devuelta: <b>{hhmm(r.arrivalAt) || new Date(r.arrivalAt).toLocaleString("es-ES", { timeZone: BUSINESS_TZ })}</b>
+        </div>
+      ) : null}
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 13, color: "#334155" }}>
         {typeof r.totalCents !== "undefined" ? <span>Total: <b>{euros(r.totalCents)}</b></span> : null}

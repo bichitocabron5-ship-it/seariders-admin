@@ -1,6 +1,7 @@
 // src/app/api/platform/queue/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { deriveReservationStatusFromUnits } from "@/lib/reservation-status";
 import {
   ReservationStatus,
   JetskiStatus,
@@ -30,18 +31,6 @@ function parseKind(req: Request): "JETSKI" | "NAUTICA" | null {
   const raw = url.searchParams.get("kind")?.trim().toUpperCase();
   if (raw === "JETSKI" || raw === "NAUTICA") return raw;
   return null;
-}
-
-function deriveReservationStatusFromUnits(
-  units: Array<{ status: ReservationUnitStatus }>
-): ReservationStatus {
-  if (!units.length) return ReservationStatus.WAITING;
-  if (units.some((u) => u.status === ReservationUnitStatus.IN_SEA)) return ReservationStatus.IN_SEA;
-  if (units.some((u) => u.status === ReservationUnitStatus.READY_FOR_PLATFORM)) return ReservationStatus.READY_FOR_PLATFORM;
-  if (units.some((u) => u.status === ReservationUnitStatus.WAITING)) return ReservationStatus.WAITING;
-  if (units.every((u) => u.status === ReservationUnitStatus.COMPLETED)) return ReservationStatus.COMPLETED;
-  if (units.every((u) => u.status === ReservationUnitStatus.CANCELED)) return ReservationStatus.CANCELED;
-  return ReservationStatus.WAITING;
 }
 
 async function repairClosedQueuedAssignments() {

@@ -23,6 +23,7 @@ type HistoryIncident = {
 type HistoryRow = {
   id: string;
   status: string;
+  storeFlowStage: string | null;
   activityDate: string;
   scheduledTime: string | null;
   arrivalAt: string | null;
@@ -66,11 +67,11 @@ type Props = {
   error: string | null;
   euros: (cents: number | null | undefined) => string;
   dt: (value: string | null | undefined) => string;
-  statusTone: (status: string) => Tone;
+  statusTone: (status: string | null | undefined) => Tone;
   incidentTone: (level: string) => Tone;
   countPaidServiceCents: (row: HistoryRow) => number;
   countPendingServiceCents: (row: HistoryRow) => number;
-  statusLabel: (status: string) => string;
+  statusLabel: (status: string | null | undefined) => string;
   mechanicsDetailHref: (incident: HistoryIncident) => string;
   mechanicsEventHref: (incident: HistoryIncident) => string;
   reservationHref: (reservationId: string) => string;
@@ -154,7 +155,7 @@ export default function StoreHistoryResultsSection({
             </thead>
             <tbody>
               {rows.map((row) => {
-                const statusUi = statusTone(row.status);
+                const statusUi = statusTone(row.storeFlowStage ?? row.status);
                 const incidentCount = row.incidents.length;
                 const holdStatus = row.depositHeld
                   ? row.depositReturnedCents > 0
@@ -234,7 +235,7 @@ export default function StoreHistoryResultsSection({
                             color: statusUi.color,
                           }}
                         >
-                          {statusLabel(row.status)}
+                          {statusLabel(row.storeFlowStage ?? row.status)}
                         </span>
                         <div style={mutedText}>
                           Formalizada: {row.formalizedAt ? dt(row.formalizedAt) : "No"}

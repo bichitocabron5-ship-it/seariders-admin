@@ -8,6 +8,7 @@ import { ReservationStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
+import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
 
 export const runtime = "nodejs";
 
@@ -90,6 +91,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           scheduledTime: true,
           storeQueueStartedAt: true,
           paymentCompletedAt: true,
+          formalizedAt: true,
           channelId: true,
           customerName: true,
           customerCountry: true,
@@ -97,6 +99,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: true,
           isLicense: true,
           status: true,
+          totalPriceCents: true,
+          depositCents: true,
           service: { select: { category: true } },
           items: {
             orderBy: { createdAt: "asc" },
@@ -111,10 +115,40 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
               service: { select: { category: true } },
             },
           },
+          contracts: {
+            select: { unitIndex: true, status: true },
+          },
+          payments: {
+            select: { amountCents: true, isDeposit: true, direction: true },
+          },
         },
       });
 
       if (!parent) throw new Error("Reserva no existe");
+      const readyCheck = evaluateReadyForPlatform({
+        status: parent.status,
+        formalizedAt: parent.formalizedAt,
+        totalPriceCents: parent.totalPriceCents,
+        depositCents: parent.depositCents,
+        quantity: parent.quantity,
+        isLicense: Boolean(parent.isLicense),
+        service: parent.service,
+        items: (parent.items ?? []).map((it) => ({
+          quantity: it.quantity ?? 0,
+          isExtra: Boolean(it.isExtra),
+          service: it.service ? { category: it.service.category ?? null } : null,
+        })),
+        contracts: (parent.contracts ?? []).map((contract) => ({
+          unitIndex: Number(contract.unitIndex ?? 0),
+          status: contract.status,
+        })),
+        payments: (parent.payments ?? []).map((payment) => ({
+          amountCents: Number(payment.amountCents ?? 0),
+          isDeposit: Boolean(payment.isDeposit),
+          direction: payment.direction,
+        })),
+      });
+      if (!readyCheck.ok) throw new Error(readyCheck.error);
 
       // Solo padre (evita llamar esto sobre una hija)
       if (parent.parentReservationId) {

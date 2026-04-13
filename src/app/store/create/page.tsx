@@ -71,6 +71,7 @@ function StoreCreatePageInner() {
     autoDiscountCents: number;
     totalPriceCents: number;
   } | null>(null);
+  const [prefillSource, setPrefillSource] = useState<string | null>(null);
 
   const [category, setCategory] = useState<string>("");
   const [serviceId, setServiceId] = useState<string>("");
@@ -130,6 +131,7 @@ function StoreCreatePageInner() {
       manualDiscountCents?: number | null;
       autoDiscountCents?: number | null;
       totalPriceCents?: number | null;
+      source?: string | null;
       service?: ServiceMain | null;
       option?: Option | null;
       channel?: Channel | null;
@@ -172,6 +174,7 @@ function StoreCreatePageInner() {
         autoDiscountCents: Number(res.autoDiscountCents ?? 0),
         totalPriceCents: Number(res.totalPriceCents ?? 0),
       });
+      setPrefillSource(res.source ?? null);
     },
     []
   );
@@ -591,6 +594,10 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
   const shownReason = discountPreview?.reason ?? (isMigrateMode && shownDiscountCents > 0 ? "Precio heredado de la pre-reserva de carpa." : null);
   const canEditPricing = !isMigrateMode && !isEditMode;
+  const isBoothReservation = showBoothBadge || prefillSource === "BOOTH";
+  const boothPricingNote = isBoothReservation
+    ? "Reservas de Booth: el descuento heredado solo se conserva al ampliar la misma actividad original. Si añades otra actividad distinta o extras, esas líneas no reciben descuento de carpa."
+    : null;
 
   const MANUAL_DISC_MAX_PCT = 30;
   const maxManualDiscountCents = Math.floor((shownBaseCents * MANUAL_DISC_MAX_PCT) / 100);
@@ -1187,6 +1194,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           <PricingSection
             discountLoading={discountLoading}
             canEditPricing={canEditPricing}
+            boothPricingNote={boothPricingNote}
             shownFinalCents={shownFinalCents}
             maxManualDiscountCents={maxManualDiscountCents}
             manualDiscountEuros={manualDiscountEuros}

@@ -102,6 +102,10 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
 
   await ensureOkResponse(res, "No se pudo actualizar la reserva");
   const j = await res.json();
+  if (Number(j.requiredUnits ?? 0) > Number(j.readyCount ?? 0)) {
+    args.router.push(`/store/create?editFrom=${j.id}#contracts`);
+    return;
+  }
   args.router.push(`/store?reservationId=${j.id}`);
 }
 

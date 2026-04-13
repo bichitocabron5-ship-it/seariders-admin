@@ -102,6 +102,7 @@ export function AvailabilitySection({
 export function PricingSection({
   discountLoading,
   canEditPricing,
+  boothPricingNote,
   shownFinalCents,
   maxManualDiscountCents,
   manualDiscountEuros,
@@ -122,6 +123,7 @@ export function PricingSection({
 }: {
   discountLoading: boolean;
   canEditPricing: boolean;
+  boothPricingNote?: string | null;
   shownFinalCents: number;
   maxManualDiscountCents: number;
   manualDiscountEuros: string;
@@ -170,6 +172,12 @@ export function PricingSection({
           <div style={{ fontSize: 24, fontWeight: 900 }}>{euros(shownFinalCentsWithManual)}</div>
         </div>
       </div>
+
+      {boothPricingNote ? (
+        <div style={{ padding: 12, borderRadius: 14, background: "#ecfeff", border: "1px solid #a5f3fc", fontSize: 13, color: "#155e75" }}>
+          {boothPricingNote}
+        </div>
+      ) : null}
 
       <div style={{ display: "grid", gap: 10 }}>
         {canEditPricing && availablePromos.length > 0 ? (

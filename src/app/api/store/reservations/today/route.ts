@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
 
 export const runtime = "nodejs";
 
@@ -245,10 +246,12 @@ export async function GET() {
       : (r.items.length > 0 ? serviceTotalCents + extrasTotalCents : Number(r.basePriceCents ?? 0));
 
     const finalTotalCents = Number(r.totalPriceCents ?? pvpTotalCents);
+    const storeFlowStage = deriveStoreFlowStage(r.status, r.arrivalAt);
     
     return {
       id: r.id,
       status: r.status,
+      storeFlowStage,
       arrivalAt: r.arrivalAt,
       formalizedAt: r.formalizedAt,
       activityDate: r.activityDate,

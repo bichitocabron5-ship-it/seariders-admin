@@ -5,11 +5,14 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import type { Prisma } from "@prisma/client";
+import { MonitorRunStatus, ReservationUnitStatus, RunAssignmentStatus, type Prisma } from "@prisma/client";
 import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
+import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
 
 export const runtime = "nodejs";
+
+const ALLOWED_MANUAL_STATUSES = new Set(["SCHEDULED", "WAITING", "READY_FOR_PLATFORM"] as const);
 
 const Body = z.object({
   id: z.string().min(1),
@@ -92,17 +95,79 @@ export async function POST(req: Request) {
   await prisma.$transaction(async (tx) => {
     const current = await tx.reservation.findUnique({
       where: { id: parsed.data.id },
-      select: { id: true, paymentCompletedAt: true },
+      select: {
+        id: true,
+        status: true,
+        paymentCompletedAt: true,
+        formalizedAt: true,
+        totalPriceCents: true,
+        depositCents: true,
+        quantity: true,
+        isLicense: true,
+        service: { select: { category: true } },
+        items: {
+          select: {
+            quantity: true,
+            isExtra: true,
+            service: { select: { category: true } },
+          },
+        },
+        contracts: { select: { unitIndex: true, status: true } },
+        payments: { select: { amountCents: true, isDeposit: true, direction: true } },
+      },
     });
     if (!current) throw new Error("Reserva no existe");
+    if (!ALLOWED_MANUAL_STATUSES.has(parsed.data.status)) {
+      throw new Error("Este endpoint no permite forzar IN_SEA, COMPLETED o CANCELED. Usa el flujo operativo específico.");
+    }
+
+    const openAssignments = await tx.monitorRunAssignment.count({
+      where: {
+        reservationId: parsed.data.id,
+        status: { in: [RunAssignmentStatus.QUEUED, RunAssignmentStatus.ACTIVE] },
+        run: {
+          status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] },
+        },
+      },
+    });
 
     const readyAt = parsed.data.status === "READY_FOR_PLATFORM" ? new Date() : null;
+    if (parsed.data.status === "READY_FOR_PLATFORM") {
+      const readyCheck = evaluateReadyForPlatform({
+        status: current.status,
+        formalizedAt: current.formalizedAt,
+        totalPriceCents: current.totalPriceCents,
+        depositCents: current.depositCents,
+        quantity: current.quantity,
+        isLicense: Boolean(current.isLicense),
+        service: current.service,
+        items: (current.items ?? []).map((it) => ({
+          quantity: it.quantity ?? 0,
+          isExtra: Boolean(it.isExtra),
+          service: it.service ? { category: it.service.category ?? null } : null,
+        })),
+        contracts: (current.contracts ?? []).map((contract) => ({
+          unitIndex: Number(contract.unitIndex ?? 0),
+          status: contract.status,
+        })),
+        payments: (current.payments ?? []).map((payment) => ({
+          amountCents: Number(payment.amountCents ?? 0),
+          isDeposit: Boolean(payment.isDeposit),
+          direction: payment.direction,
+        })),
+      });
+      if (!readyCheck.ok) throw new Error(readyCheck.error);
+    }
+    if ((parsed.data.status === "WAITING" || parsed.data.status === "SCHEDULED") && openAssignments > 0) {
+      throw new Error("La reserva tiene asignaciones activas o en cola en Platform. Deshaz la asignación antes de cambiar el estado.");
+    }
+
     await tx.reservation.update({
       where: { id: parsed.data.id },
       data: {
         status: parsed.data.status,
         ...(readyAt ? { paymentCompletedAt: current.paymentCompletedAt ?? readyAt } : {}),
-        ...(readyAt ? { readyForPlatformAt: readyAt } : {}),
+        readyForPlatformAt: readyAt,
       },
       select: { id: true },
     });
@@ -112,6 +177,19 @@ export async function POST(req: Request) {
       await tx.reservationUnit.updateMany({
         where: { reservationId: parsed.data.id, status: "READY_FOR_PLATFORM" },
         data: { readyForPlatformAt: readyAt ?? undefined },
+      });
+    }
+    if (parsed.data.status === "WAITING" || parsed.data.status === "SCHEDULED") {
+      await tx.reservationUnit.updateMany({
+        where: {
+          reservationId: parsed.data.id,
+          status: ReservationUnitStatus.READY_FOR_PLATFORM,
+        },
+        data: {
+          status: ReservationUnitStatus.WAITING,
+          readyForPlatformAt: null,
+          jetskiId: null,
+        },
       });
     }
 

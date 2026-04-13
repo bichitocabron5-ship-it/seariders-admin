@@ -408,7 +408,7 @@ export default function StoreDashboard() {
         (r) =>
           !RIGHT_STATUSES.has(r.status) &&
           !LEFT_STATUSES_EXCLUDE.has(r.status) &&
-          !r.arrivalAt
+          r.storeFlowStage !== "RETURN_PENDING_CLOSE"
       ),
     [rowsSorted],
   );
@@ -416,7 +416,7 @@ export default function StoreDashboard() {
   const rowsReturned = useMemo(
     () =>
       rowsSorted
-        .filter((r) => r.status === "WAITING" && !!r.arrivalAt)
+        .filter((r) => r.storeFlowStage === "RETURN_PENDING_CLOSE")
         .sort(
           (a, b) =>
             new Date(b.arrivalAt ?? 0).getTime() -

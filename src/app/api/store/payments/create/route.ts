@@ -11,6 +11,7 @@ import type { Prisma } from "@prisma/client";
 import { computeRequiredContractUnits, computeRequiredPlatformUnits } from "@/lib/reservation-rules";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
 
 export const runtime = "nodejs";
 
@@ -101,6 +102,7 @@ export async function POST(req: Request) {
           totalPriceCents: true,  // ✅ servicio (total final sin fianza)
           depositCents: true,     // ✅ fianza
           status: true,
+          formalizedAt: true,
           depositHeld: true,
           depositHoldReason: true,
 
@@ -261,15 +263,41 @@ export async function POST(req: Request) {
       const fullyPaid = newPendingServiceCents === 0 && newPendingDepositCents === 0;
 
       // ✅ AUTO: si todo pagado → READY_FOR_PLATFORM (solo si no está finalizada/cancelada)
-      const canAutoMove =
-        reservation.status !== ReservationStatus.COMPLETED &&
-        reservation.status !== ReservationStatus.CANCELED;
-
       let statusUpdated = false;
       let splitInfo: { ok: true; childrenCreated: number; childrenIds?: string[] } | null = null;
       const readyAt = new Date();
+      const readyCheck = evaluateReadyForPlatform({
+        status: reservation.status,
+        formalizedAt: reservation.formalizedAt,
+        totalPriceCents: reservation.totalPriceCents,
+        depositCents: reservation.depositCents,
+        quantity: reservation.quantity,
+        isLicense: Boolean(reservation.isLicense),
+        service: reservation.service,
+        items: (reservation.items ?? []).map((it) => ({
+          quantity: it.quantity ?? 0,
+          isExtra: Boolean(it.isExtra),
+          service: it.service ? { category: it.service.category ?? null } : null,
+        })),
+        contracts: (reservation.contracts ?? []).map((contract) => ({
+          unitIndex: Number(contract.unitIndex ?? 0),
+          status: contract.status,
+        })),
+        payments: [
+          ...(reservation.payments ?? []).map((payment) => ({
+            amountCents: Number(payment.amountCents ?? 0),
+            isDeposit: Boolean(payment.isDeposit),
+            direction: payment.direction,
+          })),
+          {
+            amountCents,
+            isDeposit,
+            direction,
+          },
+        ],
+      });
 
-      if (fullyPaid && canAutoMove) {
+      if (fullyPaid && readyCheck.ok) {
         if (reservation.status !== ReservationStatus.READY_FOR_PLATFORM && reservation.status !== ReservationStatus.IN_SEA) {
           await tx.reservation.update({
             where: { id: reservation.id },
@@ -411,6 +439,7 @@ export async function POST(req: Request) {
         ok: true,
         payment,
         fullyPaid,
+        readyForPlatformOk: readyCheck.ok,
         statusUpdated,
         newPendingServiceCents,
         newPendingDepositCents,

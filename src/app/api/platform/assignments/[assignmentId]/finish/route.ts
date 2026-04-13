@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
+import { deriveReservationStatusFromUnits } from "@/lib/reservation-status";
 
 import {
   MonitorRunStatus,
@@ -41,29 +42,6 @@ const Body = z.object({
 
   createMaintenanceEvent: z.boolean().optional().default(true),
 });
-
-function deriveReservationStatusFromUnits(
-  units: Array<{ status: ReservationUnitStatus }>
-): ReservationStatus {
-
-  if (!units.length) return ReservationStatus.WAITING;
-
-  const statuses = units.map(u => u.status);
-
-  if (statuses.includes(ReservationUnitStatus.IN_SEA))
-    return ReservationStatus.IN_SEA;
-
-  if (statuses.includes(ReservationUnitStatus.WAITING))
-    return ReservationStatus.WAITING;
-
-  if (statuses.includes(ReservationUnitStatus.READY_FOR_PLATFORM))
-    return ReservationStatus.READY_FOR_PLATFORM;
-
-  if (statuses.every(s => s === ReservationUnitStatus.COMPLETED))
-    return ReservationStatus.COMPLETED;
-
-  return ReservationStatus.WAITING;
-}
 
 function mapIncidentLevelToMaintenanceSeverity(
   level: IncidentLevel
@@ -395,7 +373,7 @@ export async function POST(
         data: {
           status: newStatus,
           arrivalAt:
-            newStatus === ReservationStatus.WAITING ? new Date() : undefined,
+            newStatus === ReservationStatus.WAITING ? new Date() : null,
         },
         select: { id: true },
       });

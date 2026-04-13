@@ -26,6 +26,7 @@ type HistoryIncident = {
 type HistoryRow = {
   id: string;
   status: string;
+  storeFlowStage: string | null;
   activityDate: string;
   scheduledTime: string | null;
   arrivalAt: string | null;
@@ -157,13 +158,16 @@ function mechanicsEventHref(incident: {
   return `${base}?eventId=${incident.maintenanceEventId}`;
 }
 
-function statusTone(status: string) {
-  switch (status) {
+function statusTone(stageOrStatus: string | null | undefined) {
+  switch (stageOrStatus) {
     case "COMPLETED":
       return { bg: "#ecfdf5", border: "#bbf7d0", color: "#166534" };
     case "IN_SEA":
     case "READY_FOR_PLATFORM":
       return { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" };
+    case "RETURN_PENDING_CLOSE":
+      return { bg: "#fef3c7", border: "#fcd34d", color: "#92400e" };
+    case "QUEUE":
     case "WAITING":
       return { bg: "#fff7ed", border: "#fed7aa", color: "#c2410c" };
     case "CANCELED":
@@ -201,10 +205,14 @@ function countPendingDepositCents(row: HistoryRow) {
   return Math.max(0, Number(row.depositCents ?? 0) - Number(row.depositCollectedCents ?? 0));
 }
 
-function statusLabel(status: string) {
-  switch (status) {
+function statusLabel(stageOrStatus: string | null | undefined) {
+  switch (stageOrStatus) {
     case "SCHEDULED":
       return "Programada";
+    case "QUEUE":
+      return "Pendiente de salida";
+    case "RETURN_PENDING_CLOSE":
+      return "Devuelta pendiente de cierre";
     case "WAITING":
       return "En espera";
     case "READY_FOR_PLATFORM":

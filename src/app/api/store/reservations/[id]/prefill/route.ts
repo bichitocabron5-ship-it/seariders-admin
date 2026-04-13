@@ -43,6 +43,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       manualDiscountCents: true,
       autoDiscountCents: true,
       totalPriceCents: true,
+      source: true,
       customerName: true,
       boothNote: true,
       customerPhone: true,

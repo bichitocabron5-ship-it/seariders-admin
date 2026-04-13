@@ -296,6 +296,22 @@ export function ReservationOpsPanel({
 
       <div>
         <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 4 }}>Extras</div>
+        {r.source === "BOOTH" ? (
+          <div
+            style={{
+              marginBottom: 8,
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #bae6fd",
+              background: "#f0f9ff",
+              color: "#0c4a6e",
+              fontSize: 12,
+              lineHeight: 1.45,
+            }}
+          >
+            En reservas de Booth, añadir extras o actividades nuevas no amplía el descuento heredado. Solo escala si se aumenta la misma actividad base con la que llegó la reserva.
+          </div>
+        ) : null}
         {r.extras && r.extras.length > 0 ? (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
             {r.extras.map((ex) => (

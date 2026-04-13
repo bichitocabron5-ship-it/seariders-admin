@@ -188,7 +188,10 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
         <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
           <strong>{r.customerName || "Sin nombre"}</strong>
           <span style={{ fontSize: 12, opacity: 0.7 }}>{hhmm(r.scheduledTime) || "sin hora"}</span>
-          <Badge label={r.status} color={statusColor(r.status)} />
+          <Badge
+            label={r.storeFlowStage === "RETURN_PENDING_CLOSE" ? "Devuelta" : r.status}
+            color={r.storeFlowStage === "RETURN_PENDING_CLOSE" ? "#fde68a" : statusColor(r.status)}
+          />
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <button type="button" onClick={() => router.push(`/store/create?editFrom=${r.id}`)} style={btnSecondary}>

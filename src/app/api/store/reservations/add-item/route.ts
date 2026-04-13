@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { computeAutoDiscountDetail } from "@/lib/discounts";
+import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 
 export const runtime = "nodejs";
 
@@ -137,6 +138,14 @@ export async function POST(req: Request) {
           channelId: true,
           serviceId: true,
           optionId: true,
+          items: {
+            where: { isExtra: false },
+            select: {
+              serviceId: true,
+              optionId: true,
+              quantity: true,
+            },
+          },
         },
       });
       if (!reservationPricing) throw new Error("Reserva no existe");
@@ -168,9 +177,34 @@ export async function POST(req: Request) {
             customerCountry: reservationPricing.customerCountry ?? null,
             promotionsEnabled,
           })).discountCents ?? 0);
+      const currentMatchingQuantity = (reservationPricing.items ?? []).reduce(
+        (sum, item) =>
+          item.serviceId === reservationPricing.serviceId &&
+          item.optionId === reservationPricing.optionId
+            ? sum + Number(item.quantity ?? 0)
+            : sum,
+        0
+      );
+      const boothUnitDiscountCents = getBoothUnitDiscountCents({
+        source: reservationPricing.source,
+        matchingQuantity: currentMatchingQuantity,
+        manualDiscountCents: reservationPricing.manualDiscountCents,
+      });
+      const nextMatchingQuantity =
+        !isExtra &&
+        serviceId === reservationPricing.serviceId &&
+        optionId === reservationPricing.optionId
+          ? currentMatchingQuantity + quantity
+          : currentMatchingQuantity;
+      const manualDiscountCents = isBoothReservation
+        ? getScaledBoothDiscountCents({
+            boothUnitDiscountCents,
+            nextMatchingQuantity,
+          })
+        : Number(reservationPricing.manualDiscountCents ?? 0);
       const finalTotal = Math.max(
         0,
-        newTotal - Number(reservationPricing.manualDiscountCents ?? 0) - autoDiscountCents
+        newTotal - manualDiscountCents - autoDiscountCents
       );
 
       await tx.reservation.update({
@@ -178,6 +212,7 @@ export async function POST(req: Request) {
         data: {
           basePriceCents: serviceSubtotal,
           autoDiscountCents,
+          manualDiscountCents,
           promoCode: isBoothReservation ? null : reservationPricing.promoCode ?? null,
           totalPriceCents: finalTotal,
         },

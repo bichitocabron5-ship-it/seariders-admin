@@ -194,6 +194,23 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
           </div>
         ) : null}
 
+        {r.source === "BOOTH" ? (
+          <div
+            style={{
+              marginTop: 10,
+              padding: "10px 12px",
+              borderRadius: 14,
+              border: "1px solid #a5f3fc",
+              background: "#ecfeff",
+              color: "#155e75",
+              fontSize: 13,
+              lineHeight: 1.45,
+            }}
+          >
+            El descuento heredado de carpa solo se conserva al ampliar la misma actividad original. Si añades otra actividad distinta o extras, esas líneas no reciben descuento de Booth.
+          </div>
+        ) : null}
+
         {r.taxiboatTrip ? (
           <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "#e0e7ff" }}>
             Taxi boat {r.taxiboatTrip.boat}

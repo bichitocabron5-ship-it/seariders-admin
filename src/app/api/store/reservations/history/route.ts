@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { type AppSession, sessionOptions } from "@/lib/session";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 import { getPassVoucherPaidCents, getSignedPaymentCents } from "@/lib/pass-vouchers";
+import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
 
 export const runtime = "nodejs";
 
@@ -235,6 +236,7 @@ export async function GET(req: Request) {
     return {
       id: reservation.id,
       status: reservation.status,
+      storeFlowStage: deriveStoreFlowStage(reservation.status, reservation.arrivalAt),
       activityDate: reservation.activityDate,
       scheduledTime: reservation.scheduledTime,
       arrivalAt: reservation.arrivalAt,
