@@ -16,7 +16,21 @@ type Summary = {
     meta?: { windowFrom?: string | null; windowTo?: string | null };
   };
   isClosed?: boolean;
-  closure?: { id: string; closedAt: string; isVoided?: boolean } | null;
+  closure?: {
+    id: string;
+    closedAt: string;
+    isVoided?: boolean;
+    cashFundCents?: number | null;
+    cashToKeepCents?: number | null;
+    cashToWithdrawCents?: number | null;
+  } | null;
+  cashFundSuggestion?: {
+    defaultCents?: number;
+    suggestedCents?: number;
+    source?: "CURRENT_CLOSURE" | "PREVIOUS_CLOSURE" | "DEFAULT";
+    previousClosureId?: string | null;
+    previousBusinessDate?: string | null;
+  };
 };
 
 type Method = "CASH" | "CARD" | "BIZUM" | "TRANSFER" | "VOUCHER";
@@ -115,6 +129,8 @@ export default function StoreCashClosuresPage() {
 
   const [declService, setDeclService] = useState<Record<Method, string>>(emptyMethodMapInputs());
   const [declDeposit, setDeclDeposit] = useState<Record<Method, string>>(emptyMethodMapInputs());
+  const [cashFundEuros, setCashFundEuros] = useState("");
+  const [cashFundTouched, setCashFundTouched] = useState(false);
 
   const [note, setNote] = useState<string>("");
   const [closing, setClosing] = useState(false);
@@ -182,6 +198,15 @@ export default function StoreCashClosuresPage() {
 
     return { service: dService, deposit: dDeposit, total: dTotal, netService, netDeposit, netTotal };
   }, [declaredTotals, systemServiceByMethod, systemDepositByMethod]);
+  const cashFundCents = useMemo(() => centsFromEuroInput(cashFundEuros), [cashFundEuros]);
+  const declaredCashCents = declaredTotals.total.CASH ?? 0;
+  const cashToWithdrawCents = declaredCashCents - cashFundCents;
+  const cashFundSourceLabel =
+    sum?.cashFundSuggestion?.source === "CURRENT_CLOSURE"
+      ? "guardado en este cierre"
+      : sum?.cashFundSuggestion?.source === "PREVIOUS_CLOSURE"
+      ? `heredado del cierre anterior${sum?.cashFundSuggestion?.previousBusinessDate ? ` (${String(sum.cashFundSuggestion.previousBusinessDate).slice(0, 10)})` : ""}`
+      : "valor por defecto";
 
   async function load() {
     setLoading(true);
@@ -231,6 +256,10 @@ export default function StoreCashClosuresPage() {
             VOUCHER: mD.VOUCHER ?? 0,
           }));
         }
+
+        if (!cashFundTouched) {
+          setCashFundEuros(euroInputFromCents(j?.cashFundSuggestion?.suggestedCents ?? 10_000));
+        }
       }
 
       const ss = await fetch(`/api/cash-closures/shift-sessions?origin=${origin}&shift=${shift}&date=${today}`, {
@@ -275,6 +304,7 @@ export default function StoreCashClosuresPage() {
         date: today,
         shiftSessionIds: selectedSs,
         declared: declaredTotals,
+        cashFundCents,
         note: note.trim() ? note.trim() : null,
       };
 
@@ -370,6 +400,7 @@ export default function StoreCashClosuresPage() {
             <div style={{ display: "grid", gap: 12 }}>
               <StoreMetricCard label="Sistema neto" value={euros(systemNet)} />
               <StoreMetricCard label="Declarado neto" value={euros(declaredTotals.netTotal)} />
+              <StoreMetricCard label="Fondo próximo día" value={euros(cashFundCents)} />
               <StoreMetricCard
                 label="Diferencia neta"
                 value={euros(diffLive.netTotal)}
@@ -486,6 +517,33 @@ export default function StoreCashClosuresPage() {
               <Stat label="Sistema neto" value={euros(systemNet)} />
               <Stat label="Declarado neto" value={euros(declaredTotals.netTotal)} />
               <Stat label="Diferencia neta" value={euros(diffLive.netTotal)} />
+            </div>
+
+            <div style={{ ...opsStyles.sectionCard, borderRadius: 18, padding: 16, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)" }}>
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ fontWeight: 950 }}>Fondo de caja para el siguiente día</div>
+                <div style={{ fontSize: 12, color: "#64748b" }}>
+                  Se deja dentro de la caja al cerrar para arrancar con efectivo al día siguiente. Valor sugerido: {cashFundSourceLabel}.
+                </div>
+              </div>
+
+              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "minmax(220px, 320px) repeat(auto-fit, minmax(180px, 1fr))", gap: 12, alignItems: "end" }}>
+                <label style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>Importe a dejar en caja (€)</div>
+                  <Input
+                    value={cashFundEuros}
+                    onChange={(e) => {
+                      setCashFundTouched(true);
+                      setCashFundEuros(e.target.value);
+                    }}
+                    placeholder="100,00"
+                  />
+                </label>
+
+                <Stat label="Efectivo declarado" value={euros(declaredCashCents)} />
+                <Stat label="Efectivo a dejar" value={euros(cashFundCents)} />
+                <Stat label="Efectivo a retirar" value={euros(cashToWithdrawCents)} />
+              </div>
             </div>
 
             <div style={{ fontSize: 12, opacity: 0.7 }}>

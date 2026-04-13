@@ -34,6 +34,7 @@ const Body = z.object({
   date: z.string().min(10).max(10), // YYYY-MM-DD
   shiftSessionIds: z.array(z.string().min(1)).min(1).max(4),
   declared: TotalsSchema,
+  cashFundCents: z.number().int().min(0).max(500_000),
   note: z.string().max(500).optional().nullable(),
 });
 
@@ -172,6 +173,9 @@ export async function POST(req: Request) {
       };
 
       const diff = diffTotals(recomputedDeclared, system);
+      const cashFundCents = parsed.data.cashFundCents;
+      const cashToKeepCents = cashFundCents;
+      const cashToWithdrawCents = (recomputedDeclared.total.CASH ?? 0) - cashFundCents;
 
       // 5) asegurar CashShift (create si no existe)
       const cashShift = await tx.cashShift.upsert({
@@ -207,6 +211,9 @@ export async function POST(req: Request) {
           windowFrom: from,
           windowTo: to,
           cashShiftId: cashShift.id,
+          cashFundCents,
+          cashToKeepCents,
+          cashToWithdrawCents,
         },
       };
 

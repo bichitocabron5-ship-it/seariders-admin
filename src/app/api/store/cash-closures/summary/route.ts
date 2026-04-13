@@ -9,6 +9,29 @@ import { PaymentOrigin, ShiftName, RoleName } from "@prisma/client";
 import { originFromRoleName, sumByMethod, parseBusinessDate, shiftWindow, isOriginSplitByShift, normalizeClosureShift } from "@/lib/cashClosures";
 
 export const runtime = "nodejs";
+const DEFAULT_CASH_FUND_CENTS = 10_000;
+
+type CashFundMeta = {
+  cashFundCents?: number;
+  cashToKeepCents?: number;
+  cashToWithdrawCents?: number;
+};
+
+function readCashFundMeta(value: unknown): CashFundMeta | null {
+  if (!value || typeof value !== "object") return null;
+  const meta = (value as { meta?: unknown }).meta;
+  if (!meta || typeof meta !== "object") return null;
+
+  const cashFundCents = Number((meta as { cashFundCents?: unknown }).cashFundCents);
+  const cashToKeepCents = Number((meta as { cashToKeepCents?: unknown }).cashToKeepCents);
+  const cashToWithdrawCents = Number((meta as { cashToWithdrawCents?: unknown }).cashToWithdrawCents);
+
+  return {
+    cashFundCents: Number.isFinite(cashFundCents) ? cashFundCents : undefined,
+    cashToKeepCents: Number.isFinite(cashToKeepCents) ? cashToKeepCents : undefined,
+    cashToWithdrawCents: Number.isFinite(cashToWithdrawCents) ? cashToWithdrawCents : undefined,
+  };
+}
 
 const Q = z.object({
   origin: z.nativeEnum(PaymentOrigin),
@@ -151,17 +174,57 @@ export async function GET(req: Request) {
         ...(isOriginSplitByShift(origin) ? { shift } : {}),
       },
       orderBy: [{ closedAt: "desc" }],
-      select: { id: true, closedAt: true, isVoided: true },
+      select: { id: true, closedAt: true, isVoided: true, computedJson: true },
     });
 
     const isClosed = Boolean(existing && !existing.isVoided);
+    const currentFundMeta = existing ? readCashFundMeta(existing.computedJson) : null;
+
+    const previousClosure = !existing
+      ? await prisma.cashClosure.findFirst({
+          where: {
+            origin,
+            isVoided: false,
+            businessDate: { lt: businessDate },
+            ...(isOriginSplitByShift(origin) ? { shift } : {}),
+          },
+          orderBy: [{ businessDate: "desc" }, { closedAt: "desc" }],
+          select: { id: true, businessDate: true, computedJson: true },
+        })
+      : null;
+
+    const previousFundMeta = previousClosure ? readCashFundMeta(previousClosure.computedJson) : null;
+    const suggestedCashFundCents =
+      currentFundMeta?.cashFundCents ??
+      previousFundMeta?.cashFundCents ??
+      DEFAULT_CASH_FUND_CENTS;
 
     return NextResponse.json({
       ok: true,
       computed,
       systemTotals, // ✅ listo para UI y para close
       isClosed,
-      closure: existing ?? null,
+      closure: existing
+        ? {
+            id: existing.id,
+            closedAt: existing.closedAt,
+            isVoided: existing.isVoided,
+            cashFundCents: currentFundMeta?.cashFundCents ?? null,
+            cashToKeepCents: currentFundMeta?.cashToKeepCents ?? null,
+            cashToWithdrawCents: currentFundMeta?.cashToWithdrawCents ?? null,
+          }
+        : null,
+      cashFundSuggestion: {
+        defaultCents: DEFAULT_CASH_FUND_CENTS,
+        suggestedCents: suggestedCashFundCents,
+        source: existing
+          ? "CURRENT_CLOSURE"
+          : previousFundMeta?.cashFundCents != null
+          ? "PREVIOUS_CLOSURE"
+          : "DEFAULT",
+        previousClosureId: previousClosure?.id ?? null,
+        previousBusinessDate: previousClosure?.businessDate ?? null,
+      },
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Error";

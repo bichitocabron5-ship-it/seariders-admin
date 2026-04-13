@@ -18,6 +18,13 @@ type Row = {
     deposit?: Record<string, number>;
     total?: Record<string, number>;
   };
+  computedJson?: {
+    meta?: {
+      cashFundCents?: number;
+      cashToKeepCents?: number;
+      cashToWithdrawCents?: number;
+    };
+  };
   systemJson?: {
     service?: Record<string, number>;
     deposit?: Record<string, number>;
@@ -166,6 +173,21 @@ export default function CashClosureDetailSection({
               <div style={detailStatLabel}>Diferencia neta</div>
               <div style={detailStatValue}>{euros(diffNet)}</div>
               <div style={{ marginTop: 6, fontSize: 12, fontWeight: 800, color: "#475569" }}>{diffLabel}</div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+            <div style={detailStatStyle}>
+              <div style={detailStatLabel}>Fondo de caja</div>
+              <div style={detailStatValue}>{euros(selected.computedJson?.meta?.cashFundCents ?? 0)}</div>
+            </div>
+            <div style={detailStatStyle}>
+              <div style={detailStatLabel}>Efectivo a dejar</div>
+              <div style={detailStatValue}>{euros(selected.computedJson?.meta?.cashToKeepCents ?? 0)}</div>
+            </div>
+            <div style={detailStatStyle}>
+              <div style={detailStatLabel}>Efectivo a retirar</div>
+              <div style={detailStatValue}>{euros(selected.computedJson?.meta?.cashToWithdrawCents ?? 0)}</div>
             </div>
           </div>
 

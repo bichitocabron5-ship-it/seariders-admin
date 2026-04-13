@@ -30,6 +30,13 @@ type Row = {
     deposit?: Record<string, number>;
     total?: Record<string, number>;
   };
+  computedJson?: {
+    meta?: {
+      cashFundCents?: number;
+      cashToKeepCents?: number;
+      cashToWithdrawCents?: number;
+    };
+  };
   systemJson?: {
     service?: Record<string, number>;
     deposit?: Record<string, number>;

@@ -81,6 +81,7 @@ export async function GET(req: Request) {
         },
       },
       // totales resumidos para la tabla
+      computedJson: true,
       declaredJson: true,
       systemJson: true,
       diffJson: true,
