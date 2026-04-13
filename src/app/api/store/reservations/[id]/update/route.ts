@@ -327,9 +327,11 @@ if (hasProItems) {
 
     for (const item of existing.items ?? []) {
       if (item.isExtra) continue;
+      const optionId = item.optionId ?? existing.optionId;
+      if (!optionId) continue;
       accumulateLineQuantity(existingLineQty, {
         serviceId: item.serviceId,
-        optionId: item.optionId,
+        optionId,
         quantity: Number(item.quantity ?? 0),
       });
     }
