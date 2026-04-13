@@ -12,12 +12,17 @@ import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
 
 export const runtime = "nodejs";
 
-const ALLOWED_MANUAL_STATUSES = new Set(["SCHEDULED", "WAITING", "READY_FOR_PLATFORM"] as const);
-
 const Body = z.object({
   id: z.string().min(1),
   status: z.enum(["SCHEDULED", "WAITING", "READY_FOR_PLATFORM", "IN_SEA", "COMPLETED", "CANCELED"]),
 });
+
+const ALLOWED_MANUAL_STATUSES = ["SCHEDULED", "WAITING", "READY_FOR_PLATFORM"] as const;
+type AllowedManualStatus = (typeof ALLOWED_MANUAL_STATUSES)[number];
+
+function isAllowedManualStatus(status: z.infer<typeof Body>["status"]): status is AllowedManualStatus {
+  return (ALLOWED_MANUAL_STATUSES as readonly string[]).includes(status);
+}
 
 async function requireStoreOrAdmin() {
   const cookieStore = await cookies();
@@ -117,7 +122,7 @@ export async function POST(req: Request) {
       },
     });
     if (!current) throw new Error("Reserva no existe");
-    if (!ALLOWED_MANUAL_STATUSES.has(parsed.data.status)) {
+    if (!isAllowedManualStatus(parsed.data.status)) {
       throw new Error("Este endpoint no permite forzar IN_SEA, COMPLETED o CANCELED. Usa el flujo operativo específico.");
     }
 
