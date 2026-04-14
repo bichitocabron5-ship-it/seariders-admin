@@ -69,6 +69,8 @@ export default function AdminChannelsPage() {
   async function patchChannel(id: string, patch: Partial<Channel>) {
     setSavingId(id);
     setError(null);
+    const previous = channels;
+    setChannels((prev) => prev.map((ch) => (ch.id === id ? { ...ch, ...patch } : ch)));
     try {
       const r = await fetch(`/api/admin/channels/${id}`, {
         method: "PATCH",
@@ -81,6 +83,7 @@ export default function AdminChannelsPage() {
       const updated = data.channel as Channel | undefined;
       setChannels((prev) => prev.map((ch) => (ch.id === id ? (updated ?? { ...ch, ...patch }) : ch)));
     } catch (e: unknown) {
+      setChannels(previous);
       setError(e instanceof Error ? e.message : "Error actualizando canal");
     } finally {
       setSavingId(null);

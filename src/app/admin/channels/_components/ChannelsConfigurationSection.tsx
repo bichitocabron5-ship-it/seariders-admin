@@ -107,7 +107,10 @@ export default function ChannelsConfigurationSection({
                       disabled={busy}
                       onChange={(e) => {
                         const nextKind = e.target.value as "STANDARD" | "EXTERNAL_ACTIVITY";
-                        void patchChannel(channel.id, { kind: nextKind });
+                        void patchChannel(channel.id, {
+                          kind: nextKind,
+                          visibleInBooth: nextKind === "EXTERNAL_ACTIVITY" ? true : channel.visibleInBooth,
+                        });
                       }}
                       style={inputStyle}
                     >
