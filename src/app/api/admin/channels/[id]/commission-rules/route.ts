@@ -172,53 +172,80 @@ export async function PUT(
       });
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const rule of parsed.data.rules) {
+    const ruleDeletes = parsed.data.rules
+      .filter((rule) => {
         const pct = Math.max(0, Math.min(100, Math.trunc(rule.commissionPct)));
+        return !rule.isActive || pct === Math.round(fallbackPct);
+      })
+      .map((rule) => rule.serviceId);
 
-        if (!rule.isActive) {
+    const ruleUpserts = parsed.data.rules
+      .map((rule) => ({
+        ...rule,
+        commissionPct: Math.max(0, Math.min(100, Math.trunc(rule.commissionPct))),
+      }))
+      .filter((rule) => rule.isActive && rule.commissionPct !== Math.round(fallbackPct));
+
+    const optionDeletes = parsed.data.optionPrices
+      .filter((optionPrice) => optionPrice.useDefault || optionPrice.priceCents == null)
+      .map((optionPrice) => optionPrice.optionId);
+
+    const optionUpserts = parsed.data.optionPrices.filter(
+      (optionPrice) => !optionPrice.useDefault && optionPrice.priceCents != null
+    );
+
+    await prisma.$transaction(
+      async (tx) => {
+        if (ruleDeletes.length > 0) {
           await tx.channelCommissionRule.deleteMany({
-            where: { channelId, serviceId: rule.serviceId },
+            where: { channelId, serviceId: { in: ruleDeletes } },
           });
-          continue;
         }
 
-        if (pct === Math.round(fallbackPct)) {
-          await tx.channelCommissionRule.deleteMany({
-            where: { channelId, serviceId: rule.serviceId },
-          });
-          continue;
+        if (ruleUpserts.length > 0) {
+          await Promise.all(
+            ruleUpserts.map((rule) =>
+              tx.channelCommissionRule.upsert({
+                where: { channelId_serviceId: { channelId, serviceId: rule.serviceId } },
+                update: { commissionPct: rule.commissionPct, isActive: true },
+                create: {
+                  channelId,
+                  serviceId: rule.serviceId,
+                  commissionPct: rule.commissionPct,
+                  isActive: true,
+                },
+              })
+            )
+          );
         }
 
-        await tx.channelCommissionRule.upsert({
-          where: { channelId_serviceId: { channelId, serviceId: rule.serviceId } },
-          update: { commissionPct: pct, isActive: true },
-          create: { channelId, serviceId: rule.serviceId, commissionPct: pct, isActive: true },
-        });
-      }
-
-      if (optionPricingAvailable) {
-        for (const optionPrice of parsed.data.optionPrices) {
-          if (optionPrice.useDefault || optionPrice.priceCents == null) {
+        if (optionPricingAvailable) {
+          if (optionDeletes.length > 0) {
             await tx.channelOptionPrice.deleteMany({
-              where: { channelId, optionId: optionPrice.optionId },
+              where: { channelId, optionId: { in: optionDeletes } },
             });
-            continue;
           }
 
-          await tx.channelOptionPrice.upsert({
-            where: { channelId_optionId: { channelId, optionId: optionPrice.optionId } },
-            update: { priceCents: optionPrice.priceCents, isActive: true },
-            create: {
-              channelId,
-              optionId: optionPrice.optionId,
-              priceCents: optionPrice.priceCents,
-              isActive: true,
-            },
-          });
+          if (optionUpserts.length > 0) {
+            await Promise.all(
+              optionUpserts.map((optionPrice) =>
+                tx.channelOptionPrice.upsert({
+                  where: { channelId_optionId: { channelId, optionId: optionPrice.optionId } },
+                  update: { priceCents: optionPrice.priceCents!, isActive: true },
+                  create: {
+                    channelId,
+                    optionId: optionPrice.optionId,
+                    priceCents: optionPrice.priceCents!,
+                    isActive: true,
+                  },
+                })
+              )
+            );
+          }
         }
-      }
-    });
+      },
+      { maxWait: 10_000, timeout: 30_000 }
+    );
 
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
