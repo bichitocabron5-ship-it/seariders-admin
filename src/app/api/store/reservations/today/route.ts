@@ -7,6 +7,7 @@ import { cookies } from "next/headers";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
+import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 
 export const runtime = "nodejs";
 
@@ -117,7 +118,7 @@ export async function GET() {
       },
 
       contracts: {
-        select: { status: true, unitIndex: true },
+        select: { status: true, unitIndex: true, logicalUnitIndex: true, supersededAt: true, createdAt: true },
       },
 
       depositHeld: true,
@@ -205,12 +206,7 @@ export async function GET() {
       })),
     });
 
-    const readyCount = (r.contracts ?? []).filter(
-      (c) =>
-        Number(c.unitIndex) >= 1 &&
-        Number(c.unitIndex) <= requiredUnits &&
-        (c.status === "READY" || c.status === "SIGNED")
-    ).length;
+    const readyCount = countReadyVisibleContracts(r.contracts ?? [], requiredUnits);
 
     const contractsBadge =
       requiredUnits > 0 ? { requiredUnits, readyCount } : null;

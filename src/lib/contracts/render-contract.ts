@@ -20,6 +20,7 @@ export type ContractRenderReservation = {
 export type ContractRenderDriver = {
   id: string;
   unitIndex: number;
+  logicalUnitIndex?: number | null | undefined;
   driverName: string | null | undefined;
   driverDocType: string | null | undefined;
   driverDocNumber: string | null | undefined;
@@ -412,7 +413,7 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
 
     <div class="footer">
       <div>${esc(legalHeader)}</div>
-      <div>Reserva ${esc(reservation.id)} · Contrato #${esc(contract.unitIndex)}</div>
+      <div>Reserva ${esc(reservation.id)} · Contrato #${esc(contract.logicalUnitIndex ?? contract.unitIndex)}</div>
     </div>
   </div>
 
@@ -533,7 +534,7 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
 
     <div class="footer">
       <div>${esc(legalHeader)}</div>
-      <div>Reserva ${esc(reservation.id)} · Contrato #${esc(contract.unitIndex)}</div>
+      <div>Reserva ${esc(reservation.id)} · Contrato #${esc(contract.logicalUnitIndex ?? contract.unitIndex)}</div>
     </div>
   </div>
 

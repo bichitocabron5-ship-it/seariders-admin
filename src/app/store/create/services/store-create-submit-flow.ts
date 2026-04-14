@@ -271,7 +271,7 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
   const j = await res.json();
 
   if (!j.autoFormalized) {
-    args.router.push(`/store/calendar?day=${args.dateStr}`);
+    args.router.push(`/store/create?editFrom=${j.id}#payments`);
     return;
   }
   if (Number(j.requiredContractUnits ?? 0) > 0) {

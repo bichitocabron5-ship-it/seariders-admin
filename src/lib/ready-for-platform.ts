@@ -1,5 +1,6 @@
 import { ReservationStatus } from "@prisma/client";
 
+import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 
@@ -16,7 +17,7 @@ type ReadyReservation = {
     isExtra: boolean;
     service: { category: string | null } | null;
   }>;
-  contracts: Array<{ unitIndex: number; status: string }>;
+  contracts: Array<{ unitIndex: number; logicalUnitIndex?: number | null; status: string; supersededAt?: Date | string | null; createdAt?: Date | string | null }>;
   payments: Array<{ amountCents: number; isDeposit: boolean; direction: string }>;
 };
 
@@ -40,12 +41,7 @@ export function evaluateReadyForPlatform(reservation: ReadyReservation) {
     items: reservation.items ?? [],
   });
 
-  const readyCount = (reservation.contracts ?? []).filter(
-    (contract) =>
-      Number(contract.unitIndex) >= 1 &&
-      Number(contract.unitIndex) <= requiredUnits &&
-      (contract.status === "READY" || contract.status === "SIGNED")
-  ).length;
+  const readyCount = countReadyVisibleContracts(reservation.contracts ?? [], requiredUnits);
 
   if (requiredUnits > 0 && readyCount < requiredUnits) {
     return {

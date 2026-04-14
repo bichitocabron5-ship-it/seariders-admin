@@ -468,6 +468,7 @@ export async function createReservationWithItems(params: {
         data: Array.from({ length: requiredContractUnits }, (_, idx) => ({
           reservationId: reservation.id,
           unitIndex: idx + 1,
+          logicalUnitIndex: idx + 1,
         })),
         skipDuplicates: true,
       });

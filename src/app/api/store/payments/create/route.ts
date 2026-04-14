@@ -12,6 +12,7 @@ import { computeRequiredContractUnits, computeRequiredPlatformUnits } from "@/li
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
+import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 
 export const runtime = "nodejs";
 
@@ -138,7 +139,7 @@ export async function POST(req: Request) {
           },
 
           contracts: {
-            select: { unitIndex: true, status: true },
+            select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
           },
 
           payments: {
@@ -173,7 +174,7 @@ export async function POST(req: Request) {
       const pendingDepositCents = Math.max(0, depositDueCents - netDepositPaidCents);
 
       // Bloqueo de caja: no permitir cobro si faltan contratos operativos.
-      if (direction === "IN") {
+      if (direction === "IN" && reservation.formalizedAt) {
         const requiredUnits = computeRequiredContractUnits({
           quantity: reservation.quantity,
           isLicense: Boolean(reservation.isLicense),
@@ -185,12 +186,7 @@ export async function POST(req: Request) {
           })),
         });
 
-        const readyCount = (reservation.contracts ?? []).filter(
-          (c) =>
-            Number(c.unitIndex) >= 1 &&
-            Number(c.unitIndex) <= requiredUnits &&
-            (c.status === "READY" || c.status === "SIGNED")
-        ).length;
+        const readyCount = countReadyVisibleContracts(reservation.contracts ?? [], requiredUnits);
 
         if (requiredUnits > 0 && readyCount < requiredUnits) {
           throw Object.assign(

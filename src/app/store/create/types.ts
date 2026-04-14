@@ -60,6 +60,7 @@ export type UIMode = "CREATE" | "FORMALIZE" | "EDIT";
 export type ContractDto = {
   id: string;
   unitIndex: number;
+  logicalUnitIndex?: number | null;
   status: "DRAFT" | "READY" | "SIGNED" | "VOID";
   driverName: string | null;
   driverPhone: string | null;

@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { countReadyVisibleContracts, listMissingLogicalUnits, pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
 
 export const runtime = "nodejs";
 
@@ -39,7 +40,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
             },
           },
           contracts: {
-            select: { id: true, unitIndex: true, status: true, createdAt: true },
+            select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
           },
         },
       });
@@ -79,21 +80,22 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
         if (legacyPrimary) {
           await tx.reservationContract.update({
             where: { id: legacyPrimary.id },
-            data: { unitIndex: 1 },
+            data: { unitIndex: 1, logicalUnitIndex: 1 },
           });
         }
       }
 
       const existingRows = await tx.reservationContract.findMany({
         where: { reservationId: id },
-        select: { unitIndex: true },
+        select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
       });
-      const existing = new Set<number>(existingRows.map((c) => Number(c.unitIndex)));
-
-      const toCreate: Array<{ reservationId: string; unitIndex: number }> = [];
-      for (let i = 1; i <= requiredUnits; i++) {
-        if (!existing.has(i)) toCreate.push({ reservationId: id, unitIndex: i });
-      }
+      const missingSlots = listMissingLogicalUnits(existingRows, requiredUnits);
+      const maxUnitIndex = Math.max(0, ...existingRows.map((c) => Number(c.unitIndex ?? 0)));
+      const toCreate: Array<{ reservationId: string; unitIndex: number; logicalUnitIndex: number }> = missingSlots.map((slot, idx) => ({
+        reservationId: id,
+        unitIndex: maxUnitIndex + idx + 1,
+        logicalUnitIndex: slot,
+      }));
 
       if (toCreate.length) {
         await tx.reservationContract.createMany({
@@ -105,14 +107,11 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       const contracts = await tx.reservationContract.findMany({
         where: { reservationId: id },
         orderBy: { unitIndex: "asc" },
-        select: { id: true, unitIndex: true, status: true },
+        select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
       });
 
-      const visibleContracts = contracts.filter((c) => Number(c.unitIndex) >= 1 && Number(c.unitIndex) <= requiredUnits);
-
-      const readyCount = visibleContracts.filter(
-        (c) => c.status === "READY" || c.status === "SIGNED"
-      ).length;
+      const visibleContracts = pickVisibleContractsByLogicalUnit(contracts, requiredUnits);
+      const readyCount = countReadyVisibleContracts(contracts, requiredUnits);
 
       return { reservationId: id, requiredUnits, readyCount, contracts: visibleContracts };
     });

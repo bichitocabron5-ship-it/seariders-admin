@@ -11,6 +11,7 @@ import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { validateReusableAssetsAvailability } from "@/lib/store-rental-assets";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { countReadyVisibleContracts, listMissingLogicalUnits } from "@/lib/contracts/active-contracts";
 
 export const runtime = "nodejs";
 
@@ -109,7 +110,7 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
           service: { select: { category: true } },
         },
       },
-      contracts: { select: { id: true, unitIndex: true, status: true, createdAt: true } }, // requiere relation Reservation.contracts
+      contracts: { select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true } }, // requiere relation Reservation.contracts
     },
   });
   if (!res) throw new Error("Reserva no existe");
@@ -137,21 +138,22 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
     if (legacyPrimary) {
       await tx.reservationContract.update({
         where: { id: legacyPrimary.id },
-        data: { unitIndex: 1 },
+        data: { unitIndex: 1, logicalUnitIndex: 1 },
       });
     }
   }
 
   const existingRows = await tx.reservationContract.findMany({
     where: { reservationId },
-    select: { unitIndex: true },
+    select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
   });
-  const existing = new Set<number>(existingRows.map((c) => Number(c.unitIndex)));
-
-  const toCreate: Array<{ reservationId: string; unitIndex: number }> = [];
-  for (let i = 1; i <= requiredUnits; i++) {
-    if (!existing.has(i)) toCreate.push({ reservationId, unitIndex: i });
-  }
+  const missingSlots = listMissingLogicalUnits(existingRows, requiredUnits);
+  const maxUnitIndex = Math.max(0, ...existingRows.map((c) => Number(c.unitIndex ?? 0)));
+  const toCreate: Array<{ reservationId: string; unitIndex: number; logicalUnitIndex: number }> = missingSlots.map((slot, idx) => ({
+    reservationId,
+    unitIndex: maxUnitIndex + idx + 1,
+    logicalUnitIndex: slot,
+  }));
 
   if (toCreate.length) {
     await tx.reservationContract.createMany({
@@ -163,15 +165,10 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
   const all = await tx.reservationContract.findMany({
     where: { reservationId },
     orderBy: { unitIndex: "asc" },
-    select: { unitIndex: true, status: true },
+    select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
   });
 
-  const readyCount = all.filter(
-    (c) =>
-      Number(c.unitIndex) >= 1 &&
-      Number(c.unitIndex) <= requiredUnits &&
-      (c.status === "READY" || c.status === "SIGNED")
-  ).length;
+  const readyCount = countReadyVisibleContracts(all, requiredUnits);
 
   return { requiredUnits, readyCount };
 }

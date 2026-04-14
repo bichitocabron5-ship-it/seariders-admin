@@ -11,6 +11,12 @@ import { ReservationStatus } from "@prisma/client";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import type { Prisma } from "@prisma/client";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
+import {
+  contractLogicalUnitIndex,
+  countReadyVisibleContracts,
+  listMissingLogicalUnits,
+  pickVisibleContractsByLogicalUnit,
+} from "@/lib/contracts/active-contracts";
 
 export const runtime = "nodejs";
 
@@ -85,7 +91,7 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
         },
       },
       contracts: {
-        select: { unitIndex: true, status: true },
+        select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
       },
     },
   });
@@ -101,11 +107,18 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
 
   if (requiredUnits <= 0) return { requiredUnits: 0, readyCount: 0 };
 
-  const existing = new Set<number>((reservation.contracts ?? []).map((contract) => Number(contract.unitIndex)));
-  const toCreate: Array<{ reservationId: string; unitIndex: number }> = [];
-  for (let i = 1; i <= requiredUnits; i++) {
-    if (!existing.has(i)) toCreate.push({ reservationId, unitIndex: i });
-  }
+  const missingSlots = listMissingLogicalUnits(reservation.contracts ?? [], requiredUnits);
+  const maxUnitIndex = Math.max(
+    0,
+    ...(reservation.contracts ?? []).map((contract) => Number(contract.unitIndex ?? 0))
+  );
+  const toCreate: Array<{ reservationId: string; unitIndex: number; logicalUnitIndex: number }> = missingSlots.map(
+    (slot, idx) => ({
+      reservationId,
+      unitIndex: maxUnitIndex + idx + 1,
+      logicalUnitIndex: slot,
+    })
+  );
 
   if (toCreate.length > 0) {
     await tx.reservationContract.createMany({
@@ -116,17 +129,143 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
 
   const contracts = await tx.reservationContract.findMany({
     where: { reservationId },
-    select: { unitIndex: true, status: true },
+    select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
   });
 
-  const readyCount = contracts.filter(
-    (contract) =>
-      Number(contract.unitIndex) >= 1 &&
-      Number(contract.unitIndex) <= requiredUnits &&
-      (contract.status === "READY" || contract.status === "SIGNED")
-  ).length;
+  const readyCount = countReadyVisibleContracts(contracts, requiredUnits);
 
   return { requiredUnits, readyCount };
+}
+
+async function resetContractsForRegenerationTx(
+  tx: Prisma.TransactionClient,
+  args: { reservationId: string; maxLogicalUnitIndex: number }
+) {
+  const maxLogicalUnitIndex = Math.max(0, Number(args.maxLogicalUnitIndex ?? 0));
+  if (maxLogicalUnitIndex <= 0) return;
+
+  await tx.reservationContract.updateMany({
+    where: {
+      reservationId: args.reservationId,
+      logicalUnitIndex: { gte: 1, lte: maxLogicalUnitIndex },
+      status: { not: "SIGNED" },
+      supersededAt: null,
+    },
+    data: {
+      status: "DRAFT",
+      renderedHtml: null,
+      renderedPdfUrl: null,
+      renderedPdfKey: null,
+      signatureRequestId: null,
+      signatureStatusRaw: null,
+      signatureSignedPdfUrl: null,
+      signedAt: null,
+      signatureProvider: null,
+      signatureEnvelopeId: null,
+      signatureUrl: null,
+      signatureImageUrl: null,
+      signatureImageKey: null,
+      signatureSignedBy: null,
+    },
+  });
+}
+
+async function supersedeAndCreateReplacementContractsTx(
+  tx: Prisma.TransactionClient,
+  args: { reservationId: string; requiredUnits: number }
+) {
+  const existing = await tx.reservationContract.findMany({
+    where: { reservationId: args.reservationId, supersededAt: null },
+    select: {
+      id: true,
+      unitIndex: true,
+      logicalUnitIndex: true,
+      driverName: true,
+      driverPhone: true,
+      driverEmail: true,
+      driverCountry: true,
+      driverAddress: true,
+      driverPostalCode: true,
+      driverDocType: true,
+      driverDocNumber: true,
+      driverBirthDate: true,
+      minorNeedsAuthorization: true,
+      minorAuthorizationProvided: true,
+      licenseSchool: true,
+      licenseType: true,
+      licenseNumber: true,
+      imageConsentAccepted: true,
+      imageConsentAcceptedAt: true,
+      imageConsentAcceptedBy: true,
+      preparedJetskiId: true,
+      preparedAssetId: true,
+      minorAuthorizationFileKey: true,
+      minorAuthorizationFileUrl: true,
+      minorAuthorizationFileName: true,
+      minorAuthorizationUploadedAt: true,
+    },
+    orderBy: { unitIndex: "asc" },
+  });
+
+  const requiredUnits = Math.max(0, Number(args.requiredUnits ?? 0));
+  const now = new Date();
+  const visibleBySlot = new Map<number, (typeof existing)[number]>();
+  for (const contract of existing) {
+    const slot = contractLogicalUnitIndex(contract);
+    if (slot < 1 || slot > requiredUnits) continue;
+    visibleBySlot.set(slot, contract);
+  }
+
+  if (visibleBySlot.size > 0) {
+    await tx.reservationContract.updateMany({
+      where: {
+        id: { in: Array.from(visibleBySlot.values()).map((contract) => contract.id) },
+      },
+      data: { supersededAt: now },
+    });
+  }
+
+  if (requiredUnits <= 0) return;
+
+  const maxUnitIndex = Math.max(0, ...existing.map((contract) => Number(contract.unitIndex ?? 0)));
+  const data: Prisma.ReservationContractCreateManyInput[] = [];
+
+  for (let slot = 1; slot <= requiredUnits; slot++) {
+    const previous = visibleBySlot.get(slot);
+    data.push({
+      reservationId: args.reservationId,
+      unitIndex: maxUnitIndex + slot,
+      logicalUnitIndex: slot,
+      status: "DRAFT",
+      driverName: previous?.driverName ?? null,
+      driverPhone: previous?.driverPhone ?? null,
+      driverEmail: previous?.driverEmail ?? null,
+      driverCountry: previous?.driverCountry ?? null,
+      driverAddress: previous?.driverAddress ?? null,
+      driverPostalCode: previous?.driverPostalCode ?? null,
+      driverDocType: previous?.driverDocType ?? null,
+      driverDocNumber: previous?.driverDocNumber ?? null,
+      driverBirthDate: previous?.driverBirthDate ?? null,
+      minorNeedsAuthorization: previous?.minorNeedsAuthorization ?? false,
+      minorAuthorizationProvided: previous?.minorAuthorizationProvided ?? false,
+      licenseSchool: previous?.licenseSchool ?? null,
+      licenseType: previous?.licenseType ?? null,
+      licenseNumber: previous?.licenseNumber ?? null,
+      imageConsentAccepted: previous?.imageConsentAccepted ?? false,
+      imageConsentAcceptedAt: previous?.imageConsentAcceptedAt ?? null,
+      imageConsentAcceptedBy: previous?.imageConsentAcceptedBy ?? null,
+      preparedJetskiId: previous?.preparedJetskiId ?? null,
+      preparedAssetId: previous?.preparedAssetId ?? null,
+      minorAuthorizationFileKey: previous?.minorAuthorizationFileKey ?? null,
+      minorAuthorizationFileUrl: previous?.minorAuthorizationFileUrl ?? null,
+      minorAuthorizationFileName: previous?.minorAuthorizationFileName ?? null,
+      minorAuthorizationUploadedAt: previous?.minorAuthorizationUploadedAt ?? null,
+    });
+  }
+
+  if (data.length > 0) {
+    await tx.reservationContract.createMany({ data });
+  }
 }
 
 // mismo contrato que formalize
@@ -218,6 +357,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       optionId: true,
       quantity: true,
       isLicense: true,
+      service: { select: { category: true } },
       channelId: true,
       activityDate: true,
       scheduledTime: true,
@@ -254,7 +394,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         select: {
           id: true,
           unitIndex: true,
+          logicalUnitIndex: true,
           status: true,
+          supersededAt: true,
+          createdAt: true,
         },
       },
     },
@@ -263,12 +406,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (existing.status === ReservationStatus.CANCELED || existing.status === ReservationStatus.COMPLETED) {
     return new NextResponse("La reserva cancelada o completada no se puede editar.", { status: 409 });
   }
-  const lockedContractsCount = (existing.contracts ?? []).filter(
-    (contract) =>
-      Number(contract.unitIndex ?? 0) >= 1 &&
-      (contract.status === "READY" || contract.status === "SIGNED")
+  const existingRequiredUnits = computeRequiredContractUnits({
+    quantity: existing.quantity ?? 0,
+    isLicense: Boolean(existing.isLicense),
+    serviceCategory: existing.service?.category ?? null,
+    items: existing.items ?? [],
+  });
+  const visibleContracts = pickVisibleContractsByLogicalUnit(existing.contracts ?? [], existingRequiredUnits);
+  const lockedContractsCount = visibleContracts.filter(
+    (contract) => contract.status === "READY" || contract.status === "SIGNED"
   ).length;
-
+  const signedContractsCount = visibleContracts.filter(
+    (contract) => contract.status === "SIGNED"
+  ).length;
 const hasProItems = Array.isArray(b.items) && b.items.length > 0;
 const isBoothReservation = existing.source === "BOOTH";
 const boothUnitDiscountCents = getBoothUnitDiscountCents({
@@ -321,35 +471,55 @@ if (hasProItems) {
     }
   }
 
+  let shouldRegenerateLockedContractsForPro = false;
+  let shouldVersionLockedContractsForPro = false;
+
   if (lockedContractsCount > 0) {
     const existingLineQty = new Map<string, number>();
     const nextLineQty = new Map<string, number>();
+    const existingServiceQty = new Map<string, number>();
+    const nextServiceQty = new Map<string, number>();
 
     for (const item of existing.items ?? []) {
       if (item.isExtra) continue;
       const optionId = item.optionId ?? existing.optionId;
       if (!optionId) continue;
+      const qty = Number(item.quantity ?? 0);
       accumulateLineQuantity(existingLineQty, {
         serviceId: item.serviceId,
         optionId,
-        quantity: Number(item.quantity ?? 0),
+        quantity: qty,
       });
+      existingServiceQty.set(item.serviceId, (existingServiceQty.get(item.serviceId) ?? 0) + qty);
     }
 
     for (const item of b.items!) {
+      const qty = Number(item.quantity ?? 0);
       accumulateLineQuantity(nextLineQty, {
         serviceId: item.serviceId,
         optionId: item.optionId,
-        quantity: Number(item.quantity ?? 0),
+        quantity: qty,
       });
+      nextServiceQty.set(item.serviceId, (nextServiceQty.get(item.serviceId) ?? 0) + qty);
     }
 
     const isReducingLockedBase = Array.from(existingLineQty.entries()).some(([key, qty]) => (nextLineQty.get(key) ?? 0) < qty);
-    if (isReducingLockedBase) {
-      return new NextResponse(
-        "La reserva tiene contratos preparados o firmados. Solo puedes ampliar cantidad o añadir actividades nuevas; no reducir ni sustituir las ya contratadas.",
-        { status: 409 }
-      );
+    const isReducingLockedService = Array.from(existingServiceQty.entries()).some(
+      ([serviceId, qty]) => (nextServiceQty.get(serviceId) ?? 0) < qty
+    );
+    if (signedContractsCount > 0) {
+      shouldVersionLockedContractsForPro = true;
+    } else if (isReducingLockedBase) {
+      const canRegenerateByDurationChange = !isReducingLockedService;
+
+      if (!canRegenerateByDurationChange) {
+        return new NextResponse(
+          "La reserva tiene contratos preparados o firmados. Solo puedes ampliar cantidad o añadir actividades nuevas; no reducir ni sustituir las ya contratadas.",
+          { status: 409 }
+        );
+      }
+
+      shouldRegenerateLockedContractsForPro = true;
     }
   }
 
@@ -533,9 +703,23 @@ if (hasProItems) {
     }
 
     await tx.reservation.update({ where: { id }, data, select: { id: true } });
-    const contracts = await ensureContractsTx(tx, id);
+    let contracts = await ensureContractsTx(tx, id);
 
-    if (lockedContractsCount > 0 && contracts.requiredUnits < lockedContractsCount) {
+    if (shouldVersionLockedContractsForPro) {
+      await supersedeAndCreateReplacementContractsTx(tx, {
+        reservationId: id,
+        requiredUnits: contracts.requiredUnits,
+      });
+      contracts = await ensureContractsTx(tx, id);
+    } else if (shouldRegenerateLockedContractsForPro) {
+      await resetContractsForRegenerationTx(tx, {
+        reservationId: id,
+        maxLogicalUnitIndex: contracts.requiredUnits,
+      });
+      contracts = await ensureContractsTx(tx, id);
+    }
+
+    if (!shouldVersionLockedContractsForPro && lockedContractsCount > 0 && contracts.requiredUnits < lockedContractsCount) {
       throw new Error("La edición dejaría la reserva con menos unidades contratables que contratos ya preparados o firmados.");
     }
 
@@ -715,13 +899,23 @@ if (hasProItems) {
   if (!price) return new NextResponse("No hay precio vigente para este servicio/duración.", { status: 400 });
 
   if (lockedContractsCount > 0) {
+    const canVersionSignedContracts =
+      signedContractsCount > 0 && existing.serviceId === b.serviceId;
+    const canRegenerateLockedContracts =
+      existing.serviceId === b.serviceId &&
+      existing.optionId !== b.optionId &&
+      Number(b.quantity) >= Number(existing.quantity ?? 0) &&
+      signedContractsCount === 0;
+
     if (existing.serviceId !== b.serviceId || existing.optionId !== b.optionId) {
-      return new NextResponse(
-        "La reserva tiene contratos preparados o firmados. No puedes cambiar la actividad o duración ya contratada; solo ampliar cantidad o añadir nuevas actividades.",
-        { status: 409 }
-      );
+      if (!canRegenerateLockedContracts && !canVersionSignedContracts) {
+        return new NextResponse(
+          "La reserva tiene contratos preparados o firmados. No puedes cambiar la actividad o duración ya contratada; solo ampliar cantidad o añadir nuevas actividades.",
+          { status: 409 }
+        );
+      }
     }
-    if (Number(b.quantity) < Number(existing.quantity ?? 0)) {
+    if (Number(b.quantity) < Number(existing.quantity ?? 0) && !canVersionSignedContracts) {
       return new NextResponse(
         "La reserva tiene contratos preparados o firmados. No puedes reducir la cantidad ya contratada.",
         { status: 409 }
@@ -834,9 +1028,34 @@ if (hasProItems) {
       },
       select: { id: true },
     });
-    const contracts = await ensureContractsTx(tx, id);
+    let contracts = await ensureContractsTx(tx, id);
 
-    if (lockedContractsCount > 0 && contracts.requiredUnits < lockedContractsCount) {
+    const canVersionSignedContracts =
+      lockedContractsCount > 0 &&
+      signedContractsCount > 0 &&
+      existing.serviceId === b.serviceId;
+    const canRegenerateLockedContracts =
+      lockedContractsCount > 0 &&
+      existing.serviceId === b.serviceId &&
+      existing.optionId !== b.optionId &&
+      Number(b.quantity) >= Number(existing.quantity ?? 0) &&
+      signedContractsCount === 0;
+
+    if (canVersionSignedContracts) {
+      await supersedeAndCreateReplacementContractsTx(tx, {
+        reservationId: id,
+        requiredUnits: contracts.requiredUnits,
+      });
+      contracts = await ensureContractsTx(tx, id);
+    } else if (canRegenerateLockedContracts) {
+      await resetContractsForRegenerationTx(tx, {
+        reservationId: id,
+        maxLogicalUnitIndex: contracts.requiredUnits,
+      });
+      contracts = await ensureContractsTx(tx, id);
+    }
+
+    if (!canVersionSignedContracts && lockedContractsCount > 0 && contracts.requiredUnits < lockedContractsCount) {
       throw new Error("La edición dejaría la reserva con menos unidades contratables que contratos ya preparados o firmados.");
     }
 

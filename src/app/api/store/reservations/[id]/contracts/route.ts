@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { countReadyVisibleContracts, pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
 
 export const runtime = "nodejs";
 
@@ -56,7 +57,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         select: {
           id: true,
           unitIndex: true,
+          logicalUnitIndex: true,
           status: true,
+          supersededAt: true,
 
           driverName: true,
           driverPhone: true,
@@ -80,6 +83,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           signatureImageKey: true,
           signatureSignedBy: true,
           updatedAt: true,
+          createdAt: true,
           renderedPdfKey: true,
           renderedPdfUrl: true,
 
@@ -131,11 +135,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   });
 
   // Solo contamos contratos de 1..requiredUnits (ignora legacy unitIndex 0 y sobrantes).
-  const contracts = (res.contracts ?? []).filter(
-    (c) => Number(c.unitIndex) >= 1 && Number(c.unitIndex) <= requiredUnits
-  );
-
-  const readyCount = contracts.filter((c) => c.status === "READY" || c.status === "SIGNED").length;
+  const contracts = pickVisibleContractsByLogicalUnit(res.contracts ?? [], requiredUnits);
+  const readyCount = countReadyVisibleContracts(res.contracts ?? [], requiredUnits);
 
   const needsContracts = requiredUnits > 0 && readyCount < requiredUnits;
 

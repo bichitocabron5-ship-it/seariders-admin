@@ -19,6 +19,7 @@ export default async function SignContractPage({
     select: {
       id: true,
       unitIndex: true,
+      logicalUnitIndex: true,
       status: true,
       driverName: true,
       signatureSignedBy: true,
@@ -42,7 +43,7 @@ export default async function SignContractPage({
       token={token}
       contract={{
         id: contract.id,
-        unitIndex: contract.unitIndex,
+        unitIndex: Number(contract.logicalUnitIndex ?? contract.unitIndex),
         status: contract.status,
         driverName: contract.driverName ?? "",
         signatureSignedBy: contract.signatureSignedBy ?? "",

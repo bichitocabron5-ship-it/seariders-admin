@@ -44,6 +44,7 @@ export async function POST(
         select: {
           id: true,
           unitIndex: true,
+          logicalUnitIndex: true,
           driverName: true,
           driverDocType: true,
           driverDocNumber: true,
@@ -143,6 +144,7 @@ export async function POST(
         contract: {
           id: contract.id,
           unitIndex: contract.unitIndex,
+          logicalUnitIndex: contract.logicalUnitIndex,
           driverName: contract.driverName,
           driverDocType: contract.driverDocType,
           driverDocNumber: contract.driverDocNumber,

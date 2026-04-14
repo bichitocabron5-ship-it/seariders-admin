@@ -117,7 +117,7 @@ export async function POST(req: Request) {
             service: { select: { category: true } },
           },
         },
-        contracts: { select: { unitIndex: true, status: true } },
+        contracts: { select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true } },
         payments: { select: { amountCents: true, isDeposit: true, direction: true } },
       },
     });
@@ -153,7 +153,10 @@ export async function POST(req: Request) {
         })),
         contracts: (current.contracts ?? []).map((contract) => ({
           unitIndex: Number(contract.unitIndex ?? 0),
+          logicalUnitIndex: contract.logicalUnitIndex ?? null,
           status: contract.status,
+          supersededAt: contract.supersededAt ?? null,
+          createdAt: contract.createdAt ?? null,
         })),
         payments: (current.payments ?? []).map((payment) => ({
           amountCents: Number(payment.amountCents ?? 0),

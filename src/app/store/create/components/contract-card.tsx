@@ -377,7 +377,7 @@ export function ContractCard({
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>Contrato</div>
-          <div style={{ fontWeight: 900, fontSize: 18 }}>Unidad #{c.unitIndex}</div>
+          <div style={{ fontWeight: 900, fontSize: 18 }}>Unidad #{c.logicalUnitIndex ?? c.unitIndex}</div>
           <div style={{ fontSize: 12, color: "#64748b" }}>
             Preparación documental, vista previa y PDF para firma.
           </div>

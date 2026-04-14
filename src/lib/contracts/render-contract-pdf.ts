@@ -64,6 +64,7 @@ export async function regenerateSignedContractPdf(contractId: string) {
       id: true,
       reservationId: true,
       unitIndex: true,
+      logicalUnitIndex: true,
       driverName: true,
       driverDocType: true,
       driverDocNumber: true,
@@ -163,6 +164,7 @@ export async function regenerateSignedContractPdf(contractId: string) {
     contract: {
       id: contract.id,
       unitIndex: contract.unitIndex,
+      logicalUnitIndex: contract.logicalUnitIndex,
       driverName: contract.driverName,
       driverDocType: contract.driverDocType,
       driverDocNumber: contract.driverDocNumber,

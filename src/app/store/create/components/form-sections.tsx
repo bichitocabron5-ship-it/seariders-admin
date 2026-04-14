@@ -295,3 +295,113 @@ export function SubmitSection({
     </section>
   );
 }
+
+export function FutureReservationPaymentsSection({
+  totalServiceCents,
+  paidServiceCents,
+  pendingServiceCents,
+  paymentMethod,
+  paymentAmountEuros,
+  paymentBusy,
+  paymentError,
+  onPaymentMethodChange,
+  onPaymentAmountEurosChange,
+  onFillPendingAmount,
+  onCharge,
+}: {
+  totalServiceCents: number;
+  paidServiceCents: number;
+  pendingServiceCents: number;
+  paymentMethod: "CASH" | "CARD" | "BIZUM" | "TRANSFER";
+  paymentAmountEuros: string;
+  paymentBusy: boolean;
+  paymentError: string | null;
+  onPaymentMethodChange: (value: "CASH" | "CARD" | "BIZUM" | "TRANSFER") => void;
+  onPaymentAmountEurosChange: (value: string) => void;
+  onFillPendingAmount: () => void;
+  onCharge: () => void;
+}) {
+  return (
+    <section style={{ ...cardStyle, display: "grid", gap: 14 }}>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>Cobro</div>
+        <div style={{ fontSize: 18, fontWeight: 900, marginTop: 4 }}>Paga y señal</div>
+        <div style={{ fontSize: 13, color: "#64748b" }}>
+          Registra cobros parciales del servicio sin formalizar todavía la reserva. La fianza seguirá en la operativa normal.
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
+        <div style={{ padding: 14, borderRadius: 14, border: "1px solid #e2e8f0", background: "#fff" }}>
+          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Total servicio</div>
+          <div style={{ fontSize: 24, fontWeight: 900 }}>{euros(totalServiceCents)}</div>
+        </div>
+        <div style={{ padding: 14, borderRadius: 14, border: "1px solid #e2e8f0", background: "#fff" }}>
+          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Cobrado</div>
+          <div style={{ fontSize: 24, fontWeight: 900 }}>{euros(paidServiceCents)}</div>
+        </div>
+        <div style={{ padding: 14, borderRadius: 14, border: "1px solid #e2e8f0", background: "#fff" }}>
+          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Pendiente</div>
+          <div style={{ fontSize: 24, fontWeight: 900 }}>{euros(pendingServiceCents)}</div>
+        </div>
+      </div>
+
+      {pendingServiceCents > 0 ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, alignItems: "end" }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Metodo</div>
+            <select value={paymentMethod} onChange={(e) => onPaymentMethodChange(e.target.value as "CASH" | "CARD" | "BIZUM" | "TRANSFER")} style={inputStyle}>
+              <option value="CASH">Efectivo</option>
+              <option value="CARD">Tarjeta</option>
+              <option value="BIZUM">Bizum</option>
+              <option value="TRANSFER">Transferencia</option>
+            </select>
+          </label>
+
+          <label style={{ display: "grid", gap: 6 }}>
+            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Importe</div>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={paymentAmountEuros}
+              onChange={(e) => onPaymentAmountEurosChange(e.target.value)}
+              placeholder="0"
+              style={inputStyle}
+            />
+          </label>
+
+          <button type="button" onClick={onFillPendingAmount} disabled={paymentBusy} style={{ ...inputStyle, fontWeight: 800, cursor: paymentBusy ? "wait" : "pointer" }}>
+            Rellenar resto
+          </button>
+
+          <button
+            type="button"
+            onClick={onCharge}
+            disabled={paymentBusy}
+            style={{
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid #0f172a",
+              background: "#0f172a",
+              color: "#fff",
+              fontWeight: 900,
+              cursor: paymentBusy ? "wait" : "pointer",
+            }}
+          >
+            {paymentBusy ? "Cobrando..." : "Registrar cobro"}
+          </button>
+        </div>
+      ) : (
+        <div style={{ padding: 12, borderRadius: 14, background: "#ecfdf5", border: "1px solid #bbf7d0", color: "#166534", fontWeight: 800 }}>
+          El servicio ya está completamente cobrado.
+        </div>
+      )}
+
+      {paymentError ? (
+        <div style={{ padding: 12, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 700 }}>
+          {paymentError}
+        </div>
+      ) : null}
+    </section>
+  );
+}

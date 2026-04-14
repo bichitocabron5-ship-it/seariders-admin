@@ -478,8 +478,10 @@ model ReservationContract {
   reservationId String
   reservation   Reservation @relation(fields: [reservationId], references: [id])
 
-  unitIndex Int // 1..N (N = quantity en el item principal)
+  unitIndex        Int // identificador físico/versionado
+  logicalUnitIndex Int? // slot lógico 1..N que representa la unidad contractual
   status    ContractStatus @default(DRAFT)
+  supersededAt DateTime?
 
   // Datos conductor/contrato (pueden ser distintos por unidad)
   driverName       String? @db.VarChar(120)
@@ -544,6 +546,7 @@ model ReservationContract {
   @@unique([reservationId, unitIndex])
   @@index([reservationId])
   @@index([status])
+  @@index([reservationId, logicalUnitIndex])
   @@index([preparedJetskiId])
   @@index([preparedAssetId])
 }

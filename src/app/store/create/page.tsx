@@ -6,7 +6,7 @@ import { getCountryOptionsEs } from "@/lib/countries";
 import { BUSINESS_TZ, shouldAutoFormalize } from "@/lib/tz-business";
 import { needsContractForCategory } from "@/lib/reservation-rules";
 import { opsStyles } from "@/components/ops-ui";
-import { AvailabilitySection, PricingSection, SubmitSection } from "./components/form-sections";
+import { AvailabilitySection, FutureReservationPaymentsSection, PricingSection, SubmitSection } from "./components/form-sections";
 import { ReservationBasicsSection } from "./components/reservation-basics-section";
 import { CartSection, ContractsSection } from "./components/store-sections";
 import { StoreCreateCustomerProfileSection, StoreCreateSummaryStrip } from "./components/store-create-overview";
@@ -103,6 +103,15 @@ function StoreCreatePageInner() {
   const [selectedPromoCode, setSelectedPromoCode] = useState("");
   const [applyPromo, setApplyPromo] = useState(false);
   const [cartDiscountPreviews, setCartDiscountPreviews] = useState<Record<string, { baseTotalCents: number; autoDiscountCents: number; finalTotalCents: number }>>({});
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "BIZUM" | "TRANSFER">("CARD");
+  const [paymentAmountEuros, setPaymentAmountEuros] = useState("");
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentSummary, setPaymentSummary] = useState({
+    totalServiceCents: 0,
+    paidServiceCents: 0,
+    pendingServiceCents: 0,
+  });
 
   const applyPrefillReservation = useCallback(
     (res: {
@@ -131,6 +140,9 @@ function StoreCreatePageInner() {
       manualDiscountCents?: number | null;
       autoDiscountCents?: number | null;
       totalPriceCents?: number | null;
+      totalServiceCents?: number | null;
+      paidServiceCents?: number | null;
+      pendingServiceCents?: number | null;
       source?: string | null;
       service?: ServiceMain | null;
       option?: Option | null;
@@ -173,6 +185,11 @@ function StoreCreatePageInner() {
         manualDiscountCents: Number(res.manualDiscountCents ?? 0),
         autoDiscountCents: Number(res.autoDiscountCents ?? 0),
         totalPriceCents: Number(res.totalPriceCents ?? 0),
+      });
+      setPaymentSummary({
+        totalServiceCents: Number(res.totalServiceCents ?? res.totalPriceCents ?? 0),
+        paidServiceCents: Number(res.paidServiceCents ?? 0),
+        pendingServiceCents: Number(res.pendingServiceCents ?? 0),
       });
       setPrefillSource(res.source ?? null);
     },
@@ -526,6 +543,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   const isVoucherFormalizeFlow =
     isContractsOnlyMode && (Boolean(showGiftBadge) || Boolean(migrateFlags?.isGift) || Boolean(migrateFlags?.isPass));
   // (si quieres incluir edit, usa: Boolean(migrateReservationId || editReservationId))
+  const hasReadyContracts = contracts.some((contract) => contract.status === "READY");
+  const hasSignedContracts = contracts.some((contract) => contract.status === "SIGNED");
 
   const formalizeNeedsFullData = useMemo(() => {
     return needsContractForCategory(selectedCategory, false);
@@ -549,10 +568,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   const primaryDisabledReason =
     migrateFlags?.isHistorical
       ? "Reserva histórica: no se puede formalizar."
-      : uiMode === "EDIT" && contracts.some((contract) => contract.status === "READY" || contract.status === "SIGNED")
-        ? "La reserva ya tiene contratos preparados o firmados. Para evitar desajustes, la edición queda bloqueada desde este flujo."
       : strictFormalizeBlocked
-        ? "Solo puedes formalizar el mismo día."
+          ? "Solo puedes formalizar el mismo día."
         : isFormalizeMode && !contractsReadyForFormalize
           ? `Faltan contratos por completar: ${readyCount}/${requiredUnits} listos.`
         : requiredFormalizeMissing
@@ -588,9 +605,17 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   const shownReason = discountPreview?.reason ?? (isMigrateMode && shownDiscountCents > 0 ? "Precio heredado de la pre-reserva de carpa." : null);
   const canEditPricing = !isMigrateMode && !isEditMode;
   const isBoothReservation = showBoothBadge || prefillSource === "BOOTH";
+  const showFuturePaymentsSection = isEditMode && !migrateFlags?.isHistorical;
   const boothPricingNote = isBoothReservation
     ? "Reservas de Booth: el descuento heredado solo se conserva al ampliar la misma actividad original. Si añades otra actividad distinta o extras, esas líneas no reciben descuento de carpa."
     : null;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== "#payments") return;
+    const el = document.getElementById("payments");
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [showFuturePaymentsSection]);
 
   const MANUAL_DISC_MAX_PCT = 30;
   const maxManualDiscountCents = Math.floor((shownBaseCents * MANUAL_DISC_MAX_PCT) / 100);
@@ -832,6 +857,48 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     }
   }
 
+  async function registerFutureReservationPayment() {
+    if (!editReservationId) return;
+
+    const amountCents = Math.round(Number(String(paymentAmountEuros || "").replace(",", ".")) * 100) || 0;
+    if (amountCents <= 0) {
+      setPaymentError("Introduce un importe valido.");
+      return;
+    }
+    if (amountCents > Number(paymentSummary.pendingServiceCents ?? 0)) {
+      setPaymentError("El importe supera el pendiente del servicio.");
+      return;
+    }
+
+    setPaymentBusy(true);
+    setPaymentError(null);
+    try {
+      const res = await fetch("/api/store/payments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reservationId: editReservationId,
+          amountCents,
+          method: paymentMethod,
+          origin: "STORE",
+          isDeposit: false,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      setPaymentSummary((prev) => ({
+        totalServiceCents: prev.totalServiceCents,
+        paidServiceCents: prev.paidServiceCents + amountCents,
+        pendingServiceCents: Math.max(0, prev.pendingServiceCents - amountCents),
+      }));
+      setPaymentAmountEuros("");
+    } catch (e: unknown) {
+      setPaymentError(errorMessage(e, "No se pudo registrar el cobro"));
+    } finally {
+      setPaymentBusy(false);
+    }
+  }
+
   function updateFullName(nextFirst: string, nextLast: string) {
     const full = `${String(nextFirst ?? "").trim()} ${String(nextLast ?? "").trim()}`.trim();
     setCustomerName(full);
@@ -1001,23 +1068,44 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
       <StoreCreateSummaryStrip cards={summaryCards} />
 
-      {uiMode === "EDIT" && contracts.some((contract) => contract.status === "READY" || contract.status === "SIGNED") ? (
+      {uiMode === "EDIT" && hasSignedContracts ? (
         <section
           style={{
             ...panelStyle,
             padding: 16,
-            border: "1px solid #fed7aa",
-            background: "#fff7ed",
+            border: "1px solid #cbd5e1",
+            background: "#f8fafc",
             display: "grid",
             gap: 6,
           }}
         >
-          <div style={{ ...badgeStyle, color: "#9a3412" }}>Edición bloqueada</div>
-          <div style={{ fontWeight: 900, color: "#7c2d12" }}>
-            Esta reserva ya tiene contratos preparados o firmados.
+          <div style={{ ...badgeStyle, color: "#334155" }}>Nueva versión de contratos</div>
+          <div style={{ fontWeight: 900, color: "#0f172a" }}>
+            Esta reserva ya tiene contratos firmados.
           </div>
-          <div style={{ fontSize: 13, color: "#9a3412" }}>
-            La regla operativa queda así: la reserva se puede editar antes de formalizar contratos. Una vez hay contratos en estado listo o firmado, el sistema bloquea la edición para evitar tener que regenerarlos manualmente.
+          <div style={{ fontSize: 13, color: "#475569" }}>
+            Si cambias actividad, duración o cantidad, los contratos firmados actuales se conservarán como histórico y el sistema generará nuevos contratos para volver a firmar la versión actualizada.
+          </div>
+        </section>
+      ) : null}
+
+      {uiMode === "EDIT" && !hasSignedContracts && hasReadyContracts ? (
+        <section
+          style={{
+            ...panelStyle,
+            padding: 16,
+            border: "1px solid #fde68a",
+            background: "#fffbeb",
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          <div style={{ ...badgeStyle, color: "#a16207" }}>Regeneración de contratos</div>
+          <div style={{ fontWeight: 900, color: "#713f12" }}>
+            Esta reserva ya tiene contratos en estado READY.
+          </div>
+          <div style={{ fontSize: 13, color: "#92400e" }}>
+            Si cambias la duración dentro de la misma actividad, los contratos READY volverán a DRAFT para regenerarse. Si ya hubiera contratos firmados, la edición seguiría bloqueada.
           </div>
         </section>
       ) : null}
@@ -1206,6 +1294,26 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             onApplyPromoChange={setApplyPromo}
             onPromoCodeChange={setSelectedPromoCode}
           />
+
+          {showFuturePaymentsSection ? (
+            <div id="payments">
+              <FutureReservationPaymentsSection
+                totalServiceCents={paymentSummary.totalServiceCents}
+                paidServiceCents={paymentSummary.paidServiceCents}
+                pendingServiceCents={paymentSummary.pendingServiceCents}
+                paymentMethod={paymentMethod}
+                paymentAmountEuros={paymentAmountEuros}
+                paymentBusy={paymentBusy}
+                paymentError={paymentError}
+                onPaymentMethodChange={setPaymentMethod}
+                onPaymentAmountEurosChange={setPaymentAmountEuros}
+                onFillPendingAmount={() =>
+                  setPaymentAmountEuros(((paymentSummary.pendingServiceCents ?? 0) / 100).toFixed(2))
+                }
+                onCharge={() => void registerFutureReservationPayment()}
+              />
+            </div>
+          ) : null}
 
           <SubmitSection
             primaryDisabled={primaryDisabled}

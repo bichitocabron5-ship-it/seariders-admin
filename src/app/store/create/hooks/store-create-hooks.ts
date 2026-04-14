@@ -269,6 +269,9 @@ export function useReservationPrefill(args: {
         commissionEnabled?: boolean | null;
         commissionBps?: number | null;
       } | null;
+      totalServiceCents?: number | null;
+      paidServiceCents?: number | null;
+      pendingServiceCents?: number | null;
       activityDate: string;
       scheduledTime?: string | null;
     }) => void;
@@ -294,7 +297,12 @@ export function useReservationPrefill(args: {
         const res = data.reservation;
 
         setMigrateFlags((data.flags ?? null) as MigrateFlags | null);
-        applyReservation(res);
+        applyReservation({
+          ...res,
+          totalServiceCents: Number(data.financial?.totalServiceCents ?? 0),
+          paidServiceCents: Number(data.financial?.paidServiceCents ?? 0),
+          pendingServiceCents: Number(data.financial?.pendingServiceCents ?? 0),
+        });
 
         const parts = new Intl.DateTimeFormat("en-CA", {
           timeZone: "Europe/Madrid",

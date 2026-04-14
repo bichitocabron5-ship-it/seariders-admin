@@ -62,6 +62,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       licenseNumber: true,
       giftVoucherId: true,
       passVoucherId: true,
+      payments: {
+        select: {
+          amountCents: true,
+          isDeposit: true,
+          direction: true,
+        },
+      },
       service: {
         select: {
           id: true,
@@ -97,9 +104,22 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   const isPast = r.activityDate < startOfToday();
   const isHistorical = isPast && (r.status === "COMPLETED" || r.status === "CANCELED");
+  const paidServiceCents = (r.payments ?? [])
+    .filter((payment) => !payment.isDeposit)
+    .reduce(
+      (sum, payment) => sum + (payment.direction === "OUT" ? -Number(payment.amountCents ?? 0) : Number(payment.amountCents ?? 0)),
+      0
+    );
+  const totalServiceCents = Number(r.totalPriceCents ?? 0);
+  const pendingServiceCents = Math.max(0, totalServiceCents - paidServiceCents);
 
   return NextResponse.json({
     reservation: r,
+    financial: {
+      totalServiceCents,
+      paidServiceCents: Math.max(0, paidServiceCents),
+      pendingServiceCents,
+    },
     flags: {
       isPast,
       isHistorical,
