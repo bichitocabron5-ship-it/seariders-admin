@@ -537,18 +537,11 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
   const requiredCreateMissing =
     isCreateMode &&
-    (!customerName.trim() ||
-      !customerAddress.trim() ||
-      !customerCountry.trim() ||
-      !customerDocType.trim() ||
-      !customerDocNumber.trim());
+    (!customerName.trim() || !customerPhone.trim());
 
   const requiredFormalizeMissing = isFormalizeMode && (
     !customerName.trim() ||
-    !customerAddress.trim() ||
-    !customerCountry.trim() ||
-    !customerDocType.trim() ||
-    !customerDocNumber.trim()
+    !customerPhone.trim()
   );
   const contractsReadyForFormalize =
     !isMigrateMode || requiredUnits <= 0 || readyCount >= requiredUnits;
@@ -563,9 +556,9 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         : isFormalizeMode && !contractsReadyForFormalize
           ? `Faltan contratos por completar: ${readyCount}/${requiredUnits} listos.`
         : requiredFormalizeMissing
-          ? "Para formalizar faltan datos mínimos (nombre, dirección, país y documento)."
+          ? "Para formalizar faltan datos mínimos (nombre, apellidos y teléfono)."
           : requiredCreateMissing
-            ? "Para crear faltan datos mínimos (nombre, dirección, país y documento)."
+            ? "Para crear faltan datos mínimos (nombre, apellidos y teléfono)."
             : (isCreateMode && !canCreate)
               ? "Esta opción no tiene precio vigente."
               : null;

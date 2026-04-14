@@ -51,6 +51,7 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
   validateBeforeSubmit({
     flow: "EDIT",
     customerName: args.customerName,
+    customerPhone: args.customerPhone,
     customerCountry: args.customerCountry,
     customerAddress: args.customerAddress,
     customerDocType: args.customerDocType,
@@ -125,6 +126,7 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
   validateBeforeSubmit({
     flow: "MIGRATE",
     customerName: args.customerName,
+    customerPhone: args.customerPhone,
     customerCountry: args.customerCountry,
     customerAddress: args.customerAddress,
     customerDocType: args.customerDocType,
@@ -199,6 +201,7 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
   validateBeforeSubmit({
     flow: "CREATE",
     customerName: args.customerName,
+    customerPhone: args.customerPhone,
     customerCountry: args.customerCountry,
     customerAddress: args.customerAddress,
     customerDocType: args.customerDocType,

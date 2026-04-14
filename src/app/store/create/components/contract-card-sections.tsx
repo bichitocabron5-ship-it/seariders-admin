@@ -297,7 +297,7 @@ export function ContractDriverSection({
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Nombre del conductor
+          Nombre del conductor *
           <input value={driverName} onChange={(e) => onDriverNameChange(e.target.value)} style={inputStyle} />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
@@ -309,11 +309,11 @@ export function ContractDriverSection({
           <input value={driverEmail} onChange={(e) => onDriverEmailChange(e.target.value)} style={inputStyle} placeholder="conductor@email.com" />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          País (ISO-2)
+          País (ISO-2) *
           <input value={driverCountry} onChange={(e) => onDriverCountryChange(e.target.value)} style={inputStyle} placeholder="ES" />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Dirección
+          Dirección *
           <input value={driverAddress} onChange={(e) => onDriverAddressChange(e.target.value)} style={inputStyle} />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
@@ -321,16 +321,16 @@ export function ContractDriverSection({
           <input value={driverPostalCode} onChange={(e) => onDriverPostalCodeChange(e.target.value)} style={inputStyle} placeholder="08303" />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Tipo de documento
+          Tipo de documento *
           <select value={driverDocType} onChange={(e) => onDriverDocTypeChange(e.target.value)} style={inputStyle}>
-            <option value="">Opcional</option>
+            <option value="">Selecciona...</option>
             <option value="DNI">DNI</option>
             <option value="NIE">NIE</option>
             <option value="PASSPORT">Pasaporte</option>
           </select>
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Número de documento
+          Número de documento *
           <input value={driverDocNumber} onChange={(e) => onDriverDocNumberChange(e.target.value)} style={inputStyle} />
         </label>
       </div>

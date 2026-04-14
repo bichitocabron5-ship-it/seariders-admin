@@ -5,6 +5,7 @@ import { throwValidationError } from "../utils/errors";
 export function validateBeforeSubmit(args: {
   flow: SubmitFlow;
   customerName: string;
+  customerPhone: string;
   customerCountry: string;
   customerAddress: string;
   customerDocType: string;
@@ -24,10 +25,7 @@ export function validateBeforeSubmit(args: {
   const {
     flow,
     customerName,
-    customerCountry,
-    customerAddress,
-    customerDocType,
-    customerDocNumber,
+    customerPhone,
     quantity,
     pax,
     isVoucherFormalizeFlow,
@@ -42,36 +40,34 @@ export function validateBeforeSubmit(args: {
   } = args;
 
   if (!customerName.trim()) throwValidationError("Nombre requerido");
-  if (!customerAddress.trim()) throwValidationError("Dirección requerida");
-  if (!customerCountry.trim()) throwValidationError("País requerido");
-  if (!customerDocType.trim() || !customerDocNumber.trim()) throwValidationError("Documento requerido");
-  if (Number(quantity) < 1) throwValidationError("Cantidad inválida");
-  if (Number(pax) < 1) throwValidationError("PAX inválido");
+  if (!customerPhone.trim()) throwValidationError("Telefono requerido");
+  if (Number(quantity) < 1) throwValidationError("Cantidad invalida");
+  if (Number(pax) < 1) throwValidationError("PAX invalido");
 
   if (flow !== "MIGRATE" || !isVoucherFormalizeFlow) {
     if (!serviceId) throwValidationError("Servicio requerido");
-    if (!optionId) throwValidationError("Duración requerida");
+    if (!optionId) throwValidationError("Duracion requerida");
   }
 
   if (flow === "CREATE" && !channelId) throwValidationError("Canal requerido");
 
   if (flow === "CREATE" && !cartItemsLength && !canCreate) {
-    throwValidationError("Este servicio/duración no tiene precio vigente. Revisa Admin > Precios.");
+    throwValidationError("Este servicio/duracion no tiene precio vigente. Revisa Admin > Precios.");
   }
 
   if (flow === "EDIT" && uiMode === "FORMALIZE" && dateStr !== todayYmd) {
-    throwValidationError("Solo puedes formalizar el mismo día.");
+    throwValidationError("Solo puedes formalizar el mismo dia.");
   }
 }
 
 export function validateItemsForCreate(
   items: Array<{ serviceId: string; optionId: string; quantity: number; pax: number }>
 ) {
-  if (!items.length) throwValidationError("Añade al menos una actividad.");
+  if (!items.length) throwValidationError("Anade al menos una actividad.");
   for (const it of items) {
     if (!it.serviceId) throwValidationError("Falta servicio en un item.");
-    if (!it.optionId) throwValidationError("Falta duración en un item.");
-    if (Number(it.quantity) < 1) throwValidationError("Cantidad inválida en un item.");
-    if (Number(it.pax) < 1) throwValidationError("PAX inválido en un item.");
+    if (!it.optionId) throwValidationError("Falta duracion en un item.");
+    if (Number(it.quantity) < 1) throwValidationError("Cantidad invalida en un item.");
+    if (Number(it.pax) < 1) throwValidationError("PAX invalido en un item.");
   }
 }

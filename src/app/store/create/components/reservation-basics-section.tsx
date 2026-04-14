@@ -2,7 +2,6 @@
 "use client";
 
 import React from "react";
-import Select from "react-select";
 import type { CountryOption } from "@/lib/countries";
 import type { Channel, Option, PackPreview, ServiceMain } from "../types";
 
@@ -148,7 +147,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
 
             <div style={gridWideStyle}>
               <label style={labelStyle}>
-                <span>Nombre</span>
+                <span>Nombre *</span>
                 <input
                   value={values.firstName}
                   onChange={(e) => handlers.onFirstNameChange(e.target.value)}
@@ -159,7 +158,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
               </label>
 
               <label style={labelStyle}>
-                <span>Apellidos</span>
+                <span>Apellidos *</span>
                 <input
                   value={values.lastName}
                   onChange={(e) => handlers.onLastNameChange(e.target.value)}
@@ -170,17 +169,18 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
               </label>
 
               <label style={labelStyle}>
-                <span>Teléfono (opcional)</span>
+                <span>Teléfono *</span>
                 <input
                   value={values.customerPhone}
                   onChange={(e) => handlers.onCustomerPhoneChange(e.target.value)}
+                  required
                   style={inputStyle}
                   placeholder="Ej: +34 6xx xxx xxx"
                 />
               </label>
 
               <label style={labelStyle}>
-                <span>Email (opcional)</span>
+                <span>Email</span>
                 <input
                   value={values.customerEmail}
                   onChange={(e) => handlers.onCustomerEmailChange(e.target.value)}
@@ -188,72 +188,9 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                   placeholder="cliente@email.com"
                 />
               </label>
-
-              <div style={{ ...labelStyle, ...fullRow }}>
-                <span>País {flags.customerCountryRequired ? "*" : "(opcional)"}</span>
-                <Select<CountryOption, false>
-                  instanceId="customer-country"
-                  inputId="customer-country"
-                  options={lists.countryOptions}
-                  value={lists.selectedCountryOpt}
-                  onChange={(opt) => handlers.onCustomerCountryChange((opt?.value ?? "").toUpperCase())}
-                  placeholder="Escribe para buscar..."
-                />
-                {flags.customerCountryRequired && !values.customerCountry ? (
-                  <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 700 }}>Selecciona un país.</div>
-                ) : null}
-              </div>
             </div>
 
             <div style={gridStyle}>
-              <label style={{ ...labelStyle, ...fullRow }}>
-                <span>Dirección {flags.customerAddressRequired ? "*" : "(opcional)"}</span>
-                <input
-                  value={values.customerAddress}
-                  onChange={(e) => handlers.onCustomerAddressChange(e.target.value)}
-                  required={flags.customerAddressRequired}
-                  style={inputStyle}
-                  placeholder="Dirección completa"
-                />
-              </label>
-
-              <label style={labelStyle}>
-                <span>Código postal (opcional)</span>
-                <input
-                  value={values.customerPostalCode}
-                  onChange={(e) => handlers.onCustomerPostalCodeChange(e.target.value)}
-                  style={inputStyle}
-                  placeholder="Ej: 08303"
-                />
-              </label>
-
-              <label style={labelStyle}>
-                <span>Tipo de documento {flags.customerDocumentRequired ? "*" : "(opcional)"}</span>
-                <select
-                  value={values.customerDocType}
-                  onChange={(e) => handlers.onCustomerDocTypeChange(e.target.value)}
-                  required={flags.customerDocumentRequired}
-                  style={inputStyle}
-                >
-                  <option value="">Selecciona...</option>
-                  <option value="DNI">DNI</option>
-                  <option value="NIE">NIE</option>
-                  <option value="PASSPORT">Pasaporte</option>
-                  <option value="ID_CARD">Documento nacional</option>
-                </select>
-              </label>
-
-              <label style={labelStyle}>
-                <span>Número de documento {flags.customerDocumentRequired ? "*" : "(opcional)"}</span>
-                <input
-                  value={values.customerDocNumber}
-                  onChange={(e) => handlers.onCustomerDocNumberChange(e.target.value)}
-                  required={flags.customerDocumentRequired}
-                  style={inputStyle}
-                  placeholder="Número o referencia"
-                />
-              </label>
-
               <label style={labelStyle}>
                 <span>¿Cómo nos conoció?</span>
                 <select
