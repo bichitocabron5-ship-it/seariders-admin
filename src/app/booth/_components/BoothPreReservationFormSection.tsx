@@ -5,7 +5,13 @@ import type { CountryOption } from "@/lib/countries";
 
 type Service = { id: string; name: string; category: string; code?: string | null; isExternalActivity?: boolean | null };
 type Option = { id: string; serviceId: string; durationMinutes: number; paxMax: number; basePriceCents: number };
-type Channel = { id: string; name: string; kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null };
+type Channel = {
+  id: string;
+  name: string;
+  kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
+  commissionEnabled?: boolean | null;
+  commissionBps?: number | null;
+};
 
 type Props = {
   cardStyle: React.CSSProperties;
@@ -26,6 +32,7 @@ type Props = {
   optionsForService: Option[];
   channels: Channel[];
   selectedService: Service | null;
+  selectedChannel: Channel | null;
   selectedCountryOpt: CountryOption | null;
   countryOptions: CountryOption[];
   isJetski: boolean;
@@ -36,6 +43,9 @@ type Props = {
   discountCentsRaw: number;
   discountCentsClamped: number;
   finalTotalCents: number;
+  commissionPct: number;
+  commissionCents: number;
+  netAfterCommissionCents: number;
   euros: (cents: number) => string;
   onSubmit: (e: React.FormEvent) => void | Promise<void>;
   setFirstName: (value: string) => void;
@@ -69,6 +79,7 @@ export default function BoothPreReservationFormSection({
   optionsForService,
   channels,
   selectedService,
+  selectedChannel,
   selectedCountryOpt,
   countryOptions,
   isJetski,
@@ -79,6 +90,9 @@ export default function BoothPreReservationFormSection({
   discountCentsRaw,
   discountCentsClamped,
   finalTotalCents,
+  commissionPct,
+  commissionCents,
+  netAfterCommissionCents,
   euros,
   onSubmit,
   setFirstName,
@@ -231,6 +245,23 @@ export default function BoothPreReservationFormSection({
           <div style={{ fontSize: 15, color: "#0f172a", fontWeight: 900 }}>
             Precio final de la reserva: {euros(finalTotalCents)}
           </div>
+          {selectedChannel ? (
+            commissionPct > 0 ? (
+              <>
+                <div style={{ fontSize: 13, color: "#334155" }}>
+                  Comisión estimada ({selectedChannel.name} · {commissionPct.toFixed(2)}%):{" "}
+                  <strong>{euros(commissionCents)}</strong>
+                </div>
+                <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 800 }}>
+                  Neto estimado tras comisión: {euros(netAfterCommissionCents)}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: 12, color: "#64748b" }}>
+                El canal seleccionado no tiene comisión configurada para esta actividad.
+              </div>
+            )
+          ) : null}
           {isJetski && quantity > 1 ? (
             <div style={{ fontSize: 13, color: "#334155" }}>
               Precio final por moto: <strong>{euros(Math.round(finalTotalCents / quantity))}</strong>

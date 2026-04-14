@@ -119,6 +119,13 @@ export async function GET(req: Request) {
         allowsPromotions: true,
         commissionEnabled: true,
         commissionBps: true,
+        commissionRules: {
+          where: { isActive: true },
+          select: {
+            serviceId: true,
+            commissionPct: true,
+          },
+        },
       },
       orderBy: { name: "asc" },
     }),

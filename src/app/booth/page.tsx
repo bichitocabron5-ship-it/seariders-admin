@@ -11,7 +11,15 @@ import BoothTripsSection from "./_components/BoothTripsSection";
 
 type Service = { id: string; name: string; category: string; code?: string | null; isExternalActivity?: boolean | null };
 type Option = { id: string; serviceId: string; durationMinutes: number; paxMax: number; basePriceCents: number };
-type Channel = { id: string; name: string; kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null };
+type ChannelRule = { serviceId: string; commissionPct: number };
+type Channel = {
+  id: string;
+  name: string;
+  kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
+  commissionEnabled?: boolean | null;
+  commissionBps?: number | null;
+  commissionRules?: ChannelRule[] | null;
+};
 type PayMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 
 type SplitLine = { amount: string; method: PayMethod; received?: string };
@@ -177,6 +185,11 @@ function toCentsFromEuroInput(v: string) {
   return Math.round(n * 100);
 }
 
+function clampPct(v: number) {
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(100, v));
+}
+
 function isJetskiService(svc?: { code?: string | null; name?: string | null } | null) {
   const key = normalize(svc?.code ?? svc?.name ?? "");
   return key.includes("jetski") || key.includes("jet") || key.includes("moto");
@@ -272,6 +285,10 @@ const filteredChannels = useMemo(() => {
   return preferred.length > 0 ? preferred : channels;
 }, [channels, selectedService]);
 
+const selectedChannel = useMemo(() => {
+  return filteredChannels.find((channel) => channel.id === channelId) ?? channels.find((channel) => channel.id === channelId) ?? null;
+}, [filteredChannels, channels, channelId]);
+
 const countryOptions = useMemo(() => getCountryOptionsEs(), []);
 const selectedCountryOpt = useMemo(() => {
   const v = String(customerCountry ?? "").toUpperCase();
@@ -300,6 +317,18 @@ const finalTotalCents = useMemo(
   () => Math.max(0, baseTotalCents - discountCentsClamped),
   [baseTotalCents, discountCentsClamped]
 );
+
+const commissionPct = useMemo(() => {
+  if (!selectedChannel?.commissionEnabled || !selectedService?.id) return 0;
+
+  const specificRule = selectedChannel.commissionRules?.find((rule) => rule.serviceId === selectedService.id);
+  if (specificRule) return clampPct(Number(specificRule.commissionPct ?? 0));
+
+  return clampPct(Number(selectedChannel.commissionBps ?? 0) / 100);
+}, [selectedChannel, selectedService]);
+
+const commissionCents = useMemo(() => Math.round(finalTotalCents * (commissionPct / 100)), [finalTotalCents, commissionPct]);
+const netAfterCommissionCents = useMemo(() => Math.max(0, finalTotalCents - commissionCents), [finalTotalCents, commissionCents]);
 
 async function load() {
   setError(null);
@@ -724,6 +753,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             optionsForService={optionsForService}
             channels={filteredChannels}
             selectedService={selectedService}
+            selectedChannel={selectedChannel}
             selectedCountryOpt={selectedCountryOpt}
             countryOptions={countryOptions}
             isJetski={isJetski}
@@ -734,6 +764,9 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             discountCentsRaw={discountCentsRaw}
             discountCentsClamped={discountCentsClamped}
             finalTotalCents={finalTotalCents}
+            commissionPct={commissionPct}
+            commissionCents={commissionCents}
+            netAfterCommissionCents={netAfterCommissionCents}
             euros={euros}
             onSubmit={createPre}
             setFirstName={setFirstName}
