@@ -78,7 +78,11 @@ export default function CreateChannelSection({
             Tipo de canal
             <select
               value={newKind}
-              onChange={(e) => setNewKind(e.target.value as "STANDARD" | "EXTERNAL_ACTIVITY")}
+              onChange={(e) => {
+                const nextKind = e.target.value as "STANDARD" | "EXTERNAL_ACTIVITY";
+                setNewKind(nextKind);
+                if (nextKind === "EXTERNAL_ACTIVITY") setNewVisibleInBooth(true);
+              }}
               style={inputStyle}
             >
               <option value="STANDARD">Comercial estándar</option>

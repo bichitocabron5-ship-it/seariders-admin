@@ -100,6 +100,22 @@ export default function ChannelsConfigurationSection({
                 </div>
 
                 <div style={controlsGrid}>
+                  <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    Tipo de canal
+                    <select
+                      value={channel.kind}
+                      disabled={busy}
+                      onChange={(e) => {
+                        const nextKind = e.target.value as "STANDARD" | "EXTERNAL_ACTIVITY";
+                        void patchChannel(channel.id, { kind: nextKind });
+                      }}
+                      style={inputStyle}
+                    >
+                      <option value="STANDARD">Comercial estándar</option>
+                      <option value="EXTERNAL_ACTIVITY">Actividad externa</option>
+                    </select>
+                  </label>
+
                   <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
                     <input
                       type="checkbox"

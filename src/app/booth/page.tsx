@@ -266,9 +266,10 @@ const selectedService = useMemo(() => {
 
 const filteredChannels = useMemo(() => {
   const wantsExternalChannel = selectedService?.isExternalActivity === true;
-  return channels.filter((channel) =>
+  const preferred = channels.filter((channel) =>
     wantsExternalChannel ? channel.kind === "EXTERNAL_ACTIVITY" : channel.kind !== "EXTERNAL_ACTIVITY"
   );
+  return preferred.length > 0 ? preferred : channels;
 }, [channels, selectedService]);
 
 const countryOptions = useMemo(() => getCountryOptionsEs(), []);

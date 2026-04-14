@@ -13,6 +13,7 @@ type Service = {
   id: string;
   name: string;
   category: string;
+  isExternalActivity?: boolean;
   options: ServiceOption[];
 };
 
@@ -89,6 +90,7 @@ export default function ChannelCommissionRulesSection({
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <div style={{ fontWeight: 950, fontSize: 17, color: "#0f172a" }}>{service.name}</div>
                     <span style={categoryPill}>{service.category}</span>
+                    {service.isExternalActivity ? <span style={{ ...statusPill, ...statusOn }}>Externa</span> : null}
                     <span style={{ ...statusPill, ...(active ? statusOn : statusOff) }}>
                       {active ? "Regla activa" : "Fallback canal"}
                     </span>

@@ -69,12 +69,12 @@ export async function GET(
       select: { id: true, name: true, kind: true, commissionEnabled: true, commissionBps: true },
     }),
     prisma.service.findMany({
-      where: { isActive: true, category: { not: "EXTRA" } },
+      where: { isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, category: true, isExternalActivity: true },
     }),
     prisma.serviceOption.findMany({
-      where: { isActive: true, service: { isActive: true, category: { not: "EXTRA" } } },
+      where: { isActive: true, service: { isActive: true } },
       orderBy: [{ serviceId: "asc" }, { durationMinutes: "asc" }, { paxMax: "asc" }],
       select: {
         id: true,
@@ -105,11 +105,6 @@ export async function GET(
 
   if (!channel) return new NextResponse("Canal no existe", { status: 404 });
 
-  const allowedServices = services.filter((service) =>
-    channel.kind === "EXTERNAL_ACTIVITY" ? service.isExternalActivity : !service.isExternalActivity
-  );
-  const allowedServiceIds = new Set(allowedServices.map((service) => service.id));
-
   const optionPricingAvailable = await hasChannelOptionPriceTable();
   const optionPrices = optionPricingAvailable
     ? await prisma.channelOptionPrice.findMany({
@@ -125,7 +120,7 @@ export async function GET(
     }
   }
 
-  const serviceRows = allowedServices.map((service) => ({
+  const serviceRows = services.map((service) => ({
     ...service,
     options: options
       .filter((option) => option.serviceId === service.id)
@@ -140,10 +135,8 @@ export async function GET(
   return NextResponse.json({
     channel,
     services: serviceRows,
-    rules: rules.filter((rule) => allowedServiceIds.has(rule.serviceId)),
-    optionPrices: optionPrices.filter((optionPrice) =>
-      options.some((option) => option.id === optionPrice.optionId && allowedServiceIds.has(option.serviceId))
-    ),
+    rules,
+    optionPrices,
     optionPricingAvailable,
   });
 }
