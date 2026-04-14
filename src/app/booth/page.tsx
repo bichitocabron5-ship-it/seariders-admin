@@ -9,9 +9,9 @@ import BoothPreReservationFormSection from "./_components/BoothPreReservationFor
 import BoothPreReservationsSection from "./_components/BoothPreReservationsSection";
 import BoothTripsSection from "./_components/BoothTripsSection";
 
-type Service = { id: string; name: string; category: string; code?: string | null };
+type Service = { id: string; name: string; category: string; code?: string | null; isExternalActivity?: boolean | null };
 type Option = { id: string; serviceId: string; durationMinutes: number; paxMax: number; basePriceCents: number };
-type Channel = { id: string; name: string };
+type Channel = { id: string; name: string; kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null };
 type PayMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 
 type SplitLine = { amount: string; method: PayMethod; received?: string };
@@ -264,6 +264,13 @@ const selectedService = useMemo(() => {
   return services.find((s) => s.id === serviceId) ?? null;
 }, [services, serviceId]);
 
+const filteredChannels = useMemo(() => {
+  const wantsExternalChannel = selectedService?.isExternalActivity === true;
+  return channels.filter((channel) =>
+    wantsExternalChannel ? channel.kind === "EXTERNAL_ACTIVITY" : channel.kind !== "EXTERNAL_ACTIVITY"
+  );
+}, [channels, selectedService]);
+
 const countryOptions = useMemo(() => getCountryOptionsEs(), []);
 const selectedCountryOpt = useMemo(() => {
   const v = String(customerCountry ?? "").toUpperCase();
@@ -424,6 +431,12 @@ function boatLabel(boat?: string | null) {
 useEffect(() => {
   if (!isJetski) setQuantity(1);
 }, [isJetski]);
+
+useEffect(() => {
+  if (!channelId) return;
+  if (filteredChannels.some((channel) => channel.id === channelId)) return;
+  setChannelId("");
+}, [channelId, filteredChannels]);
 
   async function createPre(e: React.FormEvent) {
     e.preventDefault();
@@ -708,7 +721,8 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             servicesFiltered={servicesFiltered}
             options={options}
             optionsForService={optionsForService}
-            channels={channels}
+            channels={filteredChannels}
+            selectedService={selectedService}
             selectedCountryOpt={selectedCountryOpt}
             countryOptions={countryOptions}
             isJetski={isJetski}

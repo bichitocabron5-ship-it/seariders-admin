@@ -5,22 +5,26 @@ import type { CSSProperties } from "react";
 export default function AdminCatalogCreateSection({
   name,
   category,
+  isExternalActivity,
   inputStyle,
   fieldLabel,
   darkBtn,
   panelStyle,
   onNameChange,
   onCategoryChange,
+  onExternalActivityChange,
   onCreate,
 }: {
   name: string;
   category: string;
+  isExternalActivity: boolean;
   inputStyle: CSSProperties;
   fieldLabel: CSSProperties;
   darkBtn: CSSProperties;
   panelStyle: CSSProperties;
   onNameChange: (value: string) => void;
   onCategoryChange: (value: string) => void;
+  onExternalActivityChange: (value: boolean) => void;
   onCreate: () => void;
 }) {
   return (
@@ -56,6 +60,15 @@ export default function AdminCatalogCreateSection({
               placeholder="Ej. Jetski turista"
               style={inputStyle}
             />
+          </label>
+
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+            <input
+              type="checkbox"
+              checked={isExternalActivity}
+              onChange={(e) => onExternalActivityChange(e.target.checked)}
+            />
+            Actividad externa
           </label>
 
           <label style={fieldLabel}>

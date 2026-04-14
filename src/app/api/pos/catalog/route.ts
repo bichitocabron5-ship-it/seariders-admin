@@ -17,6 +17,7 @@ type ServiceLite = {
   name: string;
   code: string | null;
   category: string | null;
+  isExternalActivity: boolean;
   isLicense: boolean;
   isActive: boolean;
   visibleInBooth: boolean;
@@ -68,6 +69,7 @@ export async function GET(req: Request) {
         name: true,
         code: true,
         category: true,
+        isExternalActivity: true,
         isLicense: true,
         isActive: true,
         visibleInBooth: true,
@@ -111,6 +113,7 @@ export async function GET(req: Request) {
       select: {
         id: true,
         name: true,
+        kind: true,
         visibleInStore: true,
         visibleInBooth: true,
         allowsPromotions: true,

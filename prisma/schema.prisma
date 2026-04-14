@@ -150,6 +150,7 @@ model EditLock {
 model Channel {
   id                         String                  @id @default(cuid())
   name                       String                  @unique
+  kind                       ChannelKind             @default(STANDARD)
   commissionPct              Float                   @default(0)
   isActive                   Boolean                 @default(true)
   visibleInStore             Boolean                 @default(true)
@@ -188,6 +189,7 @@ model Service {
   code             String                  @unique // ✅ estable (ej: JETSKI_TURISTA, BANANA, GOPRO)
   name             String
   category         String
+  isExternalActivity Boolean               @default(false)
   requiresPlatform Boolean                 @default(false)
   requiresJetski   Boolean                 @default(false)
   requiresMonitor  Boolean                 @default(false)
@@ -2026,6 +2028,11 @@ model ChannelOptionPrice {
   @@unique([channelId, optionId])
   @@index([channelId])
   @@index([optionId])
+}
+
+enum ChannelKind {
+  STANDARD
+  EXTERNAL_ACTIVITY
 }
 
 enum DiscountScope {

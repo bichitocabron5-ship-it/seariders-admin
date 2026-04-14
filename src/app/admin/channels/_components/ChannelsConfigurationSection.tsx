@@ -6,6 +6,7 @@ import type { CSSProperties } from "react";
 type Channel = {
   id: string;
   name: string;
+  kind: "STANDARD" | "EXTERNAL_ACTIVITY";
   isActive: boolean;
   visibleInStore: boolean;
   visibleInBooth: boolean;
@@ -60,6 +61,7 @@ export default function ChannelsConfigurationSection({
           {channels.map((channel) => {
             const pct = (channel.commissionBps ?? 0) / 100;
             const busy = savingId === channel.id;
+            const kindLabel = channel.kind === "EXTERNAL_ACTIVITY" ? "Actividad externa" : "Canal estándar";
             const commissionLabel = channel.commissionEnabled ? `Comisión ${pct.toFixed(2)}%` : "Sin comisión";
 
             return (
@@ -70,6 +72,9 @@ export default function ChannelsConfigurationSection({
                       <div style={{ fontWeight: 950, fontSize: 17, color: "#0f172a" }}>{channel.name}</div>
                       <span style={{ ...statusPill, ...(channel.isActive ? statusOn : statusOff) }}>
                         {channel.isActive ? "Activo" : "Inactivo"}
+                      </span>
+                      <span style={{ ...statusPill, ...(channel.kind === "EXTERNAL_ACTIVITY" ? statusOn : statusOff) }}>
+                        {kindLabel}
                       </span>
                       <span style={{ ...statusPill, ...(channel.commissionEnabled ? statusOn : statusOff) }}>
                         {commissionLabel}

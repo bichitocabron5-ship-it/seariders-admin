@@ -8,6 +8,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 export const runtime = "nodejs";
 
 const Body = z.object({
+  kind: z.enum(["STANDARD", "EXTERNAL_ACTIVITY"]).optional(),
   visibleInStore: z.boolean().optional(),
   visibleInBooth: z.boolean().optional(),
   allowsPromotions: z.boolean().optional(),
@@ -52,6 +53,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const updated = await prisma.channel.update({
     where: { id },
     data: {
+      kind: parsed.data.kind,
       visibleInStore: parsed.data.visibleInStore,
       visibleInBooth: parsed.data.visibleInBooth,
       allowsPromotions: parsed.data.allowsPromotions,
@@ -62,6 +64,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     select: {
       id: true,
       name: true,
+      kind: true,
       isActive: true,
       visibleInStore: true,
       visibleInBooth: true,

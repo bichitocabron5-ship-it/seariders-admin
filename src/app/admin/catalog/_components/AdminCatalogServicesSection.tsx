@@ -74,6 +74,7 @@ export default function AdminCatalogServicesSection({
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <div style={{ fontWeight: 950, fontSize: 17, color: "#0f172a" }}>{service.name}</div>
                     <span style={categoryPill}>{service.category}</span>
+                    {service.isExternalActivity ? <span style={licensePill}>Externa</span> : null}
                     <span style={{ ...statusPill, ...(service.isActive ? statusOn : statusOff) }}>
                       {service.isActive ? "Activo" : "Inactivo"}
                     </span>
@@ -118,6 +119,16 @@ export default function AdminCatalogServicesSection({
                   gap: 10,
                 }}
               >
+                <label style={toggleRow}>
+                  <input
+                    type="checkbox"
+                    checked={service.isExternalActivity}
+                    disabled={busy}
+                    onChange={(e) => onPatchService(service.id, { isExternalActivity: e.target.checked })}
+                  />
+                  Actividad externa
+                </label>
+
                 <label style={toggleRow}>
                   <input
                     type="checkbox"

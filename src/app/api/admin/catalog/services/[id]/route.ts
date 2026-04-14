@@ -13,6 +13,7 @@ export const runtime = "nodejs";
 const Body = z.object({
   name: z.string().min(1).max(120).optional(),
   category: z.string().min(1).max(40).optional(),
+  isExternalActivity: z.boolean().optional(),
   isActive: z.boolean().optional(),
 
   // flags reales
@@ -43,6 +44,7 @@ export async function PATCH(
   const data: Prisma.ServiceUpdateInput = {};
   if (p.name !== undefined) data.name = p.name;
   if (p.category !== undefined) data.category = p.category;
+  if (p.isExternalActivity !== undefined) data.isExternalActivity = p.isExternalActivity;
   if (p.isActive !== undefined) data.isActive = p.isActive;
   if (p.requiresPlatform !== undefined) data.requiresPlatform = p.requiresPlatform;
   if (p.requiresJetski !== undefined) data.requiresJetski = p.requiresJetski;
@@ -57,6 +59,7 @@ export async function PATCH(
       id: true,
       name: true,
       category: true,
+      isExternalActivity: true,
       isActive: true,
       requiresPlatform: true,
       requiresJetski: true,

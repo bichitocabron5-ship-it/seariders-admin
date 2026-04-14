@@ -12,6 +12,7 @@ export const runtime = "nodejs";
 const CreateBody = z.object({
   name: z.string().min(1).max(120),
   category: z.string().min(1).max(40),
+  isExternalActivity: z.boolean().optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(-9999).max(9999).optional(),
 
@@ -52,6 +53,7 @@ export async function GET() {
       id: true,
       name: true,
       category: true,
+      isExternalActivity: true,
       isActive: true,
 
       // quita los que no existan en tu modelo
@@ -92,6 +94,7 @@ for (let i = 2; i < 50; i++) {
     code, // imprescindible
     name: parsed.data.name,
     category: parsed.data.category,
+    isExternalActivity: parsed.data.isExternalActivity ?? false,
     isActive: parsed.data.isActive ?? true,
 
     ...(parsed.data.requiresPlatform !== undefined ? { requiresPlatform: parsed.data.requiresPlatform } : {}),

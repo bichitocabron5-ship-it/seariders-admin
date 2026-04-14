@@ -19,6 +19,7 @@ export default function AdminCatalogPage() {
   const [showInactive, setShowInactive] = useState(true);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
+  const [isExternalActivity, setIsExternalActivity] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -54,7 +55,7 @@ export default function AdminCatalogPage() {
     const response = await fetch("/api/admin/catalog/services", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmedName, category: trimmedCategory, isActive: true }),
+      body: JSON.stringify({ name: trimmedName, category: trimmedCategory, isActive: true, isExternalActivity }),
     });
 
     if (!response.ok) {
@@ -64,6 +65,7 @@ export default function AdminCatalogPage() {
 
     setName("");
     setCategory("");
+    setIsExternalActivity(false);
     await load();
   }
 
@@ -180,12 +182,14 @@ export default function AdminCatalogPage() {
       <AdminCatalogCreateSection
         name={name}
         category={category}
+        isExternalActivity={isExternalActivity}
         inputStyle={inputStyle}
         fieldLabel={fieldLabel}
         darkBtn={darkBtn}
         panelStyle={panelStyle}
         onNameChange={setName}
         onCategoryChange={setCategory}
+        onExternalActivityChange={setIsExternalActivity}
         onCreate={() => void create()}
       />
 

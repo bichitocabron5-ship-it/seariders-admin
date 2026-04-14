@@ -9,6 +9,7 @@ import CreateChannelSection from "./_components/CreateChannelSection";
 type Channel = {
   id: string;
   name: string;
+  kind: "STANDARD" | "EXTERNAL_ACTIVITY";
   isActive: boolean;
   visibleInStore: boolean;
   visibleInBooth: boolean;
@@ -24,6 +25,7 @@ export default function AdminChannelsPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [newKind, setNewKind] = useState<Channel["kind"]>("STANDARD");
   const [newIsActive, setNewIsActive] = useState(true);
   const [newVisibleInStore, setNewVisibleInStore] = useState(true);
   const [newVisibleInBooth, setNewVisibleInBooth] = useState(false);
@@ -106,6 +108,7 @@ export default function AdminChannelsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: trimmedName,
+          kind: newKind,
           isActive: newIsActive,
           visibleInStore: newVisibleInStore,
           visibleInBooth: newVisibleInBooth,
@@ -124,6 +127,7 @@ export default function AdminChannelsPage() {
       }
 
       setNewName("");
+      setNewKind("STANDARD");
       setNewIsActive(true);
       setNewVisibleInStore(true);
       setNewVisibleInBooth(false);
@@ -178,6 +182,7 @@ export default function AdminChannelsPage() {
 
       <CreateChannelSection
         newName={newName}
+        newKind={newKind}
         newIsActive={newIsActive}
         newVisibleInStore={newVisibleInStore}
         newVisibleInBooth={newVisibleInBooth}
@@ -186,6 +191,7 @@ export default function AdminChannelsPage() {
         newCommissionPct={newCommissionPct}
         creating={creating}
         setNewName={setNewName}
+        setNewKind={setNewKind}
         setNewIsActive={setNewIsActive}
         setNewVisibleInStore={setNewVisibleInStore}
         setNewVisibleInBooth={setNewVisibleInBooth}

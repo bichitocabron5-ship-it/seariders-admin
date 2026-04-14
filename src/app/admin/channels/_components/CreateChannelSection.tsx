@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 
 type Props = {
   newName: string;
+  newKind: "STANDARD" | "EXTERNAL_ACTIVITY";
   newIsActive: boolean;
   newVisibleInStore: boolean;
   newVisibleInBooth: boolean;
@@ -12,6 +13,7 @@ type Props = {
   newCommissionPct: string;
   creating: boolean;
   setNewName: (value: string) => void;
+  setNewKind: (value: "STANDARD" | "EXTERNAL_ACTIVITY") => void;
   setNewIsActive: (value: boolean) => void;
   setNewVisibleInStore: (value: boolean) => void;
   setNewVisibleInBooth: (value: boolean) => void;
@@ -28,6 +30,7 @@ type Props = {
 
 export default function CreateChannelSection({
   newName,
+  newKind,
   newIsActive,
   newVisibleInStore,
   newVisibleInBooth,
@@ -36,6 +39,7 @@ export default function CreateChannelSection({
   newCommissionPct,
   creating,
   setNewName,
+  setNewKind,
   setNewIsActive,
   setNewVisibleInStore,
   setNewVisibleInBooth,
@@ -68,6 +72,18 @@ export default function CreateChannelSection({
               placeholder="Ej. Booking, GetYourGuide, Brutal"
               style={inputStyle}
             />
+          </label>
+
+          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+            Tipo de canal
+            <select
+              value={newKind}
+              onChange={(e) => setNewKind(e.target.value as "STANDARD" | "EXTERNAL_ACTIVITY")}
+              style={inputStyle}
+            >
+              <option value="STANDARD">Comercial estándar</option>
+              <option value="EXTERNAL_ACTIVITY">Actividad externa</option>
+            </select>
           </label>
 
           <label style={{ display: "grid", gap: 6, fontSize: 13 }}>

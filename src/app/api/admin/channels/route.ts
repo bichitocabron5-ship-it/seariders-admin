@@ -9,6 +9,7 @@ export const runtime = "nodejs";
 
 const CreateBody = z.object({
   name: z.string().trim().min(1).max(120),
+  kind: z.enum(["STANDARD", "EXTERNAL_ACTIVITY"]).optional(),
   isActive: z.boolean().optional(),
   visibleInStore: z.boolean().optional(),
   visibleInBooth: z.boolean().optional(),
@@ -46,6 +47,7 @@ export async function GET() {
     select: {
       id: true,
       name: true,
+      kind: true,
       isActive: true,
       visibleInStore: true,
       visibleInBooth: true,
@@ -79,6 +81,7 @@ export async function POST(req: Request) {
     const channel = await prisma.channel.create({
       data: {
         name: parsed.data.name,
+        kind: parsed.data.kind ?? "STANDARD",
         isActive: parsed.data.isActive ?? true,
         visibleInStore: parsed.data.visibleInStore ?? true,
         visibleInBooth: parsed.data.visibleInBooth ?? false,
@@ -89,6 +92,7 @@ export async function POST(req: Request) {
       select: {
         id: true,
         name: true,
+        kind: true,
         isActive: true,
         visibleInStore: true,
         visibleInBooth: true,

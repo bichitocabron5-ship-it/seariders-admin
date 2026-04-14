@@ -3,9 +3,9 @@
 import Select from "react-select";
 import type { CountryOption } from "@/lib/countries";
 
-type Service = { id: string; name: string; category: string; code?: string | null };
+type Service = { id: string; name: string; category: string; code?: string | null; isExternalActivity?: boolean | null };
 type Option = { id: string; serviceId: string; durationMinutes: number; paxMax: number; basePriceCents: number };
-type Channel = { id: string; name: string };
+type Channel = { id: string; name: string; kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null };
 
 type Props = {
   cardStyle: React.CSSProperties;
@@ -25,6 +25,7 @@ type Props = {
   options: Option[];
   optionsForService: Option[];
   channels: Channel[];
+  selectedService: Service | null;
   selectedCountryOpt: CountryOption | null;
   countryOptions: CountryOption[];
   isJetski: boolean;
@@ -67,6 +68,7 @@ export default function BoothPreReservationFormSection({
   options,
   optionsForService,
   channels,
+  selectedService,
   selectedCountryOpt,
   countryOptions,
   isJetski,
@@ -246,7 +248,7 @@ export default function BoothPreReservationFormSection({
         </div>
 
         <label>
-          Canal opcional
+          {selectedService?.isExternalActivity ? "Canal de comisión externa" : "Canal opcional"}
           <select value={channelId} onChange={(e) => setChannelId(e.target.value)} style={fieldStyle}>
             <option value="">(ninguno)</option>
             {channels.map((channel) => (
@@ -256,6 +258,11 @@ export default function BoothPreReservationFormSection({
             ))}
           </select>
         </label>
+        {selectedService?.isExternalActivity ? (
+          <div style={{ fontSize: 12, color: "#64748b" }}>
+            Solo se muestran partners externos habilitados para liquidar comisión en Booth.
+          </div>
+        ) : null}
 
         <label style={{ display: "grid", gap: 6 }}>
           <span>Nota para tienda (opcional)</span>
