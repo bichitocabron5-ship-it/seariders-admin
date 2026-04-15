@@ -62,7 +62,11 @@ export default function ChannelsConfigurationSection({
             const pct = (channel.commissionBps ?? 0) / 100;
             const busy = savingId === channel.id;
             const kindLabel = channel.kind === "EXTERNAL_ACTIVITY" ? "Actividad externa" : "Canal estándar";
-            const commissionLabel = channel.commissionEnabled ? `Comisión ${pct.toFixed(2)}%` : "Sin comisión";
+            const commissionLabel = channel.commissionEnabled
+              ? channel.kind === "EXTERNAL_ACTIVITY"
+                ? `Partner ${pct.toFixed(2)}% · Seariders ${(100 - pct).toFixed(2)}%`
+                : `Comisión ${pct.toFixed(2)}%`
+              : "Sin comisión";
 
             return (
               <article key={channel.id} style={rowCard}>
@@ -171,7 +175,7 @@ export default function ChannelsConfigurationSection({
                   </label>
 
                   <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                    Comisión base (%)
+                    {channel.kind === "EXTERNAL_ACTIVITY" ? "Reparto partner (%)" : "Comisión base (%)"}
                     <input
                       type="number"
                       min={0}

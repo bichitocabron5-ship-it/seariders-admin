@@ -258,11 +258,11 @@ export default function BoothPreReservationFormSection({
             commissionPct > 0 ? (
               <>
                 <div style={{ fontSize: 13, color: "#334155" }}>
-                  Comision estimada ({selectedChannel.name} · {commissionPct.toFixed(2)}%):{" "}
+                  Comision estimada para Seariders ({selectedChannel.name} · {commissionPct.toFixed(2)}%):{" "}
                   <strong>{euros(commissionCents)}</strong>
                 </div>
                 <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 800 }}>
-                  Neto estimado tras comision: {euros(netAfterCommissionCents)}
+                  Neto estimado a liquidar al partner: {euros(netAfterCommissionCents)}
                 </div>
               </>
             ) : (

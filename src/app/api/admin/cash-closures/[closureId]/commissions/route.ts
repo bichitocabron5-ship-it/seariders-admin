@@ -56,6 +56,7 @@ export async function GET(req: Request, { params }: Ctx) {
         select: {
           id: true,
           name: true,
+          kind: true,
           commissionEnabled: true,
           commissionAppliesToDeposit: true,
           commissionBps: true,
@@ -81,6 +82,7 @@ export async function GET(req: Request, { params }: Ctx) {
         select: {
           id: true,
           name: true,
+          kind: true,
           commissionEnabled: true,
           commissionAppliesToDeposit: true,
           commissionBps: true,

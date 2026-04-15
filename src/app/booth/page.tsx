@@ -190,6 +190,11 @@ function clampPct(v: number) {
   return Math.max(0, Math.min(100, v));
 }
 
+function searidersPctFromChannelPct(channelPct: number, kind?: Channel["kind"] | null) {
+  const normalized = clampPct(channelPct);
+  return kind === "EXTERNAL_ACTIVITY" ? clampPct(100 - normalized) : normalized;
+}
+
 function isJetskiService(svc?: { code?: string | null; name?: string | null } | null) {
   const key = normalize(svc?.code ?? svc?.name ?? "");
   return key.includes("jetski") || key.includes("jet") || key.includes("moto");
@@ -325,9 +330,11 @@ const commissionPct = useMemo(() => {
   if (!selectedChannel?.commissionEnabled || !selectedService?.id) return 0;
 
   const specificRule = selectedChannel.commissionRules?.find((rule) => rule.serviceId === selectedService.id);
-  if (specificRule) return clampPct(Number(specificRule.commissionPct ?? 0));
+  if (specificRule) {
+    return searidersPctFromChannelPct(Number(specificRule.commissionPct ?? 0), selectedChannel.kind);
+  }
 
-  return clampPct(Number(selectedChannel.commissionBps ?? 0) / 100);
+  return searidersPctFromChannelPct(Number(selectedChannel.commissionBps ?? 0) / 100, selectedChannel.kind);
 }, [selectedChannel, selectedService]);
 
 const commissionCents = useMemo(() => Math.round(finalTotalCents * (commissionPct / 100)), [finalTotalCents, commissionPct]);
@@ -505,7 +512,7 @@ useEffect(() => {
     const j = await r.json();
     if (j.mode === "payment") {
       alert(
-        `Cobro registrado: ${euros(j.amountCents ?? finalTotalCents)} · Comisión ${euros(j.commissionCents ?? 0)} (${Number(j.commissionPct ?? 0).toFixed(2)}%)`
+        `Cobro registrado: ${euros(j.amountCents ?? finalTotalCents)} · Comisión Seariders ${euros(j.commissionCents ?? 0)} (${Number(j.commissionPct ?? 0).toFixed(2)}%)`
       );
     } else {
       alert(`Creada. Código: ${j.boothCode}`);

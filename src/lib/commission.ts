@@ -6,6 +6,7 @@ export type CommissionRuleLike = {
 };
 
 export type CommissionChannelLike = {
+  kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;
   commissionPct?: number | null;
@@ -36,6 +37,14 @@ export function commissionFromBase(baseCents: number, rate: number) {
   return roundCents(Number(baseCents ?? 0) * Number(rate ?? 0));
 }
 
+export function commissionRateForSeariders(rate: number, kind?: CommissionChannelLike["kind"]) {
+  const normalized = Math.max(0, Math.min(1, Number(rate ?? 0)));
+  if (kind === "EXTERNAL_ACTIVITY") {
+    return Math.max(0, Math.min(1, 1 - normalized));
+  }
+  return normalized;
+}
+
 export function resolveCommissionRate(args: {
   channel?: CommissionChannelLike | null;
   serviceId: string;
@@ -44,15 +53,17 @@ export function resolveCommissionRate(args: {
   const { channel, serviceId, rulePct } = args;
   if (!channel || !channel.commissionEnabled) return 0;
 
-  if (rulePct != null) return pctToRate(rulePct);
+  if (rulePct != null) return commissionRateForSeariders(pctToRate(rulePct), channel.kind);
 
   const rule = channel.commissionRules?.find((r) => r.serviceId === serviceId);
-  if (rule && rule.commissionPct != null) return pctToRate(rule.commissionPct);
+  if (rule && rule.commissionPct != null) {
+    return commissionRateForSeariders(pctToRate(rule.commissionPct), channel.kind);
+  }
 
   const byBps = bpsToRate(channel.commissionBps);
-  if (byBps > 0) return byBps;
+  if (byBps > 0) return commissionRateForSeariders(byBps, channel.kind);
 
-  return pctToRate(channel.commissionPct);
+  return commissionRateForSeariders(pctToRate(channel.commissionPct), channel.kind);
 }
 
 /**

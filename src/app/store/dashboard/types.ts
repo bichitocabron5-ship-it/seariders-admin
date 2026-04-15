@@ -115,6 +115,7 @@ export type CommissionSummary = {
   count: number;
   totalCommissionCents: number;
   byChannel: Record<string, number>;
+  byOrigin: Record<string, { totalCommissionCents: number; byChannel: Record<string, number> }>;
 };
 
 export type ExtraUiMap = Record<string, { extraServiceId: string; qty: number }>;

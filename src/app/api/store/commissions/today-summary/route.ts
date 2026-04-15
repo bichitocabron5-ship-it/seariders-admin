@@ -27,6 +27,7 @@ export async function GET() {
           select: {
             id: true,
             name: true,
+            kind: true,
             commissionEnabled: true,
             commissionBps: true, // fallback
             commissionPct: true,
@@ -70,6 +71,7 @@ export async function GET() {
           select: {
             id: true,
             name: true,
+            kind: true,
             commissionEnabled: true,
             commissionBps: true,
             commissionPct: true,
@@ -88,7 +90,7 @@ export async function GET() {
     }
 
     if (channelIds.length === 0 || serviceIds.length === 0) {
-      return NextResponse.json({ count: 0, totalCommissionCents: 0, byChannel: {} });
+      return NextResponse.json({ count: 0, totalCommissionCents: 0, byChannel: {}, byOrigin: {} });
     }
 
     // 2) Reglas específicas channel+service
@@ -110,6 +112,17 @@ export async function GET() {
     let count = 0;
     let totalCommissionCents = 0;
     const byChannel: Record<string, number> = {};
+    const byOrigin: Record<string, { totalCommissionCents: number; byChannel: Record<string, number> }> = {};
+
+    function addCommission(origin: "STORE" | "BOOTH", channelName: string, commission: number) {
+      totalCommissionCents += commission;
+      byChannel[channelName] = (byChannel[channelName] ?? 0) + commission;
+
+      const bucket = byOrigin[origin] ?? { totalCommissionCents: 0, byChannel: {} };
+      bucket.totalCommissionCents += commission;
+      bucket.byChannel[channelName] = (bucket.byChannel[channelName] ?? 0) + commission;
+      byOrigin[origin] = bucket;
+    }
 
     // (Opcional debug)
     // const debug: any[] = [];
@@ -140,8 +153,7 @@ export async function GET() {
       if (commission <= 0) continue;
 
       count++;
-      totalCommissionCents += commission;
-      byChannel[ch.name] = (byChannel[ch.name] ?? 0) + commission;
+      addCommission("STORE", ch.name, commission);
 
       // debug.push({ reservationId: r.id, channel: ch.name, base, rate, commission, hasRule: rulePct != null });
     }
@@ -167,14 +179,14 @@ export async function GET() {
       if (commission <= 0) continue;
 
       count++;
-      totalCommissionCents += commission;
-      byChannel[ch.name] = (byChannel[ch.name] ?? 0) + commission;
+      addCommission("BOOTH", ch.name, commission);
     }
 
     return NextResponse.json({
       count,
       totalCommissionCents,
       byChannel,
+      byOrigin,
       // debug,
     });
   } catch (e: unknown) {

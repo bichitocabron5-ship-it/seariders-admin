@@ -85,10 +85,28 @@ export function StoreOpsSummarySection({
             <div>
               Total comisiones: <strong>{euros(commissionSummary.totalCommissionCents)}</strong>
             </div>
-            {Object.entries(commissionSummary.byChannel).map(([channel, cents]) => (
-              <div key={channel} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <span>{channel}</span>
-                <strong>{euros(Number(cents))}</strong>
+            {Object.entries(commissionSummary.byOrigin).map(([origin, originSummary]) => (
+              <div
+                key={origin}
+                style={{
+                  display: "grid",
+                  gap: 6,
+                  padding: 10,
+                  borderRadius: 14,
+                  border: "1px solid #e5e7eb",
+                  background: "#f8fafc",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <strong>{origin}</strong>
+                  <strong>{euros(originSummary.totalCommissionCents)}</strong>
+                </div>
+                {Object.entries(originSummary.byChannel).map(([channel, cents]) => (
+                  <div key={`${origin}:${channel}`} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13 }}>
+                    <span>{channel}</span>
+                    <strong>{euros(Number(cents))}</strong>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
