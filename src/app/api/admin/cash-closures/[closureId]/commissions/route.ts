@@ -43,13 +43,29 @@ export async function GET(req: Request, { params }: Ctx) {
     where: {
       origin: closure.origin as PaymentOrigin,
       createdAt: { gte: closure.windowFrom, lt: closure.windowTo },
-      reservationId: { not: null },
+      OR: [{ reservationId: { not: null } }, { reservationId: null, channelId: { not: null }, serviceId: { not: null } }],
     },
     select: {
       reservationId: true,
+      serviceId: true,
+      channelId: true,
       amountCents: true,
       direction: true,
       isDeposit: true,
+      channel: {
+        select: {
+          id: true,
+          name: true,
+          commissionEnabled: true,
+          commissionAppliesToDeposit: true,
+          commissionBps: true,
+          commissionPct: true,
+          commissionRules: {
+            where: { isActive: true },
+            select: { serviceId: true, commissionPct: true },
+          },
+        },
+      },
     },
   });
 
@@ -137,6 +153,46 @@ export async function GET(req: Request, { params }: Ctx) {
     const row = byChannel.get(ch.id)!;
     row.baseServiceCents += baseService;
     row.baseDepositCents += baseDeposit;
+    row.baseTotalCents += baseTotal;
+    row.commissionCents += c;
+    row.reservations += 1;
+  }
+
+  for (const p of payments) {
+    if (p.reservationId || !p.channelId || !p.serviceId) continue;
+
+    const ch = p.channel;
+    if (!ch || !ch.commissionEnabled) continue;
+
+    const baseTotal = p.isDeposit && !ch.commissionAppliesToDeposit ? 0 : signed(p.amountCents, p.direction);
+    if (!baseTotal) continue;
+
+    const c = commissionFromBase(
+      baseTotal,
+      resolveCommissionRate({
+        channel: ch,
+        serviceId: p.serviceId,
+      })
+    );
+    if (!c) continue;
+
+    totalCommissionCents += c;
+
+    if (!byChannel.has(ch.id)) {
+      byChannel.set(ch.id, {
+        channelId: ch.id,
+        name: ch.name,
+        baseServiceCents: 0,
+        baseDepositCents: 0,
+        baseTotalCents: 0,
+        commissionCents: 0,
+        reservations: 0,
+      });
+    }
+
+    const row = byChannel.get(ch.id)!;
+    if (p.isDeposit) row.baseDepositCents += baseTotal;
+    else row.baseServiceCents += baseTotal;
     row.baseTotalCents += baseTotal;
     row.commissionCents += c;
     row.reservations += 1;

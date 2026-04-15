@@ -5,6 +5,7 @@ import type { CountryOption } from "@/lib/countries";
 
 type Service = { id: string; name: string; category: string; code?: string | null; isExternalActivity?: boolean | null };
 type Option = { id: string; serviceId: string; durationMinutes: number; paxMax: number; basePriceCents: number };
+type PayMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 type Channel = {
   id: string;
   name: string;
@@ -24,6 +25,7 @@ type Props = {
   quantity: number;
   pax: number;
   channelId: string;
+  paymentMethod: PayMethod;
   category: string;
   categories: string[];
   services: Service[];
@@ -33,6 +35,7 @@ type Props = {
   channels: Channel[];
   selectedService: Service | null;
   selectedChannel: Channel | null;
+  isExternalCharge: boolean;
   selectedCountryOpt: CountryOption | null;
   countryOptions: CountryOption[];
   isJetski: boolean;
@@ -55,6 +58,7 @@ type Props = {
   setQuantity: (value: number) => void;
   setPax: (value: number) => void;
   setChannelId: (value: string) => void;
+  setPaymentMethod: (value: PayMethod) => void;
   setCategory: (value: string) => void;
   setDiscountEuros: (value: string) => void;
   setBoothNote: (value: string) => void;
@@ -71,6 +75,7 @@ export default function BoothPreReservationFormSection({
   quantity,
   pax,
   channelId,
+  paymentMethod,
   category,
   categories,
   services,
@@ -80,6 +85,7 @@ export default function BoothPreReservationFormSection({
   channels,
   selectedService,
   selectedChannel,
+  isExternalCharge,
   selectedCountryOpt,
   countryOptions,
   isJetski,
@@ -102,6 +108,7 @@ export default function BoothPreReservationFormSection({
   setQuantity,
   setPax,
   setChannelId,
+  setPaymentMethod,
   setCategory,
   setDiscountEuros,
   setBoothNote,
@@ -109,9 +116,11 @@ export default function BoothPreReservationFormSection({
   return (
     <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
       <div>
-        <h2 style={{ margin: 0, fontSize: 22 }}>Pre-reserva</h2>
+        <h2 style={{ margin: 0, fontSize: 22 }}>{isExternalCharge ? "Cobro externo" : "Pre-reserva"}</h2>
         <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-          Alta rápida para carpa con precio, descuento y canal.
+          {isExternalCharge
+            ? "Registro directo de cobro con comision para actividad externa."
+            : "Alta rapida para carpa con precio, descuento y canal."}
         </div>
       </div>
 
@@ -124,7 +133,7 @@ export default function BoothPreReservationFormSection({
         </div>
 
         <div style={{ display: "grid", gap: 6 }}>
-          <div>País</div>
+          <div>Pais</div>
           <Select<CountryOption, false>
             instanceId="booth-country"
             inputId="booth-country"
@@ -136,7 +145,7 @@ export default function BoothPreReservationFormSection({
         </div>
 
         <label>
-          Categoría
+          Categoria
           <select
             value={category}
             onChange={(e) => {
@@ -171,11 +180,11 @@ export default function BoothPreReservationFormSection({
         </label>
 
         <label>
-          Duración
+          Duracion
           <select value={optionId} onChange={(e) => setOptionId(e.target.value)} style={fieldStyle}>
             {optionsForService.map((option) => (
               <option key={option.id} value={option.id}>
-                {option.durationMinutes} min · máx {option.paxMax} pax · {euros(option.basePriceCents)}
+                {option.durationMinutes} min · max {option.paxMax} pax · {euros(option.basePriceCents)}
               </option>
             ))}
           </select>
@@ -219,7 +228,7 @@ export default function BoothPreReservationFormSection({
         </label>
 
         <div style={{ fontSize: 12, opacity: 0.85 }}>
-          Máx descuento manual: <b>{euros(maxManualDiscountCents)}</b> (30% sobre {euros(baseTotalCents)})
+          Max descuento manual: <b>{euros(maxManualDiscountCents)}</b> (30% sobre {euros(baseTotalCents)})
           {discountCentsRaw > maxManualDiscountCents ? (
             <span style={{ marginLeft: 8, color: "#b91c1c" }}>limitado a {euros(maxManualDiscountCents)}</span>
           ) : null}
@@ -235,7 +244,7 @@ export default function BoothPreReservationFormSection({
             gap: 6,
           }}
         >
-          <div style={{ fontSize: 12, color: "#475569", fontWeight: 800 }}>Resumen antes de crear</div>
+          <div style={{ fontSize: 12, color: "#475569", fontWeight: 800 }}>Resumen antes de registrar</div>
           <div style={{ fontSize: 13, color: "#334155" }}>
             Precio base: <strong>{euros(baseTotalCents)}</strong>
           </div>
@@ -243,22 +252,22 @@ export default function BoothPreReservationFormSection({
             Descuento aplicado: <strong>-{euros(discountCentsClamped)}</strong>
           </div>
           <div style={{ fontSize: 15, color: "#0f172a", fontWeight: 900 }}>
-            Precio final de la reserva: {euros(finalTotalCents)}
+            {isExternalCharge ? "Importe final del cobro" : "Precio final de la reserva"}: {euros(finalTotalCents)}
           </div>
           {selectedChannel ? (
             commissionPct > 0 ? (
               <>
                 <div style={{ fontSize: 13, color: "#334155" }}>
-                  Comisión estimada ({selectedChannel.name} · {commissionPct.toFixed(2)}%):{" "}
+                  Comision estimada ({selectedChannel.name} · {commissionPct.toFixed(2)}%):{" "}
                   <strong>{euros(commissionCents)}</strong>
                 </div>
                 <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 800 }}>
-                  Neto estimado tras comisión: {euros(netAfterCommissionCents)}
+                  Neto estimado tras comision: {euros(netAfterCommissionCents)}
                 </div>
               </>
             ) : (
               <div style={{ fontSize: 12, color: "#64748b" }}>
-                El canal seleccionado no tiene comisión configurada para esta actividad.
+                El canal seleccionado no tiene comision configurada para esta actividad.
               </div>
             )
           ) : null}
@@ -269,17 +278,19 @@ export default function BoothPreReservationFormSection({
           ) : null}
           {discountCentsRaw > maxManualDiscountCents ? (
             <div style={{ fontSize: 12, color: "#b91c1c" }}>
-              El descuento introducido supera el máximo permitido y se aplicará el importe limitado.
+              El descuento introducido supera el maximo permitido y se aplicara el importe limitado.
             </div>
           ) : (
             <div style={{ fontSize: 12, color: "#64748b" }}>
-              Este será el total que se guardará al crear la reserva.
+              {isExternalCharge
+                ? "Se registrara un cobro directo en caja, sin generar codigo ni reserva."
+                : "Este sera el total que se guardara al crear la reserva."}
             </div>
           )}
         </div>
 
         <label>
-          {selectedService?.isExternalActivity ? "Canal de comisión externa" : "Canal opcional"}
+          {selectedService?.isExternalActivity ? "Canal de comision externa" : "Canal opcional"}
           <select value={channelId} onChange={(e) => setChannelId(e.target.value)} style={fieldStyle}>
             <option value="">(ninguno)</option>
             {channels.map((channel) => (
@@ -291,24 +302,36 @@ export default function BoothPreReservationFormSection({
         </label>
         {selectedService?.isExternalActivity ? (
           <div style={{ fontSize: 12, color: "#64748b" }}>
-            Solo se muestran partners externos habilitados para liquidar comisión en Booth.
+            Solo se muestran partners externos habilitados para liquidar comision en Booth.
           </div>
         ) : null}
 
+        {isExternalCharge ? (
+          <label>
+            Metodo de pago
+            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PayMethod)} style={fieldStyle}>
+              <option value="CARD">Tarjeta</option>
+              <option value="CASH">Efectivo</option>
+              <option value="BIZUM">Bizum</option>
+              <option value="TRANSFER">Transferencia</option>
+            </select>
+          </label>
+        ) : null}
+
         <label style={{ display: "grid", gap: 6 }}>
-          <span>Nota para tienda (opcional)</span>
+          <span>{isExternalCharge ? "Nota interna (opcional)" : "Nota para tienda (opcional)"}</span>
           <textarea
             value={boothNote}
             onChange={(e) => setBoothNote(e.target.value)}
             maxLength={500}
             rows={4}
-            placeholder="Ej: cliente viene con bebé, atención en inglés, espera a otro grupo..."
+            placeholder="Ej: cliente viene con bebe, atencion en ingles, espera a otro grupo..."
             style={{ ...fieldStyle, minHeight: 96, resize: "vertical" }}
           />
         </label>
 
         <button type="submit" style={{ ...darkBtn, width: "100%" }}>
-          Crear y generar código
+          {isExternalCharge ? "Registrar cobro con comision" : "Crear y generar codigo"}
         </button>
       </form>
     </section>

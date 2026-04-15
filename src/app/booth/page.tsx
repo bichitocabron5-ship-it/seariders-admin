@@ -236,6 +236,7 @@ export default function Booth() {
   const [quantity, setQuantity] = useState(1);
   const [pax, setPax] = useState(2);
   const [channelId, setChannelId] = useState<string>(""); // opcional
+  const [paymentMethod, setPaymentMethod] = useState<PayMethod>("CARD");
   const [category, setCategory] = useState<string>("");
 
 // categorías disponibles (desde services)
@@ -288,6 +289,8 @@ const filteredChannels = useMemo(() => {
 const selectedChannel = useMemo(() => {
   return filteredChannels.find((channel) => channel.id === channelId) ?? channels.find((channel) => channel.id === channelId) ?? null;
 }, [filteredChannels, channels, channelId]);
+
+const isExternalCharge = selectedChannel?.kind === "EXTERNAL_ACTIVITY" || selectedService?.isExternalActivity === true;
 
 const countryOptions = useMemo(() => getCountryOptionsEs(), []);
 const selectedCountryOpt = useMemo(() => {
@@ -490,6 +493,7 @@ useEffect(() => {
         channelId: channelId || null,
         discountEuros: (discountCentsClamped / 100).toFixed(2),
         boothNote: boothNote.trim() || null,
+        paymentMethod: isExternalCharge ? paymentMethod : null,
       }),
     });
 
@@ -499,13 +503,20 @@ useEffect(() => {
     }
 
     const j = await r.json();
-    alert(`Creada. Código: ${j.boothCode}`);
+    if (j.mode === "payment") {
+      alert(
+        `Cobro registrado: ${euros(j.amountCents ?? finalTotalCents)} · Comisión ${euros(j.commissionCents ?? 0)} (${Number(j.commissionPct ?? 0).toFixed(2)}%)`
+      );
+    } else {
+      alert(`Creada. Código: ${j.boothCode}`);
+    }
 
     setFirstName("");
     setQuantity(1);
     setPax(2);
     setDiscountEuros("");
     setBoothNote("");
+    setPaymentMethod("CARD");
 
     await load();
   }
@@ -745,6 +756,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             quantity={quantity}
             pax={pax}
             channelId={channelId}
+            paymentMethod={paymentMethod}
             category={category}
             categories={categories}
             services={services}
@@ -754,6 +766,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             channels={filteredChannels}
             selectedService={selectedService}
             selectedChannel={selectedChannel}
+            isExternalCharge={isExternalCharge}
             selectedCountryOpt={selectedCountryOpt}
             countryOptions={countryOptions}
             isJetski={isJetski}
@@ -776,6 +789,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             setQuantity={setQuantity}
             setPax={setPax}
             setChannelId={setChannelId}
+            setPaymentMethod={setPaymentMethod}
             setCategory={setCategory}
             setDiscountEuros={setDiscountEuros}
             setBoothNote={setBoothNote}
