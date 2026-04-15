@@ -398,7 +398,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       });
 
       if (!customerName) throw new Error("Nombre requerido.");
-      if (!customerAddress) throw new Error("Direccion requerida para formalizar.");
       if (!customerCountry || customerCountry.trim().length < 2) {
         throw new Error("Pais requerido para formalizar.");
       }

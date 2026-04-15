@@ -551,7 +551,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   }, [selectedCategory]);
 
   const customerCountryRequired = isCreateMode || (isFormalizeMode && formalizeNeedsFullData);
-  const customerAddressRequired = isCreateMode || isFormalizeMode;
+  const customerAddressRequired = false;
   const customerDocumentRequired = isCreateMode || isFormalizeMode;
 
   const requiredCreateMissing =

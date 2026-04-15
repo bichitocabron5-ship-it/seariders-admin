@@ -86,9 +86,6 @@ export async function POST(req: Request) {
     if (!String(b.customerName ?? "").trim()) {
       return new NextResponse("Nombre requerido", { status: 400 });
     }
-    if (!String(b.customerAddress ?? "").trim()) {
-      return new NextResponse("Dirección requerida", { status: 400 });
-    }
     if (!String(b.customerCountry ?? "").trim()) {
       return new NextResponse("País requerido", { status: 400 });
     }
