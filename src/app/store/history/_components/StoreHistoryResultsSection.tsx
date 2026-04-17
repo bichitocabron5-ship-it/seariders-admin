@@ -20,6 +20,14 @@ type HistoryIncident = {
   assetId: string | null;
 };
 
+type ManualContractAttachment = {
+  id: string;
+  fileKey: string | null;
+  fileUrl: string | null;
+  fileName: string | null;
+  uploadedAt: string | null;
+};
+
 type HistoryRow = {
   id: string;
   status: string;
@@ -38,10 +46,7 @@ type HistoryRow = {
   depositHoldReason: string | null;
   isManualEntry: boolean;
   manualEntryNote: string | null;
-  manualContractFileKey: string | null;
-  manualContractFileUrl: string | null;
-  manualContractFileName: string | null;
-  manualContractUploadedAt: string | null;
+  manualContractAttachments: ManualContractAttachment[];
   financialAdjustmentNote: string | null;
   financialAdjustedAt: string | null;
   source: string | null;
@@ -86,8 +91,8 @@ type Props = {
   actionLink: CSSProperties;
   emptyState: CSSProperties;
   onAdjustFinancials: (row: HistoryRow) => void;
-  onUploadManualContract: (row: HistoryRow, file: File) => void | Promise<void>;
-  onDownloadManualContract: (row: HistoryRow) => void | Promise<void>;
+  onUploadManualContract: (row: HistoryRow, files: File[]) => void | Promise<void>;
+  onDownloadManualContract: (row: HistoryRow, attachmentId: string) => void | Promise<void>;
   manualContractBusyId: string | null;
 };
 
@@ -157,6 +162,10 @@ export default function StoreHistoryResultsSection({
               {rows.map((row) => {
                 const statusUi = statusTone(row.storeFlowStage ?? row.status);
                 const incidentCount = row.incidents.length;
+                const manualContracts = row.manualContractAttachments ?? [];
+                const manualContractsCount = manualContracts.length;
+                const maxManualContracts = Math.max(1, Number(row.quantity ?? 1));
+                const canUploadMoreManualContracts = row.isManualEntry && manualContractsCount < maxManualContracts;
                 const holdStatus = row.depositHeld
                   ? row.depositReturnedCents > 0
                     ? "Retenida parcial"
@@ -175,9 +184,9 @@ export default function StoreHistoryResultsSection({
                         {row.isManualEntry ? (
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             <Pill bg="#fff7ed" border="#fed7aa">Reserva manual</Pill>
-                            {row.manualContractFileKey ? (
-                              <Pill bg="#ecfdf5" border="#bbf7d0">Contrato adjunto</Pill>
-                            ) : null}
+                            <Pill bg={manualContractsCount > 0 ? "#ecfdf5" : "#f8fafc"} border={manualContractsCount > 0 ? "#bbf7d0" : "#cbd5e1"}>
+                              Contratos {manualContractsCount}/{maxManualContracts}
+                            </Pill>
                           </div>
                         ) : null}
                         <div style={mutedStack}>
@@ -199,12 +208,16 @@ export default function StoreHistoryResultsSection({
                               <div>{row.manualEntryNote}</div>
                             </div>
                           ) : null}
-                          {row.manualContractFileName ? (
+                          {manualContractsCount > 0 ? (
                             <div>
-                              <strong>Contrato escaneado</strong>
-                              <div>
-                                {row.manualContractFileName}
-                                {row.manualContractUploadedAt ? ` · ${dt(row.manualContractUploadedAt)}` : ""}
+                              <strong>Contratos escaneados</strong>
+                              <div style={{ display: "grid", gap: 4 }}>
+                                {manualContracts.map((attachment, index) => (
+                                  <div key={attachment.id}>
+                                    Contrato {index + 1}: {attachment.fileName || "Archivo sin nombre"}
+                                    {attachment.uploadedAt ? ` · ${dt(attachment.uploadedAt)}` : ""}
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           ) : null}
@@ -367,17 +380,24 @@ export default function StoreHistoryResultsSection({
                         </button>
 
                         {row.isManualEntry ? (
-                          <label style={{ ...actionLink, cursor: manualContractBusyId === row.id ? "wait" : "pointer" }}>
-                            {manualContractBusyId === row.id ? "Subiendo..." : row.manualContractFileKey ? "Reemplazar contrato" : "Adjuntar contrato"}
+                          <label
+                            style={{
+                              ...actionLink,
+                              cursor: manualContractBusyId === row.id || !canUploadMoreManualContracts ? "not-allowed" : "pointer",
+                              opacity: canUploadMoreManualContracts ? 1 : 0.6,
+                            }}
+                          >
+                            {manualContractBusyId === row.id ? "Subiendo..." : canUploadMoreManualContracts ? "Adjuntar contratos" : "Contratos completos"}
                             <input
                               type="file"
                               accept=".pdf,image/jpeg,image/png,image/webp"
+                              multiple
                               style={{ display: "none" }}
-                              disabled={manualContractBusyId === row.id}
+                              disabled={manualContractBusyId === row.id || !canUploadMoreManualContracts}
                               onChange={(e) => {
-                                const file = e.currentTarget.files?.[0];
-                                if (file) {
-                                  void onUploadManualContract(row, file);
+                                const files = Array.from(e.currentTarget.files ?? []);
+                                if (files.length > 0) {
+                                  void onUploadManualContract(row, files);
                                 }
                                 e.currentTarget.value = "";
                               }}
@@ -385,16 +405,17 @@ export default function StoreHistoryResultsSection({
                           </label>
                         ) : null}
 
-                        {row.isManualEntry && row.manualContractFileKey ? (
+                        {manualContracts.map((attachment, index) => (
                           <button
+                            key={attachment.id}
                             type="button"
-                            onClick={() => void onDownloadManualContract(row)}
+                            onClick={() => void onDownloadManualContract(row, attachment.id)}
                             style={actionLink}
                             disabled={manualContractBusyId === row.id}
                           >
-                            {manualContractBusyId === row.id ? "Abriendo..." : "Ver contrato"}
+                            {manualContractBusyId === row.id ? "Abriendo..." : `Ver contrato ${index + 1}`}
                           </button>
-                        ) : null}
+                        ))}
 
                         {row.incidents.some((incident) => incident.maintenanceEventId) ? (
                           <a

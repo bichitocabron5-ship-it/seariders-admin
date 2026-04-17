@@ -68,6 +68,7 @@ export async function POST(
         id: true,
         customerName: true,
         isManualEntry: true,
+        quantity: true,
       },
     });
 
@@ -77,6 +78,22 @@ export async function POST(
 
     if (!reservation.isManualEntry) {
       return new NextResponse("Solo se puede adjuntar contrato a reservas manuales", { status: 400 });
+    }
+
+    const currentAttachments = await prisma.operationalOverrideLog.count({
+      where: {
+        targetType: OperationalOverrideTarget.RESERVATION,
+        targetId: reservation.id,
+        action: OperationalOverrideAction.MANUAL_RESERVATION_CREATE,
+        reason: "Adjunto contrato manual",
+      },
+    });
+
+    const maxContracts = Math.max(1, Number(reservation.quantity ?? 1));
+    if (currentAttachments >= maxContracts) {
+      return new NextResponse(`Esta reserva manual ya tiene ${maxContracts} contrato(s) adjunto(s).`, {
+        status: 400,
+      });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());

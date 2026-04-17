@@ -23,6 +23,14 @@ type HistoryIncident = {
   assetId: string | null;
 };
 
+type ManualContractAttachment = {
+  id: string;
+  fileKey: string | null;
+  fileUrl: string | null;
+  fileName: string | null;
+  uploadedAt: string | null;
+};
+
 type HistoryRow = {
   id: string;
   status: string;
@@ -41,10 +49,7 @@ type HistoryRow = {
   depositHoldReason: string | null;
   isManualEntry: boolean;
   manualEntryNote: string | null;
-  manualContractFileKey: string | null;
-  manualContractFileUrl: string | null;
-  manualContractFileName: string | null;
-  manualContractUploadedAt: string | null;
+  manualContractAttachments: ManualContractAttachment[];
   financialAdjustmentNote: string | null;
   financialAdjustedAt: string | null;
   source: string | null;
@@ -400,6 +405,11 @@ export default function StoreHistoryPage() {
     [catalogChannels, manualChannelId],
   );
 
+  const expectedManualContracts = useMemo(
+    () => Math.max(1, Number(manualQuantity || 1)),
+    [manualQuantity],
+  );
+
   const manualServiceTotalCents = useMemo(() => centsFromEuros(manualTotalEuros), [manualTotalEuros]);
   const manualDepositTotalCents = useMemo(() => centsFromEuros(manualDepositEuros), [manualDepositEuros]);
 
@@ -579,19 +589,30 @@ export default function StoreHistoryPage() {
     }
   }
 
-  async function uploadManualContract(row: HistoryRow, file: File) {
+  async function uploadManualContract(row: HistoryRow, files: File[]) {
     setManualContractBusyId(row.id);
     setError(null);
     try {
-      const formData = new FormData();
-      formData.set("file", file);
+      if (!files.length) return;
+      const currentCount = row.manualContractAttachments.length;
+      const maxContracts = Math.max(1, Number(row.quantity ?? 1));
 
-      const res = await fetch(`/api/admin/reservations/${row.id}/manual-contract`, {
-        method: "POST",
-        body: formData,
-      });
+      if (currentCount + files.length > maxContracts) {
+        throw new Error(`Esta reserva admite ${maxContracts} contrato(s) manual(es) y ya tiene ${currentCount}.`);
+      }
 
-      if (!res.ok) throw new Error(await res.text());
+      for (const file of files) {
+        const formData = new FormData();
+        formData.set("file", file);
+
+        const res = await fetch(`/api/admin/reservations/${row.id}/manual-contract`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+      }
+
       await load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "No se pudo adjuntar el contrato manual");
@@ -600,11 +621,12 @@ export default function StoreHistoryPage() {
     }
   }
 
-  async function downloadManualContract(row: HistoryRow) {
+  async function downloadManualContract(row: HistoryRow, attachmentId: string) {
     setManualContractBusyId(row.id);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/reservations/${row.id}/manual-contract/download`, {
+      const params = new URLSearchParams({ attachmentId });
+      const res = await fetch(`/api/admin/reservations/${row.id}/manual-contract/download?${params.toString()}`, {
         cache: "no-store",
       });
 
@@ -712,7 +734,7 @@ export default function StoreHistoryPage() {
             <div style={sectionCard}>
               <div style={sectionHeader}>
                 <div style={sectionTitle}>Reserva</div>
-                <div style={mutedText}>Datos operativos y del cliente para que quede clara en histórico.</div>
+                <div style={mutedText}>Mismos datos base que una reserva normal: cliente, servicio, capacidad y momento operativo.</div>
               </div>
               <div style={filtersGrid}>
                 <label style={field}><span style={fieldLabel}>Cliente</span><Input value={manualCustomerName} onChange={(e) => setManualCustomerName(e.target.value)} /></label>
@@ -726,6 +748,12 @@ export default function StoreHistoryPage() {
                 <label style={field}><span style={fieldLabel}>Email</span><Input value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} /></label>
                 <label style={field}><span style={fieldLabel}>Cantidad</span><Input type="number" min={1} value={manualQuantity} onChange={(e) => setManualQuantity(Number(e.target.value || 1))} /></label>
                 <label style={field}><span style={fieldLabel}>PAX</span><Input type="number" min={1} value={manualPax} onChange={(e) => setManualPax(Number(e.target.value || 1))} /></label>
+              </div>
+              <div style={summaryStrip}>
+                <Pill>Salida {manualDate || "--/--/----"} {manualTime || "--:--"}</Pill>
+                <Pill>Cantidad {manualQuantity}</Pill>
+                <Pill>PAX {manualPax}</Pill>
+                <Pill>Contratos esperados {expectedManualContracts}</Pill>
               </div>
             </div>
 
@@ -784,7 +812,7 @@ export default function StoreHistoryPage() {
             </label>
 
             <div style={mutedText}>
-              Tras crear la reserva manual, verás en su fila del histórico el botón <b>Adjuntar contrato</b> para subir el escaneado.
+              Tras crear la reserva manual, podrás adjuntar en el histórico hasta <b>{expectedManualContracts} contrato(s)</b>, uno por unidad si aplica.
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>

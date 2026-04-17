@@ -21,7 +21,7 @@ async function requireStoreOrAdmin() {
 }
 
 export async function GET(
-  _: Request,
+  req: Request,
   ctx: { params: Promise<{ id: string }> }
 ) {
   const session = await requireStoreOrAdmin();
@@ -42,12 +42,15 @@ export async function GET(
     return new NextResponse("Contrato manual no encontrado", { status: 404 });
   }
 
+  const requestedAttachmentId = new URL(req.url).searchParams.get("attachmentId")?.trim() || null;
+
   const attachmentLog = await prisma.operationalOverrideLog.findFirst({
     where: {
       targetType: "RESERVATION",
       targetId: id,
       action: "MANUAL_RESERVATION_CREATE",
       reason: "Adjunto contrato manual",
+      ...(requestedAttachmentId ? { id: requestedAttachmentId } : {}),
     },
     orderBy: { createdAt: "desc" },
     select: {

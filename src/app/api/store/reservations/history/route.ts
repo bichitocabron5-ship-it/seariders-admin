@@ -163,8 +163,9 @@ export async function GET(req: Request) {
           targetId: { in: reservationIds },
           reason: "Adjunto contrato manual",
         },
-        orderBy: [{ targetId: "asc" }, { createdAt: "desc" }],
+        orderBy: [{ targetId: "asc" }, { createdAt: "asc" }],
         select: {
+          id: true,
           targetId: true,
           payloadJson: true,
           createdAt: true,
@@ -174,21 +175,23 @@ export async function GET(req: Request) {
 
   const attachmentMap = new Map<
     string,
-    {
+    Array<{
+      id: string;
       fileKey: string | null;
       fileUrl: string | null;
       fileName: string | null;
       uploadedAt: Date | null;
-    }
+    }>
   >();
 
   for (const log of attachmentLogs) {
-    if (attachmentMap.has(log.targetId)) continue;
     const payload =
       log.payloadJson && typeof log.payloadJson === "object"
         ? (log.payloadJson as Record<string, unknown>)
         : null;
-    attachmentMap.set(log.targetId, {
+    const attachments = attachmentMap.get(log.targetId) ?? [];
+    attachments.push({
+      id: log.id,
       fileKey: typeof payload?.fileKey === "string" ? payload.fileKey : null,
       fileUrl: typeof payload?.fileUrl === "string" ? payload.fileUrl : null,
       fileName: typeof payload?.fileName === "string" ? payload.fileName : null,
@@ -197,6 +200,7 @@ export async function GET(req: Request) {
           ? new Date(payload.uploadedAt)
           : log.createdAt,
     });
+    attachmentMap.set(log.targetId, attachments);
   }
 
   const rows = rowsDb.map((reservation) => {
@@ -257,10 +261,7 @@ export async function GET(req: Request) {
       depositHoldReason: reservation.depositHoldReason,
       isManualEntry: reservation.isManualEntry,
       manualEntryNote: reservation.manualEntryNote,
-      manualContractFileKey: attachment?.fileKey ?? null,
-      manualContractFileUrl: attachment?.fileUrl ?? null,
-      manualContractFileName: attachment?.fileName ?? null,
-      manualContractUploadedAt: attachment?.uploadedAt ?? null,
+      manualContractAttachments: attachment ?? [],
       financialAdjustmentNote: reservation.financialAdjustmentNote,
       financialAdjustedAt: reservation.financialAdjustedAt,
       source: reservation.source,
