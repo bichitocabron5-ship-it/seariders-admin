@@ -107,7 +107,7 @@ export default function MechanicsOverviewSection({
           </div>
 
           <div style={{ border: "1px solid #d0d9e4", background: "#fff", borderRadius: 16, padding: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7 }}>Recursos motorizados</div>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7 }}>Total assets</div>
             <div style={{ marginTop: 4, fontSize: 26, fontWeight: 950 }}>{assetCount}</div>
           </div>
         </div>

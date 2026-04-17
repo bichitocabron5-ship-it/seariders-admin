@@ -245,13 +245,9 @@ export default function MechanicsPage() {
   }, [jetskis, q]);
 
   const filteredAssets = useMemo(() => {
-    const base = assets.filter((a) =>
-    ["BOAT", "TOWBOAT", "JETCAR", "PARASAILING", "FLYBOARD", "TOWABLE"].includes(a.type)
-    );
-
     const qq = q.trim().toLowerCase();
-    if (!qq) return base;
-    return base.filter((a) => {
+    if (!qq) return assets;
+    return assets.filter((a) => {
       const s = `${a.type} ${a.name} ${a.plate ?? ""} ${a.chassisNumber ?? ""} ${a.model ?? ""}`.toLowerCase();
       return s.includes(qq);
     });
@@ -282,6 +278,24 @@ export default function MechanicsPage() {
       a.name.localeCompare(b.name, "es")
   );
 
+  const orderedStandardAssets = orderedAssets.filter((asset) => asset.type !== "OTHER");
+  const orderedOtherAssets = orderedAssets.filter((asset) => asset.type === "OTHER");
+
+  function toAssetCard(asset: OverviewAssetRow) {
+    return {
+      id: asset.id,
+      entityType: "ASSET" as const,
+      title: asset.name,
+      href: `/mechanics/asset/${asset.id}`,
+      summary: `${asset.type}${asset.model ? ` · ${asset.model}` : ""}${asset.year ? ` · ${asset.year}` : ""}${asset.plate ? ` · ${asset.plate}` : ""}${asset.chassisNumber ? ` · Bastidor: ${asset.chassisNumber}` : ""}${asset.maxPax ? ` · Pax máx: ${asset.maxPax}` : ""}`,
+      operabilityStatus: asset.operabilityStatus,
+      currentHours: asset.currentHours,
+      service: asset.service,
+      lastServiceEventType: asset.lastServiceEventType,
+      lastServiceEventAt: asset.lastServiceEventAt,
+    };
+  }
+
   const jetskiCards = useMemo(
     () =>
       orderedJetskis.map((jetski) => ({
@@ -299,21 +313,14 @@ export default function MechanicsPage() {
     [orderedJetskis]
   );
 
-  const assetCards = useMemo(
-    () =>
-      orderedAssets.map((asset) => ({
-        id: asset.id,
-        entityType: "ASSET" as const,
-        title: asset.name,
-        href: `/mechanics/asset/${asset.id}`,
-        summary: `${asset.type}${asset.model ? ` · ${asset.model}` : ""}${asset.year ? ` · ${asset.year}` : ""}${asset.plate ? ` · ${asset.plate}` : ""}${asset.chassisNumber ? ` · Bastidor: ${asset.chassisNumber}` : ""}${asset.maxPax ? ` · Pax máx: ${asset.maxPax}` : ""}`,
-        operabilityStatus: asset.operabilityStatus,
-        currentHours: asset.currentHours,
-        service: asset.service,
-        lastServiceEventType: asset.lastServiceEventType,
-        lastServiceEventAt: asset.lastServiceEventAt,
-      })),
-    [orderedAssets]
+  const standardAssetCards = useMemo(
+    () => orderedStandardAssets.map(toAssetCard),
+    [orderedStandardAssets]
+  );
+
+  const otherAssetCards = useMemo(
+    () => orderedOtherAssets.map(toAssetCard),
+    [orderedOtherAssets]
   );
 
   const dueAlertRows = useMemo(
@@ -391,9 +398,7 @@ export default function MechanicsPage() {
 
   async function quickAdjust(entityType: MaintenanceEntityType, entityId: string, currentHours: number | null, delta: number) {
     try {
-      if (currentHours === null || currentHours === undefined) {
-        throw new Error("No hay horas actuales para este recurso.");
-      }
+      const baseHours = currentHours ?? 0;
 
       const res = await fetch("/api/mechanics/events/create", {
         method: "POST",
@@ -402,7 +407,7 @@ export default function MechanicsPage() {
           entityType,
           entityId,
           type: "HOUR_ADJUSTMENT",
-          hoursAtService: currentHours + delta,
+          hoursAtService: baseHours + delta,
           note: `Ajuste rápido +${delta}h`,
           applyToEntity: true,
         }),
@@ -551,14 +556,27 @@ export default function MechanicsPage() {
               }}
             />
 
-            <MaintenanceResourcesSection
-              title="Recursos motorizados"
-              rows={assetCards}
-              onQuickAdjust={quickAdjust}
-              onOpenAdjust={(entityType, entityId) => {
-                router.push(buildDetailHref(entityType, entityId, "HOUR_ADJUSTMENT"));
-              }}
-            />
+            {standardAssetCards.length ? (
+              <MaintenanceResourcesSection
+                title="Assets"
+                rows={standardAssetCards}
+                onQuickAdjust={quickAdjust}
+                onOpenAdjust={(entityType, entityId) => {
+                  router.push(buildDetailHref(entityType, entityId, "HOUR_ADJUSTMENT"));
+                }}
+              />
+            ) : null}
+
+            {otherAssetCards.length ? (
+              <MaintenanceResourcesSection
+                title="Other"
+                rows={otherAssetCards}
+                onQuickAdjust={quickAdjust}
+                onOpenAdjust={(entityType, entityId) => {
+                  router.push(buildDetailHref(entityType, entityId, "HOUR_ADJUSTMENT"));
+                }}
+              />
+            ) : null}
           </section>
         </div>
       )}

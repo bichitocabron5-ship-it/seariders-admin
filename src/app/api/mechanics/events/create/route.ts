@@ -230,17 +230,10 @@ export async function POST(req: Request) {
           where: { id: entityId },
           select: {
             id: true,
-            type: true,
             currentHours: true,
-            isMotorized: true,
           },
         });
         if (!asset) throw new Error("Asset no existe");
-
-        const motorizedByType = ["BOAT", "TOWBOAT", "JETCAR"].includes(asset.type);
-        if (!asset.isMotorized && !motorizedByType) {
-          throw new Error("Ese asset no es motorizado");
-        }
 
         const h =
           typeof hoursAtService === "number"

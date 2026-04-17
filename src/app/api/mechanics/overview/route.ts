@@ -48,12 +48,6 @@ export async function GET(req: Request) {
       },
     }),
     prisma.asset.findMany({
-      where: {
-        OR: [
-          { isMotorized: true },
-          { type: { in: ["BOAT", "TOWBOAT", "JETCAR", "PARASAILING", "FLYBOARD", "TOWABLE"] } },
-        ],
-      },
       orderBy: [{ type: "asc" }, { name: "asc" }],
       select: {
         id: true,

@@ -98,7 +98,7 @@ export default function ResourceSelectorModal({
               style={{ padding: 10, borderRadius: 10, border: "1px solid #d0d9e4" }}
             >
               <option value="JETSKI">Jetski</option>
-              <option value="ASSET">Asset motorizado</option>
+              <option value="ASSET">Asset</option>
             </select>
           </label>
 
