@@ -100,6 +100,20 @@ type CatalogChannel = { id: string; name: string };
 type ManualPaymentDraft = { amountEuros: string; method: "CASH" | "CARD" | "BIZUM" | "TRANSFER"; isDeposit: boolean; direction: "IN" | "OUT" };
 type ManualPresetId = "COMPLETED_PAID" | "COMPLETED_WITH_DEPOSIT" | "PENDING_COLLECTION" | "RECORD_ONLY";
 
+function historyRowTimestamp(row: Pick<HistoryRow, "scheduledTime" | "activityDate" | "arrivalAt" | "formalizedAt">) {
+  return (
+    Date.parse(row.scheduledTime ?? "") ||
+    Date.parse(row.activityDate ?? "") ||
+    Date.parse(row.arrivalAt ?? "") ||
+    Date.parse(row.formalizedAt ?? "") ||
+    0
+  );
+}
+
+function sortHistoryRowsNewestFirst(rows: HistoryRow[]) {
+  return [...rows].sort((a, b) => historyRowTimestamp(b) - historyRowTimestamp(a));
+}
+
 function euros(cents: number | null | undefined) {
   return `${((Number(cents ?? 0)) / 100).toFixed(2)} EUR`;
 }
@@ -298,7 +312,7 @@ export default function StoreHistoryPage() {
       }
 
       const data = await res.json();
-      setRows(data.rows ?? []);
+      setRows(sortHistoryRowsNewestFirst(data.rows ?? []));
       setPassRows(data.passVouchers ?? []);
       setGiftRows(data.giftVouchers ?? []);
     } catch (e: unknown) {
