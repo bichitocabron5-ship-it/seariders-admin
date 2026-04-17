@@ -1,5 +1,6 @@
 ﻿// src/app/api/store/commissions/today-summary/route.ts
 import { NextResponse } from "next/server";
+import { ReservationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { clampCommissionPct, commissionFromBase, resolveCommissionRate } from "@/lib/commission";
 import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
@@ -14,6 +15,7 @@ export async function GET() {
     const reservations = await prisma.reservation.findMany({
       where: {
         formalizedAt: { not: null },
+        status: { not: ReservationStatus.CANCELED },
         OR: [
           { scheduledTime: { gte: start, lt: endExclusive } },
           { scheduledTime: null, activityDate: { gte: start, lt: endExclusive } },
@@ -57,6 +59,7 @@ export async function GET() {
     const externalPayments = await prisma.payment.findMany({
       where: {
         reservationId: null,
+        reversalOfPaymentId: null,
         origin: "BOOTH",
         createdAt: { gte: start, lt: endExclusive },
         channelId: { not: null },
@@ -69,6 +72,12 @@ export async function GET() {
         externalGrossAmountCents: true,
         channelId: true,
         serviceId: true,
+        reversals: {
+          select: {
+            amountCents: true,
+            direction: true,
+          },
+        },
         channel: {
           select: {
             id: true,
@@ -164,8 +173,14 @@ export async function GET() {
       const ch = payment.channel;
       if (!ch || !payment.serviceId || !ch.commissionEnabled) continue;
 
-      const sign = payment.direction === "OUT" ? -1 : 1;
-      const signedAmount = sign * Math.abs(Number(payment.amountCents ?? 0));
+      const signedAmount =
+        (payment.direction === "OUT" ? -1 : 1) * Math.abs(Number(payment.amountCents ?? 0)) +
+        payment.reversals.reduce(
+          (sum, reversal) =>
+            sum +
+            (reversal.direction === "OUT" ? -1 : 1) * Math.abs(Number(reversal.amountCents ?? 0)),
+          0
+        );
 
       if (payment.isExternalCommissionOnly) {
         if (signedAmount <= 0) continue;
