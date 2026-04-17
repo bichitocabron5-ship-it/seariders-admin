@@ -401,9 +401,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (!customerCountry || customerCountry.trim().length < 2) {
         throw new Error("Pais requerido para formalizar.");
       }
-      if (!customerDocType || !customerDocNumber) {
-        throw new Error("Documento requerido para formalizar.");
-      }
       if (customerEmail && !z.string().email().safeParse(customerEmail).success) {
         throw new Error("Email invalido para formalizar.");
       }

@@ -89,9 +89,6 @@ export async function POST(req: Request) {
     if (!String(b.customerCountry ?? "").trim()) {
       return new NextResponse("País requerido", { status: 400 });
     }
-    if (!String(b.customerDocType ?? "").trim() || !String(b.customerDocNumber ?? "").trim()) {
-      return new NextResponse("Documento requerido", { status: 400 });
-    }
 
     const items = b.items.map((i) => ({
       serviceIdOrCode: i.serviceId,
