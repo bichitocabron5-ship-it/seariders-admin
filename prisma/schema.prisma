@@ -916,6 +916,9 @@ model Payment {
   origin          PaymentOrigin
   method          PaymentMethod
   amountCents     Int
+  isExternalCommissionOnly Boolean @default(false)
+  externalGrossAmountCents Int?
+  reversalOfPaymentId String?
   isDeposit       Boolean          @default(false)
   customerName    String?
   description     String?
@@ -926,6 +929,8 @@ model Payment {
   reservation     Reservation?     @relation(fields: [reservationId], references: [id])
   service         Service?         @relation(fields: [serviceId], references: [id])
   channel         Channel?         @relation(fields: [channelId], references: [id])
+  reversalOf      Payment?         @relation("PaymentReversal", fields: [reversalOfPaymentId], references: [id])
+  reversals       Payment[]        @relation("PaymentReversal")
 
   // ✅ NUEVO: el pago pertenece a una sesión/turno
   shiftSessionId  String?
@@ -942,6 +947,7 @@ model Payment {
   @@index([serviceId])
   @@index([channelId])
   @@index([shiftSessionId])
+  @@index([reversalOfPaymentId])
 }
 
 model Monitor {

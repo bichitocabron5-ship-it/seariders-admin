@@ -512,7 +512,7 @@ useEffect(() => {
     const j = await r.json();
     if (j.mode === "payment") {
       alert(
-        `Cobro registrado: ${euros(j.amountCents ?? finalTotalCents)} · Comisión Seariders ${euros(j.commissionCents ?? 0)} (${Number(j.commissionPct ?? 0).toFixed(2)}%)`
+        `Comisión registrada: ${euros(j.amountCents ?? j.commissionCents ?? 0)} · Venta externa ${euros(j.grossAmountCents ?? finalTotalCents)} · Comisión Seariders ${Number(j.commissionPct ?? 0).toFixed(2)}%`
       );
     } else {
       alert(`Creada. Código: ${j.boothCode}`);

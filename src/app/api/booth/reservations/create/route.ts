@@ -177,7 +177,9 @@ export async function POST(req: Request) {
       data: {
         origin: PaymentOrigin.BOOTH,
         method: parsed.data.paymentMethod,
-        amountCents: totalPriceCents,
+        amountCents: commissionCents,
+        isExternalCommissionOnly: true,
+        externalGrossAmountCents: totalPriceCents,
         isDeposit: false,
         direction: PaymentDirection.IN,
         createdByUserId: session.userId,
@@ -195,7 +197,8 @@ export async function POST(req: Request) {
       ok: true,
       mode: "payment",
       paymentId: payment.id,
-      amountCents: totalPriceCents,
+      amountCents: commissionCents,
+      grossAmountCents: totalPriceCents,
       commissionCents,
       commissionPct,
     });

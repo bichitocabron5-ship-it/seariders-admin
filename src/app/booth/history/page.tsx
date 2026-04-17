@@ -10,6 +10,7 @@ type HistoryRow = {
   id: string;
   boothCode: string | null;
   status: string;
+  rowKind: "RESERVATION" | "EXTERNAL_PAYMENT";
   activityDate: string;
   scheduledTime: string | null;
   arrivedStoreAt: string | null;
@@ -27,6 +28,10 @@ type HistoryRow = {
   depositPaidCents: number;
   paymentsCount: number;
   lastPaymentAt: string | null;
+  channelName: string | null;
+  paymentMethod: string | null;
+  grossExternalAmountCents: number | null;
+  canCancel: boolean;
 };
 
 function euros(cents: number | null | undefined) {
@@ -61,6 +66,10 @@ function statusTone(status: string) {
       return { bg: "#fff7ed", border: "#fed7aa", color: "#c2410c" };
     case "CANCELED":
       return { bg: "#f8fafc", border: "#cbd5e1", color: "#475569" };
+    case "EXTERNAL_PAYMENT":
+      return { bg: "#ecfeff", border: "#a5f3fc", color: "#155e75" };
+    case "EXTERNAL_CANCELED":
+      return { bg: "#f8fafc", border: "#cbd5e1", color: "#475569" };
     default:
       return { bg: "#eff6ff", border: "#bfdbfe", color: "#1d4ed8" };
   }
@@ -80,13 +89,17 @@ function statusLabel(status: string) {
       return "Completada";
     case "CANCELED":
       return "Cancelada";
+    case "EXTERNAL_PAYMENT":
+      return "Venta externa";
+    case "EXTERNAL_CANCELED":
+      return "Venta externa anulada";
     default:
       return status;
   }
 }
 
 function visiblePendingCents(row: HistoryRow) {
-  if (row.status === "CANCELED") return 0;
+  if (row.status === "CANCELED" || row.status === "EXTERNAL_CANCELED") return 0;
   return Number(row.servicePendingCents ?? 0);
 }
 
@@ -94,6 +107,7 @@ export default function BoothHistoryPage() {
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("ALL");
   const [dateFrom, setDateFrom] = useState(todayMadridYMD());
@@ -126,6 +140,27 @@ export default function BoothHistoryPage() {
     }
   }, [queryString]);
 
+  const cancelExternalPayment = useCallback(async (paymentId: string) => {
+    if (!window.confirm("Se anulará la comisión registrada. Esta acción no se puede deshacer.")) {
+      return;
+    }
+
+    setCancelingId(paymentId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/booth/payments/${paymentId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "No se pudo anular el cobro externo");
+    } finally {
+      setCancelingId(null);
+    }
+  }, [load]);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -137,7 +172,7 @@ export default function BoothHistoryPage() {
         acc.charged += Number(row.servicePaidCents ?? 0);
         acc.pending += visiblePendingCents(row);
         acc.pax += Number(row.pax ?? 0);
-        acc.receivingPending += row.arrivedStoreAt ? 0 : 1;
+        acc.receivingPending += row.rowKind === "RESERVATION" && !row.arrivedStoreAt ? 1 : 0;
         return acc;
       },
       { total: 0, charged: 0, pending: 0, pax: 0, receivingPending: 0 }
@@ -150,7 +185,7 @@ export default function BoothHistoryPage() {
         <div style={heroHeaderStyle}>
           <div style={{ display: "grid", gap: 8 }}>
             <div style={eyebrowStyle}>Carpa</div>
-            <h1 style={titleStyle}>Histórico de reservas</h1>
+            <h1 style={titleStyle}>Histórico de movimientos</h1>
             <div style={subtitleStyle}>
               Consulta por día qué salió desde carpa, cuánto se cobró, qué sigue pendiente y si la reserva ya quedó recibida en tienda.
             </div>
@@ -167,7 +202,7 @@ export default function BoothHistoryPage() {
 
         <div style={heroStatsStyle}>
           <div style={heroStatStyle}>
-            <div style={heroStatLabelStyle}>Reservas</div>
+            <div style={heroStatLabelStyle}>Movimientos</div>
             <div style={heroStatValueStyle}>{summary.total}</div>
           </div>
           <div style={heroStatStyle}>
@@ -192,11 +227,15 @@ export default function BoothHistoryPage() {
       <section style={infoStripStyle}>
         <div style={infoCardStyle}>
           <div style={infoTitleStyle}>Lectura</div>
-          <div style={infoTextStyle}>`Cobrado` y `Pendiente` miden solo servicio de carpa. La fianza se deja visible aparte como referencia.</div>
+          <div style={infoTextStyle}>
+            `Cobrado` y `Pendiente` cuadran con caja de Booth. Las ventas externas muestran la comisión registrada y el bruto externo como referencia.
+          </div>
         </div>
         <div style={infoCardStyle}>
           <div style={infoTitleStyle}>Recepción</div>
-          <div style={infoTextStyle}>La última columna indica si la reserva ya quedó recibida por tienda o si ese paso sigue pendiente.</div>
+          <div style={infoTextStyle}>
+            La última columna indica si la reserva ya quedó recibida por tienda. En cobros externos directos no aplica.
+          </div>
         </div>
       </section>
 
@@ -231,6 +270,8 @@ export default function BoothHistoryPage() {
               <option value="IN_SEA">En mar</option>
               <option value="COMPLETED">Completada</option>
               <option value="CANCELED">Cancelada</option>
+              <option value="EXTERNAL_PAYMENT">Venta externa</option>
+              <option value="EXTERNAL_CANCELED">Venta externa anulada</option>
             </Select>
           </label>
           <label style={fieldStyle}>
@@ -247,13 +288,13 @@ export default function BoothHistoryPage() {
       {error ? <Alert kind="error">{error}</Alert> : null}
 
       <Card
-        title="Reservas"
+        title="Movimientos"
         right={<div style={mutedStyle}>{loading ? "Cargando..." : `${rows.length} resultados`}</div>}
       >
         {loading ? (
           <div style={emptyStyle}>Cargando histórico...</div>
         ) : rows.length === 0 ? (
-          <div style={emptyStyle}>No hay reservas para los filtros actuales.</div>
+          <div style={emptyStyle}>No hay movimientos para los filtros actuales.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ ...styles.table, minWidth: 1220 }}>
@@ -267,19 +308,25 @@ export default function BoothHistoryPage() {
                   <th style={styles.th}>Pendiente</th>
                   <th style={styles.th}>Pagos</th>
                   <th style={styles.th}>Recepción en tienda</th>
+                  <th style={styles.th}>Acción</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => {
                   const tone = statusTone(row.status);
                   const pendingCents = visiblePendingCents(row);
+                  const isExternalPayment = row.rowKind === "EXTERNAL_PAYMENT";
+
                   return (
                     <tr key={row.id}>
                       <td style={styles.td}>
                         <div style={{ display: "grid", gap: 6 }}>
                           <div style={{ fontWeight: 900, color: "#0f172a" }}>{row.customerName || "Sin nombre"}</div>
                           <div style={mutedStyle}>
-                            {row.customerCountry || "-"} · Código {row.boothCode || "-"}
+                            {isExternalPayment
+                              ? `${row.channelName || "Canal externo"} · ${row.paymentMethod || "-"}`
+                              : `${row.customerCountry || "-"} · Código ${row.boothCode || "-"}`
+                            }
                           </div>
                           <div style={mutedStyle}>ID {row.id.slice(-6)}</div>
                         </div>
@@ -288,7 +335,10 @@ export default function BoothHistoryPage() {
                         <div style={{ display: "grid", gap: 6 }}>
                           <div style={{ fontWeight: 800 }}>{row.serviceName || "Servicio"}</div>
                           <div style={mutedStyle}>
-                            {row.durationMinutes ? `${row.durationMinutes} min` : "Sin duración"} · Cant {row.quantity ?? 0} · PAX {row.pax ?? 0}
+                            {isExternalPayment
+                              ? `Venta externa ${euros(row.grossExternalAmountCents ?? row.totalPriceCents)}`
+                              : `${row.durationMinutes ? `${row.durationMinutes} min` : "Sin duración"} · Cant ${row.quantity ?? 0} · PAX ${row.pax ?? 0}`
+                            }
                           </div>
                           <div style={mutedStyle}>{row.serviceCategory || "Sin categoría"}</div>
                         </div>
@@ -319,7 +369,12 @@ export default function BoothHistoryPage() {
                       <td style={styles.td}>
                         <div style={{ display: "grid", gap: 6 }}>
                           <div style={{ fontWeight: 900, color: "#0f172a" }}>{euros(row.servicePaidCents)}</div>
-                          <div style={mutedStyle}>Total servicio {euros(row.totalPriceCents)}</div>
+                          <div style={mutedStyle}>
+                            {isExternalPayment
+                              ? `Bruto externo ${euros(row.grossExternalAmountCents ?? row.totalPriceCents)}`
+                              : `Total servicio ${euros(row.totalPriceCents)}`
+                            }
+                          </div>
                         </div>
                       </td>
                       <td style={styles.td}>
@@ -330,19 +385,39 @@ export default function BoothHistoryPage() {
                       <td style={styles.td}>
                         <div style={{ display: "grid", gap: 6 }}>
                           <div>{row.paymentsCount} movimientos</div>
-                          <div style={mutedStyle}>Fianza neta {euros(row.depositPaidCents)}</div>
+                          <div style={mutedStyle}>
+                            {isExternalPayment ? `Cobrado por ${row.paymentMethod || "-"}` : `Fianza neta ${euros(row.depositPaidCents)}`}
+                          </div>
                           <div style={mutedStyle}>Último {formatDateTime(row.lastPaymentAt)}</div>
                         </div>
                       </td>
                       <td style={styles.td}>
                         <div style={{ display: "grid", gap: 6 }}>
-                          <div style={{ fontWeight: 800, color: row.arrivedStoreAt ? "#166534" : "#b45309" }}>
-                            {row.arrivedStoreAt ? "Recibida" : "Pendiente"}
+                          <div
+                            style={{
+                              fontWeight: 800,
+                              color: isExternalPayment ? "#475569" : row.arrivedStoreAt ? "#166534" : "#b45309",
+                            }}
+                          >
+                            {isExternalPayment ? "No aplica" : row.arrivedStoreAt ? "Recibida" : "Pendiente"}
                           </div>
                           <div style={mutedStyle}>
-                            {row.arrivedStoreAt ? formatDateTime(row.arrivedStoreAt) : "Aún no registrada en tienda"}
+                            {isExternalPayment
+                              ? "Cobro directo de comisión en Booth"
+                              : row.arrivedStoreAt
+                                ? formatDateTime(row.arrivedStoreAt)
+                                : "Aún no registrada en tienda"}
                           </div>
                         </div>
+                      </td>
+                      <td style={styles.td}>
+                        {isExternalPayment && row.canCancel ? (
+                          <Button onClick={() => void cancelExternalPayment(row.id)} disabled={cancelingId === row.id}>
+                            {cancelingId === row.id ? "Anulando..." : "Cancelar"}
+                          </Button>
+                        ) : (
+                          <span style={mutedStyle}>-</span>
+                        )}
                       </td>
                     </tr>
                   );

@@ -51,7 +51,9 @@ export async function GET(req: Request) {
     };
   }
 
-  if (status && status !== "ALL") {
+  const isExternalStatus = status === "EXTERNAL_PAYMENT" || status === "EXTERNAL_CANCELED";
+
+  if (status && status !== "ALL" && !isExternalStatus) {
     where.status = status;
   }
 
@@ -69,40 +71,103 @@ export async function GET(req: Request) {
     };
   }
 
-  const rowsDb = await prisma.reservation.findMany({
-    where,
-    orderBy: [{ activityDate: "desc" }, { scheduledTime: "desc" }, { createdAt: "desc" }],
-    take,
-    select: {
-      id: true,
-      boothCode: true,
-      boothNote: true,
-      status: true,
-      activityDate: true,
-      scheduledTime: true,
-      arrivedStoreAt: true,
-      createdAt: true,
-      customerName: true,
-      customerCountry: true,
-      quantity: true,
-      pax: true,
-      totalPriceCents: true,
-      service: { select: { name: true, category: true } },
-      option: { select: { durationMinutes: true } },
-      payments: {
-        select: {
-          amountCents: true,
-          isDeposit: true,
-          direction: true,
-          method: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  });
+  const reservationRowsDb =
+    isExternalStatus
+      ? []
+      : await prisma.reservation.findMany({
+          where,
+          orderBy: [{ activityDate: "desc" }, { scheduledTime: "desc" }, { createdAt: "desc" }],
+          take,
+          select: {
+            id: true,
+            boothCode: true,
+            boothNote: true,
+            status: true,
+            activityDate: true,
+            scheduledTime: true,
+            arrivedStoreAt: true,
+            createdAt: true,
+            customerName: true,
+            customerCountry: true,
+            quantity: true,
+            pax: true,
+            totalPriceCents: true,
+            service: { select: { name: true, category: true } },
+            option: { select: { durationMinutes: true } },
+            payments: {
+              select: {
+                amountCents: true,
+                isDeposit: true,
+                direction: true,
+                method: true,
+                createdAt: true,
+              },
+              orderBy: { createdAt: "asc" },
+            },
+          },
+        });
 
-  const rows = rowsDb.map((reservation) => {
+  const paymentWhere: Record<string, unknown> = {
+    reservationId: null,
+    reversalOfPaymentId: null,
+    origin: "BOOTH",
+    channelId: { not: null },
+    serviceId: { not: null },
+  };
+
+  if (q?.trim()) {
+    paymentWhere.customerName = {
+      contains: q.trim(),
+      mode: "insensitive",
+    };
+  }
+
+  if (dateFrom || dateTo) {
+    const endExclusive = dateTo
+      ? (() => {
+          const [y, m, d] = dateTo.split("-").map(Number);
+          return tzLocalToUtcDate(BUSINESS_TZ, y, m, d + 1, 0, 0);
+        })()
+      : undefined;
+
+    paymentWhere.createdAt = {
+      ...(dateFrom ? { gte: utcDateFromYmdInTz(BUSINESS_TZ, dateFrom) } : {}),
+      ...(endExclusive ? { lt: endExclusive } : {}),
+    };
+  }
+
+  const externalPaymentsDb =
+    !status || status === "ALL" || isExternalStatus
+      ? await prisma.payment.findMany({
+          where: paymentWhere,
+          orderBy: [{ createdAt: "desc" }],
+          take,
+          select: {
+            id: true,
+            createdAt: true,
+            customerName: true,
+            amountCents: true,
+            direction: true,
+            method: true,
+            description: true,
+            isExternalCommissionOnly: true,
+            externalGrossAmountCents: true,
+            reversals: {
+              select: {
+                id: true,
+                createdAt: true,
+                amountCents: true,
+                direction: true,
+              },
+              orderBy: { createdAt: "asc" },
+            },
+            service: { select: { name: true, category: true } },
+            channel: { select: { name: true } },
+          },
+        })
+      : [];
+
+  const reservationRows = reservationRowsDb.map((reservation) => {
     const servicePaidCents = reservation.payments
       .filter((payment) => !payment.isDeposit)
       .reduce((sum, payment) => {
@@ -139,8 +204,65 @@ export async function GET(req: Request) {
       depositPaidCents,
       paymentsCount: reservation.payments.length,
       lastPaymentAt: reservation.payments[reservation.payments.length - 1]?.createdAt ?? null,
+      rowKind: "RESERVATION" as const,
+      channelName: null,
+      paymentMethod: null,
+      grossExternalAmountCents: null,
+      canCancel: false,
     };
   });
+
+  const externalPaymentRows = externalPaymentsDb.map((payment) => {
+    const originalAmount =
+      payment.direction === "OUT" ? -Math.abs(Number(payment.amountCents ?? 0)) : Math.abs(Number(payment.amountCents ?? 0));
+    const reversalNet = payment.reversals.reduce(
+      (sum, reversal) => sum + (reversal.direction === "OUT" ? -Math.abs(Number(reversal.amountCents ?? 0)) : Math.abs(Number(reversal.amountCents ?? 0))),
+      0
+    );
+    const signedAmount = originalAmount + reversalNet;
+    const grossExternalAmountCents = Number(payment.externalGrossAmountCents ?? 0) || null;
+    const lastPaymentAt = payment.reversals[payment.reversals.length - 1]?.createdAt ?? payment.createdAt;
+
+    return {
+      id: payment.id,
+      boothCode: null,
+      boothNote: null,
+      status: signedAmount <= 0 ? "EXTERNAL_CANCELED" : "EXTERNAL_PAYMENT",
+      activityDate: payment.createdAt,
+      scheduledTime: null,
+      arrivedStoreAt: null,
+      createdAt: payment.createdAt,
+      customerName: payment.customerName ?? null,
+      customerCountry: null,
+      quantity: null,
+      pax: null,
+      totalPriceCents: grossExternalAmountCents ?? Math.abs(signedAmount),
+      serviceName: payment.service?.name ?? payment.description ?? "Venta externa",
+      serviceCategory: payment.service?.category ?? "Canal externo",
+      durationMinutes: null,
+      servicePaidCents: signedAmount,
+      servicePendingCents: 0,
+      depositPaidCents: 0,
+      paymentsCount: 1 + payment.reversals.length,
+      lastPaymentAt,
+      rowKind: "EXTERNAL_PAYMENT" as const,
+      channelName: payment.channel?.name ?? null,
+      paymentMethod: payment.method,
+      grossExternalAmountCents,
+      canCancel: signedAmount > 0,
+    };
+  });
+
+  const filteredExternalPaymentRows =
+    status === "EXTERNAL_PAYMENT"
+      ? externalPaymentRows.filter((row) => row.status === "EXTERNAL_PAYMENT")
+      : status === "EXTERNAL_CANCELED"
+      ? externalPaymentRows.filter((row) => row.status === "EXTERNAL_CANCELED")
+      : externalPaymentRows;
+
+  const rows = [...reservationRows, ...filteredExternalPaymentRows]
+    .sort((a, b) => new Date(b.scheduledTime ?? b.activityDate ?? b.createdAt).getTime() - new Date(a.scheduledTime ?? a.activityDate ?? a.createdAt).getTime())
+    .slice(0, take);
 
   return NextResponse.json({ ok: true, rows });
 }

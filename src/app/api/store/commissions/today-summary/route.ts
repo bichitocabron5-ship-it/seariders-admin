@@ -65,6 +65,8 @@ export async function GET() {
       select: {
         amountCents: true,
         direction: true,
+        isExternalCommissionOnly: true,
+        externalGrossAmountCents: true,
         channelId: true,
         serviceId: true,
         channel: {
@@ -162,8 +164,17 @@ export async function GET() {
       const ch = payment.channel;
       if (!ch || !payment.serviceId || !ch.commissionEnabled) continue;
 
-      const base =
-        payment.direction === "OUT" ? -Math.abs(Number(payment.amountCents ?? 0)) : Math.abs(Number(payment.amountCents ?? 0));
+      const sign = payment.direction === "OUT" ? -1 : 1;
+      const signedAmount = sign * Math.abs(Number(payment.amountCents ?? 0));
+
+      if (payment.isExternalCommissionOnly) {
+        if (signedAmount <= 0) continue;
+        count++;
+        addCommission("BOOTH", ch.name, signedAmount);
+        continue;
+      }
+
+      const base = sign * Math.abs(Number(payment.amountCents ?? 0));
       if (base <= 0) continue;
 
       const key = `${ch.id}:${payment.serviceId}`;

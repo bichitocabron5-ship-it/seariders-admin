@@ -50,6 +50,8 @@ export async function GET(req: Request, { params }: Ctx) {
       serviceId: true,
       channelId: true,
       amountCents: true,
+      isExternalCommissionOnly: true,
+      externalGrossAmountCents: true,
       direction: true,
       isDeposit: true,
       channel: {
@@ -165,6 +167,34 @@ export async function GET(req: Request, { params }: Ctx) {
 
     const ch = p.channel;
     if (!ch || !ch.commissionEnabled) continue;
+
+    if (p.isExternalCommissionOnly) {
+      const commissionOnlyAmount = signed(p.amountCents, p.direction);
+      if (!commissionOnlyAmount) continue;
+
+      totalCommissionCents += commissionOnlyAmount;
+
+      if (!byChannel.has(ch.id)) {
+        byChannel.set(ch.id, {
+          channelId: ch.id,
+          name: ch.name,
+          baseServiceCents: 0,
+          baseDepositCents: 0,
+          baseTotalCents: 0,
+          commissionCents: 0,
+          reservations: 0,
+        });
+      }
+
+      const row = byChannel.get(ch.id)!;
+      const grossBase = signed(p.externalGrossAmountCents ?? p.amountCents, p.direction);
+      if (p.isDeposit) row.baseDepositCents += grossBase;
+      else row.baseServiceCents += grossBase;
+      row.baseTotalCents += grossBase;
+      row.commissionCents += commissionOnlyAmount;
+      row.reservations += 1;
+      continue;
+    }
 
     const baseTotal = p.isDeposit && !ch.commissionAppliesToDeposit ? 0 : signed(p.amountCents, p.direction);
     if (!baseTotal) continue;
