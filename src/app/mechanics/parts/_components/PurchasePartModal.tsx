@@ -30,6 +30,8 @@ type VendorOption = {
   }>;
 };
 
+const EXPENSE_CATEGORY_CODE = "SPARE_PARTS";
+
 export default function PurchasePartModal({
   part,
   onClose,
@@ -71,23 +73,44 @@ export default function PurchasePartModal({
       try {
         setVendorsLoading(true);
 
-        const qs = new URLSearchParams({
+        const baseParams = {
           onlyActive: "true",
-          categoryCode: "RECAMBIOS",
           limit: "50",
+        } as const;
+
+        const qs = new URLSearchParams({
+          ...baseParams,
+          categoryCode: EXPENSE_CATEGORY_CODE,
         });
 
         if (vendorQuery.trim()) {
           qs.set("q", vendorQuery.trim());
         }
 
-        const res = await fetch(`/api/expenses/vendors?${qs.toString()}`, {
+        let res = await fetch(`/api/expenses/vendors?${qs.toString()}`, {
           cache: "no-store",
         });
 
         if (!res.ok) throw new Error(await res.text());
 
-        const json = await res.json();
+        let json = await res.json();
+
+        // Fallback: if vendors exist in admin but are not explicitly linked
+        // to the spare-parts category yet, still make them selectable here.
+        if ((json.rows?.length ?? 0) === 0) {
+          const fallbackQs = new URLSearchParams(baseParams);
+          if (vendorQuery.trim()) {
+            fallbackQs.set("q", vendorQuery.trim());
+          }
+
+          res = await fetch(`/api/expenses/vendors?${fallbackQs.toString()}`, {
+            cache: "no-store",
+          });
+
+          if (!res.ok) throw new Error(await res.text());
+          json = await res.json();
+        }
+
         if (!cancelled) {
           setVendorOptions(json.rows ?? []);
         }

@@ -66,23 +66,43 @@ export default function PartModal({
       try {
         setSupplierLoading(true);
 
-        const qs = new URLSearchParams({
+        const baseParams = {
           onlyActive: "true",
-          categoryCode: EXPENSE_CATEGORY_CODE,
           limit: "50",
+        } as const;
+
+        const qs = new URLSearchParams({
+          ...baseParams,
+          categoryCode: EXPENSE_CATEGORY_CODE,
         });
 
         if (supplierQuery.trim()) {
           qs.set("q", supplierQuery.trim());
         }
 
-        const res = await fetch(`/api/expenses/vendors?${qs.toString()}`, {
+        let res = await fetch(`/api/expenses/vendors?${qs.toString()}`, {
           cache: "no-store",
         });
 
         if (!res.ok) throw new Error(await res.text());
 
-        const json = await res.json();
+        let json = await res.json();
+
+        // Fallback: expose active admin vendors even if they have not been
+        // categorized under spare parts yet.
+        if ((json.rows?.length ?? 0) === 0) {
+          const fallbackQs = new URLSearchParams(baseParams);
+          if (supplierQuery.trim()) {
+            fallbackQs.set("q", supplierQuery.trim());
+          }
+
+          res = await fetch(`/api/expenses/vendors?${fallbackQs.toString()}`, {
+            cache: "no-store",
+          });
+
+          if (!res.ok) throw new Error(await res.text());
+          json = await res.json();
+        }
 
         if (!cancelled) {
           setSupplierOptions(json.rows ?? []);
