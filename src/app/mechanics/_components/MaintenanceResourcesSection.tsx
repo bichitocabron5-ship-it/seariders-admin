@@ -20,6 +20,9 @@ type ResourceCardRow = {
   href: string;
   summary: string;
   operabilityStatus: "OPERATIONAL" | "MAINTENANCE" | "DAMAGED" | "OUT_OF_SERVICE";
+  maintenanceProfile?: "OPERATIONAL" | "MAINTENANCE_ONLY";
+  meterType?: "HOURS" | "NONE";
+  usesHours?: boolean;
   currentHours: number | null;
   service: {
     state: ServiceState;
@@ -192,42 +195,60 @@ export default function MaintenanceResourcesSection({
               </div>
             </div>
 
-            <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 13 }}>
-              <Metric label="Horas actuales" value={row.currentHours} />
-              <Metric label="Horas desde última revisión" value={row.service.hoursSinceService} />
-              <Metric label="Próxima revisión" value={row.service.serviceDueAt} />
-              <Metric
-                label="Horas restantes"
-                value={row.service.hoursLeft}
-                strong={row.service.state === "WARN" || row.service.state === "DUE"}
-              />
-            </div>
+            {row.usesHours !== false ? (
+              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 13 }}>
+                <Metric label="Horas actuales" value={row.currentHours} />
+                <Metric label="Horas desde última revisión" value={row.service.hoursSinceService} />
+                <Metric label="Próxima revisión" value={row.service.serviceDueAt} />
+                <Metric
+                  label="Horas restantes"
+                  value={row.service.hoursLeft}
+                  strong={row.service.state === "WARN" || row.service.state === "DUE"}
+                />
+              </div>
+            ) : (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 14,
+                  border: "1px solid #dbe4ea",
+                  background: "#f8fafc",
+                  fontSize: 13,
+                  color: "#475569",
+                }}
+              >
+                Recurso mantenible sin trazabilidad por horas. Usa incidencias, reparaciones e inspecciones.
+              </div>
+            )}
 
             <div style={{ marginTop: 10, fontSize: 12, opacity: 0.82 }}>
               Última revisión registrada: <b>{lastEventSummary(row.lastServiceEventType, row.lastServiceEventAt)}</b>
             </div>
 
             <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button
-                  onClick={() => onQuickAdjust(row.entityType, row.id, row.currentHours, 1)}
-                  style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", fontWeight: 900 }}
-                >
-                  +1h
-                </button>
-                <button
-                  onClick={() => onQuickAdjust(row.entityType, row.id, row.currentHours, 5)}
-                  style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", fontWeight: 900 }}
-                >
-                  +5h
-                </button>
-                <button
-                  onClick={() => onOpenAdjust(row.entityType, row.id)}
-                  style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", fontWeight: 900 }}
-                >
-                  Ajustar
-                </button>
-              </div>
+              {row.usesHours !== false ? (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => onQuickAdjust(row.entityType, row.id, row.currentHours, 1)}
+                    style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", fontWeight: 900 }}
+                  >
+                    +1h
+                  </button>
+                  <button
+                    onClick={() => onQuickAdjust(row.entityType, row.id, row.currentHours, 5)}
+                    style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", fontWeight: 900 }}
+                  >
+                    +5h
+                  </button>
+                  <button
+                    onClick={() => onOpenAdjust(row.entityType, row.id)}
+                    style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #d0d9e4", background: "#fff", fontWeight: 900 }}
+                  >
+                    Ajustar
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         ))}

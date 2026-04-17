@@ -18,7 +18,7 @@ type EventDetailRow = {
   severity: MaintenanceSeverity;
   createdAt: string;
   resolvedAt: string | null;
-  hoursAtService: number;
+  hoursAtService: number | null;
   note: string | null;
   supplierName: string | null;
   externalWorkshop: boolean;
@@ -507,7 +507,8 @@ export default function EditMaintenanceEventModal({
               {entityLabel(row)} · {row.type}
             </div>
             <div style={{ fontSize: 13, opacity: 0.8 }}>
-              Creado: {fmtDateTime(row.createdAt)} · Horas evento: {row.hoursAtService}
+              Creado: {fmtDateTime(row.createdAt)}
+              {typeof row.hoursAtService === "number" ? ` · Horas evento: ${row.hoursAtService}` : ""}
             </div>
             <div style={{ fontSize: 13, opacity: 0.8 }}>
               Autor:{" "}

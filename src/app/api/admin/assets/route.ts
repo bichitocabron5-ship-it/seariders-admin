@@ -5,7 +5,13 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
-import { AssetStatus, AssetType, Prisma } from "@prisma/client";
+import {
+  AssetMaintenanceProfile,
+  AssetMeterType,
+  AssetStatus,
+  AssetType,
+  Prisma,
+} from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -53,6 +59,8 @@ export async function GET(req: Request) {
       type: true,
       status: true,
       platformUsage: true,
+      maintenanceProfile: true,
+      meterType: true,
       name: true,
       code: true,
       model: true,
@@ -80,6 +88,8 @@ const CreateBody = z.object({
   type: z.nativeEnum(AssetType),
   status: z.nativeEnum(AssetStatus).optional(),
   platformUsage: z.enum(["CUSTOMER_ASSIGNABLE", "RUN_BASE_ONLY", "HIDDEN"]).optional(),
+  maintenanceProfile: z.nativeEnum(AssetMaintenanceProfile).optional(),
+  meterType: z.nativeEnum(AssetMeterType).optional(),
 
   name: z.string().trim().min(1).max(80),
   code: z.string().trim().min(1).max(30).optional().nullable(),
@@ -118,6 +128,8 @@ export async function POST(req: Request) {
         type: b.type,
         status: b.status ?? AssetStatus.OPERATIONAL,
         platformUsage: b.platformUsage ?? "CUSTOMER_ASSIGNABLE",
+        maintenanceProfile: b.maintenanceProfile ?? AssetMaintenanceProfile.OPERATIONAL,
+        meterType: b.meterType ?? AssetMeterType.HOURS,
 
         name: b.name,
         code: b.code ?? null,
@@ -128,8 +140,14 @@ export async function POST(req: Request) {
         maxPax: b.maxPax ?? null,
         note: b.note ?? null,
 
-        currentHours: b.currentHours ?? null,
-        lastServiceHours: b.lastServiceHours ?? null,
+        currentHours:
+          (b.meterType ?? AssetMeterType.HOURS) === AssetMeterType.NONE
+            ? null
+            : b.currentHours ?? null,
+        lastServiceHours:
+          (b.meterType ?? AssetMeterType.HOURS) === AssetMeterType.NONE
+            ? null
+            : b.lastServiceHours ?? null,
         ...(typeof b.serviceIntervalHours === "number" ? { serviceIntervalHours: b.serviceIntervalHours } : {}),
         ...(typeof b.serviceWarnHours === "number" ? { serviceWarnHours: b.serviceWarnHours } : {}),
         isMotorized: b.isMotorized ?? false,
@@ -138,6 +156,9 @@ export async function POST(req: Request) {
         id: true,
         type: true,
         status: true,
+        platformUsage: true,
+        maintenanceProfile: true,
+        meterType: true,
         name: true,
         code: true,
         model: true,
@@ -189,6 +210,8 @@ export async function PATCH(req: Request) {
         ...(b.type ? { type: b.type } : {}),
         ...(b.status ? { status: b.status } : {}),
         ...(b.platformUsage ? { platformUsage: b.platformUsage } : {}),
+        ...(b.maintenanceProfile ? { maintenanceProfile: b.maintenanceProfile } : {}),
+        ...(b.meterType ? { meterType: b.meterType } : {}),
         ...(typeof b.name === "string" ? { name: b.name } : {}),
         ...(b.code !== undefined ? { code: b.code } : {}),
         ...(b.model !== undefined ? { model: b.model } : {}),
@@ -197,8 +220,9 @@ export async function PATCH(req: Request) {
         ...(b.chassisNumber !== undefined ? { chassisNumber: b.chassisNumber } : {}),
         ...(b.maxPax !== undefined ? { maxPax: b.maxPax } : {}),
         ...(b.note !== undefined ? { note: b.note } : {}),
-        ...(b.currentHours !== undefined ? { currentHours: b.currentHours } : {}),
-        ...(b.lastServiceHours !== undefined ? { lastServiceHours: b.lastServiceHours } : {}),
+        ...(b.meterType === AssetMeterType.NONE ? { currentHours: null, lastServiceHours: null } : {}),
+        ...(b.currentHours !== undefined && b.meterType !== AssetMeterType.NONE ? { currentHours: b.currentHours } : {}),
+        ...(b.lastServiceHours !== undefined && b.meterType !== AssetMeterType.NONE ? { lastServiceHours: b.lastServiceHours } : {}),
         ...(typeof b.serviceIntervalHours === "number" ? { serviceIntervalHours: b.serviceIntervalHours } : {}),
         ...(typeof b.serviceWarnHours === "number" ? { serviceWarnHours: b.serviceWarnHours } : {}),
         ...(typeof b.isMotorized === "boolean" ? { isMotorized: b.isMotorized } : {}),
@@ -208,6 +232,8 @@ export async function PATCH(req: Request) {
         type: true,
         status: true,
         platformUsage: true,
+        maintenanceProfile: true,
+        meterType: true,
         name: true,
         code: true,
         model: true,

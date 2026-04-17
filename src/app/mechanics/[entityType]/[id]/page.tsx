@@ -41,6 +41,8 @@ type DetailResponse = {
     code?: string | null;
     note?: string | null;
     isMotorized?: boolean;
+    maintenanceProfile?: "OPERATIONAL" | "MAINTENANCE_ONLY";
+    meterType?: "HOURS" | "NONE";
 
     // comunes
     plate?: string | null;
@@ -68,7 +70,7 @@ type EventRow = {
   id: string;
     entityType: MaintenanceEntityType;
     type: MaintenanceEventType;
-    hoursAtService: number;
+    hoursAtService: number | null;
     note: string | null;
     createdAt: string;
     createdByUserId: string | null;
@@ -258,13 +260,17 @@ export default function MechanicsDetailPage() {
     setEditingEventId(eventIdFromQuery);
   }, [eventIdFromQuery]);
 
+  const usesHours = data?.entityType === "JETSKI" || data?.entity.meterType !== "NONE";
+  const canAffectOperability =
+    data?.entityType === "JETSKI" || data?.entity.maintenanceProfile !== "MAINTENANCE_ONLY";
+
   const openEventModal = useCallback(
     (nextEventType: MaintenanceEventType = "SERVICE") => {
       if (!data) return;
       setEditingEventId(null);
       setEventType(nextEventType);
       setHoursAtService(
-        data.entity.currentHours !== null && data.entity.currentHours !== undefined
+        usesHours && data.entity.currentHours !== null && data.entity.currentHours !== undefined
           ? String(data.entity.currentHours)
           : ""
       );
@@ -286,7 +292,7 @@ export default function MechanicsDetailPage() {
       setOperabilityOnResolved("");
       setPartsUsed([]);
     },
-    [data]
+    [data, usesHours]
   );
 
   const load = useCallback(async () => {
@@ -651,7 +657,7 @@ export default function MechanicsDetailPage() {
       setModalError(null);
 
       const h = hoursAtService.trim() ? Number(hoursAtService) : undefined;
-      if (hoursAtService.trim() && (Number.isNaN(h) || h! < 0)) {
+      if (usesHours && hoursAtService.trim() && (Number.isNaN(h) || h! < 0)) {
         throw new Error("Horas inválidas.");
       }
 
@@ -670,7 +676,7 @@ export default function MechanicsDetailPage() {
           entityType: data.entityType,
           entityId: data.entity.id,
           type: eventType,
-          hoursAtService: h,
+          hoursAtService: usesHours ? h : undefined,
           note: note.trim() ? note.trim() : null,
           applyToEntity,
 
@@ -880,8 +886,10 @@ export default function MechanicsDetailPage() {
         parts={parts}
         partsUsed={partsUsed}
         setPartsUsed={setPartsUsed}
+        usesHours={Boolean(usesHours)}
         applyToEntity={applyToEntity}
         setApplyToEntity={setApplyToEntity}
+        canAffectOperability={Boolean(canAffectOperability)}
         affectsOperability={affectsOperability}
         setAffectsOperability={setAffectsOperability}
         operabilityOnOpen={operabilityOnOpen}

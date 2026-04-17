@@ -52,6 +52,8 @@ export async function GET(req: Request) {
       select: {
         id: true,
         type: true,
+        maintenanceProfile: true,
+        meterType: true,
         name: true,
         plate: true,
         chassisNumber: true,
@@ -142,7 +144,7 @@ export async function GET(req: Request) {
 
   const lastJetskiMap = new Map<
     string,
-    { hoursAtService: number; createdAt: string; type: string }
+    { hoursAtService: number | null; createdAt: string; type: string }
   >();
   for (const e of lastJetskiEvents) {
     if (!e.jetskiId) continue;
@@ -158,7 +160,7 @@ export async function GET(req: Request) {
 
   const lastAssetMap = new Map<
     string,
-    { hoursAtService: number; createdAt: string; type: string }
+    { hoursAtService: number | null; createdAt: string; type: string }
   >();
   for (const e of lastAssetEvents) {
     if (!e.assetId) continue;
@@ -198,12 +200,14 @@ export async function GET(req: Request) {
   });
 
   const assetOut = assets.map((a) => {
-    const lastEvt = lastAssetMap.get(a.id) ?? null;
-    const lastServiceHoursEffective = lastEvt?.hoursAtService ?? (a.lastServiceHours ?? null);
-    const currentHoursEffective = applyLiveHours(
-      a.currentHours ?? null,
-      activeAssetHoursMap.get(a.id) ?? 0
-    );
+    const usesHours = a.meterType === "HOURS";
+    const lastEvt = usesHours ? lastAssetMap.get(a.id) ?? null : null;
+    const lastServiceHoursEffective = usesHours
+      ? lastEvt?.hoursAtService ?? (a.lastServiceHours ?? null)
+      : null;
+    const currentHoursEffective = usesHours
+      ? applyLiveHours(a.currentHours ?? null, activeAssetHoursMap.get(a.id) ?? 0)
+      : null;
 
     const svc = calcService({
       currentHours: currentHoursEffective,

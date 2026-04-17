@@ -1106,6 +1106,8 @@ model Asset {
   type   AssetType
   status AssetStatus @default(OPERATIONAL)
   platformUsage AssetPlatformUsage @default(CUSTOMER_ASSIGNABLE)
+  maintenanceProfile AssetMaintenanceProfile @default(OPERATIONAL)
+  meterType          AssetMeterType          @default(HOURS)
 
   name                 String
   code                 String?
@@ -1151,7 +1153,7 @@ model MaintenanceEvent {
   asset   Asset?  @relation("MaintenanceEventAsset", fields: [assetId], references: [id], onDelete: Cascade)
 
   // Datos del evento
-  hoursAtService Float
+  hoursAtService Float?
   note           String?
 
   // mantenimiento avanzado
@@ -2125,6 +2127,16 @@ enum AssetPlatformUsage {
   CUSTOMER_ASSIGNABLE
   RUN_BASE_ONLY
   HIDDEN
+}
+
+enum AssetMaintenanceProfile {
+  OPERATIONAL
+  MAINTENANCE_ONLY
+}
+
+enum AssetMeterType {
+  HOURS
+  NONE
 }
 
 enum JetskiStatus {

@@ -18,6 +18,8 @@ type Props = {
     maxPax?: number | null;
     code?: string | null;
     currentHours?: number | null;
+    meterType?: "HOURS" | "NONE";
+    maintenanceProfile?: "OPERATIONAL" | "MAINTENANCE_ONLY";
     operabilityStatus: string;
     status: string;
   };
@@ -91,6 +93,8 @@ export default function MaintenanceDetailOverviewSection({
   service,
   lastServiceHoursEffective,
 }: Props) {
+  const usesHours = entityType === "JETSKI" || entity.meterType !== "NONE";
+
   return (
     <>
       <div
@@ -118,7 +122,7 @@ export default function MaintenanceDetailOverviewSection({
             </div>
           </div>
 
-          <div style={stateBadgeStyle(service.state)}>{stateLabel(service.state)}</div>
+          {usesHours ? <div style={stateBadgeStyle(service.state)}>{stateLabel(service.state)}</div> : null}
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -126,26 +130,56 @@ export default function MaintenanceDetailOverviewSection({
           <span style={operabilityBadgeStyle(entity.operabilityStatus ?? entity.status)}>
             {operabilityLabel(entity.operabilityStatus ?? entity.status)}
           </span>
+          {entityType === "ASSET" && entity.maintenanceProfile === "MAINTENANCE_ONLY" ? (
+            <span
+              style={{
+                padding: "4px 8px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 900,
+                border: "1px solid #d1d5db",
+                background: "#f8fafc",
+                color: "#334155",
+              }}
+            >
+              Solo mantenimiento
+            </span>
+          ) : null}
         </div>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 12,
-        }}
-      >
-        <Kpi title="Horas actuales" value={fmtHours(entity.currentHours)} />
-        <Kpi title="Desde última revisión" value={fmtHours(service.hoursSinceService)} />
-        <Kpi title="Próxima revisión" value={fmtHours(service.serviceDueAt)} />
-        <Kpi
-          title="Horas restantes"
-          value={fmtHours(service.hoursLeft)}
-          danger={isNegativeNumber(service.hoursLeft)}
-        />
-        <Kpi title="Última revisión efectiva" value={fmtHours(lastServiceHoursEffective)} />
-      </div>
+      {usesHours ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 12,
+          }}
+        >
+          <Kpi title="Horas actuales" value={fmtHours(entity.currentHours)} />
+          <Kpi title="Desde última revisión" value={fmtHours(service.hoursSinceService)} />
+          <Kpi title="Próxima revisión" value={fmtHours(service.serviceDueAt)} />
+          <Kpi
+            title="Horas restantes"
+            value={fmtHours(service.hoursLeft)}
+            danger={isNegativeNumber(service.hoursLeft)}
+          />
+          <Kpi title="Última revisión efectiva" value={fmtHours(lastServiceHoursEffective)} />
+        </div>
+      ) : (
+        <div
+          style={{
+            border: "1px solid #dbe4ea",
+            borderRadius: 16,
+            background: "#f8fafc",
+            padding: 14,
+            color: "#475569",
+            fontSize: 13,
+          }}
+        >
+          Este recurso no usa mantenimiento por horas. La ficha registra incidencias, reparaciones, inspecciones y costes.
+        </div>
+      )}
     </>
   );
 }

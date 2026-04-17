@@ -61,6 +61,8 @@ export default function AdminAssetsListSection({
                   <div style={{ fontWeight: 950, fontSize: 18 }}>{row.name}</div>
                   <span style={statusBadge(row.status)}>{row.status}</span>
                   <span style={usageBadge(row.platformUsage)}>{usageLabel(row.platformUsage)}</span>
+                  <span style={profileBadge(row.maintenanceProfile)}>{profileLabel(row.maintenanceProfile)}</span>
+                  <span style={meterBadge(row.meterType)}>{meterLabel(row.meterType)}</span>
                 </div>
                 <div style={{ fontSize: 13, color: "#475569" }}>
                   {row.type}
@@ -117,4 +119,28 @@ function usageLabel(usage: "CUSTOMER_ASSIGNABLE" | "RUN_BASE_ONLY" | "HIDDEN") {
   if (usage === "CUSTOMER_ASSIGNABLE") return "Asignable";
   if (usage === "RUN_BASE_ONLY") return "Solo base";
   return "Oculto";
+}
+
+function profileBadge(profile: "OPERATIONAL" | "MAINTENANCE_ONLY"): React.CSSProperties {
+  if (profile === "OPERATIONAL") {
+    return { ...badgeBase, border: "1px solid #bae6fd", background: "#ecfeff", color: "#155e75" };
+  }
+  return { ...badgeBase, border: "1px solid #d1d5db", background: "#f8fafc", color: "#334155" };
+}
+
+function profileLabel(profile: "OPERATIONAL" | "MAINTENANCE_ONLY") {
+  if (profile === "OPERATIONAL") return "Operativo";
+  return "Solo mantenimiento";
+}
+
+function meterBadge(meterType: "HOURS" | "NONE"): React.CSSProperties {
+  if (meterType === "HOURS") {
+    return { ...badgeBase, border: "1px solid #ddd6fe", background: "#f5f3ff", color: "#5b21b6" };
+  }
+  return { ...badgeBase, border: "1px solid #e5e7eb", background: "#f8fafc", color: "#475569" };
+}
+
+function meterLabel(meterType: "HOURS" | "NONE") {
+  if (meterType === "HOURS") return "Con horas";
+  return "Sin contador";
 }

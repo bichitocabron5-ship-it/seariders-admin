@@ -13,7 +13,7 @@ type MaintenanceEventType =
 type EventRow = {
   id: string;
   type: MaintenanceEventType;
-  hoursAtService: number;
+  hoursAtService: number | null;
   note: string | null;
   createdAt: string;
   status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "EXTERNAL" | "CANCELED";

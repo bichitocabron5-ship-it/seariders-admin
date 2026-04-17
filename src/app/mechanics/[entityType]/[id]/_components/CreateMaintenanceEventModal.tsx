@@ -79,8 +79,10 @@ type Props = {
   parts: SparePartRow[];
   partsUsed: PartUsageDraft[];
   setPartsUsed: Dispatch<SetStateAction<PartUsageDraft[]>>;
+  usesHours: boolean;
   applyToEntity: boolean;
   setApplyToEntity: Dispatch<SetStateAction<boolean>>;
+  canAffectOperability: boolean;
   affectsOperability: boolean;
   setAffectsOperability: Dispatch<SetStateAction<boolean>>;
   operabilityOnOpen: string;
@@ -131,8 +133,10 @@ export default function CreateMaintenanceEventModal({
   parts,
   partsUsed,
   setPartsUsed,
+  usesHours,
   applyToEntity,
   setApplyToEntity,
+  canAffectOperability,
   affectsOperability,
   setAffectsOperability,
   operabilityOnOpen,
@@ -203,15 +207,30 @@ export default function CreateMaintenanceEventModal({
             </select>
           </label>
 
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-            Horas en el momento del evento
-            <input
-              value={hoursAtService}
-              onChange={(e) => setHoursAtService(e.target.value)}
-              placeholder="Vacío = currentHours"
-              style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-            />
-          </label>
+          {usesHours ? (
+            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+              Horas en el momento del evento
+              <input
+                value={hoursAtService}
+                onChange={(e) => setHoursAtService(e.target.value)}
+                placeholder="Vacío = currentHours"
+                style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
+              />
+            </label>
+          ) : (
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 12,
+                border: "1px solid #dbe4ea",
+                background: "#f8fafc",
+                fontSize: 13,
+                color: "#475569",
+              }}
+            >
+              Este recurso no usa contador. El evento se registrará sin horas.
+            </div>
+          )}
 
           <label style={{ display: "grid", gap: 6, fontSize: 13, gridColumn: "1 / -1" }}>
             Nota
@@ -561,76 +580,80 @@ export default function CreateMaintenanceEventModal({
             </div>
           </div>
 
-          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-            <input
-              type="checkbox"
-              checked={applyToEntity}
-              onChange={(e) => setApplyToEntity(e.target.checked)}
-            />
-            Aplicar a la entidad
-          </label>
-
-          <div
-            style={{
-              border: "1px solid #e5e7eb",
-              background: "#fafafa",
-              borderRadius: 12,
-              padding: 12,
-              display: "grid",
-              gap: 10,
-            }}
-          >
-            <div style={{ fontWeight: 900 }}>Operatividad en Plataforma</div>
-
+          {usesHours ? (
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
               <input
                 type="checkbox"
-                checked={affectsOperability}
-                onChange={(e) => setAffectsOperability(e.target.checked)}
+                checked={applyToEntity}
+                onChange={(e) => setApplyToEntity(e.target.checked)}
               />
-              Este evento afecta a la operatividad actual
+              Aplicar a la entidad
             </label>
+          ) : null}
 
-            {affectsOperability ? (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 10,
-                }}
-              >
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Estado al abrir/reabrir
-                  <select
-                    value={operabilityOnOpen}
-                    onChange={(e) => setOperabilityOnOpen(e.target.value)}
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                  >
-                    <option value="">Selecciona...</option>
-                    <option value="MAINTENANCE">MAINTENANCE</option>
-                    <option value="DAMAGED">DAMAGED</option>
-                    <option value="OUT_OF_SERVICE">OUT_OF_SERVICE</option>
-                    <option value="OPERATIONAL">OPERATIONAL</option>
-                  </select>
-                </label>
+          {canAffectOperability ? (
+            <div
+              style={{
+                border: "1px solid #e5e7eb",
+                background: "#fafafa",
+                borderRadius: 12,
+                padding: 12,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div style={{ fontWeight: 900 }}>Operatividad en Plataforma</div>
 
-                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Estado al resolver
-                  <select
-                    value={operabilityOnResolved}
-                    onChange={(e) => setOperabilityOnResolved(e.target.value)}
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                  >
-                    <option value="">Selecciona...</option>
-                    <option value="OPERATIONAL">OPERATIONAL</option>
-                    <option value="MAINTENANCE">MAINTENANCE</option>
-                    <option value="DAMAGED">DAMAGED</option>
-                    <option value="OUT_OF_SERVICE">OUT_OF_SERVICE</option>
-                  </select>
-                </label>
-              </div>
-            ) : null}
-          </div>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={affectsOperability}
+                  onChange={(e) => setAffectsOperability(e.target.checked)}
+                />
+                Este evento afecta a la operatividad actual
+              </label>
+
+              {affectsOperability ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 10,
+                  }}
+                >
+                  <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    Estado al abrir/reabrir
+                    <select
+                      value={operabilityOnOpen}
+                      onChange={(e) => setOperabilityOnOpen(e.target.value)}
+                      style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
+                    >
+                      <option value="">Selecciona...</option>
+                      <option value="MAINTENANCE">MAINTENANCE</option>
+                      <option value="DAMAGED">DAMAGED</option>
+                      <option value="OUT_OF_SERVICE">OUT_OF_SERVICE</option>
+                      <option value="OPERATIONAL">OPERATIONAL</option>
+                    </select>
+                  </label>
+
+                  <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    Estado al resolver
+                    <select
+                      value={operabilityOnResolved}
+                      onChange={(e) => setOperabilityOnResolved(e.target.value)}
+                      style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
+                    >
+                      <option value="">Selecciona...</option>
+                      <option value="OPERATIONAL">OPERATIONAL</option>
+                      <option value="MAINTENANCE">MAINTENANCE</option>
+                      <option value="DAMAGED">DAMAGED</option>
+                      <option value="OUT_OF_SERVICE">OUT_OF_SERVICE</option>
+                    </select>
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         {modalError ? (

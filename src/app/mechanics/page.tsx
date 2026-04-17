@@ -52,6 +52,8 @@ type OverviewAssetRow = {
   operabilityStatus: "OPERATIONAL" | "MAINTENANCE" | "DAMAGED" | "OUT_OF_SERVICE";
   id: string;
   type: string;
+  maintenanceProfile: "OPERATIONAL" | "MAINTENANCE_ONLY";
+  meterType: "HOURS" | "NONE";
   name: string;
   plate: string | null;
   chassisNumber: string | null;
@@ -85,7 +87,7 @@ type OpenEventRow = {
   severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   createdAt: string;
   resolvedAt: string | null;
-  hoursAtService: number;
+  hoursAtService: number | null;
   note: string | null;
   supplierName: string | null;
   externalWorkshop: boolean;
@@ -262,8 +264,8 @@ export default function MechanicsPage() {
 
   const dueJetskis = filteredJetskis.filter((j) => j.service.state === "DUE");
   const warnJetskis = filteredJetskis.filter((j) => j.service.state === "WARN");
-  const dueAssets = filteredAssets.filter((a) => a.service.state === "DUE");
-  const warnAssets = filteredAssets.filter((a) => a.service.state === "WARN");
+  const dueAssets = filteredAssets.filter((a) => a.meterType === "HOURS" && a.service.state === "DUE");
+  const warnAssets = filteredAssets.filter((a) => a.meterType === "HOURS" && a.service.state === "WARN");
 
   const urgentCount = dueJetskis.length + dueAssets.length;
   const warnCount = warnJetskis.length + warnAssets.length;
@@ -278,10 +280,15 @@ export default function MechanicsPage() {
       a.name.localeCompare(b.name, "es")
   );
 
-  const orderedStandardAssets = orderedAssets.filter((asset) => asset.type !== "OTHER");
-  const orderedOtherAssets = orderedAssets.filter((asset) => asset.type === "OTHER");
+  const orderedStandardAssets = orderedAssets.filter(
+    (asset) => asset.maintenanceProfile === "OPERATIONAL"
+  );
+  const orderedOtherAssets = orderedAssets.filter(
+    (asset) => asset.maintenanceProfile === "MAINTENANCE_ONLY"
+  );
 
   function toAssetCard(asset: OverviewAssetRow) {
+    const usesHours = asset.meterType === "HOURS";
     return {
       id: asset.id,
       entityType: "ASSET" as const,
@@ -289,6 +296,9 @@ export default function MechanicsPage() {
       href: `/mechanics/asset/${asset.id}`,
       summary: `${asset.type}${asset.model ? ` · ${asset.model}` : ""}${asset.year ? ` · ${asset.year}` : ""}${asset.plate ? ` · ${asset.plate}` : ""}${asset.chassisNumber ? ` · Bastidor: ${asset.chassisNumber}` : ""}${asset.maxPax ? ` · Pax máx: ${asset.maxPax}` : ""}`,
       operabilityStatus: asset.operabilityStatus,
+      maintenanceProfile: asset.maintenanceProfile,
+      meterType: asset.meterType,
+      usesHours,
       currentHours: asset.currentHours,
       service: asset.service,
       lastServiceEventType: asset.lastServiceEventType,
@@ -558,7 +568,7 @@ export default function MechanicsPage() {
 
             {standardAssetCards.length ? (
               <MaintenanceResourcesSection
-                title="Assets"
+                title="Assets operativos"
                 rows={standardAssetCards}
                 onQuickAdjust={quickAdjust}
                 onOpenAdjust={(entityType, entityId) => {
@@ -569,7 +579,7 @@ export default function MechanicsPage() {
 
             {otherAssetCards.length ? (
               <MaintenanceResourcesSection
-                title="Other"
+                title="Maintenance-only"
                 rows={otherAssetCards}
                 onQuickAdjust={quickAdjust}
                 onOpenAdjust={(entityType, entityId) => {

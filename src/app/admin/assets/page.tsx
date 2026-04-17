@@ -119,10 +119,9 @@ export default function AdminAssetsPage() {
             >
               Admin
             </div>
-            <div style={{ ...opsStyles.heroTitle, color: "#0f172a" }}>Recursos náuticos</div>
+            <div style={{ ...opsStyles.heroTitle, color: "#0f172a" }}>Assets y mantenimiento</div>
             <div style={{ fontSize: 14, color: "#475569" }}>
-              Flota de apoyo, estado operativo y datos técnicos de boats, towboat, jetcar, parasailing, flyboard y
-              towables.
+              Recursos operativos y recursos solo mantenibles en una misma ficha, con perfil técnico y uso en plataforma.
             </div>
           </div>
 

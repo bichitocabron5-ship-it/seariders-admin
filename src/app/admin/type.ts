@@ -10,12 +10,16 @@ export type AssetType =
 
 export type AssetStatus = "OPERATIONAL" | "MAINTENANCE" | "DAMAGED" | "OUT_OF_SERVICE";
 export type AssetPlatformUsage = "CUSTOMER_ASSIGNABLE" | "RUN_BASE_ONLY" | "HIDDEN";
+export type AssetMaintenanceProfile = "OPERATIONAL" | "MAINTENANCE_ONLY";
+export type AssetMeterType = "HOURS" | "NONE";
 
 export type AssetRow = {
   id: string;
   type: AssetType;
   status: AssetStatus;
   platformUsage: AssetPlatformUsage;
+  maintenanceProfile: AssetMaintenanceProfile;
+  meterType: AssetMeterType;
 
   name: string;
   code: string | null;

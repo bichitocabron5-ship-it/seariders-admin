@@ -5,7 +5,12 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
-import { AssetStatus, AssetType } from "@prisma/client";
+import {
+  AssetMaintenanceProfile,
+  AssetMeterType,
+  AssetStatus,
+  AssetType,
+} from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -24,6 +29,8 @@ const PatchBody = z.object({
   type: z.nativeEnum(AssetType).optional(),
   status: z.nativeEnum(AssetStatus).optional(),
   platformUsage: z.enum(["CUSTOMER_ASSIGNABLE", "RUN_BASE_ONLY", "HIDDEN"]).optional(),
+  maintenanceProfile: z.nativeEnum(AssetMaintenanceProfile).optional(),
+  meterType: z.nativeEnum(AssetMeterType).optional(),
 
   name: z.string().trim().min(1).max(80).optional(),
   code: z.string().trim().min(1).max(30).optional().nullable(),
@@ -60,6 +67,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         ...(b.type ? { type: b.type } : {}),
         ...(b.status ? { status: b.status } : {}),
         ...(b.platformUsage ? { platformUsage: b.platformUsage } : {}),
+        ...(b.maintenanceProfile ? { maintenanceProfile: b.maintenanceProfile } : {}),
+        ...(b.meterType ? { meterType: b.meterType } : {}),
         ...(typeof b.name === "string" ? { name: b.name } : {}),
 
         ...(b.code !== undefined ? { code: b.code } : {}),
@@ -70,8 +79,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         ...(b.maxPax !== undefined ? { maxPax: b.maxPax } : {}),
         ...(b.note !== undefined ? { note: b.note } : {}),
 
-        ...(b.currentHours !== undefined ? { currentHours: b.currentHours } : {}),
-        ...(b.lastServiceHours !== undefined ? { lastServiceHours: b.lastServiceHours } : {}),
+        ...(b.meterType === AssetMeterType.NONE ? { currentHours: null, lastServiceHours: null } : {}),
+        ...(b.currentHours !== undefined && b.meterType !== AssetMeterType.NONE ? { currentHours: b.currentHours } : {}),
+        ...(b.lastServiceHours !== undefined && b.meterType !== AssetMeterType.NONE ? { lastServiceHours: b.lastServiceHours } : {}),
         ...(typeof b.serviceIntervalHours === "number" ? { serviceIntervalHours: b.serviceIntervalHours } : {}),
         ...(typeof b.serviceWarnHours === "number" ? { serviceWarnHours: b.serviceWarnHours } : {}),
         ...(typeof b.isMotorized === "boolean" ? { isMotorized: b.isMotorized } : {}),
@@ -81,6 +91,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         type: true,
         status: true,
         platformUsage: true,
+        maintenanceProfile: true,
+        meterType: true,
         name: true,
         code: true,
         model: true,

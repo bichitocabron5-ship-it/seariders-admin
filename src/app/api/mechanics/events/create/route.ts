@@ -203,7 +203,7 @@ export async function POST(req: Request) {
     const out = await prisma.$transaction(async (tx) => {
       const createdByUserId = session.userId as string;
 
-      let effectiveHours: number;
+      let effectiveHours: number | null;
       let jetskiId: string | null = null;
       let assetId: string | null = null;
 
@@ -231,20 +231,25 @@ export async function POST(req: Request) {
           select: {
             id: true,
             currentHours: true,
+            meterType: true,
           },
         });
         if (!asset) throw new Error("Asset no existe");
 
-        const h =
-          typeof hoursAtService === "number"
-            ? hoursAtService
-            : asset.currentHours;
+        if (asset.meterType === "NONE") {
+          effectiveHours = typeof hoursAtService === "number" ? hoursAtService : null;
+        } else {
+          const h =
+            typeof hoursAtService === "number"
+              ? hoursAtService
+              : asset.currentHours;
 
-        if (h === null || typeof h !== "number") {
-          throw new Error("hoursAtService requerido (no hay currentHours)");
+          if (h === null || typeof h !== "number") {
+            throw new Error("hoursAtService requerido (no hay currentHours)");
+          }
+
+          effectiveHours = h;
         }
-
-        effectiveHours = h;
         assetId = asset.id;
       } else {
         throw new Error("Tipo inválido");
@@ -336,7 +341,11 @@ export async function POST(req: Request) {
           });
         }
 
-      if (applyToEntity && (type === "SERVICE" || type === "OIL_CHANGE")) {
+      if (
+        applyToEntity &&
+        effectiveHours !== null &&
+        (type === "SERVICE" || type === "OIL_CHANGE")
+      ) {
         if (jetskiId) {
           await tx.jetski.update({
             where: { id: jetskiId },
@@ -353,7 +362,7 @@ export async function POST(req: Request) {
         }
       }
 
-      if (applyToEntity && type === "HOUR_ADJUSTMENT") {
+      if (applyToEntity && effectiveHours !== null && type === "HOUR_ADJUSTMENT") {
         if (jetskiId) {
           await tx.jetski.update({
             where: { id: jetskiId },

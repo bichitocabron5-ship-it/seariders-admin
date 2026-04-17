@@ -1,15 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AssetPlatformUsage, AssetRow, AssetStatus, AssetType } from "@/app/admin/types";
+import type {
+  AssetMaintenanceProfile,
+  AssetMeterType,
+  AssetPlatformUsage,
+  AssetRow,
+  AssetStatus,
+  AssetType,
+} from "@/app/admin/types";
 
 const ASSET_TYPES: AssetType[] = ["BOAT", "TOWBOAT", "JETCAR", "PARASAILING", "FLYBOARD", "TOWABLE", "OTHER"];
 const ASSET_STATUSES: AssetStatus[] = ["OPERATIONAL", "MAINTENANCE", "DAMAGED", "OUT_OF_SERVICE"];
 const ASSET_PLATFORM_USAGES: AssetPlatformUsage[] = ["CUSTOMER_ASSIGNABLE", "RUN_BASE_ONLY", "HIDDEN"];
+const ASSET_MAINTENANCE_PROFILES: AssetMaintenanceProfile[] = ["OPERATIONAL", "MAINTENANCE_ONLY"];
+const ASSET_METER_TYPES: AssetMeterType[] = ["HOURS", "NONE"];
+
 const ASSET_PLATFORM_USAGE_LABEL: Record<AssetPlatformUsage, string> = {
   CUSTOMER_ASSIGNABLE: "Asignable a clientes",
   RUN_BASE_ONLY: "Solo base de salida",
   HIDDEN: "Oculto en Platform",
+};
+
+const ASSET_MAINTENANCE_PROFILE_LABEL: Record<AssetMaintenanceProfile, string> = {
+  OPERATIONAL: "Operativo",
+  MAINTENANCE_ONLY: "Solo mantenimiento",
+};
+
+const ASSET_METER_TYPE_LABEL: Record<AssetMeterType, string> = {
+  HOURS: "Horas",
+  NONE: "Sin contador",
 };
 
 type Props = {
@@ -48,6 +68,10 @@ export default function AssetModal({
   const [type, setType] = useState<AssetType>(initial?.type ?? "OTHER");
   const [status, setStatus] = useState<AssetStatus>(initial?.status ?? "OPERATIONAL");
   const [platformUsage, setPlatformUsage] = useState<AssetPlatformUsage>(initial?.platformUsage ?? "CUSTOMER_ASSIGNABLE");
+  const [maintenanceProfile, setMaintenanceProfile] = useState<AssetMaintenanceProfile>(
+    initial?.maintenanceProfile ?? "OPERATIONAL"
+  );
+  const [meterType, setMeterType] = useState<AssetMeterType>(initial?.meterType ?? "HOURS");
   const [name, setName] = useState(initial?.name ?? "");
   const [code, setCode] = useState(initial?.code ?? "");
   const [model, setModel] = useState(initial?.model ?? "");
@@ -75,6 +99,17 @@ export default function AssetModal({
     if (["BOAT", "TOWBOAT", "JETCAR"].includes(type)) setIsMotorized(true);
   }, [type, initial]);
 
+  useEffect(() => {
+    if (maintenanceProfile !== "MAINTENANCE_ONLY") return;
+    setPlatformUsage("HIDDEN");
+  }, [maintenanceProfile]);
+
+  useEffect(() => {
+    if (meterType !== "NONE") return;
+    setCurrentHours("");
+    setLastServiceHours("");
+  }, [meterType]);
+
   async function save() {
     setError(null);
     if (!name.trim()) return setError("Nombre obligatorio.");
@@ -90,22 +125,34 @@ export default function AssetModal({
     }
 
     const currentHoursNum = currentHours.trim() ? Number(currentHours.trim()) : null;
-    if (currentHours.trim() && (!Number.isFinite(currentHoursNum) || currentHoursNum! < 0)) {
+    if (meterType === "HOURS" && currentHours.trim() && (!Number.isFinite(currentHoursNum) || currentHoursNum! < 0)) {
       return setError("Horas actuales inválidas.");
     }
 
     const lastServiceHoursNum = lastServiceHours.trim() ? Number(lastServiceHours.trim()) : null;
-    if (lastServiceHours.trim() && (!Number.isFinite(lastServiceHoursNum) || lastServiceHoursNum! < 0)) {
+    if (
+      meterType === "HOURS" &&
+      lastServiceHours.trim() &&
+      (!Number.isFinite(lastServiceHoursNum) || lastServiceHoursNum! < 0)
+    ) {
       return setError("Horas último service inválidas.");
     }
 
     const serviceIntervalHoursNum = serviceIntervalHours.trim() ? Number(serviceIntervalHours.trim()) : null;
-    if (serviceIntervalHours.trim() && (!Number.isFinite(serviceIntervalHoursNum) || serviceIntervalHoursNum! <= 0)) {
+    if (
+      meterType === "HOURS" &&
+      serviceIntervalHours.trim() &&
+      (!Number.isFinite(serviceIntervalHoursNum) || serviceIntervalHoursNum! <= 0)
+    ) {
       return setError("Intervalo de service inválido.");
     }
 
     const serviceWarnHoursNum = serviceWarnHours.trim() ? Number(serviceWarnHours.trim()) : null;
-    if (serviceWarnHours.trim() && (!Number.isFinite(serviceWarnHoursNum) || serviceWarnHoursNum! < 0)) {
+    if (
+      meterType === "HOURS" &&
+      serviceWarnHours.trim() &&
+      (!Number.isFinite(serviceWarnHoursNum) || serviceWarnHoursNum! < 0)
+    ) {
       return setError("Aviso de service inválido.");
     }
 
@@ -117,6 +164,8 @@ export default function AssetModal({
         type,
         status,
         platformUsage,
+        maintenanceProfile,
+        meterType,
         name: name.trim(),
         code: code.trim() || null,
         model: model.trim() || null,
@@ -126,8 +175,8 @@ export default function AssetModal({
         maxPax: maxPaxNum,
         note: note.trim() || null,
         isMotorized,
-        currentHours: currentHoursNum,
-        lastServiceHours: lastServiceHoursNum,
+        currentHours: meterType === "NONE" ? null : currentHoursNum,
+        lastServiceHours: meterType === "NONE" ? null : lastServiceHoursNum,
         serviceIntervalHours: serviceIntervalHoursNum ?? undefined,
         serviceWarnHours: serviceWarnHoursNum ?? undefined,
       };
@@ -160,7 +209,7 @@ export default function AssetModal({
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "start" }}>
           <div style={{ display: "grid", gap: 4 }}>
             <div style={{ fontSize: 24, fontWeight: 950 }}>{isEdit ? "Editar recurso" : "Nuevo recurso"}</div>
-            <div style={{ fontSize: 13, color: "#64748b" }}>Datos base, operatividad y horas de mantenimiento.</div>
+            <div style={{ fontSize: 13, color: "#64748b" }}>Datos base, perfil de mantenimiento y uso operativo.</div>
           </div>
           <button type="button" onClick={() => (busy ? null : onClose())} style={ghostBtn}>
             Cerrar
@@ -193,6 +242,30 @@ export default function AssetModal({
               {ASSET_PLATFORM_USAGES.map((value) => (
                 <option key={value} value={value}>
                   {ASSET_PLATFORM_USAGE_LABEL[value]}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Perfil">
+            <select
+              value={maintenanceProfile}
+              onChange={(e) => setMaintenanceProfile(e.target.value as AssetMaintenanceProfile)}
+              style={inputStyle}
+            >
+              {ASSET_MAINTENANCE_PROFILES.map((value) => (
+                <option key={value} value={value}>
+                  {ASSET_MAINTENANCE_PROFILE_LABEL[value]}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Contador">
+            <select value={meterType} onChange={(e) => setMeterType(e.target.value as AssetMeterType)} style={inputStyle}>
+              {ASSET_METER_TYPES.map((value) => (
+                <option key={value} value={value}>
+                  {ASSET_METER_TYPE_LABEL[value]}
                 </option>
               ))}
             </select>
@@ -231,25 +304,39 @@ export default function AssetModal({
             Recurso motorizado
           </label>
 
-          <Field label="Horas actuales">
-            <input value={currentHours} onChange={(e) => setCurrentHours(e.target.value)} style={inputStyle} />
-          </Field>
+          {meterType === "HOURS" ? (
+            <>
+              <Field label="Horas actuales">
+                <input value={currentHours} onChange={(e) => setCurrentHours(e.target.value)} style={inputStyle} />
+              </Field>
 
-          <Field label="Horas último service">
-            <input value={lastServiceHours} onChange={(e) => setLastServiceHours(e.target.value)} style={inputStyle} />
-          </Field>
+              <Field label="Horas último service">
+                <input value={lastServiceHours} onChange={(e) => setLastServiceHours(e.target.value)} style={inputStyle} />
+              </Field>
 
-          <Field label="Intervalo service">
-            <input
-              value={serviceIntervalHours}
-              onChange={(e) => setServiceIntervalHours(e.target.value)}
-              style={inputStyle}
-            />
-          </Field>
+              <Field label="Intervalo service">
+                <input value={serviceIntervalHours} onChange={(e) => setServiceIntervalHours(e.target.value)} style={inputStyle} />
+              </Field>
 
-          <Field label="Aviso service">
-            <input value={serviceWarnHours} onChange={(e) => setServiceWarnHours(e.target.value)} style={inputStyle} />
-          </Field>
+              <Field label="Aviso service">
+                <input value={serviceWarnHours} onChange={(e) => setServiceWarnHours(e.target.value)} style={inputStyle} />
+              </Field>
+            </>
+          ) : (
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                padding: 12,
+                borderRadius: 14,
+                border: "1px solid #dbe4ea",
+                background: "#f8fafc",
+                fontSize: 13,
+                color: "#475569",
+              }}
+            >
+              Este recurso no usa trazabilidad por horas. Se mantendrá por incidencias, reparaciones e inspecciones.
+            </div>
+          )}
 
           <Field label="Nota" full>
             <input value={note} onChange={(e) => setNote(e.target.value)} style={inputStyle} />

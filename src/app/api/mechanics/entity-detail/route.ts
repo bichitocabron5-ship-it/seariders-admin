@@ -201,6 +201,8 @@ async function getAssetDetail(entityId: string, take: number) {
     select: {
       id: true,
       type: true,
+      maintenanceProfile: true,
+      meterType: true,
       name: true,
       code: true,
       model: true,
@@ -296,9 +298,13 @@ async function getAssetDetail(entityId: string, take: number) {
 
   const events = withPartUsageSummary(rawEvents);
 
-  const lastEvt = events.find((event) => isServiceEventType(event.type)) ?? null;
-  const lastServiceHoursEffective =
-    lastEvt?.hoursAtService ?? (entity.lastServiceHours ?? null);
+  const usesHours = entity.meterType === "HOURS";
+  const lastEvt = usesHours
+    ? events.find((event) => isServiceEventType(event.type)) ?? null
+    : null;
+  const lastServiceHoursEffective = usesHours
+    ? lastEvt?.hoursAtService ?? (entity.lastServiceHours ?? null)
+    : null;
   const activeAssignments = await prisma.monitorRunAssignment.findMany({
     where: {
       status: RunAssignmentStatus.ACTIVE,
@@ -316,7 +322,9 @@ async function getAssetDetail(entityId: string, take: number) {
       acc + (assignment.startedAt ? diffHours(assignment.startedAt, now) : 0),
     0
   );
-  const currentHoursEffective = applyLiveHours(entity.currentHours ?? null, activeHours);
+  const currentHoursEffective = usesHours
+    ? applyLiveHours(entity.currentHours ?? null, activeHours)
+    : null;
 
   const service = calcService({
     currentHours: currentHoursEffective,

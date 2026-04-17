@@ -12,7 +12,7 @@ type OpenEventRow = {
   status: "OPEN" | "IN_PROGRESS" | "EXTERNAL";
   severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   createdAt: string;
-  hoursAtService: number;
+  hoursAtService: number | null;
   note: string | null;
   supplierName: string | null;
   externalWorkshop: boolean;
