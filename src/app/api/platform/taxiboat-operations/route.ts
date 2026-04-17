@@ -7,6 +7,8 @@ import {
   ensureTaxiboatOperations,
   isTaxiboatBoatCode,
 } from "@/lib/taxiboat-operations";
+import { diffHours } from "@/lib/mechanics";
+import { resolveTaxiboatAssetIdFromAssets } from "@/lib/taxiboat-mechanics";
 
 export const runtime = "nodejs";
 
@@ -91,7 +93,11 @@ export async function POST(req: Request) {
 
   const current = await prisma.taxiboatOperation.findUnique({
     where: { boat },
-    select: { status: true },
+    select: {
+      status: true,
+      departedBoothAt: true,
+      departedPlatformAt: true,
+    },
   });
 
   if (!current) {
@@ -119,33 +125,77 @@ export async function POST(req: Request) {
     );
   }
 
-  const updated = await prisma.taxiboatOperation.update({
-    where: { boat },
-    data:
-      action === "MARK_AT_PLATFORM"
-        ? {
-            status: "AT_PLATFORM",
-            arrivedPlatformAt: now,
-          }
-        : action === "MARK_ARRIVED_BOOTH"
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.taxiboatOperation.update({
+      where: { boat },
+      data:
+        action === "MARK_AT_PLATFORM"
           ? {
-              status: "AT_BOOTH",
-              arrivedBoothAt: now,
+              status: "AT_PLATFORM",
+              arrivedPlatformAt: now,
             }
-          : {
-              status: "TO_BOOTH",
-              departedPlatformAt: now,
+          : action === "MARK_ARRIVED_BOOTH"
+            ? {
+                status: "AT_BOOTH",
+                arrivedBoothAt: now,
+              }
+            : {
+                status: "TO_BOOTH",
+                departedPlatformAt: now,
+              },
+      select: {
+        id: true,
+        boat: true,
+        status: true,
+        departedBoothAt: true,
+        arrivedPlatformAt: true,
+        departedPlatformAt: true,
+        arrivedBoothAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const travelStartedAt =
+      action === "MARK_AT_PLATFORM"
+        ? current.departedBoothAt
+        : action === "MARK_ARRIVED_BOOTH"
+          ? current.departedPlatformAt
+          : null;
+
+    if (travelStartedAt) {
+      const hoursToAdd = diffHours(travelStartedAt, now);
+
+      if (hoursToAdd > 0) {
+        const candidateAssets = await tx.asset.findMany({
+          where: {
+            type: "BOAT",
+          },
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            meterType: true,
+            currentHours: true,
+          },
+        });
+
+        const assetId = resolveTaxiboatAssetIdFromAssets(candidateAssets, boat);
+        const matchedAsset = assetId
+          ? candidateAssets.find((asset) => asset.id === assetId) ?? null
+          : null;
+
+        if (matchedAsset && matchedAsset.meterType === "HOURS") {
+          await tx.asset.update({
+            where: { id: matchedAsset.id },
+            data: {
+              currentHours: Number(matchedAsset.currentHours ?? 0) + hoursToAdd,
             },
-    select: {
-      id: true,
-      boat: true,
-      status: true,
-      departedBoothAt: true,
-      arrivedPlatformAt: true,
-      departedPlatformAt: true,
-      arrivedBoothAt: true,
-      updatedAt: true,
-    },
+          });
+        }
+      }
+    }
+
+    return row;
   });
 
   return NextResponse.json({

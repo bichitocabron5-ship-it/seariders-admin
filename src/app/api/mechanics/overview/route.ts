@@ -11,6 +11,7 @@ import {
   type ServiceState,
 } from "@/lib/mechanics";
 import { requireMechanicsOrAdmin } from "@/lib/mechanics-auth";
+import { getActiveTaxiboatHoursMap } from "@/lib/taxiboat-mechanics";
 
 export const runtime = "nodejs";
 
@@ -72,7 +73,7 @@ export async function GET(req: Request) {
   ]);
 
   const now = new Date();
-  const [activeJetskiAssignments, activeAssetAssignments] = await Promise.all([
+  const [activeJetskiAssignments, activeAssetAssignments, taxiboatOperations] = await Promise.all([
     prisma.monitorRunAssignment.findMany({
       where: {
         status: RunAssignmentStatus.ACTIVE,
@@ -97,6 +98,19 @@ export async function GET(req: Request) {
         startedAt: true,
       },
     }),
+    prisma.taxiboatOperation.findMany({
+      where: {
+        status: {
+          in: ["TO_PLATFORM", "TO_BOOTH"],
+        },
+      },
+      select: {
+        boat: true,
+        status: true,
+        departedBoothAt: true,
+        departedPlatformAt: true,
+      },
+    }),
   ]);
 
   const activeJetskiHoursMap = new Map<string, number>();
@@ -117,6 +131,16 @@ export async function GET(req: Request) {
       (activeAssetHoursMap.get(assignment.assetId) ?? 0) +
         diffHours(assignment.startedAt, now)
     );
+  }
+
+  const activeTaxiboatHoursMap = getActiveTaxiboatHoursMap({
+    assets,
+    operations: taxiboatOperations,
+    now,
+  });
+
+  for (const [assetId, hours] of activeTaxiboatHoursMap) {
+    activeAssetHoursMap.set(assetId, (activeAssetHoursMap.get(assetId) ?? 0) + hours);
   }
 
   const [lastJetskiEvents, lastAssetEvents] = await Promise.all([

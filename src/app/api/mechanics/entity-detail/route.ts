@@ -5,6 +5,7 @@ import { z } from "zod";
 import { MaintenanceEntityType, RunAssignmentStatus } from "@prisma/client";
 import { applyLiveHours, calcService, diffHours, isServiceEventType } from "@/lib/mechanics";
 import { requireMechanicsOrAdmin } from "@/lib/mechanics-auth";
+import { getActiveTaxiboatHoursMap } from "@/lib/taxiboat-mechanics";
 
 export const runtime = "nodejs";
 
@@ -316,14 +317,33 @@ async function getAssetDetail(entityId: string, take: number) {
       startedAt: true,
     },
   });
+  const taxiboatOperations = await prisma.taxiboatOperation.findMany({
+    where: {
+      status: {
+        in: ["TO_PLATFORM", "TO_BOOTH"],
+      },
+    },
+    select: {
+      boat: true,
+      status: true,
+      departedBoothAt: true,
+      departedPlatformAt: true,
+    },
+  });
   const now = new Date();
-  const activeHours = activeAssignments.reduce(
+  const assignmentHours = activeAssignments.reduce(
     (acc, assignment) =>
       acc + (assignment.startedAt ? diffHours(assignment.startedAt, now) : 0),
     0
   );
+  const taxiboatHours =
+    getActiveTaxiboatHoursMap({
+      assets: [{ id: entity.id, name: entity.name, code: entity.code ?? null }],
+      operations: taxiboatOperations,
+      now,
+    }).get(entity.id) ?? 0;
   const currentHoursEffective = usesHours
-    ? applyLiveHours(entity.currentHours ?? null, activeHours)
+    ? applyLiveHours(entity.currentHours ?? null, assignmentHours + taxiboatHours)
     : null;
 
   const service = calcService({
