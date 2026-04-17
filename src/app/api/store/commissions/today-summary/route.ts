@@ -189,7 +189,7 @@ export async function GET() {
         continue;
       }
 
-      const base = sign * Math.abs(Number(payment.amountCents ?? 0));
+      const base = signedAmount;
       if (base <= 0) continue;
 
       const key = `${ch.id}:${payment.serviceId}`;
