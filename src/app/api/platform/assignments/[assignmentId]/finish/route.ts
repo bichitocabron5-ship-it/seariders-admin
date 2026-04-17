@@ -138,6 +138,7 @@ export async function POST(
             select: {
               id: true,
               name: true,
+              meterType: true,
               currentHours: true,
               operabilityStatus: true,
             },
@@ -187,12 +188,12 @@ export async function POST(
               endedAt
             );
       const nextJetskiCurrentHours =
-        a.jetski?.currentHours != null
-          ? Number(a.jetski.currentHours) + fallbackHoursToAdd
+        a.jetski != null
+          ? Number(a.jetski.currentHours ?? 0) + fallbackHoursToAdd
           : null;
       const nextAssetCurrentHours =
-        a.asset?.currentHours != null
-          ? Number(a.asset.currentHours) + fallbackHoursToAdd
+        a.asset != null && a.asset.meterType === "HOURS"
+          ? Number(a.asset.currentHours ?? 0) + fallbackHoursToAdd
           : null;
 
       if (a.jetskiId && nextJetskiCurrentHours != null) {
