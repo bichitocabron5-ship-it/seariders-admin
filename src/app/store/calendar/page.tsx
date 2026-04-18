@@ -19,6 +19,8 @@ type LiteRow = {
   paidCents?: number;
   service?: { name: string; category?: string | null };
   option?: { durationMinutes?: number | null; paxMax?: number | null };
+  contractsRequiredUnits?: number;
+  contractsReadyCount?: number;
 };
 
 type DayBucket = { count: number; rows: LiteRow[] };
@@ -219,6 +221,13 @@ function statusBadgeStyle(status: string): React.CSSProperties {
   return { background: "#f3f4f6", color: "#111827", border: "1px solid #e5e7eb" };
 }
 
+function contractsBadgeStyle(readyCount: number, requiredUnits: number): React.CSSProperties {
+  if (requiredUnits <= 0) return { background: "#f8fafc", color: "#475569", border: "1px solid #cbd5e1" };
+  if (readyCount >= requiredUnits) return { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" };
+  if (readyCount > 0) return { background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d" };
+  return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+}
+
 const shellStyle: React.CSSProperties = { ...storeStyles.shell, width: "min(1380px, 100%)" };
 const panelStyle: React.CSSProperties = { ...storeStyles.panel, borderRadius: 22 };
 const actionStyle: React.CSSProperties = {
@@ -241,6 +250,8 @@ function RowCard({
 }) {
   const a = actionForRow(r);
   const canCancel = displayStatus(r) !== "CANCELED" && displayStatus(r) !== "COMPLETED";
+  const requiredUnits = Number(r.contractsRequiredUnits ?? 0);
+  const readyCount = Number(r.contractsReadyCount ?? 0);
   return (
     <article style={{ padding: 14, border: "1px solid #e2e8f0", borderRadius: 16, display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -258,6 +269,22 @@ function RowCard({
         {r.option?.durationMinutes ? ` | ${r.option.durationMinutes} min` : ""}
         {r.option?.paxMax ? ` | pax ${r.option.paxMax}` : ""}
       </div>
+
+      {requiredUnits > 0 ? (
+        <div
+          style={{
+            display: "inline-flex",
+            width: "fit-content",
+            padding: "4px 10px",
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 800,
+            ...contractsBadgeStyle(readyCount, requiredUnits),
+          }}
+        >
+          {`Contratos ${readyCount}/${requiredUnits}`}
+        </div>
+      ) : null}
 
       {displayStatus(r) === "RETURN_PENDING_CLOSE" && r.arrivalAt ? (
         <div style={{ fontSize: 12, color: "#92400e" }}>

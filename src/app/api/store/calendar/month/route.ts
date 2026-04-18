@@ -6,6 +6,8 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { BUSINESS_TZ, tzLocalToUtcDate, todayYmdInTz } from "@/lib/tz-business";
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
+import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 
 export const runtime = "nodejs";
 
@@ -73,8 +75,26 @@ export async function GET(req: Request) {
       formalizedAt: true,
       totalPriceCents: true, // servicio final
       depositCents: true,     // fianza
+      quantity: true,
+      isLicense: true,
       service: { select: { name: true, category: true } },
       option: { select: { durationMinutes: true, paxMax: true } },
+      items: {
+        select: {
+          quantity: true,
+          isExtra: true,
+          service: { select: { category: true } },
+        },
+      },
+      contracts: {
+        select: {
+          unitIndex: true,
+          logicalUnitIndex: true,
+          status: true,
+          supersededAt: true,
+          createdAt: true,
+        },
+      },
     },
   });
 
@@ -119,6 +139,8 @@ export async function GET(req: Request) {
     paidCents: number;
     service: { name: string; category: string | null } | null;
     option: { durationMinutes: number; paxMax: number } | null;
+    contractsRequiredUnits: number;
+    contractsReadyCount: number;
   };
   const days: Record<string, { count: number; rows: MonthRow[] }> = {};
 
@@ -137,6 +159,17 @@ export async function GET(req: Request) {
     const paidCents = Math.max(0, paid.serviceNet + paid.depositNet);
 
     const totalCents = serviceDue; // y la fianza ya la tienes en depositDue si quieres mostrarla luego
+    const contractsRequiredUnits = computeRequiredContractUnits({
+      quantity: r.quantity ?? 0,
+      isLicense: Boolean(r.isLicense),
+      serviceCategory: r.service?.category ?? null,
+      items: (r.items ?? []).map((item) => ({
+        quantity: item.quantity ?? 0,
+        isExtra: Boolean(item.isExtra),
+        service: item.service ? { category: item.service.category ?? null } : null,
+      })),
+    });
+    const contractsReadyCount = countReadyVisibleContracts(r.contracts ?? [], contractsRequiredUnits);
 
     days[k] ??= { count: 0, rows: [] };
     days[k].rows.push({
@@ -153,6 +186,8 @@ export async function GET(req: Request) {
       paidCents,
       service: r.service,
       option: r.option,
+      contractsRequiredUnits,
+      contractsReadyCount,
     });
     days[k].count += 1;
   }

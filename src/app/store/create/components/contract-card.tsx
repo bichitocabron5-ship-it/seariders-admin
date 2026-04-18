@@ -530,6 +530,10 @@ export function ContractCard({
         <ContractSignerLinkModal
           url={signerLinkModal.url}
           expiresInMinutes={signerLinkModal.expiresInMinutes}
+          recipientName={driverName.trim() || customer.name.trim() || "cliente"}
+          phone={driverPhone.trim() || customer.phone.trim() || null}
+          country={driverCountry.trim() || customer.country.trim() || null}
+          unitLabel={`Unidad #${c.logicalUnitIndex ?? c.unitIndex}`}
           onClose={() => setSignerLinkModal(null)}
         />
       ) : null}
