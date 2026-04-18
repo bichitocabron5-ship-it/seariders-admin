@@ -561,17 +561,6 @@ model ReservationContract {
   @@index([preparedAssetId])
 }
 
-model ReservationPublicLink {
-  id          String   @id @default(cuid())
-  reservationId String @unique
-  token       String   @unique
-  createdAt   DateTime @default(now())
-  expiresAt   DateTime?
-  revokedAt   DateTime?
-
-  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
-}
-
 model DiscountRule {
   id String @id @default(cuid())
 
