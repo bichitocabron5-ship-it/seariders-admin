@@ -43,6 +43,8 @@ const Body = z.object({
   activityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   time: emptyToNull(z.string().regex(/^\d{2}:\d{2}$/)),
   status: z.nativeEnum(ReservationStatus).default(ReservationStatus.COMPLETED),
+  internalUsage: z.boolean().default(false),
+  employeeId: emptyToNull(z.string().trim().min(1)),
   customerName: z.string().trim().min(1),
   customerCountry: z
     .preprocess((value) => {
@@ -100,6 +102,16 @@ export async function POST(req: Request) {
   if (!option) return new NextResponse("Opcion no existe", { status: 400 });
   if (option.serviceId !== service.id) return new NextResponse("La opcion no pertenece al servicio", { status: 400 });
 
+  let employee: { id: string; isActive: boolean; fullName: string } | null = null;
+  if (body.employeeId) {
+    employee = await prisma.employee.findUnique({
+      where: { id: body.employeeId },
+      select: { id: true, isActive: true, fullName: true },
+    });
+    if (!employee) return new NextResponse("Trabajador no existe", { status: 400 });
+    if (!employee.isActive) return new NextResponse("Trabajador inactivo", { status: 400 });
+  }
+
   try {
     const result = await prisma.$transaction(async (tx) => {
       const reservation = await tx.reservation.create({
@@ -119,10 +131,12 @@ export async function POST(req: Request) {
               ? paymentCreatedAt
               : null,
           departureAt: body.status === ReservationStatus.IN_SEA ? paymentCreatedAt : null,
+          isInternalUsage: body.internalUsage,
           customerName: body.customerName,
           customerCountry: body.customerCountry.toUpperCase(),
           customerPhone: body.customerPhone?.trim() || null,
           customerEmail: body.customerEmail?.trim() || null,
+          employeeId: employee?.id ?? null,
           serviceId: service.id,
           optionId: option.id,
           channelId: body.channelId ?? null,
@@ -178,6 +192,9 @@ export async function POST(req: Request) {
           reason: body.note,
           payloadJson: {
             status: body.status,
+            internalUsage: body.internalUsage,
+            employeeId: employee?.id ?? null,
+            employeeName: employee?.fullName ?? null,
             totalPriceCents: body.totalPriceCents,
             depositCents: body.depositCents,
             payments: body.payments,

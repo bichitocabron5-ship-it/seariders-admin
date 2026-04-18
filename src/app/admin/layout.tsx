@@ -74,6 +74,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             <a href="/operations" className="admin-nav__link">
               Centro operativo
             </a>
+            <a href="/admin/operations" className="admin-nav__link">
+              Salidas internas
+            </a>
             <a href="/executive" className="admin-nav__link">
               Ejecutivo
             </a>

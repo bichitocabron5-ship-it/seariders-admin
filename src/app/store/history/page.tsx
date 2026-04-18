@@ -102,8 +102,9 @@ type GiftHistoryRow = {
 type CatalogService = { id: string; name?: string | null; category?: string | null };
 type CatalogOption = { id: string; serviceId: string; durationMinutes?: number | null; paxMax?: number | null };
 type CatalogChannel = { id: string; name: string };
+type InternalStaffEmployee = { id: string; fullName: string; code?: string | null; kind?: string | null; jobTitle?: string | null };
 type ManualPaymentDraft = { amountEuros: string; method: "CASH" | "CARD" | "BIZUM" | "TRANSFER"; isDeposit: boolean; direction: "IN" | "OUT" };
-type ManualPresetId = "COMPLETED_PAID" | "COMPLETED_WITH_DEPOSIT" | "PENDING_COLLECTION" | "RECORD_ONLY";
+type ManualPresetId = "COMPLETED_PAID" | "COMPLETED_WITH_DEPOSIT" | "PENDING_COLLECTION" | "RECORD_ONLY" | "STAFF_INTERNAL";
 
 function historyRowTimestamp(row: Pick<HistoryRow, "scheduledTime" | "activityDate" | "arrivalAt" | "formalizedAt">) {
   return (
@@ -258,6 +259,7 @@ export default function StoreHistoryPage() {
   const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
   const [catalogOptions, setCatalogOptions] = useState<CatalogOption[]>([]);
   const [catalogChannels, setCatalogChannels] = useState<CatalogChannel[]>([]);
+  const [internalStaffEmployees, setInternalStaffEmployees] = useState<InternalStaffEmployee[]>([]);
   const [manualBusy, setManualBusy] = useState(false);
   const [manualPreset, setManualPreset] = useState<ManualPresetId>("COMPLETED_PAID");
   const [manualCustomerName, setManualCustomerName] = useState("");
@@ -272,6 +274,8 @@ export default function StoreHistoryPage() {
   const [manualCountry, setManualCountry] = useState("ES");
   const [manualPhone, setManualPhone] = useState("");
   const [manualEmail, setManualEmail] = useState("");
+  const [manualEmployeeId, setManualEmployeeId] = useState("");
+  const [manualInternalDetail, setManualInternalDetail] = useState("");
   const [manualTotalEuros, setManualTotalEuros] = useState("");
   const [manualDepositEuros, setManualDepositEuros] = useState("");
   const [manualNote, setManualNote] = useState("");
@@ -338,16 +342,22 @@ export default function StoreHistoryPage() {
     (async () => {
       setCatalogLoading(true);
       try {
-        const res = await fetch("/api/pos/catalog?origin=STORE", { cache: "no-store" });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
+        const [catalogRes, staffRes] = await Promise.all([
+          fetch("/api/pos/catalog?origin=STORE", { cache: "no-store" }),
+          fetch("/api/admin/reservations/manual/staff-options", { cache: "no-store" }),
+        ]);
+        if (!catalogRes.ok) throw new Error(await catalogRes.text());
+        if (!staffRes.ok) throw new Error(await staffRes.text());
+        const [data, staffJson] = await Promise.all([catalogRes.json(), staffRes.json()]);
         if (cancelled) return;
         const services = (data.servicesMain ?? []) as CatalogService[];
         const options = (data.options ?? []) as CatalogOption[];
         const channels = (data.channels ?? []) as CatalogChannel[];
+        const employees = (staffJson.rows ?? []) as InternalStaffEmployee[];
         setCatalogServices(services);
         setCatalogOptions(options);
         setCatalogChannels(channels);
+        setInternalStaffEmployees(employees);
         if (!manualServiceId && services[0]?.id) setManualServiceId(services[0].id);
         if (!manualChannelId && channels[0]?.id) setManualChannelId(channels[0].id);
       } catch (e: unknown) {
@@ -454,6 +464,8 @@ export default function StoreHistoryPage() {
     setManualCountry("ES");
     setManualPhone("");
     setManualEmail("");
+    setManualEmployeeId("");
+    setManualInternalDetail("");
     setManualTotalEuros("");
     setManualDepositEuros("");
     setManualNote("");
@@ -470,6 +482,8 @@ export default function StoreHistoryPage() {
         return "Pendiente de cobro";
       case "RECORD_ONLY":
         return "Solo constancia";
+      case "STAFF_INTERNAL":
+        return "Salida interna staff";
       default:
         return preset;
     }
@@ -489,6 +503,7 @@ export default function StoreHistoryPage() {
         ] satisfies ManualPaymentDraft[]).filter((payment) => centsFromEuros(payment.amountEuros) > 0);
       case "PENDING_COLLECTION":
       case "RECORD_ONLY":
+      case "STAFF_INTERNAL":
         return [{ amountEuros: "", method: "CASH", isDeposit: false, direction: "IN" }];
       default:
         return [{ amountEuros: "", method: "CASH", isDeposit: false, direction: "IN" }];
@@ -497,7 +512,15 @@ export default function StoreHistoryPage() {
 
   function applyManualPreset(preset: ManualPresetId) {
     setManualPreset(preset);
-    setManualStatus(preset === "PENDING_COLLECTION" ? "WAITING" : "COMPLETED");
+    if (preset === "STAFF_INTERNAL") {
+      setManualStatus("READY_FOR_PLATFORM");
+      setManualChannelId("");
+      setManualTotalEuros("0.00");
+      setManualDepositEuros("0.00");
+      setManualNote("Salida interna staff");
+    } else {
+      setManualStatus(preset === "PENDING_COLLECTION" ? "WAITING" : "COMPLETED");
+    }
     setManualPayments(buildPaymentsForPreset(preset));
   }
 
@@ -513,6 +536,14 @@ export default function StoreHistoryPage() {
       if (!manualDate) throw new Error("Falta la fecha");
       if (!manualServiceId) throw new Error("Falta el servicio");
       if (!manualOptionId) throw new Error("Falta la opción");
+
+      const baseManualNote =
+        manualNote.trim() ||
+        (manualPreset === "STAFF_INTERNAL" ? "Salida interna staff" : "Alta manual historica");
+      const internalDetail = manualInternalDetail.trim();
+      const effectiveManualNote = internalDetail
+        ? `${baseManualNote} | ${internalDetail}`
+        : baseManualNote;
 
       const payments = manualPayments
         .map((payment) => ({
@@ -530,6 +561,8 @@ export default function StoreHistoryPage() {
           activityDate: manualDate,
           time: manualTime || null,
           status: manualStatus,
+          internalUsage: manualPreset === "STAFF_INTERNAL",
+          employeeId: manualPreset === "STAFF_INTERNAL" ? manualEmployeeId || null : null,
           customerName: manualCustomerName,
           customerCountry: manualCountry,
           customerPhone: manualPhone || null,
@@ -541,7 +574,7 @@ export default function StoreHistoryPage() {
           pax: manualPax,
           totalPriceCents: centsFromEuros(manualTotalEuros),
           depositCents: centsFromEuros(manualDepositEuros),
-          note: manualNote.trim() || "Alta manual histórica",
+          note: effectiveManualNote,
           payments,
         }),
       });
@@ -697,7 +730,7 @@ export default function StoreHistoryPage() {
         <Card title="Alta manual histórica">
           <div style={{ display: "grid", gap: 14 }}>
             <div style={{ fontSize: 13, color: "#64748b" }}>
-              Usa esta alta solo para reservas que ocurrieron de verdad pero no quedaron registradas. Quedarán marcadas como <b>reserva manual</b>.
+              Usa esta alta para reservas reales no registradas o para crear una <b>salida interna staff</b> que entre en Platform sin pasar por caja. Quedaran marcadas como <b>reserva manual</b>.
             </div>
             {catalogLoading ? <div style={mutedText}>Cargando catálogo...</div> : null}
             <div style={sectionCard}>
@@ -713,6 +746,7 @@ export default function StoreHistoryPage() {
                     <option value="COMPLETED_WITH_DEPOSIT">Completada con fianza cobrada</option>
                     <option value="PENDING_COLLECTION">Pendiente de cobro</option>
                     <option value="RECORD_ONLY">Solo constancia sin caja</option>
+                    <option value="STAFF_INTERNAL">Salida interna staff</option>
                   </Select>
                 </label>
                 <label style={field}>
@@ -727,7 +761,7 @@ export default function StoreHistoryPage() {
                 </label>
               </div>
               <div style={presetHint}>
-                Preset activo: <b>{manualPresetLabel(manualPreset)}</b>. Si cambias importes, pulsa <b>Autocompletar pagos</b>.
+                Preset activo: <b>{manualPresetLabel(manualPreset)}</b>. Si cambias importes, pulsa <b>Autocompletar pagos</b>.{manualPreset === "STAFF_INTERNAL" ? " Se deja lista para Platform con importes a cero y sin caja." : ""}
               </div>
             </div>
 
@@ -742,10 +776,12 @@ export default function StoreHistoryPage() {
                 <label style={field}><span style={fieldLabel}>Hora</span><Input type="time" value={manualTime} onChange={(e) => setManualTime(e.target.value)} /></label>
                 <label style={field}><span style={fieldLabel}>Servicio</span><Select value={manualServiceId} onChange={(e) => setManualServiceId(e.target.value)}>{catalogServices.map((service) => <option key={service.id} value={service.id}>{service.name ?? service.id}</option>)}</Select></label>
                 <label style={field}><span style={fieldLabel}>Opción</span><Select value={manualOptionId} onChange={(e) => setManualOptionId(e.target.value)}>{catalogOptions.filter((option) => option.serviceId === manualServiceId).map((option) => <option key={option.id} value={option.id}>{option.durationMinutes ?? "-"} min · pax {option.paxMax ?? "-"}</option>)}</Select></label>
-                <label style={field}><span style={fieldLabel}>Canal</span><Select value={manualChannelId} onChange={(e) => setManualChannelId(e.target.value)}>{catalogChannels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name}</option>)}</Select></label>
+                <label style={field}><span style={fieldLabel}>Canal</span><Select value={manualChannelId} onChange={(e) => setManualChannelId(e.target.value)}><option value="">Sin canal / interno</option>{catalogChannels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name}</option>)}</Select></label>
+                <label style={field}><span style={fieldLabel}>Trabajador</span><Select value={manualEmployeeId} onChange={(e) => setManualEmployeeId(e.target.value)} disabled={manualPreset !== "STAFF_INTERNAL"}><option value="">{manualPreset === "STAFF_INTERNAL" ? "Sin vincular" : "Solo para salida interna"}</option>{internalStaffEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}{employee.code ? ` | ${employee.code}` : ""}{employee.kind ? ` | ${employee.kind}` : ""}</option>)}</Select></label>
                 <label style={field}><span style={fieldLabel}>País</span><Input value={manualCountry} onChange={(e) => setManualCountry(e.target.value.toUpperCase())} maxLength={2} /></label>
                 <label style={field}><span style={fieldLabel}>Teléfono</span><Input value={manualPhone} onChange={(e) => setManualPhone(e.target.value)} /></label>
                 <label style={field}><span style={fieldLabel}>Email</span><Input value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} /></label>
+                <label style={field}><span style={fieldLabel}>Detalle interno</span><Input value={manualInternalDetail} onChange={(e) => setManualInternalDetail(e.target.value.slice(0, 80))} placeholder="Ej: Carlos + amigo, test gasolina, validacion post-taller..." maxLength={80} /></label>
                 <label style={field}><span style={fieldLabel}>Cantidad</span><Input type="number" min={1} value={manualQuantity} onChange={(e) => setManualQuantity(Number(e.target.value || 1))} /></label>
                 <label style={field}><span style={fieldLabel}>PAX</span><Input type="number" min={1} value={manualPax} onChange={(e) => setManualPax(Number(e.target.value || 1))} /></label>
               </div>
@@ -760,7 +796,7 @@ export default function StoreHistoryPage() {
             <div style={sectionCard}>
               <div style={sectionHeader}>
                 <div style={sectionTitle}>Importes y caja</div>
-                <div style={mutedText}>Registra el total real y la fianza; luego genera la caja sugerida si hace falta.</div>
+                <div style={mutedText}>{manualPreset === "STAFF_INTERNAL" ? "Para staff interno se propone todo a cero y sin pagos, pero puedes ajustarlo si hace falta." : "Registra el total real y la fianza; luego genera la caja sugerida si hace falta."}</div>
               </div>
               <div style={filtersGrid}>
                 <label style={field}><span style={fieldLabel}>Total servicio EUR</span><Input value={manualTotalEuros} onChange={(e) => setManualTotalEuros(e.target.value)} /></label>

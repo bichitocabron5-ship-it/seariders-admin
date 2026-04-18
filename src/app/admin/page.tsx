@@ -23,6 +23,7 @@ const cards: AdminCard[] = [
   { href: "/admin/passes", tag: "BON", icon: "BO", title: "Bonos", description: "Bonos, consumos y seguimiento.", section: "Comercial", accent: "#dbeafe" },
   { href: "/executive", tag: "OPS", icon: "BI", title: "Dashboard operativo", description: "Dirección, rendimiento y salud del negocio.", section: "Operativa", accent: "#ccfbf1" },
   { href: "/operations", tag: "CTR", icon: "OP", title: "Centro de operaciones", description: "Visión unificada de Booth, Store y Platform con alertas, contratos y extras pendientes.", section: "Operativa", accent: "#ccfbf1" },
+  { href: "/admin/operations", tag: "INT", icon: "SI", title: "Salidas internas", description: "Control operativo de salidas de staff con trazabilidad y vínculo opcional a trabajador.", section: "Operativa", accent: "#ccfbf1" },
   { href: "/store", tag: "STO", icon: "ST", title: "Store", description: "Caja, calendario, creación y operativa diaria de tienda.", section: "Operativa", accent: "#ccfbf1" },
   { href: "/platform", tag: "PLT", icon: "PF", title: "Platform", description: "Cola operativa, salidas, asignaciones y gestión de extras de plataforma.", section: "Operativa", accent: "#ccfbf1" },
   { href: "/admin/cash-closures", tag: "BOX", icon: "CA", title: "Cierres de caja", description: "Turnos, cierres y control de caja.", section: "Operativa", accent: "#ccfbf1" },
