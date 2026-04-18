@@ -64,6 +64,17 @@ function contractTone(contractsState: ContractsState) {
   return { border: "#fecaca", background: "#fff1f2", color: "#991b1b" };
 }
 
+function precheckinTone(readyCount: number, requiredUnits: number) {
+  if (requiredUnits <= 0) return null;
+  if (readyCount >= requiredUnits) {
+    return { border: "#bbf7d0", background: "#dcfce7", color: "#166534", label: "Pre-checkin completo" };
+  }
+  if (readyCount > 0) {
+    return { border: "#fcd34d", background: "#fef3c7", color: "#92400e", label: "Pre-checkin en curso" };
+  }
+  return { border: "#fecaca", background: "#fff1f2", color: "#991b1b", label: "Pendiente de firma" };
+}
+
 function depositLabel(depositStatus: DepositStatus) {
   if (depositStatus === "PENDIENTE") return "Fianza pendiente";
   if (depositStatus === "LIBERABLE") return "Fianza liberable";
@@ -119,6 +130,7 @@ export function StoreReservationCardSummary({
 }: StoreReservationCardSummaryProps) {
   const timeLabel = hhmm(reservation.scheduledTime) || "sin hora";
   const contractsTone = contractTone(contractsState);
+  const precheckin = precheckinTone(readyCount, requiredUnits);
 
   return (
     <>
@@ -129,21 +141,39 @@ export function StoreReservationCardSummary({
           <Badge label={flowStageLabel(reservation)} color={flowStageColor(reservation)} />
 
           {showContracts ? (
-            <div
-              title={`Contratos listos: ${readyCount}/${requiredUnits}`}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: `1px solid ${contractsTone.border}`,
-                background: contractsTone.background,
-                color: contractsTone.color,
-                fontWeight: 900,
-                fontSize: 12,
-                whiteSpace: "nowrap",
-              }}
-            >
-              Contratos {readyCount}/{requiredUnits}
-            </div>
+            <>
+              <div
+                title={`Contratos listos: ${readyCount}/${requiredUnits}`}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: `1px solid ${contractsTone.border}`,
+                  background: contractsTone.background,
+                  color: contractsTone.color,
+                  fontWeight: 900,
+                  fontSize: 12,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Contratos {readyCount}/{requiredUnits}
+              </div>
+              {precheckin ? (
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    border: `1px solid ${precheckin.border}`,
+                    background: precheckin.background,
+                    color: precheckin.color,
+                    fontWeight: 900,
+                    fontSize: 12,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {precheckin.label}
+                </div>
+              ) : null}
+            </>
           ) : null}
         </div>
 

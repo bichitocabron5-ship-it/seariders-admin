@@ -18,7 +18,22 @@ type ContractsHeaderSummaryProps = {
   sectionEyebrowStyle: React.CSSProperties;
   refreshButtonStyle: React.CSSProperties;
   onRefresh: () => void;
+  onOpenPrecheckinLink: (() => void) | null;
+  precheckinBusy: boolean;
 };
+
+function precheckinTone(readyCount: number, requiredUnits: number) {
+  if (requiredUnits <= 0) {
+    return { label: "No aplica", description: "Esta reserva no requiere pre-checkin contractual." };
+  }
+  if (readyCount >= requiredUnits) {
+    return { label: "Completo", description: "El cliente ya puede venir solo para revisar y cobrar." };
+  }
+  if (readyCount > 0) {
+    return { label: "En curso", description: "Parte de la documentación ya está adelantada." };
+  }
+  return { label: "Pendiente", description: "Todavía no hay documentación completada a distancia." };
+}
 
 export function ContractsHeaderSummary({
   readyCount,
@@ -29,7 +44,11 @@ export function ContractsHeaderSummary({
   sectionEyebrowStyle,
   refreshButtonStyle,
   onRefresh,
+  onOpenPrecheckinLink,
+  precheckinBusy,
 }: ContractsHeaderSummaryProps) {
+  const precheckin = precheckinTone(readyCount, requiredUnits);
+
   return (
     <>
       <StoreSectionHeader
@@ -38,9 +57,16 @@ export function ContractsHeaderSummary({
         title="Contratos"
         description="Preparación contractual, vista previa y soporte para firma digital."
         action={
-          <button type="button" onClick={onRefresh} style={refreshButtonStyle}>
-            Refrescar
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {onOpenPrecheckinLink ? (
+              <button type="button" onClick={onOpenPrecheckinLink} style={refreshButtonStyle}>
+                {precheckinBusy ? "Preparando..." : "Enviar pre-checkin"}
+              </button>
+            ) : null}
+            <button type="button" onClick={onRefresh} style={refreshButtonStyle}>
+              Refrescar
+            </button>
+          </div>
         }
       />
 
@@ -76,6 +102,13 @@ export function ContractsHeaderSummary({
           label="Seguimiento"
           value={`${signedCount} firmados · ${pendingCount} pendientes`}
           description="Referencia rápida para saber si la reserva ya está lista para cerrar."
+          accentColor={sectionEyebrowStyle.color as string}
+        />
+
+        <StoreMetricCard
+          label="Pre-checkin"
+          value={precheckin.label}
+          description={precheckin.description}
           accentColor={sectionEyebrowStyle.color as string}
         />
       </StoreMetricGrid>

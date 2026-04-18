@@ -15,6 +15,7 @@ type ContractView = {
   serviceName: string;
   durationMinutes: number | null;
   activityDate: string;
+  renderedHtml: string;
 };
 
 export function SignContractPageClient({
@@ -28,13 +29,15 @@ export function SignContractPageClient({
   const [signerName, setSignerName] = useState(contract.driverName || contract.customerName || "");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(contract.status === "SIGNED");
+  const [confirmedRead, setConfirmedRead] = useState(contract.status === "SIGNED");
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
     try {
       setError(null);
+      if (!confirmedRead) throw new Error("Debes leer y aceptar el contrato antes de firmar");
       if (!signerName.trim()) throw new Error("Nombre del firmante requerido");
-      if (!sigRef.current || sigRef.current.isEmpty()) throw new Error("La firma está vacía");
+      if (!sigRef.current || sigRef.current.isEmpty()) throw new Error("La firma esta vacia");
 
       setBusy(true);
       const imageDataUrl = sigRef.current.getTrimmedCanvas().toDataURL("image/png");
@@ -67,7 +70,7 @@ export function SignContractPageClient({
     >
       <section
         style={{
-          width: "min(760px, 100%)",
+          width: "min(980px, 100%)",
           background: "#fff",
           borderRadius: 20,
           border: "1px solid #e2e8f0",
@@ -91,9 +94,60 @@ export function SignContractPageClient({
 
         {done ? (
           <div style={{ padding: 14, borderRadius: 14, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534", fontWeight: 900 }}>
-            Contrato firmado correctamente. Ya puedes volver al ordenador de Store.
+            Contrato firmado correctamente. Puedes descargar la copia en PDF o volver al punto de venta.
           </div>
-        ) : null}
+        ) : (
+          <div style={{ padding: 14, borderRadius: 14, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8", fontWeight: 700 }}>
+            Revisa el contrato completo antes de firmar. Cuando lo hayas leido, confirma la lectura y firma al final.
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <a
+            href={`/api/sign/contracts/${encodeURIComponent(token)}/pdf`}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "12px 14px",
+              borderRadius: 12,
+              border: "1px solid #0f172a",
+              background: "#0f172a",
+              color: "#fff",
+              fontWeight: 900,
+              textDecoration: "none",
+            }}
+          >
+            Descargar PDF
+          </a>
+        </div>
+
+        <div style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
+          <iframe
+            title={`Contrato ${contract.unitIndex}`}
+            srcDoc={contract.renderedHtml}
+            style={{
+              width: "100%",
+              height: "min(70vh, 980px)",
+              border: 0,
+              display: "block",
+              background: "#fff",
+            }}
+          />
+        </div>
+
+        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+          <input
+            type="checkbox"
+            checked={confirmedRead}
+            onChange={(e) => setConfirmedRead(e.target.checked)}
+            disabled={done}
+            style={{ marginTop: 2 }}
+          />
+          <span>He leido el contrato completo y acepto firmarlo electronicamente.</span>
+        </label>
 
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
           Nombre del firmante
@@ -110,7 +164,7 @@ export function SignContractPageClient({
             ref={sigRef}
             penColor="black"
             canvasProps={{
-              width: 700,
+              width: 900,
               height: 280,
               style: {
                 width: "100%",
@@ -141,10 +195,18 @@ export function SignContractPageClient({
           <button
             type="button"
             onClick={() => void handleSave()}
-            disabled={busy || done}
-            style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid #0f172a", background: "#0f172a", color: "#fff", fontWeight: 900 }}
+            disabled={busy || done || !confirmedRead}
+            style={{
+              padding: "14px 16px",
+              borderRadius: 12,
+              border: "1px solid #0f172a",
+              background: "#0f172a",
+              color: "#fff",
+              fontWeight: 900,
+              opacity: busy || done || !confirmedRead ? 0.7 : 1,
+            }}
           >
-            {busy ? "Guardando..." : done ? "Firmado" : "Guardar firma"}
+            {busy ? "Guardando..." : done ? "Firmado" : "Firmar contrato"}
           </button>
         </div>
       </section>

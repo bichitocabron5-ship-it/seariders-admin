@@ -8,6 +8,7 @@ import { errorMessage } from "../utils/errors";
 import {
   deleteMinorAuthorization,
   generateContractPdf,
+  getReservationPrecheckinLink,
   renderContract,
   saveContractSignature,
   signContract,
@@ -17,6 +18,7 @@ import { CartItemsList } from "./cart-items-list";
 import { ContractCard } from "./contract-card";
 import { ContractsHeaderSummary } from "./contracts-header-summary";
 import { ContractsPreviewModal } from "./contracts-preview-modal";
+import { ReservationPrecheckinLinkModal } from "./reservation-precheckin-link-modal";
 
 const panelStyle: React.CSSProperties = {
   ...opsStyles.sectionCard,
@@ -89,6 +91,11 @@ export function ContractsSection({
   const [signatureContract, setSignatureContract] = useState<ContractDto | null>(null);
   const [minorUploadBusyId, setMinorUploadBusyId] = useState<string | null>(null);
   const [minorDeleteBusyId, setMinorDeleteBusyId] = useState<string | null>(null);
+  const [precheckinBusy, setPrecheckinBusy] = useState(false);
+  const [precheckinLink, setPrecheckinLink] = useState<{
+    url: string;
+    expiresInMinutes: number;
+  } | null>(null);
   const previewContract = previewContractId
     ? contracts.find((contract) => contract.id === previewContractId) ?? null
     : null;
@@ -195,6 +202,24 @@ export function ContractsSection({
     }
   }
 
+  async function handleOpenPrecheckinLink() {
+    try {
+      setPreviewError(null);
+      setPrecheckinBusy(true);
+      const data = await getReservationPrecheckinLink(reservationId);
+      setPrecheckinLink({
+        url: data.url,
+        expiresInMinutes: data.expiresInMinutes,
+      });
+    } catch (e: unknown) {
+      setPreviewError(
+        e instanceof Error ? e.message : "No se pudo preparar el enlace de pre-checkin"
+      );
+    } finally {
+      setPrecheckinBusy(false);
+    }
+  }
+
   return (
     <section id="contracts" style={{ ...panelStyle, display: "grid", gap: 12 }}>
       <ContractsHeaderSummary
@@ -206,6 +231,8 @@ export function ContractsSection({
         sectionEyebrowStyle={sectionEyebrowStyle}
         refreshButtonStyle={secondaryButtonStyle}
         onRefresh={() => void onRefresh()}
+        onOpenPrecheckinLink={requiredUnits > 0 ? () => void handleOpenPrecheckinLink() : null}
+        precheckinBusy={precheckinBusy}
       />
 
       {requiredUnits > 0 && pendingCount > 0 ? (
@@ -290,6 +317,18 @@ export function ContractsSection({
           });
         }}
       />
+
+      {precheckinLink ? (
+        <ReservationPrecheckinLinkModal
+          url={precheckinLink.url}
+          expiresInMinutes={precheckinLink.expiresInMinutes}
+          recipientName={customer.name}
+          phone={customer.phone}
+          country={customer.country}
+          contractsCount={requiredUnits}
+          onClose={() => setPrecheckinLink(null)}
+        />
+      ) : null}
     </section>
   );
 }

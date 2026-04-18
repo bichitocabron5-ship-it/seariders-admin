@@ -16,7 +16,7 @@ const COUNTRY_DIAL_CODES: Record<string, string> = {
   AT: "43",
 };
 
-function normalizePhoneForWhatsApp(phone: string, country?: string | null) {
+export function normalizePhoneForWhatsApp(phone: string, country?: string | null) {
   const raw = String(phone ?? "").trim();
   if (!raw) return null;
 

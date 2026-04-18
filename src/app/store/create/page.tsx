@@ -1232,7 +1232,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             </div>
           )}
 
-          {isMigrateMode && !migrateFlags?.isHistorical && prefillReservationId ? (
+          {prefillReservationId && !migrateFlags?.isHistorical ? (
             <ContractsSection
               reservationId={prefillReservationId}
               readyCount={readyCount}

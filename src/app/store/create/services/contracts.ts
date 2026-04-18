@@ -121,6 +121,27 @@ export async function getContractSignerLink(contractId: string): Promise<{ ok: t
   return await res.json();
 }
 
+export async function getReservationPrecheckinLink(
+  reservationId: string
+): Promise<{
+  ok: true;
+  url: string;
+  expiresInMinutes: number;
+  reservation: {
+    id: string;
+    customerName: string | null;
+    customerPhone: string | null;
+    customerCountry: string | null;
+  };
+}> {
+  const res = await fetch(`/api/store/reservations/${reservationId}/precheckin-link`, {
+    cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
 export async function uploadMinorAuthorization(args: {
   contractId: string;
   file: File;

@@ -228,6 +228,26 @@ function contractsBadgeStyle(readyCount: number, requiredUnits: number): React.C
   return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
 }
 
+function precheckinBadge(readyCount: number, requiredUnits: number) {
+  if (requiredUnits <= 0) return null;
+  if (readyCount >= requiredUnits) {
+    return {
+      label: "Pre-checkin completo",
+      style: { background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0" } satisfies React.CSSProperties,
+    };
+  }
+  if (readyCount > 0) {
+    return {
+      label: "Pre-checkin en curso",
+      style: { background: "#fef3c7", color: "#92400e", border: "1px solid #fcd34d" } satisfies React.CSSProperties,
+    };
+  }
+  return {
+    label: "Pendiente de firma",
+    style: { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" } satisfies React.CSSProperties,
+  };
+}
+
 const shellStyle: React.CSSProperties = { ...storeStyles.shell, width: "min(1380px, 100%)" };
 const panelStyle: React.CSSProperties = { ...storeStyles.panel, borderRadius: 22 };
 const actionStyle: React.CSSProperties = {
@@ -252,6 +272,7 @@ function RowCard({
   const canCancel = displayStatus(r) !== "CANCELED" && displayStatus(r) !== "COMPLETED";
   const requiredUnits = Number(r.contractsRequiredUnits ?? 0);
   const readyCount = Number(r.contractsReadyCount ?? 0);
+  const precheckin = precheckinBadge(readyCount, requiredUnits);
   return (
     <article style={{ padding: 14, border: "1px solid #e2e8f0", borderRadius: 16, display: "grid", gap: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -271,18 +292,35 @@ function RowCard({
       </div>
 
       {requiredUnits > 0 ? (
-        <div
-          style={{
-            display: "inline-flex",
-            width: "fit-content",
-            padding: "4px 10px",
-            borderRadius: 999,
-            fontSize: 12,
-            fontWeight: 800,
-            ...contractsBadgeStyle(readyCount, requiredUnits),
-          }}
-        >
-          {`Contratos ${readyCount}/${requiredUnits}`}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              width: "fit-content",
+              padding: "4px 10px",
+              borderRadius: 999,
+              fontSize: 12,
+              fontWeight: 800,
+              ...contractsBadgeStyle(readyCount, requiredUnits),
+            }}
+          >
+            {`Contratos ${readyCount}/${requiredUnits}`}
+          </div>
+          {precheckin ? (
+            <div
+              style={{
+                display: "inline-flex",
+                width: "fit-content",
+                padding: "4px 10px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 800,
+                ...precheckin.style,
+              }}
+            >
+              {precheckin.label}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
