@@ -440,6 +440,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     channelId,
     quantity,
     pax,
+    date: dateStr,
+    time: timeStr,
     customerCountry,
     jetskiLicenseMode,
     promoCode: applyPromo ? selectedPromoCode || null : null,
@@ -485,6 +487,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
                 channelId: channelId || null,
                 quantity: item.quantity,
                 pax: item.pax,
+                date: dateStr,
+                time: timeStr || null,
                 customerCountry: (customerCountry || "ES").trim().toUpperCase(),
                 jetskiLicenseMode,
                 promoCode: item.applyPromo ? item.promoCode ?? null : null,
@@ -514,7 +518,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     return () => {
       active = false;
     };
-  }, [cartItems, channelId, customerCountry, isEditMode, isMigrateMode, jetskiLicenseMode]);
+  }, [cartItems, channelId, customerCountry, dateStr, timeStr, isEditMode, isMigrateMode, jetskiLicenseMode]);
 
 
   useEffect(() => {
@@ -551,13 +555,15 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     uiMode === "FORMALIZE" && !isMigrateMode && !isEditMode && !isTodayMadridSelected;
 
   const primaryLabel =
-    uiMode === "EDIT" ? "Guardar cambios"
+    migrateFlags?.isReadOnly ? "Solo lectura"
+    : uiMode === "EDIT" ? "Guardar cambios"
     : uiMode === "FORMALIZE" ? "Formalizar"
     : "Crear";
 
   // licencia obligatoria solo al formalizar
   const isFormalizeMode = uiMode === "FORMALIZE" && !migrateFlags?.isHistorical;
   const isCreateMode = uiMode === "CREATE";
+  const isReadOnlyReservation = Boolean(migrateFlags?.isReadOnly);
 
   const isContractsOnlyMode = Boolean(migrateReservationId);
   const isVoucherFormalizeFlow =
@@ -586,7 +592,11 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     !isMigrateMode || requiredUnits <= 0 || readyCount >= requiredUnits;
 
   const primaryDisabledReason =
-    migrateFlags?.isHistorical
+    isReadOnlyReservation
+      ? migrateFlags?.isCanceled
+        ? "Reserva cancelada: ficha en solo lectura."
+        : "Reserva histórica: ficha en solo lectura."
+      : migrateFlags?.isHistorical
       ? "Reserva histórica: no se puede formalizar."
       : strictFormalizeBlocked
           ? "Solo puedes formalizar el mismo día."
@@ -637,8 +647,9 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       : null
   );
   const canEditPricing = !isMigrateMode && !isEditMode;
+  const canEditReservationForm = !isReadOnlyReservation;
   const isBoothReservation = showBoothBadge || prefillSource === "BOOTH";
-  const showFuturePaymentsSection = isEditMode && !migrateFlags?.isHistorical;
+  const showFuturePaymentsSection = isEditMode && !migrateFlags?.isHistorical && !isReadOnlyReservation;
   const boothPricingNote = isBoothReservation
     ? "Reservas de Booth: el descuento heredado solo se conserva al ampliar la misma actividad original. Si añades otra actividad distinta o extras, esas líneas no reciben descuento de carpa."
     : null;
@@ -766,6 +777,15 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     setAvailabilityTick((x) => x + 1);
 
     try {
+      if (isReadOnlyReservation) {
+        setError(
+          migrateFlags?.isCanceled
+            ? "La reserva está cancelada y solo se puede consultar."
+            : "La reserva es histórica y solo se puede consultar."
+        );
+        return;
+      }
+
       if (isEditMode && editReservationId) {
         await submitStoreCreateEditFlow({
           editReservationId,
@@ -806,7 +826,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       }
 
       if (isMigrateMode && migrateFlags?.isHistorical) {
-        router.push(`/store?reservationId=${migrateReservationId}`);
+        router.push(`/store/create?editFrom=${migrateReservationId}`);
         return;
       }
 
@@ -1081,10 +1101,20 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               Store
             </div>
             <h1 style={opsStyles.heroTitle}>
-              {uiMode === "EDIT" ? "Editar reserva" : uiMode === "FORMALIZE" ? "Formalizar reserva" : "Crear reserva"}
+              {isReadOnlyReservation
+                ? "Ficha de reserva"
+                : uiMode === "EDIT"
+                  ? "Editar reserva"
+                  : uiMode === "FORMALIZE"
+                    ? "Formalizar reserva"
+                    : "Crear reserva"}
             </h1>
             <div style={{ fontSize: 14, color: "#bae6fd", maxWidth: 700 }}>
-              {uiMode === "EDIT"
+              {isReadOnlyReservation
+                ? migrateFlags?.isCanceled
+                  ? "Reserva cancelada en modo consulta. Puedes revisar datos, pero no modificarla."
+                  : "Reserva histórica en modo consulta. Se muestran los datos guardados sin permitir edición."
+                : uiMode === "EDIT"
                 ? "Puedes editar la reserva antes de preparar contratos. Si ya existen contratos listos o firmados, la edición se bloquea para no dejar documentación desalineada."
                 : uiMode === "FORMALIZE"
                   ? "Completa los datos mínimos, valida contratos y deja la reserva lista para la operativa de tienda."
@@ -1104,8 +1134,32 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           <span style={heroPillStyle}>Fecha: {dateStr}</span>
           <span style={heroPillStyle}>Hora: {timeStr || "--:--"}</span>
           <span style={heroPillStyle}>Carrito: {cartItems.length}</span>
+          {isReadOnlyReservation ? <span style={heroPillStyle}>Bloqueada</span> : null}
         </div>
       </section>
+
+      {isReadOnlyReservation ? (
+        <section
+          style={{
+            ...panelStyle,
+            padding: 16,
+            border: migrateFlags?.isCanceled ? "1px solid #fecaca" : "1px solid #fed7aa",
+            background: migrateFlags?.isCanceled ? "#fff1f2" : "#fff7ed",
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          <div style={{ ...badgeStyle, color: migrateFlags?.isCanceled ? "#b91c1c" : "#c2410c" }}>
+            {migrateFlags?.isCanceled ? "Cancelada · solo lectura" : "Histórica · solo lectura"}
+          </div>
+          <div style={{ fontWeight: 900, color: "#0f172a" }}>
+            La ficha está abierta en modo consulta.
+          </div>
+          <div style={{ fontSize: 13, color: "#475569" }}>
+            No se permiten cambios de datos, cobros, contratos ni formalización en esta reserva.
+          </div>
+        </section>
+      ) : null}
 
       <StoreCreateSummaryStrip cards={summaryCards} />
 
@@ -1228,27 +1282,31 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             </div>
           ) : null}
 
-          <AvailabilitySection
-            dateStr={dateStr}
-            onDateChange={setDateStr}
-            availabilityLoading={availabilityLoading}
-            availabilityError={availabilityError}
-            availability={availability}
-            selectedCategory={selectedCategory}
-            timeStr={timeStr}
-            onTimeSelect={setTimeStr}
-          />
+          <div style={{ opacity: canEditReservationForm ? 1 : 0.72, pointerEvents: canEditReservationForm ? "auto" : "none" }}>
+            <AvailabilitySection
+              dateStr={dateStr}
+              onDateChange={setDateStr}
+              availabilityLoading={availabilityLoading}
+              availabilityError={availabilityError}
+              availability={availability}
+              selectedCategory={selectedCategory}
+              timeStr={timeStr}
+              onTimeSelect={setTimeStr}
+            />
+          </div>
 
-          <StoreCreateCustomerProfileSection
-            customerSearch={customerSearch}
-            customerMatches={customerMatches}
-            customerSearchBusy={customerSearchBusy}
-            customerSearchError={customerSearchError}
-            appliedCustomerProfileName={appliedCustomerProfileName}
-            onCustomerSearchChange={setCustomerSearch}
-            onSearchSubmit={() => searchCustomers(customerSearch)}
-            onApplyCustomerProfile={applyCustomerProfile}
-          />
+          <div style={{ opacity: canEditReservationForm ? 1 : 0.72, pointerEvents: canEditReservationForm ? "auto" : "none" }}>
+            <StoreCreateCustomerProfileSection
+              customerSearch={customerSearch}
+              customerMatches={customerMatches}
+              customerSearchBusy={customerSearchBusy}
+              customerSearchError={customerSearchError}
+              appliedCustomerProfileName={appliedCustomerProfileName}
+              onCustomerSearchChange={setCustomerSearch}
+              onSearchSubmit={() => searchCustomers(customerSearch)}
+              onApplyCustomerProfile={applyCustomerProfile}
+            />
+          </div>
 
           {isContractsOnlyMode ? (
             <details
@@ -1263,17 +1321,17 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               <summary style={{ fontWeight: 900, cursor: "pointer" }}>
                 Editar datos de cliente y reserva
               </summary>
-              <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+              <div style={{ marginTop: 14, display: "grid", gap: 12, opacity: canEditReservationForm ? 1 : 0.72, pointerEvents: canEditReservationForm ? "auto" : "none" }}>
                 <ReservationBasicsSection {...reservationBasicsSectionProps} />
               </div>
             </details>
           ) : (
-            <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "grid", gap: 12, opacity: canEditReservationForm ? 1 : 0.72, pointerEvents: canEditReservationForm ? "auto" : "none" }}>
               <ReservationBasicsSection {...reservationBasicsSectionProps} />
             </div>
           )}
 
-          {prefillReservationId && !migrateFlags?.isHistorical ? (
+          {prefillReservationId && !migrateFlags?.isHistorical && !isReadOnlyReservation ? (
             <ContractsSection
               reservationId={prefillReservationId}
               readyCount={readyCount}
@@ -1297,45 +1355,49 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             />
           ) : null}
 
-          <CartSection
-            isPackMode={isPackMode}
-            canAddToCart={canAddToCart}
-            cartItems={cartItems}
-            servicesMain={servicesMain}
-            options={options}
-            assetAvailability={assetAvailability}
-            getServiceNameById={getServiceNameById}
-            onAddToCart={addToCart}
-            onClearCart={clearCart}
-            onRemoveFromCart={removeFromCart}
-            onUpdateCartItem={updateCartItem}
-            onUpdateCartPromo={updateCartPromo}
-            onError={setError}
-          />
+          <div style={{ opacity: canEditReservationForm ? 1 : 0.72, pointerEvents: canEditReservationForm ? "auto" : "none" }}>
+            <CartSection
+              isPackMode={isPackMode}
+              canAddToCart={canEditReservationForm && canAddToCart}
+              cartItems={cartItems}
+              servicesMain={servicesMain}
+              options={options}
+              assetAvailability={assetAvailability}
+              getServiceNameById={getServiceNameById}
+              onAddToCart={addToCart}
+              onClearCart={clearCart}
+              onRemoveFromCart={removeFromCart}
+              onUpdateCartItem={updateCartItem}
+              onUpdateCartPromo={updateCartPromo}
+              onError={setError}
+            />
+          </div>
 
-          <PricingSection
-            discountLoading={discountLoading}
-            canEditPricing={canEditPricing}
-            boothPricingNote={boothPricingNote}
-            shownFinalCents={shownFinalCents}
-            maxManualDiscountCents={maxManualDiscountCents}
-            manualDiscountEuros={manualDiscountEuros}
-            onManualDiscountEurosChange={setManualDiscountEuros}
-            manualDiscountReason={manualDiscountReason}
-            onManualDiscountReasonChange={setManualDiscountReason}
-            shownFinalCentsWithManual={shownFinalCentsWithManual}
-            manualDiscountCentsRaw={manualDiscountCentsRaw}
-            shownDiscountCents={shownDiscountCents}
-            shownBaseCents={shownBaseCents}
-            shownReason={shownReason ?? ""}
-            pricingMeta={pricingMeta}
-            channelPricingSummary={discountPreview?.channelPricingSummary ?? null}
-            availablePromos={canEditPricing ? (discountPreview?.availablePromos ?? []) : []}
-            applyPromo={applyPromo}
-            selectedPromoCode={selectedPromoCode}
-            onApplyPromoChange={setApplyPromo}
-            onPromoCodeChange={setSelectedPromoCode}
-          />
+          <div style={{ opacity: canEditReservationForm ? 1 : 0.72, pointerEvents: canEditReservationForm ? "auto" : "none" }}>
+            <PricingSection
+              discountLoading={discountLoading}
+              canEditPricing={canEditReservationForm && canEditPricing}
+              boothPricingNote={boothPricingNote}
+              shownFinalCents={shownFinalCents}
+              maxManualDiscountCents={maxManualDiscountCents}
+              manualDiscountEuros={manualDiscountEuros}
+              onManualDiscountEurosChange={setManualDiscountEuros}
+              manualDiscountReason={manualDiscountReason}
+              onManualDiscountReasonChange={setManualDiscountReason}
+              shownFinalCentsWithManual={shownFinalCentsWithManual}
+              manualDiscountCentsRaw={manualDiscountCentsRaw}
+              shownDiscountCents={shownDiscountCents}
+              shownBaseCents={shownBaseCents}
+              shownReason={shownReason ?? ""}
+              pricingMeta={pricingMeta}
+              channelPricingSummary={discountPreview?.channelPricingSummary ?? null}
+              availablePromos={canEditReservationForm && canEditPricing ? (discountPreview?.availablePromos ?? []) : []}
+              applyPromo={applyPromo}
+              selectedPromoCode={selectedPromoCode}
+              onApplyPromoChange={setApplyPromo}
+              onPromoCodeChange={setSelectedPromoCode}
+            />
+          </div>
 
           {showFuturePaymentsSection ? (
             <div id="payments">
@@ -1366,7 +1428,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       </section>
 
       <div style={{ fontSize: 12, color: "#64748b" }}>
-        Nota: extras, contrato y formalización completa seguirán en la pantalla de la reserva (<b>/store?reservationId=...</b>).
+        Nota: extras, contrato y formalización completa seguirán en la pantalla de la reserva (<b>/store/create?editFrom=...</b>).
       </div>
     </div>
   );

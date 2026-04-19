@@ -163,7 +163,7 @@ function rowDayKey(r: LiteRow) {
 
 function actionForRow(r: LiteRow): RowAction {
   if (r.status === "CANCELED" || r.status === "CANCELLED") {
-    return { label: "Ver ficha", href: `/store?reservationId=${r.id}` };
+    return { label: "Ver ficha", href: `/store/create?editFrom=${r.id}` };
   }
 
   const dayKey = rowDayKey(r);
@@ -175,11 +175,11 @@ function actionForRow(r: LiteRow): RowAction {
     return { label: "Editar reserva", href: `/store/create?editFrom=${r.id}` };
   }
 
-  if (past) return { label: "Ver ficha", href: `/store?reservationId=${r.id}` };
+  if (past) return { label: "Ver ficha", href: `/store/create?editFrom=${r.id}` };
 
   return {
     label: "Abrir ficha",
-    href: `/store?reservationId=${r.id}`,
+    href: `/store/create?editFrom=${r.id}`,
     secondary: { label: "Editar / reagendar", href: `/store/create?editFrom=${r.id}` },
   };
 }

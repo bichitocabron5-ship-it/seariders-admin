@@ -326,7 +326,7 @@ function phaseLink(row: { phase: string; reservationId: string }) {
   }
 
   if (p.includes("STORE")) {
-    return `/store/create?reservationId=${row.reservationId}`;
+    return `/store/create?editFrom=${row.reservationId}`;
   }
 
   if (p.includes("PLATFORM")) {

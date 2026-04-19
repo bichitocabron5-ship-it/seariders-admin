@@ -382,6 +382,8 @@ export function useDiscountPreview(args: {
   optionId: string;
   quantity: number;
   pax: number;
+  date: string;
+  time: string;
   customerCountry: string;
   channelId: string;
   jetskiLicenseMode: JetskiLicenseMode;
@@ -397,6 +399,8 @@ export function useDiscountPreview(args: {
     optionId,
     quantity,
     pax,
+    date,
+    time,
     customerCountry,
     channelId,
     jetskiLicenseMode,
@@ -422,6 +426,11 @@ export function useDiscountPreview(args: {
       return;
     }
 
+    if (!date || !time) {
+      setDiscountPreview(null);
+      return;
+    }
+
     const ac = new AbortController();
 
     (async () => {
@@ -437,6 +446,8 @@ export function useDiscountPreview(args: {
             channelId: channelId || null,
             quantity,
             pax,
+            date,
+            time,
             customerCountry: (customerCountry || "ES").trim().toUpperCase(),
             jetskiLicenseMode,
             promoCode: promoCode ?? null,
@@ -458,7 +469,7 @@ export function useDiscountPreview(args: {
     })();
 
     return () => ac.abort();
-  }, [isEditMode, isMigrateMode, cartItemsLength, canCreate, baseTotalCents, serviceId, optionId, channelId, quantity, pax, customerCountry, jetskiLicenseMode, promoCode]);
+  }, [isEditMode, isMigrateMode, cartItemsLength, canCreate, baseTotalCents, serviceId, optionId, channelId, quantity, pax, date, time, customerCountry, jetskiLicenseMode, promoCode]);
 
   return { discountPreview, discountLoading };
 }

@@ -222,6 +222,9 @@ export type PackPreview = {
 export type MigrateFlags = {
   isPast: boolean;
   isHistorical: boolean;
+  isCanceled?: boolean;
+  isCompleted?: boolean;
+  isReadOnly?: boolean;
   isGift?: boolean;
   isPass?: boolean;
 };

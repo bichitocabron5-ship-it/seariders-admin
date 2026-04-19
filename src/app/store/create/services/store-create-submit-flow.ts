@@ -111,7 +111,7 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
     args.router.push(`/store/create?editFrom=${j.id}#contracts`);
     return;
   }
-  args.router.push(`/store?reservationId=${j.id}`);
+  args.router.push(`/store/create?editFrom=${j.id}`);
 }
 
 export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
@@ -176,7 +176,7 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
 
   await ensureOkResponse(res, "No se pudo formalizar la reserva");
   const j = await res.json();
-  args.router.push(`/store?reservationId=${j.id}`);
+  args.router.push(`/store/create?editFrom=${j.id}`);
 }
 
 export async function submitStoreCreateCreateFlow(args: SharedArgs & {
@@ -291,5 +291,5 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
     return;
   }
 
-  args.router.push(`/store?reservationId=${j.id}`);
+  args.router.push(`/store/create?editFrom=${j.id}`);
 }

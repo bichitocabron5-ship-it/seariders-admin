@@ -136,7 +136,7 @@ function dt(v: string | null | undefined) {
 }
 
 function reservationHref(reservationId: string) {
-  return `/store?reservationId=${reservationId}`;
+  return `/store/create?editFrom=${reservationId}`;
 }
 
 function centsFromEuros(v: string) {

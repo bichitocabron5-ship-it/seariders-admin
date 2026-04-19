@@ -6,6 +6,7 @@ import { JetskiLicenseMode, Prisma } from "@prisma/client";
 import { computeAutoDiscountDetail, listPromotionOptions, type DiscountItem } from "@/lib/discounts";
 import { resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
+import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
 
 export const runtime = "nodejs";
 
@@ -24,6 +25,8 @@ const Body = z.object({
   channelId: z.string().min(1).nullable().optional(),
   quantity: z.number().int().min(1).max(20).default(1),
   pax: z.number().int().min(1).max(30).default(1),
+  date: z.string().min(10).max(10).optional(),
+  time: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
   jetskiLicenseMode: z.nativeEnum(JetskiLicenseMode).optional(),
   customerCountry: NullableCountry.optional(), // "ES" | null
   promoCode: z.preprocess(
@@ -60,7 +63,7 @@ export async function POST(req: Request) {
     const parsed = Body.safeParse(json);
     if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
-    const { serviceId, optionId, channelId, quantity, customerCountry, promoCode } = parsed.data;
+    const { serviceId, optionId, channelId, quantity, customerCountry, promoCode, date, time } = parsed.data;
 
     // 1) option
     const opt = await prisma.serviceOption.findUnique({
@@ -71,7 +74,10 @@ export async function POST(req: Request) {
     if (opt.serviceId !== serviceId) return new NextResponse("Opción no pertenece al servicio", { status: 400 });
 
     // 2) precio vigente por optionId (nuevo) o durationMin (legacy)
-    const now = new Date();
+    const when =
+      date && time
+        ? (utcDateTimeFromYmdHmInTz(BUSINESS_TZ, date, time) ?? utcDateFromYmdInTz(BUSINESS_TZ, date))
+        : new Date();
 
     const channel = channelId
       ? await prisma.channel.findUnique({
@@ -94,7 +100,7 @@ export async function POST(req: Request) {
       serviceId,
       optionId,
       durationMinutes: Number(opt.durationMinutes ?? 30),
-      now,
+      now: when,
       pricingTier,
     });
 
@@ -112,14 +118,14 @@ export async function POST(req: Request) {
     };
 
     const detail = await computeAutoDiscountDetail({
-      when: now,
+      when,
       item,
       promoCode: promoCode ?? null,
       customerCountry: customerCountry ?? null,
       promotionsEnabled,
     });
     const availablePromos = await listPromotionOptions({
-      when: now,
+      when,
       item,
       customerCountry: customerCountry ?? null,
       promotionsEnabled,

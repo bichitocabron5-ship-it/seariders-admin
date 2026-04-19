@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { BUSINESS_TZ, getDateTimePartsInTz } from "@/lib/tz-business";
 
 export type DiscountItem = {
   serviceId: string;
@@ -60,12 +61,12 @@ export type DiscountExplain = {
 };
 
 function dayOfWeek1to7(d: Date) {
-  const js = d.getDay();
-  return js === 0 ? 7 : js;
+  return getDateTimePartsInTz(d, BUSINESS_TZ).dow1to7;
 }
 
 function minutesOfDay(d: Date) {
-  return d.getHours() * 60 + d.getMinutes();
+  const parts = getDateTimePartsInTz(d, BUSINESS_TZ);
+  return parts.hour * 60 + parts.minute;
 }
 
 function scopePriority(scope: Scope) {

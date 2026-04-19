@@ -202,7 +202,7 @@ export async function createReservationWithItems(params: {
   }
 
   // Pricing
-  const now = new Date();
+  const pricingWhen = scheduledTime ?? activityDate;
   const mainCategory = String(resolvedItems[0]?.category ?? "").toUpperCase();
   const jetskiLicenseMode = resolveJetskiLicenseMode({
     category: mainCategory,
@@ -250,7 +250,7 @@ export async function createReservationWithItems(params: {
       serviceId: it.serviceId,
       optionId: it.optionId,
       durationMinutes: it.durationMinutes,
-      now,
+      now: pricingWhen,
       pricingTier: it.category === "JETSKI" ? pricingTier : PricingTier.STANDARD,
     });
 
@@ -268,7 +268,7 @@ export async function createReservationWithItems(params: {
 
     // Auto descuento (igual que tu quick)
     const detail = await computeAutoDiscountDetail({
-      when: now,
+      when: pricingWhen,
       item: {
         serviceId: it.serviceId,
         optionId: it.optionId,
@@ -305,7 +305,7 @@ export async function createReservationWithItems(params: {
           serviceId: it.serviceId,
           optionId: it.optionId,
           durationMinutes: it.durationMinutes,
-          now,
+          now: pricingWhen,
           pricingTier: it.category === "JETSKI" ? pricingTier : PricingTier.STANDARD,
         });
 
@@ -319,7 +319,7 @@ export async function createReservationWithItems(params: {
 
         // auto descuento por línea (mismo patrón que quick)
         const detail = await computeAutoDiscountDetail({
-          when: now,
+          when: pricingWhen,
           item: {
             serviceId: it.serviceId,
             optionId: it.optionId,

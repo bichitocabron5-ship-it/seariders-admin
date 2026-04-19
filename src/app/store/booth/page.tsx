@@ -117,7 +117,7 @@ function boatLabel(boat?: string | null) {
       if (!reservationId) return;
 
       if (data.alreadyFormalized) {
-        router.push(`/store?reservationId=${reservationId}&boothCode=${encodeURIComponent(boothCode)}`);
+        router.push(`/store/create?editFrom=${reservationId}&boothCode=${encodeURIComponent(boothCode)}`);
         return;
       }
 

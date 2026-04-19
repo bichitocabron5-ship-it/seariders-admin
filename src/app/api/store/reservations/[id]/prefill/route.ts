@@ -106,6 +106,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   const isPast = r.activityDate < startOfToday();
   const isHistorical = isPast && (r.status === "COMPLETED" || r.status === "CANCELED");
+  const isCanceled = r.status === "CANCELED";
+  const isCompleted = r.status === "COMPLETED";
+  const isReadOnly = isHistorical || isCanceled;
   const paidServiceCents = (r.payments ?? [])
     .filter((payment) => !payment.isDeposit)
     .reduce(
@@ -125,6 +128,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     flags: {
       isPast,
       isHistorical,
+      isCanceled,
+      isCompleted,
+      isReadOnly,
       isGift: Boolean(r.giftVoucherId),
       isPass: Boolean(r.passVoucherId),
     },

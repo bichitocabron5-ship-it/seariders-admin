@@ -239,7 +239,7 @@ export default function AdminOperationsPage() {
                 </div>
 
                 <div style={{ display: "grid", gap: 6, justifyItems: "end" }}>
-                  <a href={`/store?reservationId=${row.id}`} style={linkBtn}>Abrir ficha</a>
+                  <a href={`/store/create?editFrom=${row.id}`} style={linkBtn}>Abrir ficha</a>
                   <div style={metaStyle}>Recursos: {row.resources.length ? row.resources.join(", ") : "-"}</div>
                   <div style={metaStyle}>Asignaciones: {row.assignmentCount} · Min trazados: {row.assignmentMinutes ?? "-"}</div>
                 </div>

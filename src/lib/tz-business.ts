@@ -60,6 +60,50 @@ export function utcDateTimeFromYmdHmInTz(tz: string, ymd: string, hm?: string | 
   return tzLocalToUtcDate(tz, y, m, d, hh, mm);
 }
 
+export function getDateTimePartsInTz(date: Date, tz = BUSINESS_TZ) {
+  const dtf = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const weekdayDtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "short",
+  });
+
+  const parts = dtf.formatToParts(date);
+  const year = Number(parts.find((p) => p.type === "year")?.value ?? 0);
+  const month = Number(parts.find((p) => p.type === "month")?.value ?? 0);
+  const day = Number(parts.find((p) => p.type === "day")?.value ?? 0);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+
+  const weekday = weekdayDtf.format(date);
+  const dowMap: Record<string, number> = {
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+    Sun: 7,
+  };
+
+  return {
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    dow1to7: dowMap[weekday] ?? 0,
+    ymd: `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+  };
+}
+
 // Rango del día de negocio (Madrid) en UTC: [start, endExclusive)
 export function tzDayRangeUtc(tz: string, nowUtc = new Date()): { start: Date; endExclusive: Date } {
   const ymd = todayYmdInTz(tz, nowUtc);

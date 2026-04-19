@@ -421,6 +421,10 @@ const boothUnitDiscountCents = getBoothUnitDiscountCents({
   matchingQuantity: existing.quantity,
   manualDiscountCents: existing.manualDiscountCents,
 });
+const tz = BUSINESS_TZ;
+const activityDate = utcDateFromYmdInTz(tz, b.activityDate);
+const scheduledTime = utcDateTimeFromYmdHmInTz(tz, b.activityDate, b.time ?? null);
+const pricingWhen = scheduledTime ?? activityDate;
 
 if (hasProItems) {
   // Si es pack padre, no debería permitir editar items aquí.
@@ -432,8 +436,6 @@ if (hasProItems) {
   if (existingPack.isPackParent && existingPack.packId) {
     return new NextResponse("Los packs se editan como pack (no se puede cambiar composición aquí).", { status: 400 });
   }
-
-  const now = new Date();
 
   // Resolver services/options en batch
   const serviceIds = Array.from(new Set(b.items!.map(x => x.serviceId)));
@@ -549,7 +551,7 @@ if (hasProItems) {
         serviceId: it.serviceId,
         optionId: it.optionId,
         durationMinutes: Number(opt.durationMinutes ?? 30),
-        now,
+        now: pricingWhen,
         pricingTier: String(svc.category ?? "").toUpperCase() === "JETSKI" ? reservationState.pricingTier : PricingTier.STANDARD,
       });
 
@@ -615,7 +617,7 @@ if (hasProItems) {
     for (const l of lineCreates) {
       if (!promotionsEnabled) continue;
       const detail = await computeAutoDiscountDetail({
-        when: now,
+        when: pricingWhen,
         item: {
           serviceId: l.serviceId,
           optionId: l.optionId,
@@ -726,10 +728,6 @@ if (hasProItems) {
 
   return NextResponse.json({ ok: true, ...result });
 }
-
-  const tz = BUSINESS_TZ;
-  const activityDate = utcDateFromYmdInTz(tz, b.activityDate);
-  const scheduledTime = utcDateTimeFromYmdHmInTz(tz, b.activityDate, b.time ?? null);
 
   const requestedServiceId = hasProItems
     ? (b.items?.[0]?.serviceId ?? existing.serviceId)
@@ -874,8 +872,6 @@ if (hasProItems) {
   }
 
   // --- Recalcular como create-quick ---
-  const now = new Date();
-
   const svc = await prisma.service.findUnique({
     where: { id: b.serviceId },
     select: { id: true, category: true },
@@ -900,7 +896,7 @@ if (hasProItems) {
     serviceId: svc.id,
     optionId: opt.id,
     durationMinutes: Number(opt.durationMinutes ?? 30),
-    now,
+    now: pricingWhen,
     pricingTier: String(svc.category ?? "").toUpperCase() === "JETSKI" ? reservationState.pricingTier : PricingTier.STANDARD,
   });
 
@@ -1005,7 +1001,7 @@ if (hasProItems) {
 
     const autoDiscountCents = promotionsEnabled
       ? Number((await computeAutoDiscountDetail({
-          when: new Date(),
+          when: pricingWhen,
           item: {
             serviceId: svc.id,
             optionId: opt.id,
