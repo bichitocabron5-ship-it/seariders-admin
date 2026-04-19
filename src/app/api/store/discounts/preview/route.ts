@@ -163,6 +163,15 @@ export async function POST(req: Request) {
       autoDiscountCents,
       finalTotalCents,
       pricingTier,
+      pricingMeta: {
+        pricingTier,
+        unitPriceCents: Number(price.basePriceCents || 0),
+        quantity,
+        modeLabel:
+          pricingTier === "RESIDENT"
+            ? "Tarifa residente / llave verde"
+            : "Tarifa estándar / llave amarilla o sin licencia",
+      },
       reason,
       channelPricingSummary:
         channel && channelOptionPrice?.isActive

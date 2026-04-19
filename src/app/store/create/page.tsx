@@ -321,7 +321,6 @@ function StoreCreatePageInner() {
     optionById,
     selectedOpt,
     channelsWithFallback,
-    baseTotalCents,
     packPreview,
     handleCategoryChange,
   } = useStoreCreateSelection({
@@ -365,7 +364,7 @@ function StoreCreatePageInner() {
     const service = servicesMain.find((item) => item.id === (nextServiceId ?? opt.serviceId)) ?? null;
     const category = String(service?.category ?? "").toUpperCase();
     if (category === "JETSKI" && pricingTier === "RESIDENT") {
-      return Number(opt.residentPriceCents ?? opt.basePriceCents ?? 0) || 0;
+      return Number(opt.residentPriceCents ?? 0) || 0;
     }
     return Number(opt.standardPriceCents ?? opt.basePriceCents ?? 0) || 0;
   }, [optionById, servicesMain, pricingTier]);
@@ -435,7 +434,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     isMigrateMode,
     cartItemsLength: cartItems.length,
     canCreate,
-    baseTotalCents,
+    baseTotalCents: cartSubtotalCents,
     serviceId,
     optionId,
     channelId,
@@ -613,7 +612,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   
   const shownBaseCents = useCart
   ? (cartItems.reduce((sum, item) => sum + Number(cartDiscountPreviews[item.id]?.baseTotalCents ?? 0), 0) || cartSubtotalCents)
-  : (discountPreview?.baseTotalCents ?? (isMigrateMode ? Number(prefillPricing?.basePriceCents ?? baseTotalCents) : baseTotalCents));
+  : (discountPreview?.baseTotalCents ?? (isMigrateMode ? Number(prefillPricing?.basePriceCents ?? cartSubtotalCents) : cartSubtotalCents));
 
   const shownDiscountCents = useCart
     ? cartItems.reduce((sum, item) => sum + Number(cartDiscountPreviews[item.id]?.autoDiscountCents ?? 0), 0)
@@ -624,6 +623,19 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     : (discountPreview?.finalTotalCents ?? (isMigrateMode ? Number(prefillPricing?.totalPriceCents ?? Math.max(0, shownBaseCents - shownDiscountCents)) : Math.max(0, shownBaseCents - shownDiscountCents)));
 
   const shownReason = discountPreview?.reason ?? (isMigrateMode && shownDiscountCents > 0 ? "Precio heredado de la pre-reserva de carpa." : null);
+  const pricingMeta = discountPreview?.pricingMeta ?? (
+    serviceId && optionId
+      ? {
+          pricingTier,
+          unitPriceCents: getOptionUnitPriceCents(optionId, serviceId),
+          quantity,
+          modeLabel:
+            pricingTier === "RESIDENT"
+              ? "Tarifa residente / llave verde"
+              : "Tarifa estándar / llave amarilla o sin licencia",
+        }
+      : null
+  );
   const canEditPricing = !isMigrateMode && !isEditMode;
   const isBoothReservation = showBoothBadge || prefillSource === "BOOTH";
   const showFuturePaymentsSection = isEditMode && !migrateFlags?.isHistorical;
@@ -1316,6 +1328,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             shownDiscountCents={shownDiscountCents}
             shownBaseCents={shownBaseCents}
             shownReason={shownReason ?? ""}
+            pricingMeta={pricingMeta}
             channelPricingSummary={discountPreview?.channelPricingSummary ?? null}
             availablePromos={canEditPricing ? (discountPreview?.availablePromos ?? []) : []}
             applyPromo={applyPromo}

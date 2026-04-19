@@ -192,6 +192,12 @@ export type DiscountPreview = {
   autoDiscountCents: number;
   finalTotalCents: number;
   pricingTier?: PricingTier | null;
+  pricingMeta?: {
+    pricingTier: PricingTier;
+    unitPriceCents: number;
+    quantity: number;
+    modeLabel: string;
+  } | null;
   reason?: string | null;
   channelPricingSummary?: {
     channelName: string;

@@ -278,7 +278,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                     (() => {
                       const shownPrice =
                         flags.isJetskiSelection && values.pricingTier === "RESIDENT"
-                          ? o.residentPriceCents ?? o.basePriceCents
+                          ? o.residentPriceCents
                           : o.standardPriceCents ?? o.basePriceCents;
                       return shownPrice == null ? "-" : euros(shownPrice);
                     })()
@@ -286,7 +286,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                   {(() => {
                     const shownPrice =
                       flags.isJetskiSelection && values.pricingTier === "RESIDENT"
-                        ? o.residentPriceCents ?? o.basePriceCents
+                        ? o.residentPriceCents
                         : o.standardPriceCents ?? o.basePriceCents;
                     return shownPrice == null ? " | SIN PRECIO" : "";
                   })()}

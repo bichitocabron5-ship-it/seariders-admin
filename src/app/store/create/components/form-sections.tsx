@@ -114,6 +114,7 @@ export function PricingSection({
   shownDiscountCents,
   shownBaseCents,
   shownReason,
+  pricingMeta,
   channelPricingSummary,
   availablePromos,
   applyPromo,
@@ -135,6 +136,12 @@ export function PricingSection({
   shownDiscountCents: number;
   shownBaseCents: number;
   shownReason: string;
+  pricingMeta?: {
+    pricingTier: "STANDARD" | "RESIDENT";
+    unitPriceCents: number;
+    quantity: number;
+    modeLabel: string;
+  } | null;
   channelPricingSummary?: {
     channelName: string;
     basePriceCents: number;
@@ -172,6 +179,15 @@ export function PricingSection({
           <div style={{ fontSize: 24, fontWeight: 900 }}>{euros(shownFinalCentsWithManual)}</div>
         </div>
       </div>
+
+      {pricingMeta ? (
+        <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", fontSize: 13, color: "#334155", display: "grid", gap: 4 }}>
+          <div style={{ fontWeight: 900 }}>{pricingMeta.modeLabel}</div>
+          <div>
+            Precio unitario <strong>{euros(pricingMeta.unitPriceCents)}</strong> × {pricingMeta.quantity} = <strong>{euros(pricingMeta.unitPriceCents * pricingMeta.quantity)}</strong>
+          </div>
+        </div>
+      ) : null}
 
       {boothPricingNote ? (
         <div style={{ padding: 12, borderRadius: 14, background: "#ecfeff", border: "1px solid #a5f3fc", fontSize: 13, color: "#155e75" }}>
