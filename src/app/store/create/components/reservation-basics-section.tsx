@@ -3,7 +3,7 @@
 
 import React from "react";
 import type { CountryOption } from "@/lib/countries";
-import type { Channel, Option, PackPreview, ServiceMain } from "../types";
+import type { Channel, JetskiLicenseMode, Option, PackPreview, PricingTier, ServiceMain } from "../types";
 
 function euros(cents: number) {
   return `${(Number(cents || 0) / 100).toFixed(2)} EUR`;
@@ -56,6 +56,8 @@ export type ReservationBasicsSectionProps = {
     quantity: number;
     pax: number;
     companions: number;
+    jetskiLicenseMode: JetskiLicenseMode;
+    pricingTier: PricingTier;
   };
   flags: {
     isEditMode: boolean;
@@ -64,6 +66,7 @@ export type ReservationBasicsSectionProps = {
     customerDocumentRequired: boolean;
     isVoucherFormalizeFlow: boolean;
     selectedCategory: string;
+    isJetskiSelection: boolean;
   };
   lists: {
     countryOptions: CountryOption[];
@@ -93,6 +96,7 @@ export type ReservationBasicsSectionProps = {
     onQuantityChange: (value: number) => void;
     onPaxChange: (value: number) => void;
     onCompanionsChange: (value: number) => void;
+    onJetskiLicenseModeChange: (value: JetskiLicenseMode) => void;
   };
 };
 
@@ -270,8 +274,22 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
               <option value="" disabled>{values.serviceId ? "Selecciona duración..." : "Selecciona servicio primero"}</option>
               {lists.filteredOptions.map((o) => (
                 <option key={o.id} value={o.id}>
-                  {(o.durationMinutes ?? "-")} min - {(o.paxMax ?? "-")} pax ({o.basePriceCents == null ? "-" : euros(o.basePriceCents)})
-                  {o.basePriceCents == null ? " | SIN PRECIO" : ""}
+                  {(o.durationMinutes ?? "-")} min - {(o.paxMax ?? "-")} pax ({
+                    (() => {
+                      const shownPrice =
+                        flags.isJetskiSelection && values.pricingTier === "RESIDENT"
+                          ? o.residentPriceCents ?? o.basePriceCents
+                          : o.standardPriceCents ?? o.basePriceCents;
+                      return shownPrice == null ? "-" : euros(shownPrice);
+                    })()
+                  })
+                  {(() => {
+                    const shownPrice =
+                      flags.isJetskiSelection && values.pricingTier === "RESIDENT"
+                        ? o.residentPriceCents ?? o.basePriceCents
+                        : o.standardPriceCents ?? o.basePriceCents;
+                    return shownPrice == null ? " | SIN PRECIO" : "";
+                  })()}
                 </option>
               ))}
             </select>
@@ -306,6 +324,29 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
             <input type="number" min={0} value={values.companions} onChange={(e) => handlers.onCompanionsChange(Math.max(0, Number(e.target.value)))} disabled={flags.isVoucherFormalizeFlow} style={inputStyle} />
             <div style={captionStyle}>Personas que vienen pero no realizan actividad.</div>
           </label>
+
+          {flags.isJetskiSelection ? (
+            <label style={labelStyle}>
+              <span>Modo licencia / llave</span>
+              <select
+                value={values.jetskiLicenseMode}
+                onChange={(e) => handlers.onJetskiLicenseModeChange(e.target.value as JetskiLicenseMode)}
+                disabled={flags.isVoucherFormalizeFlow}
+                style={inputStyle}
+              >
+                <option value="NONE">Sin licencia</option>
+                <option value="GREEN_LIMITED">Licencia · llave verde</option>
+                <option value="YELLOW_UNLIMITED">Licencia · llave amarilla</option>
+              </select>
+              <div style={captionStyle}>
+                {values.jetskiLicenseMode === "GREEN_LIMITED"
+                  ? "Contrato de licencia con tarifa residente."
+                  : values.jetskiLicenseMode === "YELLOW_UNLIMITED"
+                    ? "Contrato de licencia con tarifa estándar de licencia."
+                    : "Sin contrato de licencia."}
+              </div>
+            </label>
+          ) : null}
         </div>
         </div>
       </div>

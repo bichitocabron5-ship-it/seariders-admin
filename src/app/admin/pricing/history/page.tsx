@@ -12,6 +12,7 @@ type Row = {
   optionId: string | null;
   optionLabel: string | null;
   durationMin: number | null;
+  pricingTier: "STANDARD" | "RESIDENT";
   basePriceCents: number;
   validFrom: string;
   validTo: string | null;
@@ -242,6 +243,7 @@ export default function PricingHistoryPage() {
                 <th style={thStyle}>Servicio</th>
                 <th style={thStyle}>Opción</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>Duración</th>
+                <th style={thStyle}>Tarifa</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>Precio</th>
                 <th style={thStyle}>Desde</th>
                 <th style={thStyle}>Hasta</th>
@@ -251,7 +253,7 @@ export default function PricingHistoryPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={emptyStyle}>
+                  <td colSpan={8} style={emptyStyle}>
                     Sin registros.
                   </td>
                 </tr>
@@ -273,6 +275,7 @@ export default function PricingHistoryPage() {
                       <td style={{ ...tdStyle, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
                         {row.durationMin != null ? `${row.durationMin} min` : "-"}
                       </td>
+                      <td style={tdStyle}>{row.pricingTier === "RESIDENT" ? "Residente" : "Estándar"}</td>
                       <td style={{ ...tdStyle, textAlign: "right", fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>
                         {euros(row.basePriceCents)}
                       </td>

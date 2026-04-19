@@ -7,10 +7,12 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { computeAutoDiscountDetail } from "@/lib/discounts";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
-import { ReservationStatus } from "@prisma/client";
+import { JetskiLicenseMode, PricingTier, ReservationStatus } from "@prisma/client";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import type { Prisma } from "@prisma/client";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
+import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
+import { findActiveServicePrice } from "@/lib/service-pricing";
 import {
   contractLogicalUnitIndex,
   countReadyVisibleContracts,
@@ -25,41 +27,6 @@ async function requireStore() {
   const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
   if (!session?.userId || !["STORE", "ADMIN"].includes(session.role as string)) return null;
   return session;
-}
-
-type PriceReader = { servicePrice: Prisma.TransactionClient["servicePrice"] };
-
-async function findVigentePrice(tx: PriceReader, params: { serviceId: string; optionId: string; durationMinutes: number; now: Date }) {
-  const { serviceId, optionId, durationMinutes, now } = params;
-
-  let price = await tx.servicePrice.findFirst({
-    where: {
-      serviceId,
-      optionId,
-      isActive: true,
-      validFrom: { lte: now },
-      OR: [{ validTo: null }, { validTo: { gt: now } }],
-    },
-    orderBy: { validFrom: "desc" },
-    select: { id: true, basePriceCents: true },
-  });
-
-  if (!price) {
-    price = await tx.servicePrice.findFirst({
-      where: {
-        serviceId,
-        optionId: null,
-        durationMin: durationMinutes,
-        isActive: true,
-        validFrom: { lte: now },
-        OR: [{ validTo: null }, { validTo: { gt: now } }],
-      },
-      orderBy: { validFrom: "desc" },
-      select: { id: true, basePriceCents: true },
-    });
-  }
-
-  return price; // {id, basePriceCents} | null
 }
 
 function capManual30(totalBeforeDiscountsCents: number, manualDiscountCents: number) {
@@ -289,6 +256,8 @@ const ItemBody = z.object({
 const Body = z.object({
   pax: z.number().int().min(1).max(50),
   isLicense: z.boolean(),
+  jetskiLicenseMode: z.nativeEnum(JetskiLicenseMode).optional(),
+  pricingTier: z.nativeEnum(PricingTier).optional(),
   channelId: z.string().nullable().optional(),
   activityDate: z.string().min(10).max(10),
   time: z.string().min(5).max(5).nullable().optional(),
@@ -330,6 +299,30 @@ function normalizeOptionalString(v: string | null | undefined) {
   return t.length ? t : undefined;
 }
 
+function deriveCommercialReservationState(args: {
+  serviceCategory?: string | null;
+  jetskiLicenseMode?: JetskiLicenseMode | null;
+  isLicense?: boolean | null;
+  pricingTier?: PricingTier | null;
+}) {
+  const serviceCategory = String(args.serviceCategory ?? "").trim().toUpperCase();
+  const jetskiLicenseMode = resolveJetskiLicenseMode({
+    category: serviceCategory,
+    jetskiLicenseMode: args.jetskiLicenseMode,
+    isLicense: args.isLicense,
+  });
+  const isLicense =
+    serviceCategory === "JETSKI"
+      ? jetskiLicenseMode !== JetskiLicenseMode.NONE
+      : Boolean(args.isLicense);
+  const pricingTier =
+    serviceCategory === "JETSKI"
+      ? resolvePricingTierForJetskiMode(jetskiLicenseMode)
+      : (args.pricingTier ?? PricingTier.STANDARD);
+
+  return { jetskiLicenseMode, isLicense, pricingTier };
+}
+
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await requireStore();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -357,6 +350,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       optionId: true,
       quantity: true,
       isLicense: true,
+      jetskiLicenseMode: true,
+      pricingTier: true,
       service: { select: { category: true } },
       channelId: true,
       activityDate: true,
@@ -525,19 +520,6 @@ if (hasProItems) {
 
   // Recalcular totales, descuentos, fianza
   // (precio por línea por servicePrice vigente)
-  const priced = [];
-  for (const it of b.items!) {
-    const opt = optById.get(it.optionId)!;
-    const price = await findVigentePrice(prisma, { // lo cambiamos dentro de la tx más abajo
-      serviceId: it.serviceId,
-      optionId: it.optionId,
-      durationMinutes: Number(opt.durationMinutes ?? 30),
-      now,
-    });
-    // En PRO, lo correcto es hacerlo dentro de la tx. Lo recalculo más abajo.
-    priced.push({ it, durationMinutes: Number(opt.durationMinutes ?? 30), price });
-  }
-
   const result = await prisma.$transaction(async (tx) => {
     // recalcular dentro de la tx
     const lineCreates: Array<{
@@ -556,11 +538,19 @@ if (hasProItems) {
       const svc = svcById.get(it.serviceId)!;
       const opt = optById.get(it.optionId)!;
 
-      const price = await findVigentePrice(tx, {
+      const reservationState = deriveCommercialReservationState({
+        serviceCategory: svc.category ?? null,
+        jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
+        isLicense: b.isLicense,
+        pricingTier: b.pricingTier ?? existing.pricingTier,
+      });
+
+      const price = await findActiveServicePrice(tx, {
         serviceId: it.serviceId,
         optionId: it.optionId,
         durationMinutes: Number(opt.durationMinutes ?? 30),
         now,
+        pricingTier: String(svc.category ?? "").toUpperCase() === "JETSKI" ? reservationState.pricingTier : PricingTier.STANDARD,
       });
 
       if (!price) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
@@ -663,17 +653,25 @@ if (hasProItems) {
 
     // Fianza (jetski units)
     const jetskiUnits = lineCreates.filter(l => l.category === "JETSKI").reduce((s, l) => s + l.quantity, 0);
-    const depositPerUnit = b.isLicense ? 50000 : 10000;
+    const main = lineCreates[0];
+    const reservationState = deriveCommercialReservationState({
+      serviceCategory: main.category,
+      jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
+      isLicense: b.isLicense,
+      pricingTier: b.pricingTier ?? existing.pricingTier,
+    });
+    const depositPerUnit = reservationState.isLicense ? 50000 : 10000;
     const depositCents = depositPerUnit * jetskiUnits;
 
     // Compat main: primer item
-    const main = lineCreates[0];
     const totalMainQuantity = lineCreates.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0);
 
     const data: Prisma.ReservationUncheckedUpdateInput = {
       pax: b.pax,
       quantity: totalMainQuantity,
-      isLicense: b.isLicense,
+      isLicense: reservationState.isLicense,
+      jetskiLicenseMode: reservationState.jetskiLicenseMode,
+      pricingTier: reservationState.pricingTier,
       channelId: b.channelId ?? null,
       activityDate,
       scheduledTime,
@@ -696,7 +694,7 @@ if (hasProItems) {
 
     Object.assign(data, buildOptionalData());
 
-    if (!b.isLicense) {
+    if (!reservationState.isLicense) {
       data.licenseSchool = null;
       data.licenseType = null;
       data.licenseNumber = null;
@@ -733,17 +731,37 @@ if (hasProItems) {
   const activityDate = utcDateFromYmdInTz(tz, b.activityDate);
   const scheduledTime = utcDateTimeFromYmdHmInTz(tz, b.activityDate, b.time ?? null);
 
+  const requestedServiceId = hasProItems
+    ? (b.items?.[0]?.serviceId ?? existing.serviceId)
+    : (b.serviceId ?? existing.serviceId);
+  const requestedServiceCategory =
+    requestedServiceId === existing.serviceId
+      ? existing.service?.category ?? null
+      : (
+          await prisma.service.findUnique({
+            where: { id: requestedServiceId },
+            select: { category: true },
+          })
+        )?.category ?? null;
+  const requestedReservationState = deriveCommercialReservationState({
+    serviceCategory: requestedServiceCategory,
+    jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
+    isLicense: b.isLicense,
+    pricingTier: b.pricingTier ?? existing.pricingTier,
+  });
+
   const priceSensitiveChanged =
     existing.serviceId !== b.serviceId ||
     existing.optionId !== b.optionId ||
     Number(existing.quantity) !== Number(b.quantity) ||
-    Boolean(existing.isLicense) !== Boolean(b.isLicense);
+    Boolean(existing.isLicense) !== Boolean(requestedReservationState.isLicense) ||
+    existing.pricingTier !== requestedReservationState.pricingTier;
 
-    const mainCount = await prisma.reservationItem.count({
-      where: { reservationId: id, isExtra: false },
-    });
+  const mainCount = await prisma.reservationItem.count({
+    where: { reservationId: id, isExtra: false },
+  });
 
-    const isMultiOrPack = mainCount > 1 || Boolean(existing.isPackParent);
+  const isMultiOrPack = mainCount > 1 || Boolean(existing.isPackParent);
 
   // normalizar opcionales (misma semántica)
   const customerPhone = normalizeOptionalString(b.customerPhone);
@@ -768,7 +786,7 @@ if (hasProItems) {
   // regla de negocio recomendada:
   // - si isLicense=true => deben existir (después del merge)
   // - si isLicense=false => limpiamos (evita datos basura)
-  if (b.isLicense) {
+  if (requestedReservationState.isLicense) {
     if (!finalLicenseSchool || !finalLicenseType || !finalLicenseNumber) {
       return new NextResponse("Faltan datos de licencia (escuela, tipo y número).", { status: 400 });
     }
@@ -813,14 +831,16 @@ if (hasProItems) {
       scheduledTime,
 
       // campos fijos
-      isLicense: b.isLicense,
+      isLicense: requestedReservationState.isLicense,
+      jetskiLicenseMode: requestedReservationState.jetskiLicenseMode,
+      pricingTier: requestedReservationState.pricingTier,
       quantity: b.quantity,
     };
 
     Object.assign(data, buildOptionalData());
 
     // Si se desmarca licencia, limpiamos siempre
-    if (!b.isLicense) {
+    if (!requestedReservationState.isLicense) {
       data.licenseSchool = null;
       data.licenseType = null;
       data.licenseNumber = null;
@@ -869,32 +889,20 @@ if (hasProItems) {
   if (!opt) return new NextResponse("Opción no existe", { status: 400 });
   if (opt.serviceId !== svc.id) return new NextResponse("La opción no pertenece al servicio", { status: 400 });
 
-  let price = await prisma.servicePrice.findFirst({
-    where: {
-      serviceId: svc.id,
-      optionId: opt.id,
-      isActive: true,
-      validFrom: { lte: now },
-      OR: [{ validTo: null }, { validTo: { gt: now } }],
-    },
-    orderBy: { validFrom: "desc" },
-    select: { id: true, basePriceCents: true },
+  const reservationState = deriveCommercialReservationState({
+    serviceCategory: svc.category ?? null,
+    jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
+    isLicense: b.isLicense,
+    pricingTier: b.pricingTier ?? existing.pricingTier,
   });
 
-  if (!price) {
-    price = await prisma.servicePrice.findFirst({
-      where: {
-        serviceId: svc.id,
-        optionId: null,
-        durationMin: opt.durationMinutes,
-        isActive: true,
-        validFrom: { lte: now },
-        OR: [{ validTo: null }, { validTo: { gt: now } }],
-      },
-      orderBy: { validFrom: "desc" },
-      select: { id: true, basePriceCents: true },
-    });
-  }
+  const price = await findActiveServicePrice(prisma, {
+    serviceId: svc.id,
+    optionId: opt.id,
+    durationMinutes: Number(opt.durationMinutes ?? 30),
+    now,
+    pricingTier: String(svc.category ?? "").toUpperCase() === "JETSKI" ? reservationState.pricingTier : PricingTier.STANDARD,
+  });
 
   if (!price) return new NextResponse("No hay precio vigente para este servicio/duración.", { status: 400 });
 
@@ -926,7 +934,7 @@ if (hasProItems) {
   const unitPriceCents = Number(price.basePriceCents) || 0;
   const principalCents = unitPriceCents * Number(b.quantity);
 
-  const depositPerUnit = b.isLicense ? 50000 : 10000;
+  const depositPerUnit = reservationState.isLicense ? 50000 : 10000;
   const depositCents = depositPerUnit * Number(b.quantity);
 
   const result = await prisma.$transaction(async (tx) => {
@@ -941,7 +949,9 @@ if (hasProItems) {
       channelId: b.channelId ?? null,
       quantity: b.quantity,
       pax: b.pax,
-      isLicense: b.isLicense,
+      isLicense: reservationState.isLicense,
+      jetskiLicenseMode: reservationState.jetskiLicenseMode,
+      pricingTier: reservationState.pricingTier,
 
       activityDate,
       scheduledTime,
@@ -951,7 +961,7 @@ if (hasProItems) {
     Object.assign(data, buildOptionalData());
 
     // Si se desmarca licencia, limpiamos siempre
-    if (!b.isLicense) {
+    if (!reservationState.isLicense) {
       data.licenseSchool = null;
       data.licenseType = null;
       data.licenseNumber = null;

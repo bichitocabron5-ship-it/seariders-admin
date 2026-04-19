@@ -1,10 +1,12 @@
 // src/lib/reservations/createReservationWithItems.ts
-import type { Prisma } from "@prisma/client";
+import { JetskiLicenseMode, PricingTier, type Prisma } from "@prisma/client";
 import { computeAutoDiscountDetail } from "@/lib/discounts";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz, shouldAutoFormalize, todayYmdInTz } from "@/lib/tz-business";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
+import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
+import { findActiveServicePrice } from "@/lib/service-pricing";
 
 type CreateItemInput = {
   serviceIdOrCode: string;
@@ -34,6 +36,8 @@ type CreateReservationInput = {
   pax: number;
   companionsCount?: number;
   isLicense: boolean;
+  jetskiLicenseMode?: JetskiLicenseMode;
+  pricingTier?: PricingTier;
 
   manualDiscountCents?: number;
   manualDiscountReason?: string | null;
@@ -199,6 +203,20 @@ export async function createReservationWithItems(params: {
 
   // Pricing
   const now = new Date();
+  const mainCategory = String(resolvedItems[0]?.category ?? "").toUpperCase();
+  const jetskiLicenseMode = resolveJetskiLicenseMode({
+    category: mainCategory,
+    jetskiLicenseMode: input.jetskiLicenseMode,
+    isLicense: input.isLicense,
+  });
+  const isLicense =
+    mainCategory === "JETSKI"
+      ? jetskiLicenseMode !== JetskiLicenseMode.NONE
+      : Boolean(input.isLicense);
+  const pricingTier =
+    mainCategory === "JETSKI"
+      ? resolvePricingTierForJetskiMode(jetskiLicenseMode)
+      : (input.pricingTier ?? PricingTier.STANDARD);
 
   let basePriceCents = 0;
   let autoDiscountCents = 0;
@@ -228,32 +246,13 @@ export async function createReservationWithItems(params: {
 
     const it = resolvedItems[0];
 
-    let price = await tx.servicePrice.findFirst({
-      where: {
-        serviceId: it.serviceId,
-        optionId: it.optionId,
-        isActive: true,
-        validFrom: { lte: now },
-        OR: [{ validTo: null }, { validTo: { gt: now } }],
-      },
-      orderBy: { validFrom: "desc" },
-      select: { id: true, basePriceCents: true },
+    const price = await findActiveServicePrice(tx, {
+      serviceId: it.serviceId,
+      optionId: it.optionId,
+      durationMinutes: it.durationMinutes,
+      now,
+      pricingTier: it.category === "JETSKI" ? pricingTier : PricingTier.STANDARD,
     });
-
-    if (!price) {
-      price = await tx.servicePrice.findFirst({
-        where: {
-          serviceId: it.serviceId,
-          optionId: null,
-          durationMin: it.durationMinutes,
-          isActive: true,
-          validFrom: { lte: now },
-          OR: [{ validTo: null }, { validTo: { gt: now } }],
-        },
-        orderBy: { validFrom: "desc" },
-        select: { id: true, basePriceCents: true },
-      });
-    }
 
     if (!price) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
 
@@ -302,16 +301,12 @@ export async function createReservationWithItems(params: {
       autoDiscountCents = 0;
 
       for (const it of resolvedItems) {
-        const price = await tx.servicePrice.findFirst({
-          where: {
-            serviceId: it.serviceId,
-            optionId: it.optionId,
-            isActive: true,
-            validFrom: { lte: now },
-            OR: [{ validTo: null }, { validTo: { gt: now } }],
-          },
-          orderBy: { validFrom: "desc" },
-          select: { id: true, basePriceCents: true },
+        const price = await findActiveServicePrice(tx, {
+          serviceId: it.serviceId,
+          optionId: it.optionId,
+          durationMinutes: it.durationMinutes,
+          now,
+          pricingTier: it.category === "JETSKI" ? pricingTier : PricingTier.STANDARD,
         });
 
         if (!price) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
@@ -365,7 +360,7 @@ export async function createReservationWithItems(params: {
 
       const finalTotalCents = Math.max(0, totalBeforeDiscounts - autoDiscountCents - manualDiscountCents);
 
-      const depositCents = computeDepositFromResolvedItems({ isLicense: input.isLicense, resolvedItems });
+      const depositCents = computeDepositFromResolvedItems({ isLicense, resolvedItems });
       
       // Service/option “main” obligatorios en Reservation (por compatibilidad)
       const main = packMeta
@@ -393,7 +388,9 @@ export async function createReservationWithItems(params: {
           pax: input.pax,
           companionsCount: Number(input.companionsCount ?? 0),
           quantity: reservationQuantity,
-          isLicense: input.isLicense,
+          isLicense,
+          jetskiLicenseMode,
+          pricingTier,
           isPackParent: Boolean(input.packId),
 
           // Compat fields (main)
@@ -416,9 +413,9 @@ export async function createReservationWithItems(params: {
           customerDocType,
           customerDocNumber,
           marketing,
-          licenseSchool: input.isLicense ? licenseSchool : null,
-          licenseType: input.isLicense ? licenseType : null,
-          licenseNumber: input.isLicense ? licenseNumber : null,
+          licenseSchool: isLicense ? licenseSchool : null,
+          licenseType: isLicense ? licenseType : null,
+          licenseNumber: isLicense ? licenseNumber : null,
 
           // metadata pack (opcional)
           packId: input.packId ?? null,
@@ -454,7 +451,7 @@ export async function createReservationWithItems(params: {
 
     const requiredContractUnits = computeRequiredContractUnits({
       quantity: reservationQuantity,
-      isLicense: input.isLicense,
+      isLicense,
       serviceCategory: resolvedItems[0]?.category ?? null,
       items: resolvedItems.map((it) => ({
         quantity: Number(it.quantity ?? 0),

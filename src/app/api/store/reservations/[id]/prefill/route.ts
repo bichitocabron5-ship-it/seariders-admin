@@ -39,6 +39,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       quantity: true,
       pax: true,
       isLicense: true,
+      jetskiLicenseMode: true,
+      pricingTier: true,
       basePriceCents: true,
       manualDiscountCents: true,
       autoDiscountCents: true,

@@ -51,6 +51,7 @@ export async function GET() {
         serviceId: true,
         optionId: true,
         durationMin: true,
+        pricingTier: true,
         basePriceCents: true,
         validFrom: true,
         validTo: true,
@@ -60,16 +61,16 @@ export async function GET() {
   ]);
 
   // Precio vigente por optionId
-  const byOption: Record<string, Prisma.ServicePriceGetPayload<{ select: { id: true; serviceId: true; optionId: true; durationMin: true; basePriceCents: true; validFrom: true; validTo: true } }>> = {};
+  const byOption: Record<string, Prisma.ServicePriceGetPayload<{ select: { id: true; serviceId: true; optionId: true; durationMin: true; pricingTier: true; basePriceCents: true; validFrom: true; validTo: true } }>> = {};
   // Precio vigente por durationMin (extras/legacy)
-  const byDuration: Record<string, Prisma.ServicePriceGetPayload<{ select: { id: true; serviceId: true; optionId: true; durationMin: true; basePriceCents: true; validFrom: true; validTo: true } }>> = {};
+  const byDuration: Record<string, Prisma.ServicePriceGetPayload<{ select: { id: true; serviceId: true; optionId: true; durationMin: true; pricingTier: true; basePriceCents: true; validFrom: true; validTo: true } }>> = {};
 
   for (const p of prices) {
     if (p.optionId) {
-      const k = `${p.serviceId}:${p.optionId}`;
+      const k = `${p.serviceId}:${p.optionId}:${p.pricingTier}`;
       if (!byOption[k]) byOption[k] = p;
     } else {
-      const k = `${p.serviceId}:${p.durationMin ?? "null"}`;
+      const k = `${p.serviceId}:${p.durationMin ?? "null"}:${p.pricingTier}`;
       if (!byDuration[k]) byDuration[k] = p;
     }
   }

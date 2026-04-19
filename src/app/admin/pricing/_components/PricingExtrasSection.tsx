@@ -9,6 +9,7 @@ type PriceRow = {
   serviceId: string;
   optionId: string | null;
   durationMin: number | null;
+  pricingTier: "STANDARD" | "RESIDENT";
   basePriceCents: number;
   validFrom: string;
   validTo: string | null;
@@ -68,7 +69,7 @@ export default function PricingExtrasSection({
 
       <div style={{ padding: 14, display: "grid", gap: 10 }}>
         {services.map((service) => {
-          const key = `${service.id}:null`;
+          const key = `${service.id}:null:STANDARD`;
           const price = pricesByDuration[key];
           const current = price?.basePriceCents ?? 0;
           const from = price?.validFrom ? new Date(price.validFrom).toLocaleString("es-ES") : "-";

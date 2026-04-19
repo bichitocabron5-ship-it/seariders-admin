@@ -4,6 +4,7 @@ import { z } from "zod";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
+import { PricingTier } from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,7 @@ const Body = z.object({
   // UNO de los dos:
   optionId: z.string().min(1).nullable().optional(),          // precios por opción
   durationMin: z.number().int().min(1).max(600).nullable().optional(), // extras/legacy (null para extra fijo)
+  pricingTier: z.nativeEnum(PricingTier).default(PricingTier.STANDARD),
 
   basePriceCents: z.number().int().min(0).max(50_000_000),
   validFrom: z.string().optional(), // ISO opcional (por defecto: ahora)
@@ -30,7 +32,7 @@ export async function POST(req: Request) {
   const parsed = Body.safeParse(json);
   if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
-  const { serviceId, optionId, durationMin, basePriceCents } = parsed.data;
+  const { serviceId, optionId, durationMin, pricingTier, basePriceCents } = parsed.data;
   const now = parsed.data.validFrom ? new Date(parsed.data.validFrom) : new Date();
 
   // Validación: no ambos
@@ -59,6 +61,7 @@ export async function POST(req: Request) {
         serviceId,
         optionId: optionId ?? null,
         durationMin: optionId ? null : (durationMin ?? null),
+        pricingTier,
         isActive: true,
         validFrom: { lte: now },
         OR: [{ validTo: null }, { validTo: { gt: now } }],
@@ -74,6 +77,7 @@ export async function POST(req: Request) {
         serviceId,
         optionId: optionId ?? null,
         durationMin: optionId ? null : (durationMin ?? null),
+        pricingTier,
         basePriceCents,
         validFrom: now,
         validTo: null,
@@ -84,6 +88,7 @@ export async function POST(req: Request) {
         serviceId: true,
         optionId: true,
         durationMin: true,
+        pricingTier: true,
         basePriceCents: true,
         validFrom: true,
         validTo: true,

@@ -18,6 +18,8 @@ function putIfNonEmpty(obj: Record<string, unknown>, key: string, v: unknown) {
 export function buildEditUpdateBody(args: {
   pax: number;
   isLicense: boolean;
+  jetskiLicenseMode: "NONE" | "GREEN_LIMITED" | "YELLOW_UNLIMITED";
+  pricingTier: "STANDARD" | "RESIDENT";
   channelId: string;
   dateStr: string;
   timeStr: string;
@@ -43,6 +45,8 @@ export function buildEditUpdateBody(args: {
   const body: Record<string, unknown> = {
     pax: Number(args.pax),
     isLicense: Boolean(args.isLicense),
+    jetskiLicenseMode: args.jetskiLicenseMode,
+    pricingTier: args.pricingTier,
     channelId: args.channelId || null,
     activityDate: args.dateStr,
     time: args.timeStr?.trim() ? args.timeStr.trim() : null,
@@ -168,6 +172,8 @@ export function buildCreateBody(args: {
   customerDocNumber: string;
   marketingSource: string;
   isLicense: boolean;
+  jetskiLicenseMode: "NONE" | "GREEN_LIMITED" | "YELLOW_UNLIMITED";
+  pricingTier: "STANDARD" | "RESIDENT";
   licenseSchool: string;
   licenseType: string;
   licenseNumber: string;
@@ -200,6 +206,8 @@ export function buildCreateBody(args: {
     pax: Number(args.pax),
     companionsCount: Number(args.companions) || 0,
     isLicense: Boolean(args.isLicense),
+    jetskiLicenseMode: args.jetskiLicenseMode,
+    pricingTier: args.pricingTier,
     manualDiscountCents: args.manualDiscountCents,
     manualDiscountReason: args.manualDiscountReason?.trim() || null,
     items: args.itemsToSend,

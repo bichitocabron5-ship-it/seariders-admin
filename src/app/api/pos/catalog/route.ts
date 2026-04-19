@@ -5,6 +5,7 @@ import { z } from "zod";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
+import { PricingTier } from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -102,6 +103,7 @@ export async function GET(req: Request) {
         serviceId: true,
         optionId: true,
         durationMin: true,
+        pricingTier: true,
         basePriceCents: true,
         validFrom: true,
       },
@@ -150,14 +152,16 @@ export async function GET(req: Request) {
   if (origin === "BOOTH") channels = channels.filter((c) => c.visibleInBooth);
   else channels = channels.filter((c) => c.visibleInStore);
 
-  const priceMap = new Map<string, number>();
+  const standardPriceMap = new Map<string, number>();
+  const residentPriceMap = new Map<string, number>();
   for (const pr of prices) {
+    const targetMap = pr.pricingTier === PricingTier.RESIDENT ? residentPriceMap : standardPriceMap;
     if (pr.optionId) {
       const key = `${pr.serviceId}:${pr.optionId}`;
-      if (!priceMap.has(key)) priceMap.set(key, pr.basePriceCents);
+      if (!targetMap.has(key)) targetMap.set(key, pr.basePriceCents);
     } else {
       const key = `${pr.serviceId}:null`;
-      if (!priceMap.has(key)) priceMap.set(key, pr.basePriceCents);
+      if (!targetMap.has(key)) targetMap.set(key, pr.basePriceCents);
     }
   }
 
@@ -167,21 +171,24 @@ export async function GET(req: Request) {
     .filter((o) => visibleMainIds.has(o.serviceId))
     .map((o) => {
       const key = `${o.serviceId}:${o.id}`;
-      const real = priceMap.get(key);
+      const standardPriceCents = standardPriceMap.get(key) ?? null;
+      const residentPriceCents = residentPriceMap.get(key) ?? null;
       const boothFallback = origin === "BOOTH" ? (Number(o.basePriceCents ?? 0) || 0) : null;
-      const base = real ?? boothFallback;
+      const base = standardPriceCents ?? boothFallback;
 
       return {
         ...o,
         basePriceCents: base,
-        hasPrice: base != null && base > 0,
+        standardPriceCents,
+        residentPriceCents,
+        hasPrice: (base != null && base > 0) || (residentPriceCents != null && residentPriceCents > 0),
       };
     });
 
   const extraPriceByServiceId: Record<string, number | null> = {};
   for (const s of servicesExtra) {
     const key = `${s.id}:null`;
-    extraPriceByServiceId[s.id] = priceMap.get(key) ?? null;
+    extraPriceByServiceId[s.id] = standardPriceMap.get(key) ?? null;
   }
 
   const categoriesMain = uniqSorted(servicesMain.map((s) => String(s.category ?? "")).filter(Boolean));

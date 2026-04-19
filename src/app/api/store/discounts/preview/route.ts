@@ -2,8 +2,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import { JetskiLicenseMode, Prisma } from "@prisma/client";
 import { computeAutoDiscountDetail, listPromotionOptions, type DiscountItem } from "@/lib/discounts";
+import { resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
+import { findActiveServicePrice } from "@/lib/service-pricing";
 
 export const runtime = "nodejs";
 
@@ -22,6 +24,7 @@ const Body = z.object({
   channelId: z.string().min(1).nullable().optional(),
   quantity: z.number().int().min(1).max(20).default(1),
   pax: z.number().int().min(1).max(30).default(1),
+  jetskiLicenseMode: z.nativeEnum(JetskiLicenseMode).optional(),
   customerCountry: NullableCountry.optional(), // "ES" | null
   promoCode: z.preprocess(
     (v) => {
@@ -70,27 +73,6 @@ export async function POST(req: Request) {
     // 2) precio vigente por optionId (nuevo) o durationMin (legacy)
     const now = new Date();
 
-    const price = await prisma.servicePrice.findFirst({
-      where: {
-        serviceId,
-        isActive: true,
-        validFrom: { lte: now },
-        AND: [
-          {
-            OR: [
-              { optionId: optionId }, // principal moderno
-              { optionId: null, durationMin: opt.durationMinutes }, // fallback legacy
-            ],
-          },
-          { OR: [{ validTo: null }, { validTo: { gt: now } }] },
-        ],
-      },
-      orderBy: { validFrom: "desc" },
-      select: { basePriceCents: true },
-    });
-
-    if (!price) return new NextResponse("No hay precio vigente para esta opción.", { status: 400 });
-
     const channel = channelId
       ? await prisma.channel.findUnique({
           where: { id: channelId },
@@ -99,13 +81,25 @@ export async function POST(req: Request) {
       : null;
     const promotionsEnabled = channel ? Boolean(channel.allowsPromotions) : true;
 
-    const baseTotalCents = Number(price.basePriceCents || 0) * quantity;
-
     // 3) categoría
     const svc = await prisma.service.findUnique({
       where: { id: serviceId },
       select: { category: true, name: true },
     });
+    const pricingTier =
+      String(svc?.category ?? "").toUpperCase() === "JETSKI"
+        ? resolvePricingTierForJetskiMode(parsed.data.jetskiLicenseMode)
+        : "STANDARD";
+    const price = await findActiveServicePrice(prisma, {
+      serviceId,
+      optionId,
+      durationMinutes: Number(opt.durationMinutes ?? 30),
+      now,
+      pricingTier,
+    });
+
+    if (!price) return new NextResponse("No hay precio vigente para esta opción.", { status: 400 });
+    const baseTotalCents = Number(price.basePriceCents || 0) * quantity;
 
     // 4) descuento (solo principal)
     const item: DiscountItem = {
@@ -168,6 +162,7 @@ export async function POST(req: Request) {
       baseTotalCents,
       autoDiscountCents,
       finalTotalCents,
+      pricingTier,
       reason,
       channelPricingSummary:
         channel && channelOptionPrice?.isActive

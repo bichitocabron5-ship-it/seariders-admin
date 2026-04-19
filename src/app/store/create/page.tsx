@@ -13,7 +13,7 @@ import { StoreCreateCustomerProfileSection, StoreCreateSummaryStrip } from "./co
 import { useAvailability, useContractsState, useCustomerProfileSearch, useDiscountPreview, useReservationPrefill, useStoreCreateCatalog, useStoreCreateSelection } from "./hooks/store-create-hooks";
 import { submitStoreCreateCreateFlow, submitStoreCreateEditFlow, submitStoreCreateMigrateFlow } from "./services/store-create-submit-flow";
 import { errorMessage } from "./utils/errors";
-import type { CartItem, Channel, Option, ServiceMain, UIMode } from "./types";
+import type { CartItem, Channel, JetskiLicenseMode, Option, ServiceMain, UIMode } from "./types";
 import type { AssetAvailability } from "../services/assets";
 
 function todayMadridYMD() {
@@ -83,7 +83,7 @@ function StoreCreatePageInner() {
   const [lastName, setLastName] = useState("");
   const [pax, setPax] = useState(2);
   const [quantity, setQuantity] = useState(1);
-  const [isLicense, setIsLicense] = useState(false);
+  const [jetskiLicenseMode, setJetskiLicenseMode] = useState<JetskiLicenseMode>("NONE");
   const [licenseSchool, setLicenseSchool] = useState("");
   const [licenseType, setLicenseType] = useState("");
   const [licenseNumber, setLicenseNumber] = useState("");
@@ -120,6 +120,7 @@ function StoreCreatePageInner() {
       pax?: number | null;
       quantity?: number | null;
       isLicense?: boolean | null;
+      jetskiLicenseMode?: JetskiLicenseMode | null;
       serviceId?: string | null;
       optionId?: string | null;
       channelId?: string | null;
@@ -152,7 +153,7 @@ function StoreCreatePageInner() {
       setBoothNote(res.boothNote ?? "");
       setPax(Number(res.pax ?? 1));
       setQuantity(Number(res.quantity ?? 1));
-      setIsLicense(Boolean(res.isLicense));
+      setJetskiLicenseMode(res.jetskiLicenseMode ?? (res.isLicense ? "YELLOW_UNLIMITED" : "NONE"));
       setServiceId(res.serviceId ?? "");
       setOptionId(res.optionId ?? "");
       setChannelId(res.channelId ?? "");
@@ -301,14 +302,6 @@ function StoreCreatePageInner() {
     if (!catalogError) return;
     setError(catalogError);
   }, [catalogError]);
-
-  useEffect(() => {
-    if (!isLicense) {
-      setLicenseSchool("");
-      setLicenseType("");
-      setLicenseNumber("");
-    }
-  }, [isLicense]);
           
   // Hora por defecto si es hoy
   useEffect(() => {
@@ -319,6 +312,7 @@ function StoreCreatePageInner() {
   }, [dateStr, timeStr]);
 
   const {
+    selectedService,
     isPackMode,
     canAddToCart,
     servicesMainFiltered,
@@ -337,6 +331,7 @@ function StoreCreatePageInner() {
     category,
     serviceId,
     optionId,
+    jetskiLicenseMode,
     quantity,
     pax,
     prefillServiceFallback,
@@ -344,28 +339,52 @@ function StoreCreatePageInner() {
     prefillChannelFallback,
     setServiceId,
     setOptionId,
-    setIsLicense,
+    setJetskiLicenseMode,
     setTimeStr,
     setCartItems,
   });
+
+  const isJetskiSelection = selectedCategory === "JETSKI";
+  const pricingTier: "STANDARD" | "RESIDENT" =
+    isJetskiSelection && jetskiLicenseMode === "GREEN_LIMITED" ? "RESIDENT" : "STANDARD";
+  const isLicense = isJetskiSelection
+    ? jetskiLicenseMode !== "NONE"
+    : Boolean(selectedService?.isLicense);
+
+  useEffect(() => {
+    if (!isLicense) {
+      setLicenseSchool("");
+      setLicenseType("");
+      setLicenseNumber("");
+    }
+  }, [isLicense]);
+
+  const getOptionUnitPriceCents = useCallback((nextOptionId: string, nextServiceId?: string) => {
+    const opt = optionById.get(nextOptionId);
+    if (!opt) return 0;
+    const service = servicesMain.find((item) => item.id === (nextServiceId ?? opt.serviceId)) ?? null;
+    const category = String(service?.category ?? "").toUpperCase();
+    if (category === "JETSKI" && pricingTier === "RESIDENT") {
+      return Number(opt.residentPriceCents ?? opt.basePriceCents ?? 0) || 0;
+    }
+    return Number(opt.standardPriceCents ?? opt.basePriceCents ?? 0) || 0;
+  }, [optionById, servicesMain, pricingTier]);
 
   const cartSubtotalCents = useMemo(() => {
     if (isPackMode) return 0; // pack se calcula aparte
 
     if (!cartItems.length) {
-      const opt = optionById.get(optionId);
-      const unit = Number(opt?.basePriceCents ?? 0) || 0;
+      const unit = getOptionUnitPriceCents(optionId, serviceId);
       return unit * Number(quantity || 0);
     }
 
     let sum = 0;
     for (const it of cartItems) {
-      const opt = optionById.get(it.optionId);
-      const unit = Number(opt?.basePriceCents ?? 0) || 0;
+      const unit = getOptionUnitPriceCents(it.optionId, it.serviceId);
       sum += unit * Number(it.quantity || 0);
     }
     return sum;
-  }, [isPackMode, cartItems, optionId, quantity, optionById]);
+  }, [isPackMode, cartItems, optionId, quantity, serviceId, getOptionUnitPriceCents]);
 
   function normalizeAssetName(v: string) {
     return String(v ?? "").trim().toUpperCase();
@@ -408,7 +427,7 @@ function StoreCreatePageInner() {
     optionId &&
     selectedOpt &&
     (selectedOpt.hasPrice ?? true) &&
-    (Number(selectedOpt.basePriceCents ?? 0) || 0) > 0
+    getOptionUnitPriceCents(optionId, serviceId) > 0
   );
 
 const { discountPreview, discountLoading } = useDiscountPreview({
@@ -423,6 +442,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     quantity,
     pax,
     customerCountry,
+    jetskiLicenseMode,
     promoCode: applyPromo ? selectedPromoCode || null : null,
   });
 
@@ -467,6 +487,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
                 quantity: item.quantity,
                 pax: item.pax,
                 customerCountry: (customerCountry || "ES").trim().toUpperCase(),
+                jetskiLicenseMode,
                 promoCode: item.applyPromo ? item.promoCode ?? null : null,
               }),
             });
@@ -494,7 +515,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     return () => {
       active = false;
     };
-  }, [cartItems, channelId, customerCountry, isEditMode, isMigrateMode]);
+  }, [cartItems, channelId, customerCountry, isEditMode, isMigrateMode, jetskiLicenseMode]);
 
 
   useEffect(() => {
@@ -749,6 +770,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           dateStr,
           todayYmd: todayMadridYMD(),
           isLicense: Boolean(isLicense),
+          jetskiLicenseMode,
+          pricingTier,
           timeStr,
           companions,
           cartItems,
@@ -830,6 +853,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         customerDocNumber,
         marketingSource,
         isLicense: Boolean(isLicense),
+        jetskiLicenseMode,
+        pricingTier,
         licenseSchool,
         licenseType,
         licenseNumber,
@@ -939,6 +964,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       quantity,
       pax,
       companions,
+      jetskiLicenseMode,
+      pricingTier,
     },
     flags: {
       isEditMode,
@@ -947,6 +974,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       customerDocumentRequired,
       isVoucherFormalizeFlow,
       selectedCategory,
+      isJetskiSelection,
     },
     lists: {
       countryOptions,
@@ -977,6 +1005,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       onQuantityChange: setQuantity,
       onPaxChange: setPax,
       onCompanionsChange: setCompanions,
+      onJetskiLicenseModeChange: setJetskiLicenseMode,
     },
   };
 

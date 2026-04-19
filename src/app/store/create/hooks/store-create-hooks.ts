@@ -11,6 +11,7 @@ import type {
   ContractsState,
   CustomerSearchRow,
   DiscountPreview,
+  JetskiLicenseMode,
   MigrateFlags,
   Option,
   PackPreview,
@@ -227,6 +228,8 @@ export function useReservationPrefill(args: {
     pax?: number | null;
     quantity?: number | null;
     isLicense?: boolean | null;
+    jetskiLicenseMode?: JetskiLicenseMode | null;
+    pricingTier?: "STANDARD" | "RESIDENT" | null;
     serviceId?: string | null;
     optionId?: string | null;
     channelId?: string | null;
@@ -381,6 +384,7 @@ export function useDiscountPreview(args: {
   pax: number;
   customerCountry: string;
   channelId: string;
+  jetskiLicenseMode: JetskiLicenseMode;
   promoCode?: string | null;
 }) {
   const {
@@ -395,6 +399,7 @@ export function useDiscountPreview(args: {
     pax,
     customerCountry,
     channelId,
+    jetskiLicenseMode,
     promoCode,
   } = args;
 
@@ -433,6 +438,7 @@ export function useDiscountPreview(args: {
             quantity,
             pax,
             customerCountry: (customerCountry || "ES").trim().toUpperCase(),
+            jetskiLicenseMode,
             promoCode: promoCode ?? null,
           }),
         });
@@ -452,7 +458,7 @@ export function useDiscountPreview(args: {
     })();
 
     return () => ac.abort();
-  }, [isEditMode, isMigrateMode, cartItemsLength, canCreate, baseTotalCents, serviceId, optionId, channelId, quantity, pax, customerCountry, promoCode]);
+  }, [isEditMode, isMigrateMode, cartItemsLength, canCreate, baseTotalCents, serviceId, optionId, channelId, quantity, pax, customerCountry, jetskiLicenseMode, promoCode]);
 
   return { discountPreview, discountLoading };
 }
@@ -656,6 +662,7 @@ export function useStoreCreateSelection(args: {
   category: string;
   serviceId: string;
   optionId: string;
+  jetskiLicenseMode: JetskiLicenseMode;
   quantity: number;
   pax: number;
   prefillServiceFallback: ServiceMain | null;
@@ -663,7 +670,7 @@ export function useStoreCreateSelection(args: {
   prefillChannelFallback: Channel | null;
   setServiceId: (value: string) => void;
   setOptionId: (value: string) => void;
-  setIsLicense: (value: boolean) => void;
+  setJetskiLicenseMode: (value: JetskiLicenseMode) => void;
   setTimeStr: (value: string) => void;
   setCartItems: React.Dispatch<React.SetStateAction<CartItem[]>>;
 }) {
@@ -674,6 +681,7 @@ export function useStoreCreateSelection(args: {
     category,
     serviceId,
     optionId,
+    jetskiLicenseMode,
     quantity,
     pax,
     prefillServiceFallback,
@@ -681,7 +689,7 @@ export function useStoreCreateSelection(args: {
     prefillChannelFallback,
     setServiceId,
     setOptionId,
-    setIsLicense,
+    setJetskiLicenseMode,
     setTimeStr,
     setCartItems,
   } = args;
@@ -748,8 +756,15 @@ export function useStoreCreateSelection(args: {
 
   useEffect(() => {
     if (!selectedService) return;
-    setIsLicense(Boolean(selectedService.isLicense));
-  }, [selectedService, setIsLicense]);
+    const nextCategory = String(selectedService.category ?? "").toUpperCase();
+    if (nextCategory !== "JETSKI") {
+      if (jetskiLicenseMode !== "NONE") setJetskiLicenseMode("NONE");
+      return;
+    }
+    if (jetskiLicenseMode === "NONE" && selectedService.isLicense) {
+      setJetskiLicenseMode("YELLOW_UNLIMITED");
+    }
+  }, [selectedService, jetskiLicenseMode, setJetskiLicenseMode]);
 
   useEffect(() => {
     if (isPackMode) setCartItems([]);

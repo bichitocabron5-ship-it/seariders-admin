@@ -30,6 +30,8 @@ type SubmitCartItem = {
 export async function submitStoreCreateEditFlow(args: SharedArgs & {
   editReservationId: string;
   isLicense: boolean;
+  jetskiLicenseMode: "NONE" | "GREEN_LIMITED" | "YELLOW_UNLIMITED";
+  pricingTier: "STANDARD" | "RESIDENT";
   timeStr: string;
   companions: number;
   cartItems: SubmitCartItem[];
@@ -72,6 +74,8 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
   const body = buildEditUpdateBody({
     pax: args.pax,
     isLicense: Boolean(args.isLicense),
+    jetskiLicenseMode: args.jetskiLicenseMode,
+    pricingTier: args.pricingTier,
     channelId: args.channelId,
     dateStr: args.dateStr,
     timeStr: args.timeStr,
@@ -189,6 +193,8 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
   customerDocNumber: string;
   marketingSource: string;
   isLicense: boolean;
+  jetskiLicenseMode: "NONE" | "GREEN_LIMITED" | "YELLOW_UNLIMITED";
+  pricingTier: "STANDARD" | "RESIDENT";
   licenseSchool: string;
   licenseType: string;
   licenseNumber: string;
@@ -248,6 +254,8 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
     customerDocNumber: args.customerDocNumber,
     marketingSource: args.marketingSource,
     isLicense: Boolean(args.isLicense),
+    jetskiLicenseMode: args.jetskiLicenseMode,
+    pricingTier: args.pricingTier,
     licenseSchool: args.licenseSchool,
     licenseType: args.licenseType,
     licenseNumber: args.licenseNumber,

@@ -1,5 +1,7 @@
 // src/app/store/create/types.ts
 export type ServiceMain = { id: string; name: string; category?: string | null; code?: string | null; isLicense?: boolean | null };
+export type JetskiLicenseMode = "NONE" | "GREEN_LIMITED" | "YELLOW_UNLIMITED";
+export type PricingTier = "STANDARD" | "RESIDENT";
 
 export type Option = {
   id: string;
@@ -9,6 +11,8 @@ export type Option = {
   paxMax?: number | null;
   contractedMinutes?: number | null;
   basePriceCents?: number | null;
+  standardPriceCents?: number | null;
+  residentPriceCents?: number | null;
   hasPrice?: boolean;
 };
 
@@ -187,6 +191,7 @@ export type DiscountPreview = {
   baseTotalCents: number;
   autoDiscountCents: number;
   finalTotalCents: number;
+  pricingTier?: PricingTier | null;
   reason?: string | null;
   channelPricingSummary?: {
     channelName: string;

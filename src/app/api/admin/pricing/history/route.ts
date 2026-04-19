@@ -40,6 +40,7 @@ export async function GET(req: Request) {
       serviceId: true,
       optionId: true,
       durationMin: true,
+      pricingTier: true,
       basePriceCents: true,
       validFrom: true,
       validTo: true,
@@ -60,6 +61,7 @@ export async function GET(req: Request) {
       ? `${r.option.durationMinutes} min · hasta ${r.option.paxMax} pax · contratado ${r.option.contractedMinutes} min`
       : null,
     durationMin: r.durationMin,
+    pricingTier: r.pricingTier,
     basePriceCents: r.basePriceCents,
     validFrom: r.validFrom.toISOString(),
     validTo: r.validTo ? r.validTo.toISOString() : null,

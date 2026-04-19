@@ -242,6 +242,7 @@ model ServicePrice {
   serviceId      String
   optionId       String? // ✅ NUEVO: precio por ServiceOption
   durationMin    Int? // se mantiene (extras o legacy)
+  pricingTier    PricingTier    @default(STANDARD)
   basePriceCents Int
   validFrom      DateTime       @default(now())
   validTo        DateTime?
@@ -330,6 +331,8 @@ model Reservation {
   customerPhone        String?
   customerEmail        String?
   isLicense            Boolean               @default(false)
+  jetskiLicenseMode    JetskiLicenseMode     @default(NONE)
+  pricingTier          PricingTier           @default(STANDARD)
   licenseSchool        String?
   licenseType          String?
   licenseNumber        String?
@@ -2109,6 +2112,17 @@ enum ReservationStatus {
   IN_SEA
   COMPLETED
   CANCELED
+}
+
+enum JetskiLicenseMode {
+  NONE
+  GREEN_LIMITED
+  YELLOW_UNLIMITED
+}
+
+enum PricingTier {
+  STANDARD
+  RESIDENT
 }
 
 enum ReservationUnitStatus {

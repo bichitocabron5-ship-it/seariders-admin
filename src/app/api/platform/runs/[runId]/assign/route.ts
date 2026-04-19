@@ -71,8 +71,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
         throw new Error(`Run no asignable en estado ${run.status}`);
       }
 
-      const cap = run.mode === MonitorRunMode.MONITOR ? Number(run.monitor?.maxCapacity ?? 4) : 1;
-      if ((run.assignments?.length ?? 0) >= cap) throw new Error(`Capacidad superada (${cap})`);
+      const assignmentCap =
+        run.mode === MonitorRunMode.MONITOR
+          ? Number(run.monitor?.maxCapacity ?? 4)
+          : run.mode === MonitorRunMode.TEST
+            ? 1
+            : null;
+      if (assignmentCap !== null && (run.assignments?.length ?? 0) >= assignmentCap) {
+        throw new Error(`Capacidad superada (${assignmentCap})`);
+      }
 
       // 2) Unit + Reserva
       const unit = await tx.reservationUnit.findUnique({

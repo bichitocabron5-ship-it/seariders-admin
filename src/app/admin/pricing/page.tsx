@@ -21,6 +21,7 @@ type PriceRow = {
   serviceId: string;
   optionId: string | null;
   durationMin: number | null;
+  pricingTier: "STANDARD" | "RESIDENT";
   basePriceCents: number;
   validFrom: string;
   validTo: string | null;
@@ -108,6 +109,7 @@ export default function AdminPricingPage() {
     serviceId: string;
     optionId?: string | null;
     durationMin?: number | null;
+    pricingTier?: "STANDARD" | "RESIDENT";
     basePriceCents: number;
   }) {
     setError(null);
@@ -125,10 +127,10 @@ export default function AdminPricingPage() {
     return true;
   }
 
-  async function saveOptionPrice(serviceId: string, optionId: string) {
+  async function saveOptionPrice(serviceId: string, optionId: string, pricingTier: "STANDARD" | "RESIDENT") {
     if (!data) return;
 
-    const key = `${serviceId}:${optionId}`;
+    const key = `${serviceId}:${optionId}:${pricingTier}`;
     const draftKey = `opt:${key}`;
     const cents = centsFromEurosStr(draft[draftKey] ?? "");
     if (cents == null) {
@@ -137,14 +139,14 @@ export default function AdminPricingPage() {
     }
 
     setSavingKey(draftKey);
-    const ok = await setPrice({ serviceId, optionId, basePriceCents: cents });
+    const ok = await setPrice({ serviceId, optionId, pricingTier, basePriceCents: cents });
     setSavingKey(null);
 
     if (ok) await load();
   }
 
   async function saveExtraPrice(serviceId: string) {
-    const key = `${serviceId}:null`;
+    const key = `${serviceId}:null:STANDARD`;
     const draftKey = `dur:${key}`;
     const cents = centsFromEurosStr(draft[draftKey] ?? "");
     if (cents == null) {
@@ -153,7 +155,7 @@ export default function AdminPricingPage() {
     }
 
     setSavingKey(draftKey);
-    const ok = await setPrice({ serviceId, durationMin: null, basePriceCents: cents });
+    const ok = await setPrice({ serviceId, durationMin: null, pricingTier: "STANDARD", basePriceCents: cents });
     setSavingKey(null);
 
     if (ok) await load();

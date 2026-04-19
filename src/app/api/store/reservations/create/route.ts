@@ -7,6 +7,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { createReservationWithItems } from "@/lib/reservations/createReservationWithItems";
 import { validateReusableAssetsAvailability } from "@/lib/store-rental-assets";
+import { JetskiLicenseMode, PricingTier } from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -42,6 +43,8 @@ const Body = z.object({
 
   pax: z.number().int().min(1).max(50),
   isLicense: z.boolean().default(false),
+  jetskiLicenseMode: z.nativeEnum(JetskiLicenseMode).optional(),
+  pricingTier: z.nativeEnum(PricingTier).optional(),
 
   manualDiscountCents: z.number().int().min(0).max(1_000_000).optional(),
   manualDiscountReason: z.string().max(200).nullable().optional(),
@@ -160,6 +163,8 @@ export async function POST(req: Request) {
           pax: b.pax,
           companionsCount: Number(b.companionsCount ?? 0),
           isLicense: Boolean(b.isLicense),
+          jetskiLicenseMode: b.jetskiLicenseMode,
+          pricingTier: b.pricingTier,
           manualDiscountCents: b.manualDiscountCents ?? 0,
           manualDiscountReason: b.manualDiscountReason ?? null,
           items,

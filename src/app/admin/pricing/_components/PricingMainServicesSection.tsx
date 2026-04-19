@@ -18,6 +18,7 @@ type PriceRow = {
   serviceId: string;
   optionId: string | null;
   durationMin: number | null;
+  pricingTier: "STANDARD" | "RESIDENT";
   basePriceCents: number;
   validFrom: string;
   validTo: string | null;
@@ -30,7 +31,7 @@ type Props = {
   draft: Record<string, string>;
   savingKey: string | null;
   setDraft: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  saveOptionPrice: (serviceId: string, optionId: string) => void | Promise<void>;
+  saveOptionPrice: (serviceId: string, optionId: string, pricingTier: "STANDARD" | "RESIDENT") => void | Promise<void>;
   eurosFromCents: (cents: number) => string;
   panelStyle: CSSProperties;
   panelHeader: CSSProperties;
@@ -102,12 +103,16 @@ export default function PricingMainServicesSection({
               ) : (
                 <div style={{ display: "grid", gap: 10 }}>
                   {options.map((option) => {
-                    const key = `${service.id}:${option.id}`;
-                    const price = pricesByOption[key];
-                    const current = price?.basePriceCents ?? 0;
-                    const from = price?.validFrom ? new Date(price.validFrom).toLocaleString("es-ES") : "-";
-                    const draftKey = `opt:${key}`;
-                    const isSaving = savingKey === draftKey;
+                    const standardKey = `${service.id}:${option.id}:STANDARD`;
+                    const residentKey = `${service.id}:${option.id}:RESIDENT`;
+                    const standardPrice = pricesByOption[standardKey];
+                    const residentPrice = pricesByOption[residentKey];
+                    const current = standardPrice?.basePriceCents ?? 0;
+                    const from = standardPrice?.validFrom ? new Date(standardPrice.validFrom).toLocaleString("es-ES") : "-";
+                    const standardDraftKey = `opt:${standardKey}`;
+                    const residentDraftKey = `opt:${residentKey}`;
+                    const isSavingStandard = savingKey === standardDraftKey;
+                    const isSavingResident = savingKey === residentDraftKey;
 
                     return (
                       <div key={option.id} style={optionCard}>
@@ -135,8 +140,8 @@ export default function PricingMainServicesSection({
                           <label style={fieldLabel}>
                             Nuevo precio (EUR)
                             <input
-                              value={draft[draftKey] ?? ""}
-                              onChange={(e) => setDraft((prev) => ({ ...prev, [draftKey]: e.target.value }))}
+                              value={draft[standardDraftKey] ?? ""}
+                              onChange={(e) => setDraft((prev) => ({ ...prev, [standardDraftKey]: e.target.value }))}
                               style={inputStyle}
                               placeholder="150.00"
                             />
@@ -145,11 +150,11 @@ export default function PricingMainServicesSection({
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
                             <button
                               type="button"
-                              disabled={isSaving}
-                              onClick={() => void saveOptionPrice(service.id, option.id)}
+                              disabled={isSavingStandard}
+                              onClick={() => void saveOptionPrice(service.id, option.id, "STANDARD")}
                               style={darkBtn}
                             >
-                              {isSaving ? "Guardando..." : "Guardar"}
+                              {isSavingStandard ? "Guardando..." : "Guardar"}
                             </button>
 
                             <Link href={`/admin/pricing/history?serviceId=${service.id}&optionId=${option.id}`} style={ghostBtn}>
@@ -157,6 +162,34 @@ export default function PricingMainServicesSection({
                             </Link>
                           </div>
                         </div>
+
+                        {service.category === "JETSKI" ? (
+                          <div style={editorGrid}>
+                            <label style={fieldLabel}>
+                              Tarifa residente / llave verde (EUR)
+                              <input
+                                value={draft[residentDraftKey] ?? ""}
+                                onChange={(e) => setDraft((prev) => ({ ...prev, [residentDraftKey]: e.target.value }))}
+                                style={inputStyle}
+                                placeholder="90.00"
+                              />
+                            </label>
+
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
+                              <button
+                                type="button"
+                                disabled={isSavingResident}
+                                onClick={() => void saveOptionPrice(service.id, option.id, "RESIDENT")}
+                                style={darkBtn}
+                              >
+                                {isSavingResident ? "Guardando..." : "Guardar residente"}
+                              </button>
+                              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+                                Actual: {eurosFromCents(residentPrice?.basePriceCents ?? 0)} EUR
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
