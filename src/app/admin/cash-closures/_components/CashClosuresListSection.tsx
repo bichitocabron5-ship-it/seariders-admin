@@ -7,6 +7,7 @@ type Row = {
   businessDate: string;
   closedAt: string;
   isVoided: boolean;
+  note?: string | null;
   reviewNote?: string | null;
   reviewedAt?: string | null;
   closedByUser?: { fullName?: string | null; username?: string | null } | null;
@@ -55,8 +56,7 @@ export default function CashClosuresListSection({
               borderTop: "1px solid #eee",
               padding: 14,
               cursor: "pointer",
-              background:
-                selectedId === row.id ? "linear-gradient(180deg, #f0f9ff 0%, #ecfeff 100%)" : "white",
+              background: selectedId === row.id ? "linear-gradient(180deg, #f0f9ff 0%, #ecfeff 100%)" : "white",
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
@@ -88,6 +88,12 @@ export default function CashClosuresListSection({
                   {row.reviewedAt ? `Revisado por ${row.reviewedByUser?.username ?? "admin"}` : "Pendiente de revisión"}
                   {row.reviewNote ? ` · ${row.reviewNote}` : ""}
                 </div>
+
+                {row.note ? (
+                  <div style={{ fontSize: 12, color: "#475569", marginTop: 6, lineHeight: 1.45 }}>
+                    Nota cierre: {row.note}
+                  </div>
+                ) : null}
               </div>
 
               {!row.isVoided ? (

@@ -5,10 +5,13 @@ type Row = {
   origin: "STORE" | "BOOTH" | "BAR";
   shift: string;
   businessDate: string;
+  closedAt?: string;
   windowFrom: string;
   windowTo: string;
   isVoided: boolean;
+  note?: string | null;
   voidReason?: string | null;
+  reviewedAt?: string | null;
   users?: Array<{
     user?: { id?: string; fullName?: string | null; username?: string | null } | null;
     roleNameAtClose?: string | null;
@@ -69,7 +72,7 @@ type Props = {
   yyyyMmDd: (iso: string) => string;
   euros: (cents: number) => string;
   netFrom: (obj?: Record<string, number>) => number;
-  onVoid: (closureId: string) => void;
+  onVoid: (closure: Row) => void;
 };
 
 function scopeLabel(row: Row) {
@@ -144,11 +147,32 @@ export default function CashClosureDetailSection({
             </div>
 
             {!selected.isVoided ? (
-              <button onClick={() => onVoid(selected.id)} style={lightBtn}>
-                Anular / Reabrir
+              <button onClick={() => onVoid(selected)} style={lightBtn}>
+                Reabrir cierre
               </button>
             ) : null}
           </div>
+
+          {!selected.isVoided ? (
+            <div
+              style={{
+                border: "1px solid #fde68a",
+                borderRadius: 16,
+                padding: 14,
+                background: "#fffbeb",
+                display: "grid",
+                gap: 6,
+              }}
+            >
+              <div style={{ fontWeight: 900, color: "#92400e" }}>Reapertura controlada</div>
+              <div style={{ fontSize: 13, lineHeight: 1.5, color: "#78350f" }}>
+                Reabrir no borra este cierre: lo anula como cierre activo, desbloquea la operativa y obliga a generar un nuevo cierre correcto al terminar la corrección.
+              </div>
+              <div style={{ fontSize: 12, color: "#92400e" }}>
+                Úsalo solo para incidencias reales: cobro tardío, devolución posterior o error de conteo.
+              </div>
+            </div>
+          ) : null}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
             <div style={detailStatStyle}>
@@ -209,6 +233,13 @@ export default function CashClosureDetailSection({
                 <div style={detailStatLabel}>Retenciones parciales</div>
                 <div style={detailStatValue}>{selected.depositSummary?.partialRetentions ?? 0}</div>
               </div>
+            </div>
+          ) : null}
+
+          {selected.note ? (
+            <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, padding: 14, background: "#fff" }}>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>Nota operativa del cierre</div>
+              <div style={{ fontSize: 13, lineHeight: 1.5, color: "#475569" }}>{selected.note}</div>
             </div>
           ) : null}
 

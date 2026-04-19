@@ -17,6 +17,7 @@ type Row = {
   windowTo: string;
   closedAt: string;
   isVoided: boolean;
+  note?: string | null;
   voidedAt?: string | null;
   voidReason?: string | null;
   closedByUser?: { fullName?: string | null; username?: string | null } | null;
@@ -84,6 +85,20 @@ function netFrom(obj?: Record<string, number>) {
   return Number(obj?.CASH ?? 0) + Number(obj?.CARD ?? 0) + Number(obj?.BIZUM ?? 0) + Number(obj?.TRANSFER ?? 0) + Number(obj?.VOUCHER ?? 0);
 }
 
+function addMethodMaps(a?: Record<string, number>, b?: Record<string, number>) {
+  return {
+    CASH: Number(a?.CASH ?? 0) + Number(b?.CASH ?? 0),
+    CARD: Number(a?.CARD ?? 0) + Number(b?.CARD ?? 0),
+    BIZUM: Number(a?.BIZUM ?? 0) + Number(b?.BIZUM ?? 0),
+    TRANSFER: Number(a?.TRANSFER ?? 0) + Number(b?.TRANSFER ?? 0),
+    VOUCHER: Number(a?.VOUCHER ?? 0) + Number(b?.VOUCHER ?? 0),
+  };
+}
+
+function closureScopeLabel(row: Pick<Row, "origin" | "shift">) {
+  return row.origin === "BOOTH" ? row.shift : "DIARIO";
+}
+
 export default function AdminCashClosuresPage() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -138,6 +153,54 @@ export default function AdminCashClosuresPage() {
       voided: rows.filter((row) => row.isVoided).length,
     };
   }, [rows]);
+  const summaryDate = useMemo(() => {
+    if (date) return date;
+    if (selected?.businessDate) return yyyyMmDd(selected.businessDate);
+    if (rows[0]?.businessDate) return yyyyMmDd(rows[0].businessDate);
+    return "";
+  }, [date, rows, selected?.businessDate]);
+  const dailySummary = useMemo(() => {
+    if (!summaryDate) return [];
+
+    const activeRows = rows.filter((row) => !row.isVoided && yyyyMmDd(row.businessDate) === summaryDate);
+    const grouped = new Map<Row["origin"], {
+      origin: Row["origin"];
+      closures: number;
+      declared: Record<string, number>;
+      system: Record<string, number>;
+      diff: Record<string, number>;
+    }>();
+
+    for (const row of activeRows) {
+      const current = grouped.get(row.origin) ?? {
+        origin: row.origin,
+        closures: 0,
+        declared: { CASH: 0, CARD: 0, BIZUM: 0, TRANSFER: 0, VOUCHER: 0 },
+        system: { CASH: 0, CARD: 0, BIZUM: 0, TRANSFER: 0, VOUCHER: 0 },
+        diff: { CASH: 0, CARD: 0, BIZUM: 0, TRANSFER: 0, VOUCHER: 0 },
+      };
+      current.closures += 1;
+      current.declared = addMethodMaps(current.declared, row.declaredJson?.total);
+      current.system = addMethodMaps(current.system, row.systemJson?.total);
+      current.diff = addMethodMaps(current.diff, row.diffJson?.total);
+      grouped.set(row.origin, current);
+    }
+
+    return Array.from(grouped.values()).sort((a, b) => a.origin.localeCompare(b.origin));
+  }, [rows, summaryDate]);
+  const dailyGrandTotal = useMemo(
+    () =>
+      dailySummary.reduce(
+        (acc, row) => ({
+          closures: acc.closures + row.closures,
+          declared: acc.declared + netFrom(row.declared),
+          system: acc.system + netFrom(row.system),
+          diff: acc.diff + netFrom(row.diff),
+        }),
+        { closures: 0, declared: 0, system: 0, diff: 0 }
+      ),
+    [dailySummary]
+  );
 
   useEffect(() => {
     if (!selected?.id) {
@@ -165,20 +228,49 @@ export default function AdminCashClosuresPage() {
     await load(); // tu refresco
   }
 
-  async function voidClosure(closureId: string) {
-    const reason = prompt("Motivo de reapertura/anulación (obligatorio):");
-    if (!reason || reason.trim().length < 3) return;
+  async function voidClosure(row: Row) {
+    const scope = `${row.origin} · ${closureScopeLabel(row)} · ${yyyyMmDd(row.businessDate)}`;
+    const firstConfirm = confirm(
+      `Vas a reabrir el cierre ${scope}.\n\n` +
+      "Esto anulará este cierre como activo, desbloqueará la operativa y exigirá volver a cerrar caja después de corregir la incidencia.\n\n" +
+      "Pulsa Aceptar solo si necesitas registrar una corrección real."
+    );
+    if (!firstConfirm) return;
+
+    if (row.reviewedAt) {
+      const reviewedConfirm = confirm(
+        "Este cierre ya estaba revisado por admin.\n\n" +
+        "Reabrirlo eliminará ese estado de revisión y tendrás que revisar de nuevo el nuevo cierre.\n\n" +
+        "¿Quieres continuar?"
+      );
+      if (!reviewedConfirm) return;
+    }
+
+    const reason = prompt(
+      "Motivo de reapertura (obligatorio, mínimo 10 caracteres):\n" +
+      "Ej: cobro de última hora, devolución posterior, error de conteo en efectivo..."
+    );
+    if (reason === null) return;
+
+    const cleanReason = reason.trim();
+    if (cleanReason.length < 10) {
+      alert("Escribe un motivo más concreto. Mínimo 10 caracteres.");
+      return;
+    }
 
     try {
-      const r = await fetch(`/api/admin/cash-closures/${closureId}/void`, {
+      const r = await fetch(`/api/admin/cash-closures/${row.id}/void`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: reason.trim() }),
+        body: JSON.stringify({ reason: cleanReason }),
       });
       if (!r.ok) throw new Error(await r.text());
       await load();
+      alert(
+        "Cierre reabierto. Haz la corrección operativa necesaria y vuelve a cerrar caja para dejar un nuevo cierre activo."
+      );
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Error anulando cierre");
+      alert(e instanceof Error ? e.message : "Error reabriendo cierre");
     }
   }
 
@@ -237,6 +329,50 @@ export default function AdminCashClosuresPage() {
           <div style={infoText}>Empieza por la diferencia neta y luego baja al detalle por método, sobre todo `CASH`.</div>
         </div>
       </section>
+
+      {summaryDate && dailySummary.length > 0 ? (
+        <section style={panelStyle}>
+          <div style={{ padding: "10px 12px", background: "#f9fafb", fontWeight: 900, fontSize: 13 }}>
+            Resumen del día · {summaryDate}
+          </div>
+          <div style={{ padding: 12, display: "grid", gap: 12 }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th style={tableHeadLeft}>Origen</th>
+                    <th style={tableHeadRight}>Cierres</th>
+                    <th style={tableHeadRight}>Declarado neto</th>
+                    <th style={tableHeadRight}>Sistema neto</th>
+                    <th style={tableHeadRight}>Diferencia neta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dailySummary.map((row) => (
+                    <tr key={row.origin}>
+                      <td style={tableCellLeft}>{row.origin}</td>
+                      <td style={tableCellRight}>{row.closures}</td>
+                      <td style={tableCellRight}>{euros(netFrom(row.declared))}</td>
+                      <td style={tableCellRight}>{euros(netFrom(row.system))}</td>
+                      <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(netFrom(row.diff))}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td style={{ ...tableCellLeft, fontWeight: 900 }}>TOTAL DÍA</td>
+                    <td style={{ ...tableCellRight, fontWeight: 900 }}>{dailyGrandTotal.closures}</td>
+                    <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(dailyGrandTotal.declared)}</td>
+                    <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(dailyGrandTotal.system)}</td>
+                    <td style={{ ...tableCellRight, fontWeight: 950 }}>{euros(dailyGrandTotal.diff)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              El resumen agrega cierres activos del día por origen. En `BOOTH` suma mañana y tarde; en `STORE` y `BAR` normalmente verás un único cierre diario por punto.
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {error ? (
         <div style={errorStyle}>
@@ -469,4 +605,28 @@ const errorStyle: React.CSSProperties = {
   background: "#fff1f2",
   color: "#991b1b",
   fontWeight: 900,
+};
+
+const tableHeadLeft: React.CSSProperties = {
+  textAlign: "left",
+  padding: 8,
+  borderBottom: "1px solid #eee",
+};
+
+const tableHeadRight: React.CSSProperties = {
+  textAlign: "right",
+  padding: 8,
+  borderBottom: "1px solid #eee",
+};
+
+const tableCellLeft: React.CSSProperties = {
+  textAlign: "left",
+  padding: 8,
+  borderBottom: "1px solid #f3f4f6",
+};
+
+const tableCellRight: React.CSSProperties = {
+  textAlign: "right",
+  padding: 8,
+  borderBottom: "1px solid #f3f4f6",
 };

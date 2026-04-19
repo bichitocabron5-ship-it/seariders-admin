@@ -69,6 +69,7 @@ export async function GET(req: Request) {
       isVoided: true,
       voidedAt: true,
       voidReason: true,
+      note: true,
       reviewedAt: true,
       reviewNote: true,
       reviewedByUser: { select: { id: true, fullName: true, username: true } },
