@@ -2,7 +2,7 @@
 
 import type React from "react";
 import QRCode from "react-qr-code";
-import { normalizePhoneForWhatsApp } from "./contract-signer-link-modal";
+import { formatLinkExpiry, normalizePhoneForWhatsApp } from "./contract-signer-link-modal";
 
 export function ReservationPrecheckinLinkModal({
   url,
@@ -22,12 +22,13 @@ export function ReservationPrecheckinLinkModal({
   onClose: () => void;
 }) {
   const whatsappPhone = normalizePhoneForWhatsApp(phone ?? "", country);
+  const expiryLabel = formatLinkExpiry(expiresInMinutes);
   const whatsappMessage =
     `Hola ${recipientName || "cliente"},\n\n` +
     `Le enviamos su enlace seguro de pre-checkin para completar los datos de la reserva, revisar el contrato${contractsCount === 1 ? "" : " de cada unidad"} y firmarlo digitalmente antes de su llegada.\n\n` +
     `${url}\n\n` +
     `Una vez completado, en tienda solo revisaremos los datos finales para continuar con el cobro.\n\n` +
-    `Este enlace caduca en ${expiresInMinutes} minutos.\n\n` +
+    `Este enlace caduca en ${expiryLabel}.\n\n` +
     `Gracias,\nEquipo Seariders`;
 
   const whatsappUrl = whatsappPhone

@@ -41,6 +41,15 @@ export function normalizePhoneForWhatsApp(phone: string, country?: string | null
   return normalized.length >= 8 ? normalized : null;
 }
 
+export function formatLinkExpiry(expiresInMinutes: number) {
+  if (expiresInMinutes >= 1440) {
+    const days = Math.round(expiresInMinutes / 1440);
+    return `${days} dia${days === 1 ? "" : "s"}`;
+  }
+
+  return `${expiresInMinutes} minuto${expiresInMinutes === 1 ? "" : "s"}`;
+}
+
 export function ContractSignerLinkModal({
   url,
   expiresInMinutes,
@@ -59,12 +68,13 @@ export function ContractSignerLinkModal({
   onClose: () => void;
 }) {
   const whatsappPhone = normalizePhoneForWhatsApp(phone ?? "", country);
+  const expiryLabel = formatLinkExpiry(expiresInMinutes);
   const whatsappMessage =
     `Hola ${recipientName || "cliente"},\n\n` +
     `Le enviamos el enlace seguro para revisar y firmar su contrato de reserva con Seariders (${unitLabel}).\n\n` +
     `${url}\n\n` +
     `Cuando la firma quede registrada, podremos continuar con la formalizacion y el cobro de su reserva.\n\n` +
-    `Este enlace caduca en ${expiresInMinutes} minutos.\n\n` +
+    `Este enlace caduca en ${expiryLabel}.\n\n` +
     `Gracias.`;
   const whatsappUrl = whatsappPhone
     ? `https://wa.me/${encodeURIComponent(whatsappPhone)}?text=${encodeURIComponent(whatsappMessage)}`
@@ -101,7 +111,7 @@ export function ContractSignerLinkModal({
           </div>
           <div style={{ fontSize: 20, fontWeight: 900 }}>Escanea este QR desde el movil o tablet</div>
           <div style={{ fontSize: 13, color: "#64748b" }}>
-            El enlace de firma caduca en {expiresInMinutes} minutos.
+            El enlace de firma caduca en {expiryLabel}.
           </div>
         </div>
 

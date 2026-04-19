@@ -76,6 +76,27 @@ type DraftContract = {
   licenseNumber: string;
 };
 
+const DOCUMENT_TYPE_OPTIONS = [
+  { value: "", label: "Selecciona..." },
+  { value: "DNI", label: "DNI" },
+  { value: "NIE", label: "NIE" },
+  { value: "PASSPORT", label: "Pasaporte" },
+];
+
+const MARKETING_SOURCE_OPTIONS = [
+  { value: "", label: "Selecciona..." },
+  { value: "Instagram", label: "Instagram" },
+  { value: "Facebook", label: "Facebook" },
+  { value: "Recomendación", label: "Recomendacion" },
+  { value: "Google", label: "Google" },
+  { value: "Radio", label: "Radio" },
+  { value: "TikTok", label: "TikTok" },
+  { value: "Youtube", label: "Youtube" },
+  { value: "Flyers", label: "Flyers" },
+  { value: "Otros", label: "Otros" },
+  { value: "Hoteles", label: "Hoteles" },
+];
+
 function formatDate(value: string | null) {
   if (!value) return "Sin fecha";
   return new Date(value).toLocaleDateString("es-ES");
@@ -384,11 +405,16 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
 
           <section style={{ display: "grid", gap: 12 }}>
             <h2 style={{ margin: 0, fontSize: 20 }}>Datos del titular</h2>
+            <div style={{ fontSize: 13, color: "#64748b", fontWeight: 700 }}>
+              Los campos marcados con <strong>*</strong> son obligatorios.
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-              <Field label="Nombre y apellidos" value={reservationDraft.customerName} onChange={(value) => setReservationDraft((current) => ({ ...current, customerName: value }))} />
-              <Field label="Teléfono" value={reservationDraft.customerPhone} onChange={(value) => setReservationDraft((current) => ({ ...current, customerPhone: value }))} />
+              <Field label="Nombre y apellidos *" value={reservationDraft.customerName} onChange={(value) => setReservationDraft((current) => ({ ...current, customerName: value }))} />
+              <Field label="Teléfono *" value={reservationDraft.customerPhone} onChange={(value) => setReservationDraft((current) => ({ ...current, customerPhone: value }))} />
               <Field label="Email" value={reservationDraft.customerEmail} onChange={(value) => setReservationDraft((current) => ({ ...current, customerEmail: value }))} />
-              <Field label="Cómo nos conoció" value={reservationDraft.marketing} onChange={(value) => setReservationDraft((current) => ({ ...current, marketing: value }))} />
+              <SelectField label="Tipo de documento" value={reservationDraft.customerDocType} options={DOCUMENT_TYPE_OPTIONS} onChange={(value) => setReservationDraft((current) => ({ ...current, customerDocType: value }))} />
+              <Field label="Numero de documento" value={reservationDraft.customerDocNumber} onChange={(value) => setReservationDraft((current) => ({ ...current, customerDocNumber: value }))} />
+              <SelectField label="Como nos conocio?" value={reservationDraft.marketing} options={MARKETING_SOURCE_OPTIONS} onChange={(value) => setReservationDraft((current) => ({ ...current, marketing: value }))} />
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
@@ -456,20 +482,20 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-                  <Field label="Nombre del conductor" value={draft?.driverName ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverName: value } }))} />
-                  <Field label="Teléfono" value={draft?.driverPhone ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPhone: value } }))} />
+                  <Field label="Nombre del conductor *" value={draft?.driverName ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverName: value } }))} />
+                  <Field label="Teléfono *" value={draft?.driverPhone ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPhone: value } }))} />
                   <Field label="Email" value={draft?.driverEmail ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverEmail: value } }))} />
-                  <Field label="País" value={draft?.driverCountry ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverCountry: value } }))} />
-                  <Field label="Dirección" value={draft?.driverAddress ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverAddress: value } }))} />
+                  <Field label="País *" value={draft?.driverCountry ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverCountry: value } }))} />
+                  <Field label="Dirección *" value={draft?.driverAddress ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverAddress: value } }))} />
                   <Field label="Código postal" value={draft?.driverPostalCode ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPostalCode: value } }))} />
-                  <DateField label="Fecha de nacimiento" value={draft?.driverBirthDate ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverBirthDate: value } }))} />
-                  <Field label="Tipo de documento" value={draft?.driverDocType ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocType: value } }))} />
-                  <Field label="Número de documento" value={draft?.driverDocNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocNumber: value } }))} />
+                  <DateField label="Fecha de nacimiento *" value={draft?.driverBirthDate ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverBirthDate: value } }))} />
+                  <SelectField label="Tipo de documento *" value={draft?.driverDocType ?? ""} disabled={disabled} options={DOCUMENT_TYPE_OPTIONS} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocType: value } }))} />
+                  <Field label="Número de documento *" value={draft?.driverDocNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocNumber: value } }))} />
                   {snapshot.reservation.isLicense ? (
                     <>
-                      <Field label="Escuela / expedición" value={draft?.licenseSchool ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseSchool: value } }))} />
-                      <Field label="Tipo de licencia" value={draft?.licenseType ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseType: value } }))} />
-                      <Field label="Número de licencia" value={draft?.licenseNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseNumber: value } }))} />
+                      <Field label="Escuela / expedición *" value={draft?.licenseSchool ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseSchool: value } }))} />
+                      <Field label="Tipo de licencia *" value={draft?.licenseType ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseType: value } }))} />
+                      <Field label="Número de licencia *" value={draft?.licenseNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseNumber: value } }))} />
                     </>
                   ) : null}
                 </div>
@@ -596,6 +622,33 @@ function Field({
     <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
       <span>{label}</span>
       <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={inputStyle} />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  disabled?: boolean;
+}) {
+  return (
+    <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
+      <span>{label}</span>
+      <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={inputStyle}>
+        {options.map((option) => (
+          <option key={`${option.value}-${option.label}`} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }
