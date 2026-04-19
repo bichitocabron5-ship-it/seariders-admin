@@ -5,7 +5,7 @@ type Row = {
   origin: "STORE" | "BOOTH" | "BAR";
   shift: string;
   businessDate: string;
-  closedAt?: string;
+  closedAt: string;
   windowFrom: string;
   windowTo: string;
   isVoided: boolean;
@@ -46,6 +46,8 @@ type Row = {
   };
 };
 
+type VoidableClosure = Pick<Row, "id" | "origin" | "shift" | "businessDate" | "closedAt" | "reviewedAt">;
+
 type CommissionsSummary = {
   ok: boolean;
   totalCommissionCents?: number;
@@ -72,7 +74,7 @@ type Props = {
   yyyyMmDd: (iso: string) => string;
   euros: (cents: number) => string;
   netFrom: (obj?: Record<string, number>) => number;
-  onVoid: (closure: Row) => void;
+  onVoid: (closure: VoidableClosure) => void;
 };
 
 function scopeLabel(row: Row) {

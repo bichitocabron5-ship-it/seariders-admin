@@ -73,6 +73,8 @@ type CommissionsSummary = {
   }>;
 };
 
+type VoidableClosure = Pick<Row, "id" | "origin" | "shift" | "businessDate" | "closedAt" | "reviewedAt">;
+
 function yyyyMmDd(iso: string) {
   return String(iso).slice(0, 10);
 }
@@ -228,7 +230,7 @@ export default function AdminCashClosuresPage() {
     await load(); // tu refresco
   }
 
-  async function voidClosure(row: Row) {
+  async function voidClosure(row: VoidableClosure) {
     const scope = `${row.origin} · ${closureScopeLabel(row)} · ${yyyyMmDd(row.businessDate)}`;
     const firstConfirm = confirm(
       `Vas a reabrir el cierre ${scope}.\n\n` +
