@@ -89,6 +89,8 @@ export async function GET(req: Request) {
         contractedMinutes: true,
         basePriceCents: true,
         isActive: true,
+        visibleInStore: true,
+        visibleInBooth: true,
       },
       orderBy: [{ serviceId: "asc" }, { durationMinutes: "asc" }],
     }),
@@ -169,6 +171,7 @@ export async function GET(req: Request) {
 
   const options = optionsRaw
     .filter((o) => visibleMainIds.has(o.serviceId))
+    .filter((o) => (origin === "BOOTH" ? o.visibleInBooth : o.visibleInStore))
     .map((o) => {
       const key = `${o.serviceId}:${o.id}`;
       const standardPriceCents = standardPriceMap.get(key) ?? null;

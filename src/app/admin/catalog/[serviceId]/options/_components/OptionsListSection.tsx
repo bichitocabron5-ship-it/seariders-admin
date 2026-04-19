@@ -8,6 +8,8 @@ type OptionRow = {
   paxMax: number;
   contractedMinutes: number;
   isActive: boolean;
+  visibleInStore: boolean;
+  visibleInBooth: boolean;
   basePriceCents?: number;
 };
 
@@ -16,6 +18,8 @@ type OptionDraft = {
   paxMax: number;
   contractedMinutes: number;
   isActive: boolean;
+  visibleInStore: boolean;
+  visibleInBooth: boolean;
 };
 
 type Props = {
@@ -141,6 +145,8 @@ export default function OptionsListSection({
                           paxMax: prev?.paxMax ?? option.paxMax,
                           contractedMinutes: prev?.contractedMinutes ?? option.contractedMinutes,
                           isActive: prev?.isActive ?? option.isActive,
+                          visibleInStore: prev?.visibleInStore ?? option.visibleInStore,
+                          visibleInBooth: prev?.visibleInBooth ?? option.visibleInBooth,
                         }))
                       }
                       style={inputStyle}
@@ -161,6 +167,8 @@ export default function OptionsListSection({
                           paxMax: Number(e.target.value || 0),
                           contractedMinutes: prev?.contractedMinutes ?? option.contractedMinutes,
                           isActive: prev?.isActive ?? option.isActive,
+                          visibleInStore: prev?.visibleInStore ?? option.visibleInStore,
+                          visibleInBooth: prev?.visibleInBooth ?? option.visibleInBooth,
                         }))
                       }
                       style={inputStyle}
@@ -181,6 +189,8 @@ export default function OptionsListSection({
                           paxMax: prev?.paxMax ?? option.paxMax,
                           contractedMinutes: Number(e.target.value || 0),
                           isActive: prev?.isActive ?? option.isActive,
+                          visibleInStore: prev?.visibleInStore ?? option.visibleInStore,
+                          visibleInBooth: prev?.visibleInBooth ?? option.visibleInBooth,
                         }))
                       }
                       style={inputStyle}
@@ -200,10 +210,54 @@ export default function OptionsListSection({
                             paxMax: prev?.paxMax ?? option.paxMax,
                             contractedMinutes: prev?.contractedMinutes ?? option.contractedMinutes,
                             isActive: e.target.checked,
+                            visibleInStore: prev?.visibleInStore ?? option.visibleInStore,
+                            visibleInBooth: prev?.visibleInBooth ?? option.visibleInBooth,
                           }))
                         }
                       />
                       Opción activa
+                    </span>
+                  </label>
+
+                  <label style={{ ...fieldStyle, justifyContent: "end" }}>
+                    Canal
+                    <span style={{ display: "grid", gap: 8, fontSize: 13, fontWeight: 800, color: "#0f172a" }}>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={currentDraft?.visibleInStore ?? option.visibleInStore}
+                          disabled={busy}
+                          onChange={(e) =>
+                            setDraft((prev) => ({
+                              durationMinutes: prev?.durationMinutes ?? option.durationMinutes,
+                              paxMax: prev?.paxMax ?? option.paxMax,
+                              contractedMinutes: prev?.contractedMinutes ?? option.contractedMinutes,
+                              isActive: prev?.isActive ?? option.isActive,
+                              visibleInStore: e.target.checked,
+                              visibleInBooth: prev?.visibleInBooth ?? option.visibleInBooth,
+                            }))
+                          }
+                        />
+                        Visible en Store
+                      </label>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={currentDraft?.visibleInBooth ?? option.visibleInBooth}
+                          disabled={busy}
+                          onChange={(e) =>
+                            setDraft((prev) => ({
+                              durationMinutes: prev?.durationMinutes ?? option.durationMinutes,
+                              paxMax: prev?.paxMax ?? option.paxMax,
+                              contractedMinutes: prev?.contractedMinutes ?? option.contractedMinutes,
+                              isActive: prev?.isActive ?? option.isActive,
+                              visibleInStore: prev?.visibleInStore ?? option.visibleInStore,
+                              visibleInBooth: e.target.checked,
+                            }))
+                          }
+                        />
+                        Visible en Booth
+                      </label>
                     </span>
                   </label>
 
@@ -226,11 +280,19 @@ export default function OptionsListSection({
                     <div style={metaLabel}>PAX máx.</div>
                     <div style={metaValue}>{option.paxMax}</div>
                   </div>
-                  <div style={metaItem}>
-                    <div style={metaLabel}>Contratado</div>
-                    <div style={metaValue}>{option.contractedMinutes} min</div>
+                    <div style={metaItem}>
+                      <div style={metaLabel}>Contratado</div>
+                      <div style={metaValue}>{option.contractedMinutes} min</div>
+                    </div>
+                    <div style={metaItem}>
+                      <div style={metaLabel}>Store</div>
+                      <div style={metaValue}>{option.visibleInStore ? "Visible" : "Oculta"}</div>
+                    </div>
+                    <div style={metaItem}>
+                      <div style={metaLabel}>Booth</div>
+                      <div style={metaValue}>{option.visibleInBooth ? "Visible" : "Oculta"}</div>
+                    </div>
                   </div>
-                </div>
               )}
             </article>
           );

@@ -12,7 +12,9 @@ const CreateBody = z.object({
   durationMinutes: z.number().int().min(1).max(600),
   paxMax: z.number().int().min(1).max(30),
   contractedMinutes: z.number().int().min(1).max(600).optional(),
-  isActive: z.boolean().optional(), // AÑADIR
+  isActive: z.boolean().optional(),
+  visibleInStore: z.boolean().optional(),
+  visibleInBooth: z.boolean().optional(),
   // legacy obligatorio en tu schema (aunque ya no sea fuente de verdad)
   // Pon 0 por defecto y listo.  
   basePriceCents: z.number().int().min(0).max(10_000_000).optional(),
@@ -39,6 +41,8 @@ export async function GET(
       paxMax: true,
       contractedMinutes: true,
       isActive: true,
+      visibleInStore: true,
+      visibleInBooth: true,
       basePriceCents: true,
     },
   });
@@ -97,6 +101,8 @@ const created = await prisma.serviceOption.create({
     paxMax: parsed.data.paxMax,
     contractedMinutes: parsed.data.contractedMinutes ?? parsed.data.durationMinutes,
     isActive: parsed.data.isActive ?? true,
+    visibleInStore: parsed.data.visibleInStore ?? true,
+    visibleInBooth: parsed.data.visibleInBooth ?? true,
     basePriceCents: 0,
   },
   select: {
@@ -106,6 +112,8 @@ const created = await prisma.serviceOption.create({
     paxMax: true,
     contractedMinutes: true,
     isActive: true,
+    visibleInStore: true,
+    visibleInBooth: true,
   },
 });
 

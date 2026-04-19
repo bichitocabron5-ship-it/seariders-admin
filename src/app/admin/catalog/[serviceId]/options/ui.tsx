@@ -11,6 +11,8 @@ type OptionRow = {
   paxMax: number;
   contractedMinutes: number;
   isActive: boolean;
+  visibleInStore: boolean;
+  visibleInBooth: boolean;
   basePriceCents?: number;
 };
 
@@ -19,6 +21,8 @@ type OptionDraft = {
   paxMax: number;
   contractedMinutes: number;
   isActive: boolean;
+  visibleInStore: boolean;
+  visibleInBooth: boolean;
 };
 
 export default function AdminServiceOptionsClient({ serviceId }: { serviceId: string }) {
@@ -35,6 +39,8 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
   const [dur, setDur] = useState(60);
   const [pax, setPax] = useState(2);
   const [contracted, setContracted] = useState(60);
+  const [visibleInStore, setVisibleInStore] = useState(true);
+  const [visibleInBooth, setVisibleInBooth] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,6 +101,8 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
         paxMax: pax,
         contractedMinutes: contracted,
         basePriceCents: 0,
+        visibleInStore,
+        visibleInBooth,
       };
 
       const res = await fetch(`/api/admin/catalog/services/${serviceId}/options`, {
@@ -145,6 +153,8 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
       paxMax: option.paxMax,
       contractedMinutes: option.contractedMinutes,
       isActive: option.isActive,
+      visibleInStore: option.visibleInStore,
+      visibleInBooth: option.visibleInBooth,
     });
     setError(null);
   }
@@ -214,10 +224,14 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
         dur={dur}
         pax={pax}
         contracted={contracted}
+        visibleInStore={visibleInStore}
+        visibleInBooth={visibleInBooth}
         creating={creating}
         onDurChange={setDur}
         onPaxChange={setPax}
         onContractedChange={setContracted}
+        onVisibleInStoreChange={setVisibleInStore}
+        onVisibleInBoothChange={setVisibleInBooth}
         onCreate={createOption}
       />
 

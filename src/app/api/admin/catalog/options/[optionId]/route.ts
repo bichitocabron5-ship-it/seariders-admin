@@ -13,6 +13,8 @@ const Body = z.object({
   paxMax: z.coerce.number().int().min(1).max(30).optional(),
   contractedMinutes: z.coerce.number().int().min(1).max(600).optional(),
   isActive: z.boolean().optional(),
+  visibleInStore: z.boolean().optional(),
+  visibleInBooth: z.boolean().optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ optionId: string }> }) {
@@ -61,6 +63,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ option
       paxMax: true,
       contractedMinutes: true,
       isActive: true,
+      visibleInStore: true,
+      visibleInBooth: true,
     },
   });
 

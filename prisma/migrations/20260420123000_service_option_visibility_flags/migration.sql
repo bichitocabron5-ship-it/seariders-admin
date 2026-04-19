@@ -1,0 +1,3 @@
+ALTER TABLE "ServiceOption"
+ADD COLUMN "visibleInStore" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "visibleInBooth" BOOLEAN NOT NULL DEFAULT true;

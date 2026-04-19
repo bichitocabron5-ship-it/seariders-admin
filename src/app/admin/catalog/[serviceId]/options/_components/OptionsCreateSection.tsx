@@ -12,10 +12,14 @@ type Props = {
   dur: number;
   pax: number;
   contracted: number;
+  visibleInStore: boolean;
+  visibleInBooth: boolean;
   creating: boolean;
   onDurChange: (value: number) => void;
   onPaxChange: (value: number) => void;
   onContractedChange: (value: number) => void;
+  onVisibleInStoreChange: (value: boolean) => void;
+  onVisibleInBoothChange: (value: boolean) => void;
   onCreate: () => void | Promise<void>;
 };
 
@@ -29,10 +33,14 @@ export default function OptionsCreateSection({
   dur,
   pax,
   contracted,
+  visibleInStore,
+  visibleInBooth,
   creating,
   onDurChange,
   onPaxChange,
   onContractedChange,
+  onVisibleInStoreChange,
+  onVisibleInBoothChange,
   onCreate,
 }: Props) {
   return (
@@ -80,6 +88,28 @@ export default function OptionsCreateSection({
               onChange={(e) => onContractedChange(Number(e.target.value || 0))}
               style={inputStyle}
             />
+          </label>
+
+          <label style={{ ...fieldStyle, justifyContent: "end" }}>
+            Visibilidad
+            <span style={{ display: "grid", gap: 8, fontSize: 13, fontWeight: 800, color: "#0f172a" }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={visibleInStore}
+                  onChange={(e) => onVisibleInStoreChange(e.target.checked)}
+                />
+                Visible en Store
+              </label>
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={visibleInBooth}
+                  onChange={(e) => onVisibleInBoothChange(e.target.checked)}
+                />
+                Visible en Booth
+              </label>
+            </span>
           </label>
 
           <div style={{ display: "grid", alignItems: "end" }}>

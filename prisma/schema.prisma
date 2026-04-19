@@ -222,6 +222,8 @@ model ServiceOption {
   contractedMinutes Int
   basePriceCents    Int
   isActive          Boolean           @default(true)
+  visibleInStore    Boolean           @default(true)
+  visibleInBooth    Boolean           @default(true)
   service           Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   reservations      Reservation[]
   reservationItems  ReservationItem[]
