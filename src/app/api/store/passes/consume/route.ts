@@ -82,7 +82,18 @@ export async function POST(req: Request) {
           soldPayment: { select: { amountCents: true, direction: true } },
           salePayments: { select: { amountCents: true, direction: true } },
 
-          product: { select: { serviceId: true, optionId: true } },
+          product: {
+            select: {
+              serviceId: true,
+              optionId: true,
+              option: {
+                select: {
+                  id: true,
+                  durationMinutes: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -97,10 +108,40 @@ export async function POST(req: Request) {
       if (remaining < minutesToUse) throw new Error(`Minutos insuficientes. Quedan ${remaining} min.`);
 
       // 1) descuento minutos + crear consume
+      // 2) resolver optionId operativo según los minutos solicitados
+      // Si el producto tiene una opción fija y coincide en duración, la reutilizamos.
+      // Si no coincide, buscamos una opción activa del mismo servicio para esos minutos.
+      let optionId = v.product.optionId ?? null;
+
+      if (v.product.option?.durationMinutes !== minutesToUse) {
+        const opt = await tx.serviceOption.findFirst({
+          where: {
+            serviceId: v.product.serviceId,
+            durationMinutes: minutesToUse,
+            isActive: true,
+          },
+          select: { id: true },
+        });
+
+        if (!opt) {
+          throw new Error(
+            `No existe una opción activa de ${minutesToUse} min para este servicio (configura ServiceOption o ajusta los minutos).`
+          );
+        }
+
+        optionId = opt.id;
+      }
+
+      if (!optionId) {
+        throw new Error("No se ha podido resolver la opción del servicio para este consumo");
+      }
+
+      // 3) descuento minutos + crear consume
       const consume = await tx.passConsume.create({
         data: {
           voucherId: v.id,
           serviceId: v.product.serviceId,
+          optionId,
           minutesUsed: minutesToUse,
           consumedByUserId: session.userId,
         },
@@ -112,29 +153,6 @@ export async function POST(req: Request) {
         data: { minutesRemaining: remaining - minutesToUse },
         select: { id: true },
       });
-
-      // 2) crear reserva draft (NO formalizada)
-     // Resolver optionId (si el PassProduct no lo fija, lo resolvemos por minutos)
-    let optionId = v.product.optionId ?? null;
-
-    if (!optionId) {
-      const opt = await tx.serviceOption.findFirst({
-        where: {
-          serviceId: v.product.serviceId,
-          durationMinutes: minutesToUse,
-          isActive: true,
-        },
-        select: { id: true },
-      });
-
-      if (!opt) {
-        throw new Error(
-          `No existe una opción activa de ${minutesToUse} min para este servicio (configura ServiceOption o ajusta los minutos).`
-        );
-      }
-
-      optionId = opt.id;
-    }
 
       const reservation = await tx.reservation.create({
         data: {
@@ -178,7 +196,7 @@ export async function POST(req: Request) {
         select: { id: true },
       });
 
-      // 3) item real a 0 EUR
+      // 4) item real a 0 EUR
       await tx.reservationItem.create({
         data: {
           reservationId: reservation.id,
@@ -194,7 +212,7 @@ export async function POST(req: Request) {
         select: { id: true },
       });
 
-      // link opcional consume -> reservation
+      // 5) link opcional consume -> reservation
       await tx.passConsume.update({
         where: { id: consume.id },
         data: { reservationId: reservation.id },
