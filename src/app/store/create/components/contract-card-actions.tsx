@@ -69,7 +69,7 @@ export function ContractCardActions({
         style={{ ...secondaryBtnStyle, width: "100%" }}
         disabled={signerLinkBusy || saving}
       >
-        {signerLinkBusy ? "Abriendo firma..." : "Firmar en tablet"}
+        {signerLinkBusy ? "Abriendo firma..." : "Firma presencial"}
       </button>
 
       {canDownloadFinalPdf ? (

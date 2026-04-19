@@ -48,6 +48,7 @@ type ContractView = {
   imageConsentAccepted: boolean;
   signedAt: string | null;
   signatureSignedBy: string | null;
+  preparedResourceLabel: string;
   renderedHtml: string;
 };
 
@@ -450,6 +451,12 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
                   </a>
                 </div>
 
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+                  <ReadOnlyField label="Hora programada" value={formatTime(snapshot.reservation.scheduledTime)} />
+                  <ReadOnlyField label="Duración" value={snapshot.reservation.durationMinutes ? `${snapshot.reservation.durationMinutes} min` : "Según reserva"} />
+                  <ReadOnlyField label="Recurso asignado" value={contract.preparedResourceLabel} />
+                </div>
+
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
                   <Field label="Nombre del conductor" value={draft?.driverName ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverName: value } }))} />
                   <Field label="Teléfono" value={draft?.driverPhone ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPhone: value } }))} />
@@ -610,6 +617,26 @@ function DateField({
     <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
       <span>{label}</span>
       <input type="date" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={inputStyle} />
+    </label>
+  );
+}
+
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
+      <span>{label}</span>
+      <div
+        style={{
+          ...inputStyle,
+          color: "#475569",
+          background: "#f8fafc",
+          minHeight: 48,
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        {value}
+      </div>
     </label>
   );
 }

@@ -472,10 +472,6 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
         Declara haber comprendido las normas y acepta las condiciones del contrato.
       </p>
 
-      ${contract.imageConsentAccepted
-        ? `<p>☑ Acepto el uso de mi imagen según lo indicado.</p>`
-        : `<p>☐ Acepto el uso de mi imagen según lo indicado.</p>`
-      }
 
       <div class="grid-2" style="margin-top:10px;">
         <div class="field">
@@ -526,10 +522,6 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
         El cliente autoriza a UTE JERSKI CENTER- NOMAD NAUTIC a utilizar las fotografías y vídeos tomados durante la actividad para su publicación en redes sociales, página web y material publicitario de la empresa. Esta autorización es gratuita y podrá ser revocada en cualquier momento mediante notificación por escrito.
       </p>
 
-      ${contract.imageConsentAccepted
-        ? `<p>☑ Acepto el uso de mi imagen según lo indicado.</p>`
-        : `<p>☐ Acepto el uso de mi imagen según lo indicado.</p>`
-      }
     </div>
 
     <div class="footer">
@@ -978,10 +970,6 @@ function buildLicensedHtml(input: ContractRenderInput) {
       <p>
         El cliente autoriza a UTE JERSKI CENTER- NOMAD NAUTIC a utilizar las fotografías y vídeos tomados durante la actividad para su publicación en redes sociales, página web y material publicitario de la empresa. Esta autorización es gratuita y podrá ser revocada en cualquier momento mediante notificación por escrito.
       </p>
-      ${contract.imageConsentAccepted
-        ? `<p>☑ Acepto el uso de mi imagen según lo indicado.</p>`
-        : `<p>☐ Acepto el uso de mi imagen según lo indicado.</p>`
-      }
     </div>
 
     <div class="footer">${esc(legalHeader)}</div>

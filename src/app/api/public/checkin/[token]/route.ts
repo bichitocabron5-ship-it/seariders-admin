@@ -237,6 +237,11 @@ async function getReservationSnapshot(reservationId: string) {
       imageConsentAccepted: Boolean(contract.imageConsentAccepted),
       signedAt: contract.signedAt?.toISOString() ?? null,
       signatureSignedBy: contract.signatureSignedBy,
+      preparedResourceLabel: contract.preparedJetski
+        ? `Moto ${contract.preparedJetski.number ?? "?"}${contract.preparedJetski.model ? ` · ${contract.preparedJetski.model}` : ""}${contract.preparedJetski.plate ? ` · ${contract.preparedJetski.plate}` : ""}`
+        : contract.preparedAsset
+          ? `${contract.preparedAsset.name ?? "Recurso asignado"}${contract.preparedAsset.type ? ` · ${contract.preparedAsset.type}` : ""}${contract.preparedAsset.plate ? ` · ${contract.preparedAsset.plate}` : ""}`
+          : "Pendiente de asignación en tienda",
       renderedHtml,
     };
   });

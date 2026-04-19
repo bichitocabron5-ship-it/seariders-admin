@@ -271,6 +271,10 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
   const j = await res.json();
 
   if (!j.autoFormalized) {
+    if (Number(j.requiredContractUnits ?? 0) > 0) {
+      args.router.push(`/store/create?editFrom=${j.id}#contracts`);
+      return;
+    }
     args.router.push(`/store/create?editFrom=${j.id}#payments`);
     return;
   }

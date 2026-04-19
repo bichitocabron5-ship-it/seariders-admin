@@ -119,7 +119,7 @@ export function ReservationPrecheckinLinkModal({
           <button
             type="button"
             onClick={() => {
-              if (whatsappUrl) window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+              if (whatsappUrl) window.location.href = whatsappUrl;
             }}
             disabled={!whatsappUrl}
             style={{

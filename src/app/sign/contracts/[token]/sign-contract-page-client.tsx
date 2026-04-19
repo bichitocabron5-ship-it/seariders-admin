@@ -30,6 +30,7 @@ export function SignContractPageClient({
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(contract.status === "SIGNED");
   const [confirmedRead, setConfirmedRead] = useState(contract.status === "SIGNED");
+  const [imageConsentAccepted, setImageConsentAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
@@ -47,6 +48,7 @@ export function SignContractPageClient({
         body: JSON.stringify({
           signerName: signerName.trim(),
           imageDataUrl,
+          imageConsentAccepted,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -147,6 +149,17 @@ export function SignContractPageClient({
             style={{ marginTop: 2 }}
           />
           <span>He leido el contrato completo y acepto firmarlo electronicamente.</span>
+        </label>
+
+        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+          <input
+            type="checkbox"
+            checked={imageConsentAccepted}
+            onChange={(e) => setImageConsentAccepted(e.target.checked)}
+            disabled={done}
+            style={{ marginTop: 2 }}
+          />
+          <span>Acepto el uso de mi imagen con fines promocionales y publicitarios.</span>
         </label>
 
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>

@@ -22,6 +22,7 @@ async function requireStoreOrAdmin() {
 const BodySchema = z.object({
   signerName: z.string().trim().min(2),
   imageDataUrl: z.string().trim().min(30),
+  imageConsentAccepted: z.boolean().optional(),
 });
 
 export async function POST(
@@ -42,6 +43,7 @@ export async function POST(
       contractId,
       signerName: body.signerName,
       imageDataUrl: body.imageDataUrl,
+      imageConsentAccepted: body.imageConsentAccepted,
     });
 
     return NextResponse.json({

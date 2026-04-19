@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 const BodySchema = z.object({
   signerName: z.string().trim().min(2),
   imageDataUrl: z.string().trim().min(30),
+  imageConsentAccepted: z.boolean().optional(),
 });
 
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
@@ -21,6 +22,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       contractId: payload.contractId,
       signerName: body.signerName,
       imageDataUrl: body.imageDataUrl,
+      imageConsentAccepted: body.imageConsentAccepted,
     });
 
     return NextResponse.json({ ok: true, contract });
