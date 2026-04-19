@@ -29,6 +29,18 @@ export async function GET(_: Request, ctx: { params: Promise<{ token: string; co
     return NextResponse.redirect(url);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Error";
+    if (message.includes("Could not find Chrome")) {
+      const fallback = await prisma.reservationContract.findUnique({
+        where: { id: contractId },
+        select: { renderedHtml: true },
+      });
+      if (fallback?.renderedHtml?.trim()) {
+        return new NextResponse(fallback.renderedHtml, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+      return new NextResponse("No se pudo generar el PDF. Abre el contrato en el navegador y usa Imprimir > Guardar como PDF.", { status: 503 });
+    }
     return new NextResponse(message, { status: 400 });
   }
 }

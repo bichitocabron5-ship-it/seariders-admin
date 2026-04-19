@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
 
 type ContractView = {
@@ -26,12 +26,49 @@ export function SignContractPageClient({
   contract: ContractView;
 }) {
   const sigRef = useRef<SignatureCanvas | null>(null);
+  const sigContainerRef = useRef<HTMLDivElement | null>(null);
   const [signerName, setSignerName] = useState(contract.driverName || contract.customerName || "");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(contract.status === "SIGNED");
   const [confirmedRead, setConfirmedRead] = useState(contract.status === "SIGNED");
   const [imageConsentAccepted, setImageConsentAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const resizeSignaturePad = useCallback(() => {
+    const pad = sigRef.current;
+    const container = sigContainerRef.current;
+    if (!pad || !container) return;
+
+    const canvas = pad.getCanvas();
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    const width = Math.max(Math.floor(container.getBoundingClientRect().width), 280);
+    const height = 280;
+    const data = !pad.isEmpty() ? pad.toDataURL("image/png") : null;
+
+    canvas.width = Math.floor(width * ratio);
+    canvas.height = Math.floor(height * ratio);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.scale(ratio, ratio);
+
+    pad.clear();
+
+    if (data) {
+      pad.fromDataURL(data, {
+        ratio,
+        width,
+        height,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    resizeSignaturePad();
+    window.addEventListener("resize", resizeSignaturePad);
+    return () => window.removeEventListener("resize", resizeSignaturePad);
+  }, [resizeSignaturePad]);
 
   async function handleSave() {
     try {
@@ -122,8 +159,12 @@ export function SignContractPageClient({
               textDecoration: "none",
             }}
           >
-            Descargar PDF
+            Descargar PDF / vista imprimible
           </a>
+        </div>
+
+        <div style={{ fontSize: 12, color: "#64748b" }}>
+          Si el PDF no está disponible en este dispositivo, se abrirá una versión imprimible del contrato.
         </div>
 
         <div style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
@@ -172,13 +213,11 @@ export function SignContractPageClient({
           />
         </label>
 
-        <div style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
+        <div ref={sigContainerRef} style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
           <SignatureCanvas
             ref={sigRef}
             penColor="black"
             canvasProps={{
-              width: 900,
-              height: 280,
               style: {
                 width: "100%",
                 height: 280,

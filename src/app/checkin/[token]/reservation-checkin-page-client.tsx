@@ -9,6 +9,7 @@ type ReservationView = {
   customerName: string | null;
   customerPhone: string | null;
   customerEmail: string | null;
+  marketing: string | null;
   customerCountry: string | null;
   customerAddress: string | null;
   customerPostalCode: string | null;
@@ -110,6 +111,7 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
     customerName: "",
     customerPhone: "",
     customerEmail: "",
+    marketing: "",
     customerCountry: "",
     customerAddress: "",
     customerPostalCode: "",
@@ -134,6 +136,7 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
       customerName: data.reservation.customerName ?? "",
       customerPhone: data.reservation.customerPhone ?? "",
       customerEmail: data.reservation.customerEmail ?? "",
+      marketing: data.reservation.marketing ?? "",
       customerCountry: data.reservation.customerCountry ?? "ES",
       customerAddress: data.reservation.customerAddress ?? "",
       customerPostalCode: data.reservation.customerPostalCode ?? "",
@@ -385,12 +388,7 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
               <Field label="Nombre y apellidos" value={reservationDraft.customerName} onChange={(value) => setReservationDraft((current) => ({ ...current, customerName: value }))} />
               <Field label="Teléfono" value={reservationDraft.customerPhone} onChange={(value) => setReservationDraft((current) => ({ ...current, customerPhone: value }))} />
               <Field label="Email" value={reservationDraft.customerEmail} onChange={(value) => setReservationDraft((current) => ({ ...current, customerEmail: value }))} />
-              <Field label="País" value={reservationDraft.customerCountry} onChange={(value) => setReservationDraft((current) => ({ ...current, customerCountry: value }))} />
-              <Field label="Dirección" value={reservationDraft.customerAddress} onChange={(value) => setReservationDraft((current) => ({ ...current, customerAddress: value }))} />
-              <Field label="Código postal" value={reservationDraft.customerPostalCode} onChange={(value) => setReservationDraft((current) => ({ ...current, customerPostalCode: value }))} />
-              <DateField label="Fecha de nacimiento" value={reservationDraft.customerBirthDate} onChange={(value) => setReservationDraft((current) => ({ ...current, customerBirthDate: value }))} />
-              <Field label="Tipo de documento" value={reservationDraft.customerDocType} onChange={(value) => setReservationDraft((current) => ({ ...current, customerDocType: value }))} />
-              <Field label="Número de documento" value={reservationDraft.customerDocNumber} onChange={(value) => setReservationDraft((current) => ({ ...current, customerDocNumber: value }))} />
+              <Field label="Cómo nos conoció" value={reservationDraft.marketing} onChange={(value) => setReservationDraft((current) => ({ ...current, marketing: value }))} />
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
@@ -447,7 +445,7 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
                     rel="noreferrer"
                     style={secondaryLinkStyle}
                   >
-                    Descargar PDF
+                    PDF / vista imprimible
                   </a>
                 </div>
 
