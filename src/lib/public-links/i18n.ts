@@ -146,6 +146,9 @@ type PublicCopy = {
     driverAddress: string;
     driverPostalCode: string;
     driverBirthDate: string;
+    licenseSchool: string;
+    licenseType: string;
+    licenseNumber: string;
     imageConsent: string;
     tutorAuthorization: (fileName: string | null) => string;
     signatureTitle: string;
@@ -294,6 +297,9 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
         driverAddress: "Address *",
         driverPostalCode: "Postal code",
         driverBirthDate: "Date of birth *",
+        licenseSchool: "License school / issuer *",
+        licenseType: "License type *",
+        licenseNumber: "License number *",
         imageConsent: "I accept the image consent and the processing required for the activity.",
         tutorAuthorization: (fileName) =>
           `I confirm that parent or guardian authorization exists. ${fileName ? `Validated document: ${fileName}.` : "The copy will be validated in store."}`,
@@ -312,7 +318,7 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
       requiredFields: "Los campos marcados con * son obligatorios.",
       documentTypeLabel: "Tipo de documento",
       documentNumberLabel: "Numero de documento",
-      marketingLabel: "Como nos conocio?",
+      marketingLabel: "Como nos conociste?",
       documentTypeOptions,
       marketingOptions,
     },
@@ -421,6 +427,9 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
       driverAddress: "Direccion *",
       driverPostalCode: "Codigo postal",
       driverBirthDate: "Fecha de nacimiento *",
+      licenseSchool: "Escuela / emisor *",
+      licenseType: "Tipo de licencia *",
+      licenseNumber: "Numero de licencia *",
       imageConsent: "Acepto el consentimiento de imagen y el tratamiento necesario para la actividad.",
       tutorAuthorization: (fileName) =>
         `Confirmo que existe autorizacion del padre, madre o tutor. ${fileName ? `Documento validado: ${fileName}.` : "La copia se validara en tienda."}`,

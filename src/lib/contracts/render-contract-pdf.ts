@@ -40,7 +40,7 @@ async function generatePdfFromHtml(html: string, language: PublicLanguage) {
       },
       headerTemplate: `
         <div style="width:100%; font-size:9px; padding:0 12mm; color:#222; text-align:center;">
-          UTE JETSKI CENTER- NOMAD NAUTIC · CIF: U16457343 · Tel: 608101272 · Email: seariderjetski@gmail.com · Direccion: C/ MARINA L-401 402, NUM 401 402 08330 PREMIA DE MAR - (BARCELONA)
+          UTE JETSKI CENTER- NOMAD NAUTIC | CIF: U16457343 | Tel: 608101272 | Email: seariderjetski@gmail.com | Direccion: C/ MARINA L-401 402, NUM 401 402 08330 PREMIA DE MAR - (BARCELONA)
         </div>
       `,
       footerTemplate: `

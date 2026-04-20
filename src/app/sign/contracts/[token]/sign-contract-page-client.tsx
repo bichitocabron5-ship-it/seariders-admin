@@ -130,8 +130,8 @@ export function SignContractPageClient({
           <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>{copy.signPage.title(contract.unitIndex)}</h1>
           <div style={{ fontSize: 14, color: "#475569" }}>
             {contract.serviceName}
-            {contract.durationMinutes ? ` · ${contract.durationMinutes} min` : ""}
-            {contract.customerName ? ` · ${contract.customerName}` : ""}
+            {contract.durationMinutes ? ` | ${contract.durationMinutes} min` : ""}
+            {contract.customerName ? ` | ${contract.customerName}` : ""}
           </div>
         </div>
 

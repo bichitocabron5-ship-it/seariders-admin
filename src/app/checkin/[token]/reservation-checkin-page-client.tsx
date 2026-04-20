@@ -363,8 +363,8 @@ export function ReservationCheckinPageClient({
             <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.1 }}>{copy.checkinPage.title}</h1>
             <div style={{ color: "#475569", fontSize: 14 }}>
               {snapshot.reservation.serviceName}
-              {snapshot.reservation.durationMinutes ? ` · ${snapshot.reservation.durationMinutes} min` : ""}
-              {` · ${formatPublicDate(snapshot.reservation.activityDate, language)} · ${formatPublicTime(snapshot.reservation.scheduledTime, language)}`}
+              {snapshot.reservation.durationMinutes ? ` | ${snapshot.reservation.durationMinutes} min` : ""}
+              {` | ${formatPublicDate(snapshot.reservation.activityDate, language)} | ${formatPublicTime(snapshot.reservation.scheduledTime, language)}`}
             </div>
             <div style={{ fontSize: 12, color: autosave.color, fontWeight: 800 }}>
               {autosave.label}
@@ -436,7 +436,7 @@ export function ReservationCheckinPageClient({
                   <div style={{ fontWeight: 900, fontSize: 20 }}>{copy.checkinPage.unitTitle(contract.unitIndex)}</div>
                   <div style={{ fontSize: 13, color: "#64748b" }}>
                     {draft?.driverName || copy.checkinPage.pendingDriver}
-                    {contract.signedAt ? ` · ${copy.checkinPage.signedOn(formatPublicDate(contract.signedAt, language))}` : ""}
+                    {contract.signedAt ? ` | ${copy.checkinPage.signedOn(formatPublicDate(contract.signedAt, language))}` : ""}
                   </div>
                 </div>
                 <StatusBadge status={contract.status} language={language} />
@@ -475,9 +475,9 @@ export function ReservationCheckinPageClient({
                   <Field label={`${copy.common.documentNumberLabel} *`} value={draft?.driverDocNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocNumber: value } }))} />
                   {snapshot.reservation.isLicense ? (
                     <>
-                      <Field label="License school *" value={draft?.licenseSchool ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseSchool: value } }))} />
-                      <Field label="License type *" value={draft?.licenseType ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseType: value } }))} />
-                      <Field label="License number *" value={draft?.licenseNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseNumber: value } }))} />
+                      <Field label={copy.checkinPage.licenseSchool} value={draft?.licenseSchool ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseSchool: value } }))} />
+                      <Field label={copy.checkinPage.licenseType} value={draft?.licenseType ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseType: value } }))} />
+                      <Field label={copy.checkinPage.licenseNumber} value={draft?.licenseNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseNumber: value } }))} />
                     </>
                   ) : null}
                 </div>
