@@ -7,6 +7,7 @@ import {
   loadLogoSrc,
   templateCodeForContract,
 } from "@/lib/contracts/render-contract";
+import { normalizePublicLanguage } from "@/lib/public-links/i18n";
 import { verifyReservationCheckinToken } from "@/lib/reservations/public-checkin-link";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import {
@@ -59,7 +60,7 @@ function norm(value: string | null | undefined) {
   return trimmed.length ? trimmed : null;
 }
 
-async function getReservationSnapshot(reservationId: string) {
+async function getReservationSnapshot(reservationId: string, language: ReturnType<typeof normalizePublicLanguage>) {
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
     select: {
@@ -173,6 +174,7 @@ async function getReservationSnapshot(reservationId: string) {
           hasLicense,
         }),
         templateVersion: "v1",
+        language,
         logoSrc,
         reservation: {
           id: reservation.id,
@@ -275,24 +277,26 @@ async function getReservationSnapshot(reservationId: string) {
   };
 }
 
-export async function GET(_: Request, ctx: { params: Promise<{ token: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
+  const language = normalizePublicLanguage(new URL(req.url).searchParams.get("lang"));
   const payload = verifyReservationCheckinToken(token);
-  if (!payload) return new NextResponse("Enlace de pre-checkin no valido o caducado", { status: 401 });
+  if (!payload) return new NextResponse(language === "en" ? "Pre-check-in link is invalid or expired" : "Enlace de pre-checkin no valido o caducado", { status: 401 });
 
-  const snapshot = await getReservationSnapshot(payload.reservationId);
-  if (!snapshot) return new NextResponse("Reserva no encontrada", { status: 404 });
+  const snapshot = await getReservationSnapshot(payload.reservationId, language);
+  if (!snapshot) return new NextResponse(language === "en" ? "Booking not found" : "Reserva no encontrada", { status: 404 });
 
-  return NextResponse.json({ ok: true, ...snapshot });
+  return NextResponse.json({ ok: true, language, ...snapshot });
 }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
+  const language = normalizePublicLanguage(new URL(req.url).searchParams.get("lang"));
   const payload = verifyReservationCheckinToken(token);
-  if (!payload) return new NextResponse("Enlace de pre-checkin no valido o caducado", { status: 401 });
+  if (!payload) return new NextResponse(language === "en" ? "Pre-check-in link is invalid or expired" : "Enlace de pre-checkin no valido o caducado", { status: 401 });
 
   const parsed = BodySchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return new NextResponse("Body invalido", { status: 400 });
+  if (!parsed.success) return new NextResponse(language === "en" ? "Invalid request body" : "Body invalido", { status: 400 });
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -396,9 +400,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
       }
     });
 
-    const snapshot = await getReservationSnapshot(payload.reservationId);
-    if (!snapshot) return new NextResponse("Reserva no encontrada", { status: 404 });
-    return NextResponse.json({ ok: true, ...snapshot });
+      const snapshot = await getReservationSnapshot(payload.reservationId, language);
+    if (!snapshot) return new NextResponse(language === "en" ? "Booking not found" : "Reserva no encontrada", { status: 404 });
+    return NextResponse.json({ ok: true, language, ...snapshot });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Error";
     return new NextResponse(message, { status: 400 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyContractSignatureToken } from "@/lib/contracts/signature-link";
 import { saveContractSignature } from "@/lib/contracts/save-contract-signature";
+import { normalizePublicLanguage } from "@/lib/public-links/i18n";
 
 export const runtime = "nodejs";
 
@@ -13,8 +14,11 @@ const BodySchema = z.object({
 
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
+  const language = normalizePublicLanguage(new URL(req.url).searchParams.get("lang"));
   const payload = verifyContractSignatureToken(token);
-  if (!payload) return new NextResponse("Enlace de firma no válido o caducado", { status: 401 });
+  if (!payload) {
+    return new NextResponse(language === "en" ? "Signature link is invalid or expired" : "Enlace de firma no valido o caducado", { status: 401 });
+  }
 
   try {
     const body = BodySchema.parse(await req.json());
@@ -23,6 +27,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       signerName: body.signerName,
       imageDataUrl: body.imageDataUrl,
       imageConsentAccepted: body.imageConsentAccepted,
+      language,
     });
 
     return NextResponse.json({ ok: true, contract });

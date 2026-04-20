@@ -6,16 +6,21 @@ import {
   loadLogoSrc,
   templateCodeForContract,
 } from "@/lib/contracts/render-contract";
+import { normalizePublicLanguage } from "@/lib/public-links/i18n";
 import { SignContractPageClient } from "./sign-contract-page-client";
 
 export const runtime = "nodejs";
 
 export default async function SignContractPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ lang?: string }>;
 }) {
   const { token } = await params;
+  const { lang } = await searchParams;
+  const language = normalizePublicLanguage(lang);
   const payload = verifyContractSignatureToken(token);
   if (!payload) notFound();
 
@@ -95,6 +100,7 @@ export default async function SignContractPage({
         hasLicense,
       }),
       templateVersion: "v1",
+      language,
       logoSrc,
       reservation: {
         id: contract.reservation.id,
@@ -142,6 +148,7 @@ export default async function SignContractPage({
   return (
     <SignContractPageClient
       token={token}
+      language={language}
       contract={{
         id: contract.id,
         unitIndex: Number(contract.logicalUnitIndex ?? contract.unitIndex),

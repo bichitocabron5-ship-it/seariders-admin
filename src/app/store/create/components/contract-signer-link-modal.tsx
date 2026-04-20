@@ -1,6 +1,14 @@
 "use client";
 
 import QRCode from "react-qr-code";
+import { useMemo, useState } from "react";
+import {
+  appendPublicLanguage,
+  getDefaultPublicLanguage,
+  getPublicCopy,
+  PUBLIC_LANGUAGE_OPTIONS,
+  type PublicLanguage,
+} from "@/lib/public-links/i18n";
 
 const COUNTRY_DIAL_CODES: Record<string, string> = {
   ES: "34",
@@ -67,15 +75,17 @@ export function ContractSignerLinkModal({
   unitLabel: string;
   onClose: () => void;
 }) {
+  const [language, setLanguage] = useState<PublicLanguage>(getDefaultPublicLanguage(country));
+  const copy = getPublicCopy(language);
+  const localizedUrl = useMemo(() => appendPublicLanguage(url, language), [language, url]);
   const whatsappPhone = normalizePhoneForWhatsApp(phone ?? "", country);
   const expiryLabel = formatLinkExpiry(expiresInMinutes);
-  const whatsappMessage =
-    `Hola ${recipientName || "cliente"},\n\n` +
-    `Le enviamos el enlace seguro para revisar y firmar su contrato de reserva con Seariders (${unitLabel}).\n\n` +
-    `${url}\n\n` +
-    `Cuando la firma quede registrada, podremos continuar con la formalizacion y el cobro de su reserva.\n\n` +
-    `Este enlace caduca en ${expiryLabel}.\n\n` +
-    `Gracias.`;
+  const whatsappMessage = copy.signerModal.buildMessage({
+    recipientName,
+    unitLabel,
+    url: localizedUrl,
+    expiryLabel,
+  });
   const whatsappUrl = whatsappPhone
     ? `https://wa.me/${encodeURIComponent(whatsappPhone)}?text=${encodeURIComponent(whatsappMessage)}`
     : null;
@@ -107,13 +117,24 @@ export function ContractSignerLinkModal({
       >
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>
-            Firma en tablet
+            {copy.signerModal.titleEyebrow}
           </div>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>Escanea este QR desde el movil o tablet</div>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{copy.signerModal.title}</div>
           <div style={{ fontSize: 13, color: "#64748b" }}>
-            El enlace de firma caduca en {expiryLabel}.
+            {copy.signerModal.expires(expiryLabel)}
           </div>
         </div>
+
+        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
+          Idioma
+          <select value={language} onChange={(e) => setLanguage(e.target.value as PublicLanguage)} style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1", fontSize: 13, background: "#fff" }}>
+            {PUBLIC_LANGUAGE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <div
           style={{
@@ -131,10 +152,10 @@ export function ContractSignerLinkModal({
         </div>
 
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
-          Enlace de firma
+          {copy.signerModal.linkLabel}
           <input
             readOnly
-            value={url}
+            value={localizedUrl}
             style={{
               width: "100%",
               padding: "12px 14px",
@@ -147,7 +168,7 @@ export function ContractSignerLinkModal({
         </label>
 
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
-          Mensaje para WhatsApp
+          {copy.signerModal.whatsappLabel}
           <textarea
             readOnly
             value={whatsappMessage}
@@ -175,14 +196,14 @@ export function ContractSignerLinkModal({
           }}
         >
           {whatsappUrl
-            ? `WhatsApp listo para ${phone || "el cliente"}.`
-            : "No hay un telefono valido para abrir WhatsApp automaticamente. Puedes copiar el mensaje y enviarlo manualmente."}
+            ? copy.signerModal.whatsappReady(phone || "the customer")
+            : copy.signerModal.whatsappMissing}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
           <button
             type="button"
-            onClick={() => void navigator.clipboard.writeText(url)}
+            onClick={() => void navigator.clipboard.writeText(localizedUrl)}
             style={{
               padding: "12px 14px",
               borderRadius: 12,
@@ -192,7 +213,7 @@ export function ContractSignerLinkModal({
               cursor: "pointer",
             }}
           >
-            Copiar enlace
+            {copy.signerModal.copyLink}
           </button>
           <button
             type="button"
@@ -206,7 +227,7 @@ export function ContractSignerLinkModal({
               cursor: "pointer",
             }}
           >
-            Copiar mensaje
+            {copy.signerModal.copyMessage}
           </button>
           <button
             type="button"
@@ -225,11 +246,11 @@ export function ContractSignerLinkModal({
               opacity: whatsappUrl ? 1 : 0.65,
             }}
           >
-            Enviar WhatsApp
+            {copy.signerModal.sendWhatsapp}
           </button>
           <button
             type="button"
-            onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+            onClick={() => window.open(localizedUrl, "_blank", "noopener,noreferrer")}
             style={{
               padding: "12px 14px",
               borderRadius: 12,
@@ -240,7 +261,7 @@ export function ContractSignerLinkModal({
               cursor: "pointer",
             }}
           >
-            Abrir firma
+            {copy.signerModal.openLink}
           </button>
         </div>
 
@@ -256,7 +277,7 @@ export function ContractSignerLinkModal({
             cursor: "pointer",
           }}
         >
-          Cerrar
+          {copy.signerModal.close}
         </button>
       </div>
     </div>

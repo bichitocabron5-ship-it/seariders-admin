@@ -3,13 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { regenerateSignedContractPdf } from "@/lib/contracts/render-contract-pdf";
 import { getSignedContractPdfUrl } from "@/lib/s3";
 import { verifyReservationCheckinToken } from "@/lib/reservations/public-checkin-link";
+import { normalizePublicLanguage } from "@/lib/public-links/i18n";
 
 export const runtime = "nodejs";
 
-export async function GET(_: Request, ctx: { params: Promise<{ token: string; contractId: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ token: string; contractId: string }> }) {
   const { token, contractId } = await ctx.params;
+  const language = normalizePublicLanguage(new URL(req.url).searchParams.get("lang"));
   const payload = verifyReservationCheckinToken(token);
-  if (!payload) return new NextResponse("Enlace de pre-checkin no valido o caducado", { status: 401 });
+  if (!payload) return new NextResponse(language === "en" ? "Pre-check-in link is invalid or expired" : "Enlace de pre-checkin no valido o caducado", { status: 401 });
 
   try {
     const existing = await prisma.reservationContract.findUnique({
@@ -17,12 +19,12 @@ export async function GET(_: Request, ctx: { params: Promise<{ token: string; co
       select: { id: true, reservationId: true },
     });
     if (!existing || existing.reservationId !== payload.reservationId) {
-      return new NextResponse("Contrato no encontrado", { status: 404 });
+      return new NextResponse(language === "en" ? "Contract not found" : "Contrato no encontrado", { status: 404 });
     }
 
-    const contract = await regenerateSignedContractPdf(existing.id);
+    const contract = await regenerateSignedContractPdf(existing.id, language);
     if (!contract.renderedPdfKey) {
-      return new NextResponse("PDF no disponible", { status: 404 });
+      return new NextResponse(language === "en" ? "PDF not available" : "PDF no disponible", { status: 404 });
     }
 
     const url = await getSignedContractPdfUrl(contract.renderedPdfKey, 300);
@@ -39,7 +41,12 @@ export async function GET(_: Request, ctx: { params: Promise<{ token: string; co
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
       }
-      return new NextResponse("No se pudo generar el PDF. Abre el contrato en el navegador y usa Imprimir > Guardar como PDF.", { status: 503 });
+      return new NextResponse(
+        language === "en"
+          ? "The PDF could not be generated. Open the contract in the browser and use Print > Save as PDF."
+          : "No se pudo generar el PDF. Abre el contrato en el navegador y usa Imprimir > Guardar como PDF.",
+        { status: 503 }
+      );
     }
     return new NextResponse(message, { status: 400 });
   }

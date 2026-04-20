@@ -1,8 +1,16 @@
 "use client";
 
 import type React from "react";
+import { useMemo, useState } from "react";
 import QRCode from "react-qr-code";
 import { formatLinkExpiry, normalizePhoneForWhatsApp } from "./contract-signer-link-modal";
+import {
+  appendPublicLanguage,
+  getDefaultPublicLanguage,
+  getPublicCopy,
+  PUBLIC_LANGUAGE_OPTIONS,
+  type PublicLanguage,
+} from "@/lib/public-links/i18n";
 
 export function ReservationPrecheckinLinkModal({
   url,
@@ -21,15 +29,17 @@ export function ReservationPrecheckinLinkModal({
   contractsCount: number;
   onClose: () => void;
 }) {
+  const [language, setLanguage] = useState<PublicLanguage>(getDefaultPublicLanguage(country));
+  const copy = getPublicCopy(language);
+  const localizedUrl = useMemo(() => appendPublicLanguage(url, language), [language, url]);
   const whatsappPhone = normalizePhoneForWhatsApp(phone ?? "", country);
   const expiryLabel = formatLinkExpiry(expiresInMinutes);
-  const whatsappMessage =
-    `Hola ${recipientName || "cliente"},\n\n` +
-    `Le enviamos su enlace seguro de pre-checkin para completar los datos de la reserva, revisar el contrato${contractsCount === 1 ? "" : " de cada unidad"} y firmarlo digitalmente antes de su llegada.\n\n` +
-    `${url}\n\n` +
-    `Una vez completado, en tienda solo revisaremos los datos finales para continuar con el cobro.\n\n` +
-    `Este enlace caduca en ${expiryLabel}.\n\n` +
-    `Gracias,\nEquipo Seariders`;
+  const whatsappMessage = copy.precheckinModal.buildMessage({
+    recipientName,
+    contractsCount,
+    url: localizedUrl,
+    expiryLabel,
+  });
 
   const whatsappUrl = whatsappPhone
     ? `https://wa.me/${encodeURIComponent(whatsappPhone)}?text=${encodeURIComponent(whatsappMessage)}`
@@ -62,13 +72,28 @@ export function ReservationPrecheckinLinkModal({
       >
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>
-            Pre-checkin remoto
+            {copy.precheckinModal.titleEyebrow}
           </div>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>Enviar enlace único de reserva</div>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{copy.precheckinModal.title}</div>
           <div style={{ fontSize: 13, color: "#64748b" }}>
-            El cliente podrá completar sus datos, revisar {contractsCount === 1 ? "el contrato" : `los ${contractsCount} contratos`} y firmar antes de venir.
+            {copy.precheckinModal.description(contractsCount)}
           </div>
         </div>
+
+        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
+          Idioma
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as PublicLanguage)}
+            style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1", fontSize: 13, background: "#fff" }}
+          >
+            {PUBLIC_LANGUAGE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <div
           style={{
@@ -81,17 +106,17 @@ export function ReservationPrecheckinLinkModal({
           }}
         >
           <div style={{ background: "#fff", padding: 16, borderRadius: 12 }}>
-            <QRCode value={url} size={256} />
+            <QRCode value={localizedUrl} size={256} />
           </div>
         </div>
 
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
-          Enlace de pre-checkin
-          <input readOnly value={url} style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1", fontSize: 13, background: "#fff" }} />
+          {copy.precheckinModal.linkLabel}
+          <input readOnly value={localizedUrl} style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1", fontSize: 13, background: "#fff" }} />
         </label>
 
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
-          Mensaje para WhatsApp
+          {copy.precheckinModal.whatsappLabel}
           <textarea readOnly value={whatsappMessage} style={{ width: "100%", minHeight: 148, padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1", fontSize: 13, background: "#fff", resize: "vertical" }} />
         </label>
 
@@ -106,16 +131,16 @@ export function ReservationPrecheckinLinkModal({
           }}
         >
           {whatsappUrl
-            ? `WhatsApp listo para ${phone || "el cliente"}.`
-            : "No hay un teléfono válido para abrir WhatsApp automáticamente. Puedes copiar el mensaje y enviarlo manualmente."}
+            ? copy.precheckinModal.whatsappReady(phone || "the customer")
+            : copy.precheckinModal.whatsappMissing}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-          <button type="button" onClick={() => void navigator.clipboard.writeText(url)} style={buttonStyle}>
-            Copiar enlace
+          <button type="button" onClick={() => void navigator.clipboard.writeText(localizedUrl)} style={buttonStyle}>
+            {copy.precheckinModal.copyLink}
           </button>
           <button type="button" onClick={() => void navigator.clipboard.writeText(whatsappMessage)} style={buttonStyle}>
-            Copiar mensaje
+            {copy.precheckinModal.copyMessage}
           </button>
           <button
             type="button"
@@ -132,11 +157,11 @@ export function ReservationPrecheckinLinkModal({
               opacity: whatsappUrl ? 1 : 0.65,
             }}
           >
-            Enviar WhatsApp
+            {copy.precheckinModal.sendWhatsapp}
           </button>
           <button
             type="button"
-            onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+            onClick={() => window.open(localizedUrl, "_blank", "noopener,noreferrer")}
             style={{
               ...buttonStyle,
               border: "1px solid #0f172a",
@@ -144,12 +169,12 @@ export function ReservationPrecheckinLinkModal({
               color: "#fff",
             }}
           >
-            Abrir enlace
+            {copy.precheckinModal.openLink}
           </button>
         </div>
 
         <button type="button" onClick={onClose} style={buttonStyle}>
-          Cerrar
+          {copy.precheckinModal.close}
         </button>
       </div>
     </div>

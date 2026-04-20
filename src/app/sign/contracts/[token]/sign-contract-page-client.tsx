@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
+import { getPublicCopy, type PublicLanguage } from "@/lib/public-links/i18n";
 
 type ContractView = {
   id: string;
@@ -20,11 +21,14 @@ type ContractView = {
 
 export function SignContractPageClient({
   token,
+  language,
   contract,
 }: {
   token: string;
+  language: PublicLanguage;
   contract: ContractView;
 }) {
+  const copy = getPublicCopy(language);
   const sigRef = useRef<SignatureCanvas | null>(null);
   const sigContainerRef = useRef<HTMLDivElement | null>(null);
   const [signerName, setSignerName] = useState(contract.driverName || contract.customerName || "");
@@ -73,13 +77,13 @@ export function SignContractPageClient({
   async function handleSave() {
     try {
       setError(null);
-      if (!confirmedRead) throw new Error("Debes leer y aceptar el contrato antes de firmar");
-      if (!signerName.trim()) throw new Error("Nombre del firmante requerido");
-      if (!sigRef.current || sigRef.current.isEmpty()) throw new Error("La firma esta vacia");
+      if (!confirmedRead) throw new Error(copy.signPage.errors.mustRead);
+      if (!signerName.trim()) throw new Error(copy.signPage.errors.signerRequired);
+      if (!sigRef.current || sigRef.current.isEmpty()) throw new Error(copy.signPage.errors.signatureEmpty);
 
       setBusy(true);
       const imageDataUrl = sigRef.current.getTrimmedCanvas().toDataURL("image/png");
-      const res = await fetch(`/api/sign/contracts/${encodeURIComponent(token)}/signature`, {
+      const res = await fetch(`/api/sign/contracts/${encodeURIComponent(token)}/signature?lang=${encodeURIComponent(language)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -91,7 +95,7 @@ export function SignContractPageClient({
       if (!res.ok) throw new Error(await res.text());
       setDone(true);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "No se pudo guardar la firma");
+      setError(e instanceof Error ? e.message : copy.signPage.errors.saveFailed);
     } finally {
       setBusy(false);
     }
@@ -121,9 +125,9 @@ export function SignContractPageClient({
       >
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>
-            Firma digital
+            {copy.signPage.eyebrow}
           </div>
-          <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>Contrato unidad #{contract.unitIndex}</h1>
+          <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>{copy.signPage.title(contract.unitIndex)}</h1>
           <div style={{ fontSize: 14, color: "#475569" }}>
             {contract.serviceName}
             {contract.durationMinutes ? ` · ${contract.durationMinutes} min` : ""}
@@ -133,17 +137,17 @@ export function SignContractPageClient({
 
         {done ? (
           <div style={{ padding: 14, borderRadius: 14, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534", fontWeight: 900 }}>
-            Contrato firmado correctamente. Puedes descargar la copia en PDF o volver al punto de venta.
+            {copy.signPage.done}
           </div>
         ) : (
           <div style={{ padding: 14, borderRadius: 14, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8", fontWeight: 700 }}>
-            Revisa el contrato completo antes de firmar. Cuando lo hayas leido, confirma la lectura y firma al final.
+            {copy.signPage.intro}
           </div>
         )}
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <a
-            href={`/api/sign/contracts/${encodeURIComponent(token)}/pdf`}
+            href={`/api/sign/contracts/${encodeURIComponent(token)}/pdf?lang=${encodeURIComponent(language)}`}
             target="_blank"
             rel="noreferrer"
             style={{
@@ -159,17 +163,17 @@ export function SignContractPageClient({
               textDecoration: "none",
             }}
           >
-            Descargar PDF / vista imprimible
+            {copy.signPage.download}
           </a>
         </div>
 
         <div style={{ fontSize: 12, color: "#64748b" }}>
-          Si el PDF no está disponible en este dispositivo, se abrirá una versión imprimible del contrato.
+          {copy.signPage.pdfHint}
         </div>
 
         <div style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
           <iframe
-            title={`Contrato ${contract.unitIndex}`}
+            title={`Contract ${contract.unitIndex}`}
             srcDoc={contract.renderedHtml}
             style={{
               width: "100%",
@@ -189,7 +193,7 @@ export function SignContractPageClient({
             disabled={done}
             style={{ marginTop: 2 }}
           />
-          <span>He leido el contrato completo y acepto firmarlo electronicamente.</span>
+          <span>{copy.signPage.readConfirm}</span>
         </label>
 
         <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
@@ -200,11 +204,11 @@ export function SignContractPageClient({
             disabled={done}
             style={{ marginTop: 2 }}
           />
-          <span>Acepto el uso de mi imagen con fines promocionales y publicitarios.</span>
+          <span>{copy.signPage.imageConsent}</span>
         </label>
 
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
-          Nombre del firmante
+          {copy.signPage.signerName}
           <input
             value={signerName}
             onChange={(e) => setSignerName(e.target.value)}
@@ -242,7 +246,7 @@ export function SignContractPageClient({
             disabled={busy || done}
             style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 900 }}
           >
-            Limpiar
+            {copy.signPage.clear}
           </button>
           <button
             type="button"
@@ -258,7 +262,7 @@ export function SignContractPageClient({
               opacity: busy || done || !confirmedRead ? 0.7 : 1,
             }}
           >
-            {busy ? "Guardando..." : done ? "Firmado" : "Firmar contrato"}
+            {busy ? copy.signPage.saving : done ? copy.signPage.signed : copy.signPage.sign}
           </button>
         </div>
       </section>

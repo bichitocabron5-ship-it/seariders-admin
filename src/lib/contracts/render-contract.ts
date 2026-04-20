@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { PublicLanguage } from "@/lib/public-links/i18n";
+import { translateContractHtml } from "@/lib/contracts/render-contract-i18n";
 
 export type ContractRenderReservation = {
   id: string;
@@ -57,6 +59,7 @@ export type ContractRenderDriver = {
 export type ContractRenderInput = {
   templateCode: string;
   templateVersion: string;
+  language?: PublicLanguage;
   logoSrc: string;
   reservation: ContractRenderReservation;
   contract: ContractRenderDriver;
@@ -151,15 +154,23 @@ function preparedResourceSummary(contract: ContractRenderDriver) {
 }
 
 export function buildContractHtml(input: ContractRenderInput) {
-  switch (input.templateCode) {
-    case "JETSKI_NO_LICENSE":
-      return buildJetskiNoLicenseHtml(input);
-    case "JETSKI_LICENSED":
-    case "BOAT_LICENSED":
-      return buildLicensedHtml(input);
-    default:
-      throw new Error(`Template no soportada: ${input.templateCode}`);
-  }
+  const baseHtml = (() => {
+    switch (input.templateCode) {
+      case "JETSKI_NO_LICENSE":
+        return buildJetskiNoLicenseHtml(input);
+      case "JETSKI_LICENSED":
+      case "BOAT_LICENSED":
+        return buildLicensedHtml(input);
+      default:
+        throw new Error(`Template no soportada: ${input.templateCode}`);
+    }
+  })();
+
+  return translateContractHtml({
+    html: baseHtml,
+    language: input.language ?? "es",
+    templateCode: input.templateCode,
+  });
 }
 
 function signatureBlockHtml(args: {

@@ -2,6 +2,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/prisma";
 import { s3 } from "@/lib/s3";
 import { regenerateSignedContractPdf } from "@/lib/contracts/render-contract-pdf";
+import type { PublicLanguage } from "@/lib/public-links/i18n";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -27,6 +28,7 @@ export async function saveContractSignature(args: {
   signerName: string;
   imageDataUrl: string;
   imageConsentAccepted?: boolean;
+  language?: PublicLanguage;
 }) {
   const contract = await prisma.reservationContract.findUnique({
     where: { id: args.contractId },
@@ -71,5 +73,5 @@ export async function saveContractSignature(args: {
     },
   });
 
-  return await regenerateSignedContractPdf(contract.id);
+  return await regenerateSignedContractPdf(contract.id, args.language ?? "es");
 }

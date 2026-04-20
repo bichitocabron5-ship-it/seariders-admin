@@ -3,6 +3,12 @@
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
+import {
+  formatPublicDate,
+  formatPublicTime,
+  getPublicCopy,
+  type PublicLanguage,
+} from "@/lib/public-links/i18n";
 
 type ReservationView = {
   id: string;
@@ -76,48 +82,21 @@ type DraftContract = {
   licenseNumber: string;
 };
 
-const DOCUMENT_TYPE_OPTIONS = [
-  { value: "", label: "Selecciona..." },
-  { value: "DNI", label: "DNI" },
-  { value: "NIE", label: "NIE" },
-  { value: "PASSPORT", label: "Pasaporte" },
-];
-
-const MARKETING_SOURCE_OPTIONS = [
-  { value: "", label: "Selecciona..." },
-  { value: "Instagram", label: "Instagram" },
-  { value: "Facebook", label: "Facebook" },
-  { value: "Recomendación", label: "Recomendacion" },
-  { value: "Google", label: "Google" },
-  { value: "Radio", label: "Radio" },
-  { value: "TikTok", label: "TikTok" },
-  { value: "Youtube", label: "Youtube" },
-  { value: "Flyers", label: "Flyers" },
-  { value: "Otros", label: "Otros" },
-  { value: "Hoteles", label: "Hoteles" },
-];
-
-function formatDate(value: string | null) {
-  if (!value) return "Sin fecha";
-  return new Date(value).toLocaleDateString("es-ES");
+function autosaveTone(state: "idle" | "saving" | "saved" | "error", copy: ReturnType<typeof getPublicCopy>) {
+  if (state === "saving") return { label: copy.checkinPage.autosaveSaving, color: "#1d4ed8" };
+  if (state === "saved") return { label: copy.checkinPage.autosaveSaved, color: "#166534" };
+  if (state === "error") return { label: copy.checkinPage.autosaveError, color: "#991b1b" };
+  return { label: copy.checkinPage.autosaveIdle, color: "#475569" };
 }
 
-function formatTime(value: string | null) {
-  if (!value) return "Sin hora";
-  return new Date(value).toLocaleTimeString("es-ES", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function autosaveTone(state: "idle" | "saving" | "saved" | "error") {
-  if (state === "saving") return { label: "Guardado automático en curso...", color: "#1d4ed8" };
-  if (state === "saved") return { label: "Cambios guardados automáticamente.", color: "#166534" };
-  if (state === "error") return { label: "No se pudo guardar automáticamente. Revisa la conexión.", color: "#991b1b" };
-  return { label: "Los cambios se guardarán automáticamente.", color: "#475569" };
-}
-
-export function ReservationCheckinPageClient({ token }: { token: string }) {
+export function ReservationCheckinPageClient({
+  token,
+  language,
+}: {
+  token: string;
+  language: PublicLanguage;
+}) {
+  const copy = getPublicCopy(language);
   const sigRefs = useRef<Record<string, SignatureCanvas | null>>({});
   const lastSavedPayloadRef = useRef<string>("");
   const autosaveTimerRef = useRef<number | null>(null);
@@ -195,19 +174,19 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch(`/api/public/checkin/${encodeURIComponent(token)}`, {
+        const res = await fetch(`/api/public/checkin/${encodeURIComponent(token)}?lang=${encodeURIComponent(language)}`, {
           cache: "no-store",
         });
         if (!res.ok) throw new Error(await res.text());
         const data = (await res.json()) as { reservation: ReservationView; contracts: ContractView[] };
         hydrate(data);
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "No se pudo cargar el pre-checkin");
+        setError(e instanceof Error ? e.message : copy.checkinPage.loadFailed);
       } finally {
         setLoading(false);
       }
     })();
-  }, [hydrate, token]);
+  }, [copy.checkinPage.loadFailed, hydrate, language, token]);
 
   const persistAll = useCallback(async (mode: "manual" | "autosave") => {
     try {
@@ -220,7 +199,7 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
       }
 
       const serialized = serializePayload(reservationDraft, contractDrafts);
-      const res = await fetch(`/api/public/checkin/${encodeURIComponent(token)}`, {
+      const res = await fetch(`/api/public/checkin/${encodeURIComponent(token)}?lang=${encodeURIComponent(language)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -239,20 +218,20 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
       hydrate(data);
       lastSavedPayloadRef.current = serialized;
       if (mode === "manual") {
-        setSuccess("Datos guardados correctamente.");
+        setSuccess(copy.checkinPage.saved);
       } else {
         setAutosaveState("saved");
       }
       return true;
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "No se pudieron guardar los datos";
+      const message = e instanceof Error ? e.message : copy.checkinPage.loadFailed;
       setError(message);
       if (mode === "autosave") setAutosaveState("error");
       return false;
     } finally {
       if (mode === "manual") setSaving(false);
     }
-  }, [contractDrafts, hydrate, reservationDraft, serializePayload, token]);
+  }, [contractDrafts, copy.checkinPage.loadFailed, copy.checkinPage.saved, hydrate, language, reservationDraft, serializePayload, token]);
 
   const saveAll = useCallback(async () => await persistAll("manual"), [persistAll]);
 
@@ -268,29 +247,30 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
 
       const saved = await persistAll("manual");
       if (!saved) return;
-      if (!signature || signature.isEmpty()) throw new Error("La firma está vacía.");
-      if (!draft.driverName.trim() && !reservationDraft.customerName.trim()) throw new Error("Indica el nombre del firmante.");
+      if (!signature || signature.isEmpty()) throw new Error(copy.signPage.errors.signatureEmpty);
+      if (!draft.driverName.trim() && !reservationDraft.customerName.trim()) throw new Error(copy.signPage.errors.signerRequired);
 
-      const res = await fetch(`/api/public/checkin/${encodeURIComponent(token)}/contracts/${contractId}/signature`, {
+      const signerName = draft.driverName.trim() || reservationDraft.customerName.trim();
+      const res = await fetch(`/api/public/checkin/${encodeURIComponent(token)}/contracts/${contractId}/signature?lang=${encodeURIComponent(language)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          signerName: draft.driverName.trim() || reservationDraft.customerName.trim(),
+          signerName,
           imageDataUrl: signature.getTrimmedCanvas().toDataURL("image/png"),
         }),
       });
       if (!res.ok) throw new Error(await res.text());
 
-      const refresh = await fetch(`/api/public/checkin/${encodeURIComponent(token)}`, {
+      const refresh = await fetch(`/api/public/checkin/${encodeURIComponent(token)}?lang=${encodeURIComponent(language)}`, {
         cache: "no-store",
       });
       if (!refresh.ok) throw new Error(await refresh.text());
       const data = (await refresh.json()) as Snapshot;
       hydrate(data);
       signature.clear();
-      setSuccess("Contrato firmado correctamente.");
+      setSuccess(copy.checkinPage.signedBanner(signerName, formatPublicDate(new Date().toISOString(), language)));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "No se pudo firmar el contrato");
+      setError(e instanceof Error ? e.message : copy.checkinPage.loadFailed);
     } finally {
       setSigningId(null);
     }
@@ -340,12 +320,14 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
   }, [snapshot, loading, saving, signingId, reservationDraft, contractDrafts, persistAll, serializePayload]);
 
   if (loading) {
-    return <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#475569" }}>Cargando pre-checkin...</main>;
+    return <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#475569" }}>{copy.checkinPage.loading}</main>;
   }
 
   if (!snapshot) {
-    return <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#991b1b", padding: 24 }}>{error ?? "No se pudo cargar el enlace."}</main>;
+    return <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#991b1b", padding: 24 }}>{error ?? copy.checkinPage.loadFailed}</main>;
   }
+
+  const autosave = autosaveTone(autosaveState, copy);
 
   return (
     <main
@@ -376,50 +358,49 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
         >
           <div style={{ display: "grid", gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>
-              Pre-checkin digital
+              {copy.checkinPage.eyebrow}
             </div>
-            <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.1 }}>Complete sus datos y firme su reserva</h1>
+            <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.1 }}>{copy.checkinPage.title}</h1>
             <div style={{ color: "#475569", fontSize: 14 }}>
               {snapshot.reservation.serviceName}
               {snapshot.reservation.durationMinutes ? ` · ${snapshot.reservation.durationMinutes} min` : ""}
-              {` · ${formatDate(snapshot.reservation.activityDate)} · ${formatTime(snapshot.reservation.scheduledTime)}`}
+              {` · ${formatPublicDate(snapshot.reservation.activityDate, language)} · ${formatPublicTime(snapshot.reservation.scheduledTime, language)}`}
             </div>
-            <div style={{ fontSize: 12, color: autosaveTone(autosaveState).color, fontWeight: 800 }}>
-              {autosaveTone(autosaveState).label}
+            <div style={{ fontSize: 12, color: autosave.color, fontWeight: 800 }}>
+              {autosave.label}
             </div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-            <MetricCard label="Contratos" value={`${snapshot.reservation.signedCount}/${snapshot.reservation.requiredUnits}`} description="Firmados" />
-            <MetricCard label="Listos" value={`${snapshot.reservation.readyCount}/${snapshot.reservation.requiredUnits}`} description="Preparados para tienda" />
-            <MetricCard label="Titular" value={reservationDraft.customerName || "Pendiente"} description="Responsable de la reserva" />
+            <MetricCard label={copy.checkinPage.metrics.contracts} value={`${snapshot.reservation.signedCount}/${snapshot.reservation.requiredUnits}`} description={copy.checkinPage.metrics.signed} />
+            <MetricCard label={copy.checkinPage.metrics.ready} value={`${snapshot.reservation.readyCount}/${snapshot.reservation.requiredUnits}`} description={copy.checkinPage.metrics.prepared} />
+            <MetricCard label={copy.checkinPage.metrics.holder} value={reservationDraft.customerName || copy.checkinPage.metrics.pending} description={copy.checkinPage.metrics.holder} />
           </div>
 
           <div style={{ padding: 14, borderRadius: 16, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8", fontSize: 14 }}>
-            Revise el contrato de cada unidad, complete los datos obligatorios y firme al final de cada bloque.
-            Si la reserva incluye un menor con autorización, la documentación deberá validarse en tienda antes del cobro definitivo.
+            {copy.checkinPage.intro}
           </div>
 
           {error ? <Banner tone="error" text={error} /> : null}
           {success ? <Banner tone="success" text={success} /> : null}
 
           <section style={{ display: "grid", gap: 12 }}>
-            <h2 style={{ margin: 0, fontSize: 20 }}>Datos del titular</h2>
+            <h2 style={{ margin: 0, fontSize: 20 }}>{copy.checkinPage.holderTitle}</h2>
             <div style={{ fontSize: 13, color: "#64748b", fontWeight: 700 }}>
-              Los campos marcados con <strong>*</strong> son obligatorios.
+              {copy.common.requiredFields}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-              <Field label="Nombre y apellidos *" value={reservationDraft.customerName} onChange={(value) => setReservationDraft((current) => ({ ...current, customerName: value }))} />
-              <Field label="Teléfono *" value={reservationDraft.customerPhone} onChange={(value) => setReservationDraft((current) => ({ ...current, customerPhone: value }))} />
-              <Field label="Email" value={reservationDraft.customerEmail} onChange={(value) => setReservationDraft((current) => ({ ...current, customerEmail: value }))} />
-              <SelectField label="Tipo de documento" value={reservationDraft.customerDocType} options={DOCUMENT_TYPE_OPTIONS} onChange={(value) => setReservationDraft((current) => ({ ...current, customerDocType: value }))} />
-              <Field label="Numero de documento" value={reservationDraft.customerDocNumber} onChange={(value) => setReservationDraft((current) => ({ ...current, customerDocNumber: value }))} />
-              <SelectField label="Como nos conocio?" value={reservationDraft.marketing} options={MARKETING_SOURCE_OPTIONS} onChange={(value) => setReservationDraft((current) => ({ ...current, marketing: value }))} />
+              <Field label={copy.checkinPage.holderName} value={reservationDraft.customerName} onChange={(value) => setReservationDraft((current) => ({ ...current, customerName: value }))} />
+              <Field label={copy.checkinPage.holderPhone} value={reservationDraft.customerPhone} onChange={(value) => setReservationDraft((current) => ({ ...current, customerPhone: value }))} />
+              <Field label={copy.checkinPage.holderEmail} value={reservationDraft.customerEmail} onChange={(value) => setReservationDraft((current) => ({ ...current, customerEmail: value }))} />
+              <SelectField label={copy.common.documentTypeLabel} value={reservationDraft.customerDocType} options={copy.common.documentTypeOptions} onChange={(value) => setReservationDraft((current) => ({ ...current, customerDocType: value }))} />
+              <Field label={copy.common.documentNumberLabel} value={reservationDraft.customerDocNumber} onChange={(value) => setReservationDraft((current) => ({ ...current, customerDocNumber: value }))} />
+              <SelectField label={copy.common.marketingLabel} value={reservationDraft.marketing} options={copy.common.marketingOptions} onChange={(value) => setReservationDraft((current) => ({ ...current, marketing: value }))} />
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
               <button type="button" onClick={() => void saveAll()} disabled={saving} style={primaryButtonStyle}>
-                {saving ? "Guardando..." : "Guardar datos"}
+                {saving ? copy.checkinPage.saving : copy.checkinPage.save}
               </button>
             </div>
           </section>
@@ -452,50 +433,51 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
                 }}
               >
                 <div style={{ display: "grid", gap: 4 }}>
-                  <div style={{ fontWeight: 900, fontSize: 20 }}>Unidad #{contract.unitIndex}</div>
+                  <div style={{ fontWeight: 900, fontSize: 20 }}>{copy.checkinPage.unitTitle(contract.unitIndex)}</div>
                   <div style={{ fontSize: 13, color: "#64748b" }}>
-                    {draft?.driverName || "Conductor pendiente"} {contract.signedAt ? `· firmado el ${formatDate(contract.signedAt)}` : ""}
+                    {draft?.driverName || copy.checkinPage.pendingDriver}
+                    {contract.signedAt ? ` · ${copy.checkinPage.signedOn(formatPublicDate(contract.signedAt, language))}` : ""}
                   </div>
                 </div>
-                <StatusBadge status={contract.status} />
+                <StatusBadge status={contract.status} language={language} />
               </summary>
 
               <div style={{ display: "grid", gap: 16, padding: "0 18px 18px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                   <button type="button" onClick={() => copyHolderToContract(contract.id)} disabled={disabled} style={secondaryButtonStyle}>
-                    Usar datos del titular
+                    {copy.checkinPage.useHolder}
                   </button>
                   <a
-                    href={`/api/public/checkin/${encodeURIComponent(token)}/contracts/${contract.id}/pdf`}
+                    href={`/api/public/checkin/${encodeURIComponent(token)}/contracts/${contract.id}/pdf?lang=${encodeURIComponent(language)}`}
                     target="_blank"
                     rel="noreferrer"
                     style={secondaryLinkStyle}
                   >
-                    PDF / vista imprimible
+                    {copy.checkinPage.printable}
                   </a>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-                  <ReadOnlyField label="Hora programada" value={formatTime(snapshot.reservation.scheduledTime)} />
-                  <ReadOnlyField label="Duración" value={snapshot.reservation.durationMinutes ? `${snapshot.reservation.durationMinutes} min` : "Según reserva"} />
-                  <ReadOnlyField label="Recurso asignado" value={contract.preparedResourceLabel} />
+                  <ReadOnlyField label={copy.checkinPage.scheduledTime} value={formatPublicTime(snapshot.reservation.scheduledTime, language)} />
+                  <ReadOnlyField label={copy.checkinPage.duration} value={snapshot.reservation.durationMinutes ? `${snapshot.reservation.durationMinutes} min` : copy.checkinPage.accordingToReservation} />
+                  <ReadOnlyField label={copy.checkinPage.assignedResource} value={contract.preparedResourceLabel} />
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-                  <Field label="Nombre del conductor *" value={draft?.driverName ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverName: value } }))} />
-                  <Field label="Teléfono *" value={draft?.driverPhone ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPhone: value } }))} />
-                  <Field label="Email" value={draft?.driverEmail ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverEmail: value } }))} />
-                  <Field label="País *" value={draft?.driverCountry ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverCountry: value } }))} />
-                  <Field label="Dirección *" value={draft?.driverAddress ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverAddress: value } }))} />
-                  <Field label="Código postal" value={draft?.driverPostalCode ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPostalCode: value } }))} />
-                  <DateField label="Fecha de nacimiento *" value={draft?.driverBirthDate ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverBirthDate: value } }))} />
-                  <SelectField label="Tipo de documento *" value={draft?.driverDocType ?? ""} disabled={disabled} options={DOCUMENT_TYPE_OPTIONS} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocType: value } }))} />
-                  <Field label="Número de documento *" value={draft?.driverDocNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocNumber: value } }))} />
+                  <Field label={copy.checkinPage.driverName} value={draft?.driverName ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverName: value } }))} />
+                  <Field label={copy.checkinPage.driverPhone} value={draft?.driverPhone ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPhone: value } }))} />
+                  <Field label={copy.checkinPage.driverEmail} value={draft?.driverEmail ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverEmail: value } }))} />
+                  <Field label={copy.checkinPage.driverCountry} value={draft?.driverCountry ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverCountry: value } }))} />
+                  <Field label={copy.checkinPage.driverAddress} value={draft?.driverAddress ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverAddress: value } }))} />
+                  <Field label={copy.checkinPage.driverPostalCode} value={draft?.driverPostalCode ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPostalCode: value } }))} />
+                  <DateField label={copy.checkinPage.driverBirthDate} value={draft?.driverBirthDate ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverBirthDate: value } }))} />
+                  <SelectField label={`${copy.common.documentTypeLabel} *`} value={draft?.driverDocType ?? ""} disabled={disabled} options={copy.common.documentTypeOptions} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocType: value } }))} />
+                  <Field label={`${copy.common.documentNumberLabel} *`} value={draft?.driverDocNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocNumber: value } }))} />
                   {snapshot.reservation.isLicense ? (
                     <>
-                      <Field label="Escuela / expedición *" value={draft?.licenseSchool ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseSchool: value } }))} />
-                      <Field label="Tipo de licencia *" value={draft?.licenseType ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseType: value } }))} />
-                      <Field label="Número de licencia *" value={draft?.licenseNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseNumber: value } }))} />
+                      <Field label="License school *" value={draft?.licenseSchool ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseSchool: value } }))} />
+                      <Field label="License type *" value={draft?.licenseType ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseType: value } }))} />
+                      <Field label="License number *" value={draft?.licenseNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseNumber: value } }))} />
                     </>
                   ) : null}
                 </div>
@@ -507,7 +489,7 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
                     disabled={disabled}
                     onChange={(e) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], imageConsentAccepted: e.target.checked } }))}
                   />
-                  <span>Acepto el consentimiento de imagen y el tratamiento necesario para la actividad.</span>
+                  <span>{copy.checkinPage.imageConsent}</span>
                 </label>
 
                 {contract.minorNeedsAuthorization || draft?.minorAuthorizationProvided ? (
@@ -518,15 +500,13 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
                       disabled={disabled}
                       onChange={(e) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], minorAuthorizationProvided: e.target.checked } }))}
                     />
-                    <span>
-                      Confirmo que existe autorización del padre, madre o tutor. {contract.minorAuthorizationFileName ? `Documento validado: ${contract.minorAuthorizationFileName}.` : "La copia se validará en tienda."}
-                    </span>
+                    <span>{copy.checkinPage.tutorAuthorization(contract.minorAuthorizationFileName)}</span>
                   </label>
                 ) : null}
 
                 <div style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
                   <iframe
-                    title={`Contrato ${contract.unitIndex}`}
+                    title={`Contract ${contract.unitIndex}`}
                     srcDoc={contract.renderedHtml}
                     style={{
                       width: "100%",
@@ -541,9 +521,9 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
                 {!disabled ? (
                   <>
                     <div style={{ display: "grid", gap: 8 }}>
-                      <div style={{ fontWeight: 900 }}>Firma electrónica</div>
+                      <div style={{ fontWeight: 900 }}>{copy.checkinPage.signatureTitle}</div>
                       <div style={{ fontSize: 13, color: "#475569" }}>
-                        Antes de firmar, guarde los datos si ha realizado cambios. La firma solo se habilita cuando el contrato tiene toda la información obligatoria.
+                        {copy.checkinPage.signatureHelp}
                       </div>
                     </div>
 
@@ -573,7 +553,7 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
                         onClick={() => sigRefs.current[contract.id]?.clear()}
                         style={secondaryButtonStyle}
                       >
-                        Limpiar firma
+                        {copy.checkinPage.clearSignature}
                       </button>
                       <button
                         type="button"
@@ -581,12 +561,12 @@ export function ReservationCheckinPageClient({ token }: { token: string }) {
                         disabled={signingId === contract.id}
                         style={primaryButtonStyle}
                       >
-                        {signingId === contract.id ? "Firmando..." : "Firmar contrato"}
+                        {signingId === contract.id ? copy.checkinPage.signing : copy.checkinPage.signContract}
                       </button>
                     </div>
                   </>
                 ) : (
-                  <Banner tone="success" text={`Contrato firmado por ${contract.signatureSignedBy || "el cliente"} el ${formatDate(contract.signedAt)}.`} />
+                  <Banner tone="success" text={copy.checkinPage.signedBanner(contract.signatureSignedBy || contract.driverName || "customer", formatPublicDate(contract.signedAt, language))} />
                 )}
               </div>
             </details>
@@ -692,13 +672,18 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, language }: { status: string; language: PublicLanguage }) {
+  const labels =
+    language === "en"
+      ? { signed: "Signed", ready: "Ready", pending: "Pending" }
+      : { signed: "Firmado", ready: "Listo", pending: "Pendiente" };
+
   const tone =
     status === "SIGNED"
-      ? { bg: "#dcfce7", color: "#166534", border: "#86efac", label: "Firmado" }
+      ? { bg: "#dcfce7", color: "#166534", border: "#86efac", label: labels.signed }
       : status === "READY"
-        ? { bg: "#dbeafe", color: "#1d4ed8", border: "#93c5fd", label: "Listo" }
-        : { bg: "#fff7ed", color: "#9a3412", border: "#fdba74", label: "Pendiente" };
+        ? { bg: "#dbeafe", color: "#1d4ed8", border: "#93c5fd", label: labels.ready }
+        : { bg: "#fff7ed", color: "#9a3412", border: "#fdba74", label: labels.pending };
 
   return (
     <span

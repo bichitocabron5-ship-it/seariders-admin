@@ -7,8 +7,9 @@ import {
   loadLogoSrc,
   templateCodeForContract,
 } from "@/lib/contracts/render-contract";
+import type { PublicLanguage } from "@/lib/public-links/i18n";
 
-async function generatePdfFromHtml(html: string) {
+async function generatePdfFromHtml(html: string, language: PublicLanguage) {
   const browser = await puppeteer.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -39,12 +40,12 @@ async function generatePdfFromHtml(html: string) {
       },
       headerTemplate: `
         <div style="width:100%; font-size:9px; padding:0 12mm; color:#222; text-align:center;">
-          UTE JETSKI CENTER- NOMAD NAUTIC · CIF: U16457343 · Tel: 608101272 · Email: seariderjetski@gmail.com · Dirección: C/ MARINA L-401 402, NUM 401 402 08330 PREMIÀ DE MAR - (BARCELONA)
+          UTE JETSKI CENTER- NOMAD NAUTIC · CIF: U16457343 · Tel: 608101272 · Email: seariderjetski@gmail.com · Direccion: C/ MARINA L-401 402, NUM 401 402 08330 PREMIA DE MAR - (BARCELONA)
         </div>
       `,
       footerTemplate: `
         <div style="width:100%; font-size:9px; padding:0 12mm; color:#444; display:flex; justify-content:flex-end;">
-          Página <span class="pageNumber"></span> / <span class="totalPages"></span>
+          ${language === "en" ? "Page" : "Pagina"} <span class="pageNumber"></span> / <span class="totalPages"></span>
         </div>
       `,
     });
@@ -55,7 +56,7 @@ async function generatePdfFromHtml(html: string) {
   }
 }
 
-export async function regenerateSignedContractPdf(contractId: string) {
+export async function regenerateSignedContractPdf(contractId: string, language: PublicLanguage = "es") {
   const logoSrc = await loadLogoSrc();
 
   const contract = await prisma.reservationContract.findUnique({
@@ -145,6 +146,7 @@ export async function regenerateSignedContractPdf(contractId: string) {
   const renderedHtml = buildContractHtml({
     templateCode,
     templateVersion,
+    language,
     logoSrc,
     reservation: {
       id: contract.reservation.id,
@@ -189,7 +191,7 @@ export async function regenerateSignedContractPdf(contractId: string) {
     },
   });
 
-  const pdfBuffer = await generatePdfFromHtml(renderedHtml);
+  const pdfBuffer = await generatePdfFromHtml(renderedHtml, language);
 
   const uploaded = await uploadPdfToS3({
     key: buildContractPdfKey({
