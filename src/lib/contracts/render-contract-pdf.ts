@@ -1,5 +1,6 @@
 // src/lib/contracts/render-contract-pdf.ts
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 import { prisma } from "@/lib/prisma";
 import { buildContractPdfKey, uploadPdfToS3 } from "@/lib/s3";
 import {
@@ -9,11 +10,16 @@ import {
 } from "@/lib/contracts/render-contract";
 import type { PublicLanguage } from "@/lib/public-links/i18n";
 
-async function generatePdfFromHtml(html: string, language: PublicLanguage) {
-  const browser = await puppeteer.launch({
+async function launchBrowser() {
+  return puppeteer.launch({
+    args: chromium.args,
+    executablePath: await chromium.executablePath(),
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
+}
+
+async function generatePdfFromHtml(html: string, language: PublicLanguage) {
+  const browser = await launchBrowser();
 
   try {
     const page = await browser.newPage();
@@ -56,7 +62,31 @@ async function generatePdfFromHtml(html: string, language: PublicLanguage) {
   }
 }
 
-export async function regenerateSignedContractPdf(contractId: string, language: PublicLanguage = "es") {
+export async function generatePdf(html: string) {
+  const browser = await launchBrowser();
+
+  try {
+    const page = await browser.newPage();
+
+    await page.setContent(html, {
+      waitUntil: "networkidle0",
+    });
+
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+    });
+
+    return Buffer.from(pdf);
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function regenerateSignedContractPdf(
+  contractId: string,
+  language: PublicLanguage = "es"
+) {
   const logoSrc = await loadLogoSrc();
 
   const contract = await prisma.reservationContract.findUnique({
