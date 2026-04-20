@@ -47,7 +47,7 @@ async function requireAdmin() {
 const Query = z.object({
   q: z.string().optional(),
   status: z.nativeEnum(ExpenseStatus).optional(),
-  costCenter: z.nativeEnum(ExpenseCostCenter),
+  costCenter: z.nativeEnum(ExpenseCostCenter).optional(),
   categoryId: z.string().optional(),
   vendorId: z.string().optional(),
   from: z.string().optional(), // YYYY-MM-DD

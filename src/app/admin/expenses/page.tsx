@@ -149,6 +149,50 @@ const COST_CENTERS: ExpenseCostCenter[] = [
 ] as const;
 const EXPENSE_CATEGORIES_API = "/api/admin/expenses/expense-categories";
 const EXPENSE_VENDORS_API = "/api/admin/expenses/expense-vendors";
+const EXPENSE_FILTERS_STORAGE_KEY = "admin-expenses-filters";
+
+type StoredExpenseFilters = {
+  q: string;
+  status: "" | ExpenseStatus;
+  costCenter: "" | ExpenseCostCenter;
+  categoryId: string;
+  vendorId: string;
+  from: string;
+  to: string;
+};
+
+function loadStoredExpenseFilters(): StoredExpenseFilters {
+  const empty: StoredExpenseFilters = {
+    q: "",
+    status: "",
+    costCenter: "",
+    categoryId: "",
+    vendorId: "",
+    from: "",
+    to: "",
+  };
+
+  if (typeof window === "undefined") return empty;
+
+  try {
+    const raw = window.localStorage.getItem(EXPENSE_FILTERS_STORAGE_KEY);
+    if (!raw) return empty;
+
+    const parsed = JSON.parse(raw) as Partial<StoredExpenseFilters>;
+
+    return {
+      q: typeof parsed.q === "string" ? parsed.q : "",
+      status: typeof parsed.status === "string" ? (parsed.status as "" | ExpenseStatus) : "",
+      costCenter: typeof parsed.costCenter === "string" ? (parsed.costCenter as "" | ExpenseCostCenter) : "",
+      categoryId: typeof parsed.categoryId === "string" ? parsed.categoryId : "",
+      vendorId: typeof parsed.vendorId === "string" ? parsed.vendorId : "",
+      from: typeof parsed.from === "string" ? parsed.from : "",
+      to: typeof parsed.to === "string" ? parsed.to : "",
+    };
+  } catch {
+    return empty;
+  }
+}
 
 function normalizeText(value: string | null | undefined) {
   if (value == null) return value;
@@ -320,6 +364,7 @@ function statusBadgeStyle(status: ExpenseStatus): React.CSSProperties {
 }
 
 export default function AdminExpensesPage() {
+  const [storedFilters] = useState<StoredExpenseFilters>(() => loadStoredExpenseFilters());
   const [rows, setRows] = useState<ExpenseRow[]>([]);
   const [summary, setSummary] = useState<ExpensesResponse["summary"] | null>(null);
   const [categories, setCategories] = useState<ExpenseCategoryRow[]>([]);
@@ -328,13 +373,13 @@ export default function AdminExpensesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState<"" | ExpenseStatus>("");
-  const [costCenter, setCostCenter] = useState<"" | ExpenseCostCenter>("");
-  const [categoryId, setCategoryId] = useState("");
-  const [vendorId, setVendorId] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [q, setQ] = useState(storedFilters.q);
+  const [status, setStatus] = useState<"" | ExpenseStatus>(storedFilters.status);
+  const [costCenter, setCostCenter] = useState<"" | ExpenseCostCenter>(storedFilters.costCenter);
+  const [categoryId, setCategoryId] = useState(storedFilters.categoryId);
+  const [vendorId, setVendorId] = useState(storedFilters.vendorId);
+  const [from, setFrom] = useState(storedFilters.from);
+  const [to, setTo] = useState(storedFilters.to);
 
   const [openExpenseModal, setOpenExpenseModal] = useState(false);
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
@@ -356,6 +401,29 @@ export default function AdminExpensesPage() {
 
   const activeCategoryCount = useMemo(() => categories.filter((category) => category.isActive).length, [categories]);
   const activeVendorCount = useMemo(() => vendors.filter((vendor) => vendor.isActive).length, [vendors]);
+  const categoryStats = useMemo(
+    () =>
+      rows.reduce<Record<string, { expenseCount: number; totalCents: number }>>((acc, row) => {
+        const current = acc[row.categoryId] ?? { expenseCount: 0, totalCents: 0 };
+        current.expenseCount += 1;
+        current.totalCents += Number(row.totalCents ?? row.amountCents ?? 0);
+        acc[row.categoryId] = current;
+        return acc;
+      }, {}),
+    [rows]
+  );
+  const vendorStats = useMemo(
+    () =>
+      rows.reduce<Record<string, { expenseCount: number; totalCents: number }>>((acc, row) => {
+        if (!row.vendorId) return acc;
+        const current = acc[row.vendorId] ?? { expenseCount: 0, totalCents: 0 };
+        current.expenseCount += 1;
+        current.totalCents += Number(row.totalCents ?? row.amountCents ?? 0);
+        acc[row.vendorId] = current;
+        return acc;
+      }, {}),
+    [rows]
+  );
   
   useEffect(() => {
     if (!vendorId) return;
@@ -363,6 +431,17 @@ export default function AdminExpensesPage() {
     const stillValid = filteredVendors.some((v) => v.id === vendorId);
     if (!stillValid) setVendorId("");
   }, [vendorId, filteredVendors]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        EXPENSE_FILTERS_STORAGE_KEY,
+        JSON.stringify({ q, status, costCenter, categoryId, vendorId, from, to } satisfies StoredExpenseFilters)
+      );
+    } catch {
+      // Ignore storage write issues so filters still work in-memory.
+    }
+  }, [q, status, costCenter, categoryId, vendorId, from, to]);
 
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
@@ -605,15 +684,6 @@ export default function AdminExpensesPage() {
         </div>
       ) : null}
 
-      <ExpensesDirectorySection
-        categories={categories}
-        vendors={vendors}
-        activeCategoryCount={activeCategoryCount}
-        activeVendorCount={activeVendorCount}
-        onEditCategory={openEditCategory}
-        onEditVendor={openEditVendor}
-      />
-
       {loading ? <div style={loadingBox}>Cargando gastos...</div> : null}
       {error ? <div style={errorBox}>{error}</div> : null}
 
@@ -631,6 +701,17 @@ export default function AdminExpensesPage() {
           statusBadgeStyle={statusBadgeStyle}
         />
       ) : null}
+
+      <ExpensesDirectorySection
+        categories={categories}
+        vendors={vendors}
+        activeCategoryCount={activeCategoryCount}
+        activeVendorCount={activeVendorCount}
+        categoryStats={categoryStats}
+        vendorStats={vendorStats}
+        onEditCategory={openEditCategory}
+        onEditVendor={openEditVendor}
+      />
 
       {openExpenseModal ? (
         <ExpenseModal
