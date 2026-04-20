@@ -107,7 +107,12 @@ function dayKeyFromRow(r: LiteRow) {
   }).format(new Date(src));
 }
 
+function isCanceledRow(r: LiteRow) {
+  return r.status === "CANCELED" || r.status === "CANCELLED";
+}
+
 function isHistoricalRow(r: LiteRow) {
+  if (isCanceledRow(r)) return true;
   const k = dayKeyFromRow(r);
   return k ? isPastDateLocal(k) : false;
 }
@@ -162,7 +167,7 @@ function rowDayKey(r: LiteRow) {
 }
 
 function actionForRow(r: LiteRow): RowAction {
-  if (r.status === "CANCELED" || r.status === "CANCELLED") {
+  if (isCanceledRow(r)) {
     return { label: "Ver ficha", href: `/store/create?editFrom=${r.id}` };
   }
 
