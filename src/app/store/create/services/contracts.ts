@@ -112,9 +112,40 @@ export async function saveContractSignature(args: {
   return await res.json();
 }
 
-export async function getContractSignerLink(contractId: string): Promise<{ ok: true; url: string; expiresInMinutes: number }> {
+export async function getContractSignerLink(contractId: string): Promise<{
+  ok: true;
+  url: string | null;
+  localizedUrl: string | null;
+  manualMessage: string | null;
+  expiresInMinutes: number;
+  notification?: {
+    ok?: boolean;
+    status?: string;
+    provider?: string;
+    error?: string;
+  } | null;
+}> {
   const res = await fetch(`/api/store/contracts/${contractId}/signer-link`, {
     cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
+export async function resendContractSignerWhatsapp(contractId: string): Promise<{
+  ok: true;
+  notification?: {
+    ok?: boolean;
+    status?: string;
+    provider?: string;
+    error?: string;
+  } | null;
+}> {
+  const res = await fetch(`/api/store/contracts/${contractId}/notify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
   });
 
   if (!res.ok) throw new Error(await res.text());

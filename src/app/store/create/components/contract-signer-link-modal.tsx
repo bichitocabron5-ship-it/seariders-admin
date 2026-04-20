@@ -65,6 +65,10 @@ export function ContractSignerLinkModal({
   phone,
   country,
   unitLabel,
+  manualMessage,
+  notificationStatus,
+  notificationProvider,
+  notificationError,
   onClose,
 }: {
   url: string;
@@ -73,6 +77,10 @@ export function ContractSignerLinkModal({
   phone?: string | null;
   country?: string | null;
   unitLabel: string;
+  manualMessage?: string | null;
+  notificationStatus?: string | null;
+  notificationProvider?: string | null;
+  notificationError?: string | null;
   onClose: () => void;
 }) {
   const [language, setLanguage] = useState<PublicLanguage>(getDefaultPublicLanguage(country));
@@ -80,12 +88,13 @@ export function ContractSignerLinkModal({
   const localizedUrl = useMemo(() => appendPublicLanguage(url, language), [language, url]);
   const whatsappPhone = normalizePhoneForWhatsApp(phone ?? "", country);
   const expiryLabel = formatLinkExpiry(expiresInMinutes);
-  const whatsappMessage = copy.signerModal.buildMessage({
+  const fallbackMessage = copy.signerModal.buildMessage({
     recipientName,
     unitLabel,
     url: localizedUrl,
     expiryLabel,
   });
+  const whatsappMessage = manualMessage?.trim() ? manualMessage : fallbackMessage;
   const whatsappUrl = whatsappPhone
     ? `https://wa.me/${encodeURIComponent(whatsappPhone)}?text=${encodeURIComponent(whatsappMessage)}`
     : null;
@@ -189,15 +198,42 @@ export function ContractSignerLinkModal({
           style={{
             padding: "12px 14px",
             borderRadius: 14,
-            border: whatsappUrl ? "1px solid #bbf7d0" : "1px solid #fde68a",
-            background: whatsappUrl ? "#f0fdf4" : "#fffbeb",
-            color: whatsappUrl ? "#166534" : "#92400e",
+            border:
+              notificationStatus === "SENT"
+                ? "1px solid #bbf7d0"
+                : whatsappUrl
+                ? "1px solid #bbf7d0"
+                : "1px solid #fde68a",
+            background:
+              notificationStatus === "SENT"
+                ? "#f0fdf4"
+                : whatsappUrl
+                ? "#f0fdf4"
+                : "#fffbeb",
+            color:
+              notificationStatus === "SENT"
+                ? "#166534"
+                : whatsappUrl
+                ? "#166534"
+                : "#92400e",
             fontSize: 13,
+            display: "grid",
+            gap: 4,
           }}
         >
-          {whatsappUrl
-            ? copy.signerModal.whatsappReady(phone || "the customer")
-            : copy.signerModal.whatsappMissing}
+          <div>
+            {notificationStatus === "SENT"
+              ? `WhatsApp enviado${notificationProvider ? ` por ${notificationProvider}` : ""}.`
+              : whatsappUrl
+              ? copy.signerModal.whatsappReady(phone || "the customer")
+              : copy.signerModal.whatsappMissing}
+          </div>
+          {notificationStatus && notificationStatus !== "SENT" ? (
+            <div style={{ fontSize: 12 }}>
+              Estado backend: {notificationStatus}
+              {notificationError ? ` | ${notificationError}` : ""}
+            </div>
+          ) : null}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>

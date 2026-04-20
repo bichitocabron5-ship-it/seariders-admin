@@ -103,6 +103,20 @@ export async function GET(req: Request) {
           reservationId: true,
         },
       },
+      notifications: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          status: true,
+          provider: true,
+          recipientPhone: true,
+          portalUrl: true,
+          errorMessage: true,
+          createdAt: true,
+          sentAt: true,
+        },
+      },
     },
   });
 

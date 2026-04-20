@@ -9,6 +9,7 @@ import type { ContractDto, ContractPatch } from "../types";
 import {
   fetchPreparedOptions,
   getContractSignerLink,
+  resendContractSignerWhatsapp,
   getSignedContractDownloadUrl,
   getSignedMinorAuthorizationDownloadUrl,
 } from "../services/contracts";
@@ -180,7 +181,15 @@ export function ContractCard({
 }: ContractCardProps) {
   const [saving, setSaving] = React.useState(false);
   const [signerLinkBusy, setSignerLinkBusy] = React.useState(false);
-  const [signerLinkModal, setSignerLinkModal] = React.useState<{ url: string; expiresInMinutes: number } | null>(null);
+  const [retryNotificationBusy, setRetryNotificationBusy] = React.useState(false);
+  const [signerLinkModal, setSignerLinkModal] = React.useState<{
+    url: string;
+    expiresInMinutes: number;
+    manualMessage?: string | null;
+    notificationStatus?: string | null;
+    notificationProvider?: string | null;
+    notificationError?: string | null;
+  } | null>(null);
   const [awaitingExternalSignature, setAwaitingExternalSignature] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 
@@ -360,15 +369,34 @@ export function ContractCard({
       setErr(null);
       await savePartial(buildPayload());
       const data = await getContractSignerLink(c.id);
+      if (!data.url) throw new Error("No se pudo generar el enlace de firma");
       setAwaitingExternalSignature(true);
       setSignerLinkModal({
         url: data.url,
         expiresInMinutes: data.expiresInMinutes,
+        manualMessage: data.manualMessage ?? null,
+        notificationStatus: data.notification?.status ?? null,
+        notificationProvider: data.notification?.provider ?? null,
+        notificationError: data.notification?.error ?? null,
       });
     } catch (e: unknown) {
       setErr(errorMessage(e, "No se pudo abrir la firma en tablet"));
     } finally {
       setSignerLinkBusy(false);
+    }
+  }
+
+  async function handleRetryNotification() {
+    try {
+      setRetryNotificationBusy(true);
+      setErr(null);
+      await savePartial(buildPayload());
+      await resendContractSignerWhatsapp(c.id);
+      await onSaved();
+    } catch (e: unknown) {
+      setErr(errorMessage(e, "No se pudo reenviar el WhatsApp del contrato"));
+    } finally {
+      setRetryNotificationBusy(false);
     }
   }
 
@@ -502,6 +530,43 @@ export function ContractCard({
 
       {err ? <div style={{ padding: 12, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 800 }}>{err}</div> : null}
 
+      <div style={{ ...subCardStyle, gap: 10 }}>
+        <div style={sectionEyebrowStyle}>Notificaciones</div>
+        {(c.notifications ?? []).length ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            {(c.notifications ?? []).map((n) => (
+              <div key={n.id} style={{ display: "grid", gap: 4, padding: "10px 12px", borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0", fontSize: 13 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ color: "#475569" }}>
+                    {new Date(n.createdAt).toLocaleString("es-ES")} | {n.provider}
+                  </span>
+                  <b>{n.status}</b>
+                </div>
+                <div style={{ color: "#475569" }}>
+                  {n.recipientPhone ? `Destino: ${n.recipientPhone}` : "Sin teléfono válido"}
+                </div>
+                {n.linkUrl ? (
+                  <a href={n.linkUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", fontWeight: 800 }}>
+                    Abrir enlace enviado
+                  </a>
+                ) : null}
+                {n.errorMessage ? <div style={{ color: "#b91c1c" }}>{n.errorMessage}</div> : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: "#64748b" }}>Sin notificaciones registradas.</div>
+        )}
+        <button
+          type="button"
+          onClick={() => void handleRetryNotification()}
+          disabled={retryNotificationBusy || saving}
+          style={{ ...secondaryBtn, width: "fit-content" }}
+        >
+          {retryNotificationBusy ? "Reenviando..." : "Reintentar WhatsApp"}
+        </button>
+      </div>
+
       <ContractCardActions
         saving={saving}
         isUnder16={isUnder16}
@@ -534,6 +599,10 @@ export function ContractCard({
           phone={driverPhone.trim() || customer.phone.trim() || null}
           country={driverCountry.trim() || customer.country.trim() || null}
           unitLabel={`Unidad #${c.logicalUnitIndex ?? c.unitIndex}`}
+          manualMessage={signerLinkModal.manualMessage ?? null}
+          notificationStatus={signerLinkModal.notificationStatus ?? null}
+          notificationProvider={signerLinkModal.notificationProvider ?? null}
+          notificationError={signerLinkModal.notificationError ?? null}
           onClose={() => setSignerLinkModal(null)}
         />
       ) : null}

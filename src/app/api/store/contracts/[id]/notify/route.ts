@@ -15,7 +15,7 @@ async function requireStoreOrAdmin() {
   return null;
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await requireStoreOrAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
@@ -41,7 +41,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   if (!contract) return new NextResponse("Contrato no encontrado", { status: 404 });
 
-  const expiresInMinutes = 45;
   const recipientName =
     contract.driverName?.trim() ||
     contract.reservation.customerName?.trim() ||
@@ -61,19 +60,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     recipientName,
     phone,
     country,
-    expiresInMinutes,
+    expiresInMinutes: 45,
   }).catch((error: unknown) => ({
     ok: false as const,
     status: "FAILED",
     error: error instanceof Error ? error.message : "Error enviando WhatsApp de contrato",
   }));
 
-  return NextResponse.json({
-    ok: true,
-    url: "url" in notification ? notification.url : null,
-    localizedUrl: "localizedUrl" in notification ? notification.localizedUrl : null,
-    manualMessage: "message" in notification ? notification.message : null,
-    expiresInMinutes,
-    notification,
-  });
+  return NextResponse.json({ ok: true, notification });
 }

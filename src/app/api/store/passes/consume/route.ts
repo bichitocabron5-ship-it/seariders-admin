@@ -7,6 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
 import { getPassVoucherPaidCents, getPassVoucherPendingCents } from "@/lib/pass-vouchers";
+import { sendPassConsumptionWhatsapp } from "@/lib/passes/pass-notifications";
 
 export const runtime = "nodejs";
 
@@ -73,6 +74,7 @@ export async function POST(req: Request) {
           buyerName: true,
           buyerPhone: true,
           buyerEmail: true,
+          code: true,
 
           // PRO contrato
           customerCountry: true,
@@ -223,6 +225,7 @@ export async function POST(req: Request) {
         reservationId: reservation.id,
         voucherId: v.id,
         consumeId: consume.id,
+        code: v.code,
 
         minutesUsed: minutesToUse,
         minutesRemaining: remaining - minutesToUse,
@@ -234,10 +237,28 @@ export async function POST(req: Request) {
         optionId, // el resuelto (string)
 
         customerName: v.buyerName?.trim() ? v.buyerName.trim() : "Bono",
+        buyerPhone: v.buyerPhone?.trim() ? v.buyerPhone.trim() : null,
+        customerCountry: v.customerCountry?.trim() ? v.customerCountry.trim().toUpperCase() : "ES",
       };
     });
 
-    return NextResponse.json({ ok: true, ...out });
+    const notification = await sendPassConsumptionWhatsapp({
+      voucherId: out.voucherId,
+      consumeId: out.consumeId,
+      code: out.code,
+      minutesTotal: out.minutesTotal,
+      minutesUsed: out.minutesUsed,
+      minutesRemaining: out.minutesRemaining,
+      buyerName: out.customerName,
+      buyerPhone: out.buyerPhone,
+      customerCountry: out.customerCountry,
+    }).catch((error: unknown) => ({
+      ok: false as const,
+      status: "FAILED",
+      error: error instanceof Error ? error.message : "Error enviando WhatsApp",
+    }));
+
+    return NextResponse.json({ ok: true, ...out, notification });
   } catch (e: unknown) {
     return new NextResponse(e instanceof Error ? e.message : "Error", { status: 400 });
   }

@@ -356,6 +356,11 @@ model Reservation {
   financialAdjustmentNote String?            @db.VarChar(500)
   financialAdjustedByUserId String?
   financialAdjustedAt  DateTime?
+  manualContractFileKey String?
+  manualContractFileName String?
+  manualContractFileUrl String?
+  manualContractUploadedAt DateTime?
+  manualContractUploadedByUserId String?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   contracts            ReservationContract[]
@@ -557,6 +562,7 @@ model ReservationContract {
 
   preparedAssetId String?
   preparedAsset   Asset?  @relation("ReservationContractPreparedAsset", fields: [preparedAssetId], references: [id], onDelete: SetNull)
+  notifications   ContractNotification[]
 
   @@unique([reservationId, unitIndex])
   @@index([reservationId])
@@ -564,6 +570,32 @@ model ReservationContract {
   @@index([reservationId, logicalUnitIndex])
   @@index([preparedJetskiId])
   @@index([preparedAssetId])
+}
+
+model ContractNotification {
+  id String @id @default(cuid())
+
+  contractId String
+  contract   ReservationContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  channel  String @default("WHATSAPP")
+  provider String @default("NONE")
+  status   String @default("PENDING")
+
+  recipientName  String?
+  recipientPhone String?
+  messagePreview String?
+  linkUrl        String?
+
+  providerMessageId String?
+  errorMessage      String?
+  sentAt            DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([contractId, createdAt])
+  @@index([status, createdAt])
 }
 
 model DiscountRule {
@@ -855,6 +887,7 @@ model PassVoucher {
 
   consumes     PassConsume[]
   reservations Reservation[] // backrelation desde Reservation.passVoucherId
+  notifications PassNotification[]
 
   @@index([origin, soldAt])
   @@index([expiresAt])
@@ -882,10 +915,41 @@ model PassConsume {
   // ✅ cada consumo crea 1 reserva (draft) → 1:1
   reservationId String?      @unique
   reservation   Reservation? @relation(fields: [reservationId], references: [id])
+  notifications PassNotification[]
 
   @@index([voucherId, consumedAt])
   @@index([consumedAt])
   @@index([serviceId])
+}
+
+model PassNotification {
+  id String @id @default(cuid())
+
+  voucherId String
+  voucher   PassVoucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+  consumeId String?
+  consume   PassConsume? @relation(fields: [consumeId], references: [id], onDelete: SetNull)
+
+  channel  String @default("WHATSAPP")
+  provider String @default("NONE")
+  status   String @default("PENDING")
+
+  recipientName  String?
+  recipientPhone String?
+  messagePreview String?
+  portalUrl      String?
+
+  providerMessageId String?
+  errorMessage      String?
+  sentAt            DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([voucherId, createdAt])
+  @@index([consumeId])
+  @@index([status, createdAt])
 }
 
 model TaxiboatTrip {

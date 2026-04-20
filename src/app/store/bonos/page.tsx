@@ -98,6 +98,16 @@ type PassVoucherDto = {
     minutesUsed: number;
     reservationId: string | null;
   }>;
+  notifications: Array<{
+    id: string;
+    status: string;
+    provider: string;
+    recipientPhone: string | null;
+    portalUrl: string | null;
+    errorMessage: string | null;
+    createdAt: string;
+    sentAt: string | null;
+  }>;
 };
 
 type PassSummaryRow = {
@@ -240,6 +250,7 @@ export default function StoreBonosPage() {
   const [voidReason, setVoidReason] = useState("");
   const [voidRefundMethod, setVoidRefundMethod] = useState<PassMethod>("CARD");
   const [voiding, setVoiding] = useState(false);
+  const [retryingNotification, setRetryingNotification] = useState(false);
 
   const countryOptions = useMemo(() => getCountryOptionsEs(), []);
   const selectedSellCountryOpt = useMemo(() => {
@@ -517,6 +528,25 @@ export default function StoreBonosPage() {
     }
   }
 
+  async function retryPassNotification() {
+    if (!voucher) return;
+    setErr(null);
+    setRetryingNotification(true);
+    try {
+      const r = await fetch("/api/store/passes/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: voucher.code }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      await search();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Error reenviando WhatsApp del bono");
+    } finally {
+      setRetryingNotification(false);
+    }
+  }
+
   async function loadSummary() {
     setErr(null);
     setSummaryLoading(true);
@@ -775,6 +805,41 @@ export default function StoreBonosPage() {
             ) : (
               <div style={{ fontSize: 13, color: "#64748b" }}>Sin consumos todavía.</div>
             )}
+
+            <div style={{ fontWeight: 900 }}>Notificaciones WhatsApp</div>
+            {(voucher.notifications ?? []).length ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                {voucher.notifications.map((n) => (
+                  <div key={n.id} style={{ display: "grid", gap: 6, fontSize: 13, padding: "10px 12px", borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                      <span style={{ color: "#475569" }}>
+                        {new Date(n.createdAt).toLocaleString("es-ES")} | {n.provider}
+                      </span>
+                      <b>{n.status}</b>
+                    </div>
+                    <div style={{ color: "#475569" }}>
+                      {n.recipientPhone ? `Destino: ${n.recipientPhone}` : "Sin teléfono válido"}
+                    </div>
+                    {n.portalUrl ? (
+                      <a href={n.portalUrl} target="_blank" rel="noreferrer" style={{ color: "#0369a1", fontWeight: 800 }}>
+                        Abrir ficha pública del bono
+                      </a>
+                    ) : null}
+                    {n.errorMessage ? <div style={{ color: "#b91c1c" }}>{n.errorMessage}</div> : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: "#64748b" }}>Sin notificaciones registradas.</div>
+            )}
+            <button
+              type="button"
+              onClick={retryPassNotification}
+              disabled={retryingNotification || !(voucher.consumes ?? []).length}
+              style={{ ...secondaryButtonStyle, width: "fit-content" }}
+            >
+              {retryingNotification ? "Reenviando..." : "Reintentar WhatsApp"}
+            </button>
           </div>
 
           <div style={{ ...panelStyle, display: "grid", gap: 12 }}>

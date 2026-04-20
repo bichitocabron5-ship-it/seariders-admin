@@ -123,6 +123,17 @@ export type ContractDto = {
     type?: string | null;
     plate?: string | null;
   } | null;
+
+  notifications?: Array<{
+    id: string;
+    status: string;
+    provider: string;
+    recipientPhone: string | null;
+    linkUrl: string | null;
+    errorMessage: string | null;
+    createdAt: string;
+    sentAt: string | null;
+  }>;
 };
 
 export type PreparedJetskiOption = {
