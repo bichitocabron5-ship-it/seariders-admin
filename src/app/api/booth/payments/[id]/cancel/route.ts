@@ -1,40 +1,15 @@
 import { NextResponse } from "next/server";
-import { PaymentDirection, RoleName, ShiftName } from "@prisma/client";
+import { PaymentDirection, RoleName } from "@prisma/client";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 
 import { prisma } from "@/lib/prisma";
 import { type AppSession, sessionOptions } from "@/lib/session";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
-import { BUSINESS_TZ, todayYmdInTz, tzDayRangeUtc, utcDateFromYmdInTz } from "@/lib/tz-business";
+import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
+import { findCurrentShiftSession } from "@/lib/shiftSessions";
 
 type Ctx = { params: Promise<{ id: string }> };
-
-async function findBoothShiftSession(userId: string, shift: ShiftName | undefined) {
-  const businessDate = utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
-
-  return (
-    (await prisma.shiftSession.findFirst({
-      where: {
-        userId,
-        endedAt: null,
-        role: { name: "BOOTH" },
-      },
-      select: { id: true },
-      orderBy: { startedAt: "desc" },
-    })) ??
-    (await prisma.shiftSession.findFirst({
-      where: {
-        userId,
-        businessDate,
-        shift: shift ?? "MORNING",
-        role: { name: "BOOTH" },
-      },
-      select: { id: true },
-      orderBy: { startedAt: "desc" },
-    }))
-  );
-}
 
 export async function POST(_req: Request, { params }: Ctx) {
   const { id } = await params;
@@ -46,7 +21,7 @@ export async function POST(_req: Request, { params }: Ctx) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  await assertCashOpenForUser(session.userId, session.role as RoleName);
+  await assertCashOpenForUser(session.userId, session.role as RoleName, session.shiftSessionId);
 
   const payment = await prisma.payment.findUnique({
     where: { id },
@@ -105,7 +80,12 @@ export async function POST(_req: Request, { params }: Ctx) {
     );
   }
 
-  const shiftSession = await findBoothShiftSession(session.userId, session.shift);
+  const shiftSession = await findCurrentShiftSession({
+    userId: session.userId,
+    role: RoleName.BOOTH,
+    shift: session.shift ?? "MORNING",
+    shiftSessionId: session.shiftSessionId,
+  });
   if (!shiftSession && String(session.role) !== "ADMIN") {
     return NextResponse.json({ error: "No hay shift session de carpa válida para esta anulación." }, { status: 400 });
   }

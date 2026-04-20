@@ -2,12 +2,8 @@
 import { prisma } from "@/lib/prisma";
 import { PaymentOrigin, RoleName, ShiftName } from "@prisma/client";
 import { normalizeClosureShift, originFromRoleName } from "@/lib/cashClosures";
-
-function businessDateFrom(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
+import { findCurrentShiftSession } from "@/lib/shiftSessions";
+import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
 
 // Ajusta las horas a TU operativa (me dijiste carpa 9-14 y 14-19)
 export function shiftFromNow(now = new Date()): ShiftName {
@@ -24,26 +20,20 @@ export function shiftFromNow(now = new Date()): ShiftName {
  * - origin se deduce por rol (STORE/BOOTH/BAR)
  * - shift: si tu sesión ya guarda shift en ShiftSession activa, usa eso; si no, usa shiftFromNow()
  */
-export async function getLockKeyForUser(userId: string, role: RoleName) {
+export async function getLockKeyForUser(userId: string, role: RoleName, shiftSessionId?: string | null) {
   const origin = originFromRoleName(role);
   if (!origin) return null;
 
-  // Preferimos ShiftSession activa para el usuario (si la tienes en login)
-  const ss = await prisma.shiftSession.findFirst({
-    where: { userId, endedAt: null, role: { name: role } },
-    orderBy: { startedAt: "desc" },
-    select: { shift: true, startedAt: true },
-  });
-
   const now = new Date();
+  const ss = await findCurrentShiftSession({ userId, role, shiftSessionId });
   const shift = normalizeClosureShift(origin, ss?.shift ?? shiftFromNow(now));
-  const businessDate = businessDateFrom(now);
+  const businessDate = utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ, now));
 
   return { origin: origin as PaymentOrigin, shift: shift as ShiftName, businessDate };
 }
 
-export async function assertCashOpenForUser(userId: string, role: RoleName) {
-  const key = await getLockKeyForUser(userId, role);
+export async function assertCashOpenForUser(userId: string, role: RoleName, shiftSessionId?: string | null) {
+  const key = await getLockKeyForUser(userId, role, shiftSessionId);
   if (!key) return; // ADMIN/PLATFORM no cobran como origin
 
   const activeClosure = await prisma.cashClosure.findFirst({

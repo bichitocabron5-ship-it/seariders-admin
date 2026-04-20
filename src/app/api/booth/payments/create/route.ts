@@ -7,7 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
-import { BUSINESS_TZ, utcDateFromYmdInTz, todayYmdInTz } from "@/lib/tz-business";
+import { findCurrentShiftSession } from "@/lib/shiftSessions";
 
 const BodySchema = z.object({
   reservationId: z.string().min(1),
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Body inválido", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  await assertCashOpenForUser(session.userId, session.role as RoleName);
+  await assertCashOpenForUser(session.userId, session.role as RoleName, session.shiftSessionId);
 
   const { reservationId, amountCents, method } = parsed.data;
 
@@ -62,28 +62,12 @@ export async function POST(req: Request) {
     );
   }
 
-  const businessDate = utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
-
-  const shiftSession =
-    (await prisma.shiftSession.findFirst({
-      where: {
-        userId: session.userId,
-        endedAt: null,
-        role: { name: "BOOTH" },
-      },
-      select: { id: true },
-      orderBy: { startedAt: "desc" },
-    })) ??
-    (await prisma.shiftSession.findFirst({
-      where: {
-        userId: session.userId,
-        businessDate,
-        shift: session.shift ?? "MORNING",
-        role: { name: "BOOTH" },
-      },
-      select: { id: true },
-      orderBy: { startedAt: "desc" },
-    }));
+  const shiftSession = await findCurrentShiftSession({
+    userId: session.userId,
+    role: RoleName.BOOTH,
+    shift: session.shift ?? "MORNING",
+    shiftSessionId: session.shiftSessionId,
+  });
 
   if (!shiftSession && String(session.role) !== "ADMIN") {
     return NextResponse.json({ error: "No hay shift session de carpa válida para este cobro." }, { status: 400 });

@@ -7,7 +7,6 @@ import {
   ReservationSource,
   ReservationStatus,
   RoleName,
-  ShiftName,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -17,6 +16,7 @@ import { cookies } from "next/headers";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import { commissionFromBase, resolveCommissionRate } from "@/lib/commission";
 import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
+import { findCurrentShiftSession } from "@/lib/shiftSessions";
 
 const BodySchema = z.object({
   customerName: z.string().min(1),
@@ -35,32 +35,6 @@ function genBoothCode() {
   const a = Math.floor(1000 + Math.random() * 9000);
   const b = Math.floor(100 + Math.random() * 900);
   return `PO-${a}-${b}`;
-}
-
-async function findBoothShiftSession(userId: string, shift: ShiftName | undefined) {
-  const businessDate = utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
-
-  return (
-    (await prisma.shiftSession.findFirst({
-      where: {
-        userId,
-        endedAt: null,
-        role: { name: "BOOTH" },
-      },
-      select: { id: true },
-      orderBy: { startedAt: "desc" },
-    })) ??
-    (await prisma.shiftSession.findFirst({
-      where: {
-        userId,
-        businessDate,
-        shift: shift ?? "MORNING",
-        role: { name: "BOOTH" },
-      },
-      select: { id: true },
-      orderBy: { startedAt: "desc" },
-    }))
-  );
 }
 
 export async function POST(req: Request) {
@@ -159,9 +133,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Método de pago requerido para actividad externa." }, { status: 400 });
     }
 
-    await assertCashOpenForUser(session.userId, session.role as RoleName);
+    await assertCashOpenForUser(session.userId, session.role as RoleName, session.shiftSessionId);
 
-    const shiftSession = await findBoothShiftSession(session.userId, session.shift);
+    const shiftSession = await findCurrentShiftSession({
+      userId: session.userId,
+      role: RoleName.BOOTH,
+      shift: session.shift ?? "MORNING",
+      shiftSessionId: session.shiftSessionId,
+    });
     if (!shiftSession && String(session.role) !== "ADMIN") {
       return NextResponse.json({ error: "No hay shift session de carpa válida para este cobro." }, { status: 400 });
     }
