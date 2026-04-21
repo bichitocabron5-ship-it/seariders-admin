@@ -65,6 +65,24 @@ export async function getSignedPrivateFileUrl(key: string, expiresIn = 300) {
   return await getSignedUrl(s3, command, { expiresIn });
 }
 
+export async function getPrivateFileDataUrl(key: string, contentType = "application/octet-stream") {
+  const bucket = requireEnv("S3_BUCKET");
+
+  const response = await s3.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    })
+  );
+
+  const bytes = await response.Body?.transformToByteArray();
+  if (!bytes) {
+    throw new Error(`No se pudo leer el fichero privado ${key}`);
+  }
+
+  return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`;
+}
+
 function slugPart(v: string | null | undefined, fallback: string) {
   const normalized = String(v ?? "")
     .normalize("NFD")

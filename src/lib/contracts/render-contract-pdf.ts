@@ -2,7 +2,11 @@
 import puppeteer from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
 import { prisma } from "@/lib/prisma";
-import { buildContractPdfKey, uploadPdfToS3 } from "@/lib/s3";
+import {
+  buildContractPdfKey,
+  getPrivateFileDataUrl,
+  uploadPdfToS3,
+} from "@/lib/s3";
 import {
   buildContractHtml,
   loadLogoSrc,
@@ -16,6 +20,17 @@ async function launchBrowser() {
     executablePath: await chromium.executablePath(),
     headless: true,
   });
+}
+
+async function resolveSignatureImageSrc(args: {
+  signatureImageKey?: string | null;
+  signatureImageUrl?: string | null;
+}) {
+  if (args.signatureImageKey) {
+    return await getPrivateFileDataUrl(args.signatureImageKey, "image/png");
+  }
+
+  return args.signatureImageUrl ?? null;
 }
 
 export async function generateContractPdfFromHtml(
@@ -115,6 +130,7 @@ export async function regenerateSignedContractPdf(
       imageConsentAccepted: true,
       minorAuthorizationFileKey: true,
       minorAuthorizationFileName: true,
+      signatureImageKey: true,
       signatureImageUrl: true,
       signatureSignedBy: true,
       signedAt: true,
@@ -175,6 +191,10 @@ export async function regenerateSignedContractPdf(
   });
 
   const templateVersion = "v1";
+  const signatureImageSrc = await resolveSignatureImageSrc({
+    signatureImageKey: contract.signatureImageKey,
+    signatureImageUrl: contract.signatureImageUrl,
+  });
 
   const renderedHtml = buildContractHtml({
     templateCode,
@@ -218,7 +238,7 @@ export async function regenerateSignedContractPdf(
       minorAuthorizationFileName: contract.minorAuthorizationFileName,
       preparedJetski: contract.preparedJetski ?? null,
       preparedAsset: contract.preparedAsset ?? null,
-      signatureImageUrl: contract.signatureImageUrl,
+      signatureImageUrl: signatureImageSrc,
       signatureSignedBy: contract.signatureSignedBy,
       signedAt: contract.signedAt,
     },
