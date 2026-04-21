@@ -1517,7 +1517,6 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               onManualDiscountEurosChange={setManualDiscountEuros}
               manualDiscountReason={manualDiscountReason}
               onManualDiscountReasonChange={setManualDiscountReason}
-              showDiscountPolicy={selectedChannel?.showDiscountPolicyInStore !== false}
               discountResponsibility={discountResponsibility}
               onDiscountResponsibilityChange={setDiscountResponsibility}
               promoterDiscountSharePct={promoterDiscountSharePct}

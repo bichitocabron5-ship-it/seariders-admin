@@ -10,8 +10,6 @@ type Channel = {
   isActive: boolean;
   visibleInStore: boolean;
   visibleInBooth: boolean;
-  showDiscountPolicyInStore: boolean;
-  showDiscountPolicyInBooth: boolean;
   allowsPromotions: boolean;
   commissionEnabled: boolean;
   commissionBps: number | null;
@@ -103,12 +101,6 @@ export default function ChannelsConfigurationSection({
                       <span style={{ ...statusPill, ...(channel.visibleInBooth ? statusOn : statusOff) }}>
                         {channel.visibleInBooth ? "Booth ON" : "Booth OFF"}
                       </span>
-                      <span style={{ ...statusPill, ...(channel.showDiscountPolicyInStore ? statusOn : statusOff) }}>
-                        {channel.showDiscountPolicyInStore ? "Dto tienda ON" : "Dto tienda OFF"}
-                      </span>
-                      <span style={{ ...statusPill, ...(channel.showDiscountPolicyInBooth ? statusOn : statusOff) }}>
-                        {channel.showDiscountPolicyInBooth ? "Dto booth ON" : "Dto booth OFF"}
-                      </span>
                       <span style={{ ...statusPill, ...(channel.discountResponsibility === "COMPANY" ? statusOff : statusOn) }}>
                         {discountPolicyLabel}
                       </span>
@@ -165,30 +157,6 @@ export default function ChannelsConfigurationSection({
                       }}
                     />
                     Visible en booth
-                  </label>
-
-                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
-                    <input
-                      type="checkbox"
-                      checked={channel.showDiscountPolicyInStore}
-                      disabled={busy}
-                      onChange={(e) => {
-                        void patchChannel(channel.id, { showDiscountPolicyInStore: e.target.checked });
-                      }}
-                    />
-                    Mostrar dto en tienda
-                  </label>
-
-                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
-                    <input
-                      type="checkbox"
-                      checked={channel.showDiscountPolicyInBooth}
-                      disabled={busy}
-                      onChange={(e) => {
-                        void patchChannel(channel.id, { showDiscountPolicyInBooth: e.target.checked });
-                      }}
-                    />
-                    Mostrar dto en booth
                   </label>
 
                   <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>

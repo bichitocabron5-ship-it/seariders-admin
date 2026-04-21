@@ -109,7 +109,6 @@ export function PricingSection({
   onManualDiscountEurosChange,
   manualDiscountReason,
   onManualDiscountReasonChange,
-  showDiscountPolicy,
   discountResponsibility,
   onDiscountResponsibilityChange,
   promoterDiscountSharePct,
@@ -141,7 +140,6 @@ export function PricingSection({
   onManualDiscountEurosChange: (value: string) => void;
   manualDiscountReason: string;
   onManualDiscountReasonChange: (value: string) => void;
-  showDiscountPolicy: boolean;
   discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
   onDiscountResponsibilityChange: (value: "COMPANY" | "PROMOTER" | "SHARED") => void;
   promoterDiscountSharePct: string;
@@ -251,36 +249,32 @@ export function PricingSection({
 
             <input value={manualDiscountReason} onChange={(e) => onManualDiscountReasonChange(e.target.value)} style={inputStyle} placeholder="Motivo del descuento (opcional)" />
 
-            {showDiscountPolicy ? (
-              <>
-                <label style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Quién asume el descuento</div>
-                  <select
-                    value={discountResponsibility}
-                    onChange={(e) => onDiscountResponsibilityChange(e.target.value as "COMPANY" | "PROMOTER" | "SHARED")}
-                    style={inputStyle}
-                  >
-                    <option value="COMPANY">Empresa</option>
-                    <option value="PROMOTER">Promotor</option>
-                    <option value="SHARED">Compartido</option>
-                  </select>
-                </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Quién asume el descuento</div>
+              <select
+                value={discountResponsibility}
+                onChange={(e) => onDiscountResponsibilityChange(e.target.value as "COMPANY" | "PROMOTER" | "SHARED")}
+                style={inputStyle}
+              >
+                <option value="COMPANY">Empresa</option>
+                <option value="PROMOTER">Promotor</option>
+                <option value="SHARED">Compartido</option>
+              </select>
+            </label>
 
-                {discountResponsibility === "SHARED" ? (
-                  <label style={{ display: "grid", gap: 6 }}>
-                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Parte del promotor (%)</div>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={0.01}
-                      value={promoterDiscountSharePct}
-                      onChange={(e) => onPromoterDiscountSharePctChange(e.target.value)}
-                      style={inputStyle}
-                    />
-                  </label>
-                ) : null}
-              </>
+            {discountResponsibility === "SHARED" ? (
+              <label style={{ display: "grid", gap: 6 }}>
+                <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Parte del promotor (%)</div>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  value={promoterDiscountSharePct}
+                  onChange={(e) => onPromoterDiscountSharePctChange(e.target.value)}
+                  style={inputStyle}
+                />
+              </label>
             ) : null}
 
             <div style={{ fontSize: 12, color: "#475569" }}>
@@ -307,12 +301,10 @@ export function PricingSection({
           <div style={{ marginTop: 6 }}>
             Base comisionable: <strong>{euros(commissionBaseCents)}</strong>
           </div>
-          {showDiscountPolicy ? (
-            <div style={{ marginTop: 6 }}>
-              Descuento promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa: <strong>{euros(companyDiscountCents)}</strong>
-            </div>
-          ) : null}
-          {showDiscountPolicy && promoterDiscountCents > 0 ? (
+          <div style={{ marginTop: 6 }}>
+            Descuento promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa: <strong>{euros(companyDiscountCents)}</strong>
+          </div>
+          {promoterDiscountCents > 0 ? (
             <div style={{ marginTop: 6 }}>
               Promotor: <strong>{promoterNominalPct.toFixed(2)}%</strong> nominal → <strong>{promoterEffectivePct.toFixed(2)}%</strong> efectivo
             </div>
@@ -323,7 +315,7 @@ export function PricingSection({
         <div style={{ fontSize: 12, color: "#64748b" }}>Sin descuento automático.</div>
       )}
 
-      {showDiscountPolicy && promoterDiscountCents > 0 ? (
+      {promoterDiscountCents > 0 ? (
         <div style={{ padding: 12, borderRadius: 14, background: "#fff7ed", border: "1px solid #fed7aa", fontSize: 13, color: "#7c2d12" }}>
           <div>
             Base comisionable: <strong>{euros(commissionBaseCents)}</strong>

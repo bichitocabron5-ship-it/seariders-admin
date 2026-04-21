@@ -8,8 +8,6 @@ type Props = {
   newIsActive: boolean;
   newVisibleInStore: boolean;
   newVisibleInBooth: boolean;
-  newShowDiscountPolicyInStore: boolean;
-  newShowDiscountPolicyInBooth: boolean;
   newAllowsPromotions: boolean;
   newCommissionEnabled: boolean;
   newCommissionPct: string;
@@ -21,8 +19,6 @@ type Props = {
   setNewIsActive: (value: boolean) => void;
   setNewVisibleInStore: (value: boolean) => void;
   setNewVisibleInBooth: (value: boolean) => void;
-  setNewShowDiscountPolicyInStore: (value: boolean) => void;
-  setNewShowDiscountPolicyInBooth: (value: boolean) => void;
   setNewAllowsPromotions: (value: boolean) => void;
   setNewCommissionEnabled: (value: boolean) => void;
   setNewCommissionPct: (value: string) => void;
@@ -42,8 +38,6 @@ export default function CreateChannelSection({
   newIsActive,
   newVisibleInStore,
   newVisibleInBooth,
-  newShowDiscountPolicyInStore,
-  newShowDiscountPolicyInBooth,
   newAllowsPromotions,
   newCommissionEnabled,
   newCommissionPct,
@@ -55,8 +49,6 @@ export default function CreateChannelSection({
   setNewIsActive,
   setNewVisibleInStore,
   setNewVisibleInBooth,
-  setNewShowDiscountPolicyInStore,
-  setNewShowDiscountPolicyInBooth,
   setNewAllowsPromotions,
   setNewCommissionEnabled,
   setNewCommissionPct,
@@ -156,24 +148,6 @@ export default function CreateChannelSection({
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
             <input type="checkbox" checked={newVisibleInBooth} onChange={(e) => setNewVisibleInBooth(e.target.checked)} />
             Visible en booth
-          </label>
-
-          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
-            <input
-              type="checkbox"
-              checked={newShowDiscountPolicyInStore}
-              onChange={(e) => setNewShowDiscountPolicyInStore(e.target.checked)}
-            />
-            Mostrar dto en tienda
-          </label>
-
-          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
-            <input
-              type="checkbox"
-              checked={newShowDiscountPolicyInBooth}
-              onChange={(e) => setNewShowDiscountPolicyInBooth(e.target.checked)}
-            />
-            Mostrar dto en booth
           </label>
 
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>

@@ -13,8 +13,6 @@ type Channel = {
   isActive: boolean;
   visibleInStore: boolean;
   visibleInBooth: boolean;
-  showDiscountPolicyInStore: boolean;
-  showDiscountPolicyInBooth: boolean;
   allowsPromotions: boolean;
   commissionEnabled: boolean;
   commissionBps: number | null;
@@ -33,8 +31,6 @@ export default function AdminChannelsPage() {
   const [newIsActive, setNewIsActive] = useState(true);
   const [newVisibleInStore, setNewVisibleInStore] = useState(true);
   const [newVisibleInBooth, setNewVisibleInBooth] = useState(false);
-  const [newShowDiscountPolicyInStore, setNewShowDiscountPolicyInStore] = useState(true);
-  const [newShowDiscountPolicyInBooth, setNewShowDiscountPolicyInBooth] = useState(true);
   const [newAllowsPromotions, setNewAllowsPromotions] = useState(false);
   const [newCommissionEnabled, setNewCommissionEnabled] = useState(false);
   const [newCommissionPct, setNewCommissionPct] = useState("0");
@@ -129,8 +125,6 @@ export default function AdminChannelsPage() {
           isActive: newIsActive,
           visibleInStore: newVisibleInStore,
           visibleInBooth: newVisibleInBooth,
-          showDiscountPolicyInStore: newShowDiscountPolicyInStore,
-          showDiscountPolicyInBooth: newShowDiscountPolicyInBooth,
           allowsPromotions: newAllowsPromotions,
           commissionEnabled: newCommissionEnabled,
           commissionBps,
@@ -152,8 +146,6 @@ export default function AdminChannelsPage() {
       setNewIsActive(true);
       setNewVisibleInStore(true);
       setNewVisibleInBooth(false);
-      setNewShowDiscountPolicyInStore(true);
-      setNewShowDiscountPolicyInBooth(true);
       setNewAllowsPromotions(false);
       setNewCommissionEnabled(false);
       setNewCommissionPct("0");
@@ -211,8 +203,6 @@ export default function AdminChannelsPage() {
         newIsActive={newIsActive}
         newVisibleInStore={newVisibleInStore}
         newVisibleInBooth={newVisibleInBooth}
-        newShowDiscountPolicyInStore={newShowDiscountPolicyInStore}
-        newShowDiscountPolicyInBooth={newShowDiscountPolicyInBooth}
         newAllowsPromotions={newAllowsPromotions}
         newCommissionEnabled={newCommissionEnabled}
         newCommissionPct={newCommissionPct}
@@ -224,8 +214,6 @@ export default function AdminChannelsPage() {
         setNewIsActive={setNewIsActive}
         setNewVisibleInStore={setNewVisibleInStore}
         setNewVisibleInBooth={setNewVisibleInBooth}
-        setNewShowDiscountPolicyInStore={setNewShowDiscountPolicyInStore}
-        setNewShowDiscountPolicyInBooth={setNewShowDiscountPolicyInBooth}
         setNewAllowsPromotions={setNewAllowsPromotions}
         setNewCommissionEnabled={setNewCommissionEnabled}
         setNewCommissionPct={setNewCommissionPct}

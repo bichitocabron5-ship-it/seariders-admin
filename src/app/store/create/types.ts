@@ -22,8 +22,6 @@ export type Channel = {
   kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
   visibleInStore?: boolean | null;
   visibleInBooth?: boolean | null;
-  showDiscountPolicyInStore?: boolean | null;
-  showDiscountPolicyInBooth?: boolean | null;
   allowsPromotions?: boolean | null;
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;
