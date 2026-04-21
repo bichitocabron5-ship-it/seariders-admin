@@ -77,6 +77,15 @@ const externalSignaturePendingStyle: React.CSSProperties = {
   display: "grid",
   gap: 4,
 };
+const signedSummaryStyle: React.CSSProperties = {
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid #bbf7d0",
+  background: "#f0fdf4",
+  color: "#166534",
+  display: "grid",
+  gap: 6,
+};
 
 function contractStatusStyle(status: ContractDto["status"]): React.CSSProperties {
   if (status === "SIGNED") {
@@ -406,6 +415,44 @@ export function ContractCard({
     }
   }
 
+  if (c.status === "SIGNED") {
+    return (
+      <article style={{ ...panelStyle, gap: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>Contrato</div>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>Unidad #{c.logicalUnitIndex ?? c.unitIndex}</div>
+            <div style={{ fontSize: 12, color: "#64748b" }}>Contrato firmado y bloqueado para edicion.</div>
+          </div>
+          <div style={contractStatusStyle(c.status)}>{c.status}</div>
+        </div>
+
+        <div style={signedSummaryStyle}>
+          <div style={{ fontWeight: 900 }}>
+            {c.signatureSignedBy ? `Firmado por ${c.signatureSignedBy}` : "Contrato firmado"}
+          </div>
+          <div style={{ fontSize: 13 }}>
+            {c.signedAt ? `Fecha de firma: ${new Date(c.signedAt).toLocaleString("es-ES")}` : "La firma ya esta registrada en el sistema."}
+          </div>
+        </div>
+
+        <div style={{ ...subCardStyle, gap: 10 }}>
+          <div style={sectionEyebrowStyle}>Acciones finales</div>
+          <div style={actionRowStyle}>
+            <button type="button" onClick={() => void handleDownloadFinalPdf()} disabled={!canDownloadFinalPdf} style={{ ...secondaryBtn, width: "100%", opacity: canDownloadFinalPdf ? 1 : 0.65 }}>
+              Descargar PDF final
+            </button>
+            <button type="button" onClick={() => void handleGeneratePdfClick()} disabled={pdfBusy} style={{ ...secondaryBtn, width: "100%" }}>
+              {pdfBusy ? "Generando PDF..." : "Regenerar PDF firmado"}
+            </button>
+          </div>
+        </div>
+
+        {err ? <div style={{ padding: 12, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 800 }}>{err}</div> : null}
+      </article>
+    );
+  }
+
   return (
     <article style={panelStyle}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -574,6 +621,7 @@ export function ContractCard({
       </div>
 
       <ContractCardActions
+        status={c.status}
         saving={saving}
         isUnder16={isUnder16}
         previewBusy={previewBusy}

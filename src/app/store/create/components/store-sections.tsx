@@ -99,6 +99,11 @@ export function ContractsSection({
   const previewContract = previewContractId
     ? contracts.find((contract) => contract.id === previewContractId) ?? null
     : null;
+  const orderedContracts = [...contracts].sort((left, right) => {
+    const rank = (status: ContractDto["status"]) =>
+      status === "DRAFT" ? 0 : status === "READY" ? 1 : status === "SIGNED" ? 2 : 3;
+    return rank(left.status) - rank(right.status) || (left.logicalUnitIndex ?? left.unitIndex) - (right.logicalUnitIndex ?? right.unitIndex);
+  });
   const signedCount = contracts.filter((contract) => contract.status === "SIGNED").length;
   const pendingCount = Math.max(requiredUnits - readyCount, 0);
 
@@ -257,7 +262,7 @@ export function ContractsSection({
         </div>
       ) : null}
 
-      {contracts.map((c) => (
+      {orderedContracts.map((c) => (
         <ContractCard
           key={c.id}
           reservationId={reservationId}

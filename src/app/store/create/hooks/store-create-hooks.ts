@@ -185,14 +185,16 @@ export function useContractsState(args: {
     if (!enabled) return;
     if (!prefillReservationId) return;
     if (isHistorical) return;
-    if (requiredUnits <= 0 || readyCount >= requiredUnits) return;
+
+    const hasContractsAwaitingSignature = contracts.some((contract) => contract.status === "READY");
+    if (!hasContractsAwaitingSignature) return;
 
     const timer = window.setInterval(() => {
       void loadContractsBlock(prefillReservationId);
-    }, 5000);
+    }, 3000);
 
     return () => window.clearInterval(timer);
-  }, [enabled, prefillReservationId, isHistorical, requiredUnits, readyCount, loadContractsBlock]);
+  }, [enabled, prefillReservationId, isHistorical, contracts, loadContractsBlock]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

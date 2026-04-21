@@ -3,6 +3,7 @@
 import type React from "react";
 
 type ContractCardActionsProps = {
+  status: "DRAFT" | "READY" | "SIGNED" | "VOID";
   saving: boolean;
   isUnder16: boolean;
   previewBusy: boolean;
@@ -22,6 +23,7 @@ type ContractCardActionsProps = {
 };
 
 export function ContractCardActions({
+  status,
   saving,
   isUnder16,
   previewBusy,
@@ -39,14 +41,18 @@ export function ContractCardActions({
   onDownloadFinalPdf,
   onOpenSignerLink,
 }: ContractCardActionsProps) {
+  const isReady = status === "READY";
+
   return (
     <div style={actionRowStyle}>
       <button type="button" onClick={onSave} disabled={saving} style={{ ...secondaryButtonStyle, width: "100%" }}>
-        {saving ? "Guardando..." : "Guardar"}
+        {saving ? "Guardando..." : isReady ? "Actualizar datos" : "Guardar borrador"}
       </button>
-      <button type="button" onClick={onMarkReady} disabled={saving || isUnder16} style={{ ...primaryButtonStyle, width: "100%", opacity: saving || isUnder16 ? 0.6 : 1 }} title={isUnder16 ? "No permitido <16" : ""}>
-        Marcar READY
-      </button>
+      {!isReady ? (
+        <button type="button" onClick={onMarkReady} disabled={saving || isUnder16} style={{ ...primaryButtonStyle, width: "100%", opacity: saving || isUnder16 ? 0.6 : 1 }} title={isUnder16 ? "No permitido <16" : ""}>
+          Dejar listo para firma
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={onPreview}
@@ -66,10 +72,10 @@ export function ContractCardActions({
       <button
         type="button"
         onClick={onOpenSignerLink}
-        style={{ ...secondaryBtnStyle, width: "100%" }}
+        style={{ ...primaryButtonStyle, width: "100%" }}
         disabled={signerLinkBusy || saving}
       >
-        {signerLinkBusy ? "Abriendo firma..." : "Firma presencial"}
+        {signerLinkBusy ? "Abriendo firma..." : isReady ? "Abrir firma" : "Guardar y abrir firma"}
       </button>
 
       {canDownloadFinalPdf ? (
