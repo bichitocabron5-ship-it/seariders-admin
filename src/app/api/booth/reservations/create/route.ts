@@ -14,7 +14,11 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
-import { commissionFromBase, resolveCommissionRate } from "@/lib/commission";
+import {
+  commissionFromBase,
+  computeCommissionableBase,
+  resolveCommissionRate,
+} from "@/lib/commission";
 import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
 import { findCurrentShiftSession } from "@/lib/shiftSessions";
 
@@ -27,6 +31,8 @@ const BodySchema = z.object({
   pax: z.number().int().min(1).max(20),
   channelId: z.string().optional().nullable(),
   discountEuros: z.union([z.string(), z.number()]).optional().nullable(),
+  discountResponsibility: z.enum(["COMPANY", "PROMOTER", "SHARED"]).optional().nullable(),
+  promoterDiscountSharePct: z.union([z.string(), z.number()]).optional().nullable(),
   boothNote: z.string().trim().max(500).optional().nullable(),
   paymentMethod: z.nativeEnum(PaymentMethod).optional().nullable(),
 });
@@ -72,6 +78,8 @@ export async function POST(req: Request) {
             commissionEnabled: true,
             commissionBps: true,
             commissionPct: true,
+            discountResponsibility: true,
+            promoterDiscountShareBps: true,
             commissionRules: {
               where: { isActive: true },
               select: { serviceId: true, commissionPct: true },
@@ -110,6 +118,11 @@ export async function POST(req: Request) {
   const discountRaw = parsed.data.discountEuros ?? 0;
   const discountNum = typeof discountRaw === "string" ? Number(discountRaw.replace(",", ".")) : discountRaw;
   const discountCents = Math.max(0, Math.round((Number.isFinite(discountNum) ? discountNum : 0) * 100));
+  const promoterDiscountShareRaw = parsed.data.promoterDiscountSharePct ?? 0;
+  const promoterDiscountSharePct =
+    typeof promoterDiscountShareRaw === "string"
+      ? Number(promoterDiscountShareRaw.replace(",", "."))
+      : promoterDiscountShareRaw;
   const maxDiscountCents = Math.floor(grossTotalCents * 0.3);
 
   if (discountCents > maxDiscountCents) {
@@ -120,6 +133,14 @@ export async function POST(req: Request) {
   }
 
   const totalPriceCents = Math.max(0, grossTotalCents - discountCents);
+  const discountBreakdown = computeCommissionableBase({
+    grossBaseCents: grossTotalCents,
+    totalDiscountCents: discountCents,
+    responsibility: parsed.data.discountResponsibility ?? channel?.discountResponsibility ?? "COMPANY",
+    promoterDiscountShareBps: Math.round(
+      (Number.isFinite(promoterDiscountSharePct) ? promoterDiscountSharePct : 0) * 100
+    ) || channel?.promoterDiscountShareBps || 0,
+  });
   const isExternalCharge = channel?.kind === "EXTERNAL_ACTIVITY" || service.isExternalActivity;
 
   if (isExternalCharge) {
@@ -149,7 +170,7 @@ export async function POST(req: Request) {
       channel,
       serviceId: service.id,
     });
-    const commissionCents = commissionFromBase(totalPriceCents, commissionRate);
+    const commissionCents = commissionFromBase(discountBreakdown.commissionBaseCents, commissionRate);
     const commissionPct = Number((commissionRate * 100).toFixed(2));
 
     const payment = await prisma.payment.create({
@@ -157,8 +178,14 @@ export async function POST(req: Request) {
         origin: PaymentOrigin.BOOTH,
         method: parsed.data.paymentMethod,
         amountCents: commissionCents,
+        commissionBaseCents: discountBreakdown.commissionBaseCents,
+        externalDiscountCents: discountBreakdown.discountCents,
+        discountResponsibility: discountBreakdown.discountResponsibility,
+        promoterDiscountShareBps: discountBreakdown.promoterDiscountShareBps,
+        promoterDiscountCents: discountBreakdown.promoterDiscountCents,
+        companyDiscountCents: discountBreakdown.companyDiscountCents,
         isExternalCommissionOnly: true,
-        externalGrossAmountCents: totalPriceCents,
+        externalGrossAmountCents: grossTotalCents,
         isDeposit: false,
         direction: PaymentDirection.IN,
         createdByUserId: session.userId,
@@ -177,7 +204,8 @@ export async function POST(req: Request) {
       mode: "payment",
       paymentId: payment.id,
       amountCents: commissionCents,
-      grossAmountCents: totalPriceCents,
+      grossAmountCents: grossTotalCents,
+      commissionBaseCents: discountBreakdown.commissionBaseCents,
       commissionCents,
       commissionPct,
     });
@@ -203,7 +231,12 @@ export async function POST(req: Request) {
       quantity: parsed.data.quantity,
       pax: parsed.data.pax,
       basePriceCents,
+      commissionBaseCents: discountBreakdown.commissionBaseCents,
       manualDiscountCents: discountCents,
+      discountResponsibility: discountBreakdown.discountResponsibility,
+      promoterDiscountShareBps: discountBreakdown.promoterDiscountShareBps,
+      promoterDiscountCents: discountBreakdown.promoterDiscountCents,
+      companyDiscountCents: discountBreakdown.companyDiscountCents,
       totalPriceCents,
       customerName: parsed.data.customerName,
       customerCountry: parsed.data.customerCountry,

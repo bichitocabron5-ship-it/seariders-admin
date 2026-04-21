@@ -13,6 +13,8 @@ type Channel = {
   allowsPromotions: boolean;
   commissionEnabled: boolean;
   commissionBps: number | null;
+  discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
+  promoterDiscountShareBps: number | null;
 };
 
 type Props = {
@@ -60,6 +62,7 @@ export default function ChannelsConfigurationSection({
         <div style={{ display: "grid", gap: 12 }}>
           {channels.map((channel) => {
             const pct = (channel.commissionBps ?? 0) / 100;
+            const promoterSharePct = (channel.promoterDiscountShareBps ?? 0) / 100;
             const busy = savingId === channel.id;
             const kindLabel = channel.kind === "EXTERNAL_ACTIVITY" ? "Actividad externa" : "Canal estándar";
             const commissionLabel = channel.commissionEnabled
@@ -67,6 +70,12 @@ export default function ChannelsConfigurationSection({
                 ? `Partner ${pct.toFixed(2)}% · Seariders ${(100 - pct).toFixed(2)}%`
                 : `Comisión ${pct.toFixed(2)}%`
               : "Sin comisión";
+            const discountPolicyLabel =
+              channel.discountResponsibility === "PROMOTER"
+                ? "Dto promotor"
+                : channel.discountResponsibility === "COMPANY"
+                  ? "Dto empresa"
+                  : `Dto compartido ${promoterSharePct.toFixed(2)}% promotor`;
 
             return (
               <article key={channel.id} style={rowCard}>
@@ -92,9 +101,12 @@ export default function ChannelsConfigurationSection({
                       <span style={{ ...statusPill, ...(channel.visibleInBooth ? statusOn : statusOff) }}>
                         {channel.visibleInBooth ? "Booth ON" : "Booth OFF"}
                       </span>
+                      <span style={{ ...statusPill, ...(channel.discountResponsibility === "COMPANY" ? statusOff : statusOn) }}>
+                        {discountPolicyLabel}
+                      </span>
                     </div>
                     <div style={{ fontSize: 12, color: "#64748b" }}>
-                      Comisión base, reglas por servicio y visibilidad por origen.
+                      Comisión base, reglas por servicio, visibilidad por origen y política de descuentos.
                     </div>
                   </div>
 
@@ -191,6 +203,52 @@ export default function ChannelsConfigurationSection({
                       style={inputStyle}
                     />
                   </label>
+
+                  <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    Quién asume el descuento
+                    <select
+                      value={channel.discountResponsibility}
+                      disabled={busy}
+                      onChange={(e) => {
+                        const discountResponsibility = e.target.value as "COMPANY" | "PROMOTER" | "SHARED";
+                        void patchChannel(channel.id, {
+                          discountResponsibility,
+                          promoterDiscountShareBps:
+                            discountResponsibility === "PROMOTER"
+                              ? 10_000
+                              : discountResponsibility === "COMPANY"
+                                ? 0
+                                : channel.promoterDiscountShareBps ?? 5_000,
+                        });
+                      }}
+                      style={inputStyle}
+                    >
+                      <option value="COMPANY">Empresa</option>
+                      <option value="PROMOTER">Promotor</option>
+                      <option value="SHARED">Compartido</option>
+                    </select>
+                  </label>
+
+                  {channel.discountResponsibility === "SHARED" ? (
+                    <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                      Parte del promotor (%)
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.01}
+                        value={promoterSharePct}
+                        disabled={busy}
+                        onChange={(e) => {
+                          const value = Number(e.target.value || 0);
+                          void patchChannel(channel.id, {
+                            promoterDiscountShareBps: Math.round(value * 100),
+                          });
+                        }}
+                        style={inputStyle}
+                      />
+                    </label>
+                  ) : null}
 
                   <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
                     <input

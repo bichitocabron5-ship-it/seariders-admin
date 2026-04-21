@@ -201,6 +201,8 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
   companions: number;
   manualDiscountCents: number;
   manualDiscountReason: string;
+  discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
+  promoterDiscountShareBps: number;
   promoCode?: string | null;
   router: AppRouterInstance;
 }) {
@@ -266,6 +268,8 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
     companions: args.companions,
     manualDiscountCents: args.manualDiscountCents,
     manualDiscountReason: args.manualDiscountReason,
+    discountResponsibility: args.discountResponsibility,
+    promoterDiscountShareBps: args.promoterDiscountShareBps,
     itemsToSend,
   });
 

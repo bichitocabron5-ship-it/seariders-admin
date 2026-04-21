@@ -14,6 +14,8 @@ const Body = z.object({
   allowsPromotions: z.boolean().optional(),
   commissionEnabled: z.boolean().optional(),
   commissionBps: z.number().int().min(0).max(10000).optional(), // 0..100% en bps
+  discountResponsibility: z.enum(["COMPANY", "PROMOTER", "SHARED"]).optional(),
+  promoterDiscountShareBps: z.number().int().min(0).max(10000).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -60,6 +62,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       isActive: parsed.data.isActive,
       commissionEnabled: normalizedCommission.commissionEnabled,
       commissionBps: normalizedCommission.commissionBps,
+      discountResponsibility: parsed.data.discountResponsibility,
+      promoterDiscountShareBps:
+        parsed.data.discountResponsibility === undefined && parsed.data.promoterDiscountShareBps === undefined
+          ? undefined
+          : parsed.data.discountResponsibility === "PROMOTER"
+            ? 10_000
+            : parsed.data.discountResponsibility === "COMPANY"
+              ? 0
+              : Math.max(
+                  0,
+                  Math.min(
+                    10_000,
+                    Math.round(parsed.data.promoterDiscountShareBps ?? 0)
+                  )
+                ),
     },
     select: {
       id: true,
@@ -71,6 +88,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       allowsPromotions: true,
       commissionEnabled: true,
       commissionBps: true,
+      discountResponsibility: true,
+      promoterDiscountShareBps: true,
     },
   });
 

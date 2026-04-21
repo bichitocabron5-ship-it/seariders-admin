@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getCountryOptionsEs } from "@/lib/countries";
 import { opsStyles } from "@/components/ops-ui";
+import { computeCommissionableBase, resolveDiscountPolicy } from "@/lib/commission";
 import BoothOverviewSection from "./_components/BoothOverviewSection";
 import BoothPreReservationFormSection from "./_components/BoothPreReservationFormSection";
 import BoothPreReservationsSection from "./_components/BoothPreReservationsSection";
@@ -18,6 +19,8 @@ type Channel = {
   kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;
+  discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED" | null;
+  promoterDiscountShareBps?: number | null;
   commissionRules?: ChannelRule[] | null;
 };
 type PayMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
@@ -223,6 +226,8 @@ export default function Booth() {
   const [splitById, setSplitById] = useState<Record<string, [SplitLine, SplitLine]>>({});
   const [payingId, setPayingId] = useState<string | null>(null);
   const [discountEuros, setDiscountEuros] = useState<string>(""); // descuento opcional
+  const [discountResponsibility, setDiscountResponsibility] = useState<"COMPANY" | "PROMOTER" | "SHARED">("COMPANY");
+  const [promoterDiscountSharePct, setPromoterDiscountSharePct] = useState<string>("50");
   const [boothNote, setBoothNote] = useState("");
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [taxiboatOps, setTaxiboatOps] = useState<TaxiboatOperationRow[]>([]);
@@ -295,6 +300,12 @@ const selectedChannel = useMemo(() => {
   return filteredChannels.find((channel) => channel.id === channelId) ?? channels.find((channel) => channel.id === channelId) ?? null;
 }, [filteredChannels, channels, channelId]);
 
+useEffect(() => {
+  const policy = resolveDiscountPolicy({ channel: selectedChannel });
+  setDiscountResponsibility(policy.discountResponsibility);
+  setPromoterDiscountSharePct((policy.promoterDiscountShareBps / 100).toFixed(2));
+}, [selectedChannel?.id, selectedChannel?.discountResponsibility, selectedChannel?.promoterDiscountShareBps]);
+
 const isExternalCharge = selectedChannel?.kind === "EXTERNAL_ACTIVITY" || selectedService?.isExternalActivity === true;
 
 const countryOptions = useMemo(() => getCountryOptionsEs(), []);
@@ -337,7 +348,21 @@ const commissionPct = useMemo(() => {
   return searidersPctFromChannelPct(Number(selectedChannel.commissionBps ?? 0) / 100, selectedChannel.kind);
 }, [selectedChannel, selectedService]);
 
-const commissionCents = useMemo(() => Math.round(finalTotalCents * (commissionPct / 100)), [finalTotalCents, commissionPct]);
+const commissionBreakdown = useMemo(
+  () =>
+    computeCommissionableBase({
+      grossBaseCents: baseTotalCents,
+      totalDiscountCents: discountCentsClamped,
+      responsibility: discountResponsibility,
+      promoterDiscountShareBps: Math.round(Number(promoterDiscountSharePct || "0") * 100),
+    }),
+  [baseTotalCents, discountCentsClamped, discountResponsibility, promoterDiscountSharePct]
+);
+
+const commissionCents = useMemo(
+  () => Math.round(commissionBreakdown.commissionBaseCents * (commissionPct / 100)),
+  [commissionBreakdown.commissionBaseCents, commissionPct]
+);
 const netAfterCommissionCents = useMemo(() => Math.max(0, finalTotalCents - commissionCents), [finalTotalCents, commissionCents]);
 
 async function load() {
@@ -499,6 +524,8 @@ useEffect(() => {
         pax,
         channelId: channelId || null,
         discountEuros: (discountCentsClamped / 100).toFixed(2),
+        discountResponsibility,
+        promoterDiscountSharePct,
         boothNote: boothNote.trim() || null,
         paymentMethod: isExternalCharge ? paymentMethod : null,
       }),
@@ -522,6 +549,7 @@ useEffect(() => {
     setQuantity(1);
     setPax(2);
     setDiscountEuros("");
+    setPromoterDiscountSharePct("50");
     setBoothNote("");
     setPaymentMethod("CARD");
 
@@ -787,6 +815,11 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             commissionPct={commissionPct}
             commissionCents={commissionCents}
             netAfterCommissionCents={netAfterCommissionCents}
+            discountResponsibility={discountResponsibility}
+            promoterDiscountSharePct={promoterDiscountSharePct}
+            promoterDiscountCents={commissionBreakdown.promoterDiscountCents}
+            companyDiscountCents={commissionBreakdown.companyDiscountCents}
+            commissionBaseCents={commissionBreakdown.commissionBaseCents}
             euros={euros}
             onSubmit={createPre}
             setFirstName={setFirstName}
@@ -799,6 +832,8 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             setPaymentMethod={setPaymentMethod}
             setCategory={setCategory}
             setDiscountEuros={setDiscountEuros}
+            setDiscountResponsibility={setDiscountResponsibility}
+            setPromoterDiscountSharePct={setPromoterDiscountSharePct}
             setBoothNote={setBoothNote}
           />
 

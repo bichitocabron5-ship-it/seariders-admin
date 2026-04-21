@@ -24,6 +24,8 @@ export type Channel = {
   allowsPromotions?: boolean | null;
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;
+  discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED" | null;
+  promoterDiscountShareBps?: number | null;
 };
 
 export type CartItem = {

@@ -12,6 +12,8 @@ type Channel = {
   kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;
+  discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED" | null;
+  promoterDiscountShareBps?: number | null;
 };
 
 type Props = {
@@ -49,6 +51,11 @@ type Props = {
   commissionPct: number;
   commissionCents: number;
   netAfterCommissionCents: number;
+  discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
+  promoterDiscountSharePct: string;
+  promoterDiscountCents: number;
+  companyDiscountCents: number;
+  commissionBaseCents: number;
   euros: (cents: number) => string;
   onSubmit: (e: React.FormEvent) => void | Promise<void>;
   setFirstName: (value: string) => void;
@@ -61,6 +68,8 @@ type Props = {
   setPaymentMethod: (value: PayMethod) => void;
   setCategory: (value: string) => void;
   setDiscountEuros: (value: string) => void;
+  setDiscountResponsibility: (value: "COMPANY" | "PROMOTER" | "SHARED") => void;
+  setPromoterDiscountSharePct: (value: string) => void;
   setBoothNote: (value: string) => void;
 };
 
@@ -99,6 +108,11 @@ export default function BoothPreReservationFormSection({
   commissionPct,
   commissionCents,
   netAfterCommissionCents,
+  discountResponsibility,
+  promoterDiscountSharePct,
+  promoterDiscountCents,
+  companyDiscountCents,
+  commissionBaseCents,
   euros,
   onSubmit,
   setFirstName,
@@ -111,6 +125,8 @@ export default function BoothPreReservationFormSection({
   setPaymentMethod,
   setCategory,
   setDiscountEuros,
+  setDiscountResponsibility,
+  setPromoterDiscountSharePct,
   setBoothNote,
 }: Props) {
   return (
@@ -227,6 +243,38 @@ export default function BoothPreReservationFormSection({
           />
         </label>
 
+        {selectedChannel ? (
+          <>
+            <label>
+              Quien asume el descuento
+              <select
+                value={discountResponsibility}
+                onChange={(e) => setDiscountResponsibility(e.target.value as "COMPANY" | "PROMOTER" | "SHARED")}
+                style={fieldStyle}
+              >
+                <option value="COMPANY">Empresa</option>
+                <option value="PROMOTER">Promotor</option>
+                <option value="SHARED">Compartido</option>
+              </select>
+            </label>
+
+            {discountResponsibility === "SHARED" ? (
+              <label>
+                Parte del promotor (%)
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  value={promoterDiscountSharePct}
+                  onChange={(e) => setPromoterDiscountSharePct(e.target.value)}
+                  style={fieldStyle}
+                />
+              </label>
+            ) : null}
+          </>
+        ) : null}
+
         <div style={{ fontSize: 12, opacity: 0.85 }}>
           Max descuento manual: <b>{euros(maxManualDiscountCents)}</b> (30% sobre {euros(baseTotalCents)})
           {discountCentsRaw > maxManualDiscountCents ? (
@@ -260,6 +308,13 @@ export default function BoothPreReservationFormSection({
                 <div style={{ fontSize: 13, color: "#334155" }}>
                   Comision estimada para Seariders ({selectedChannel.name} · {commissionPct.toFixed(2)}%):{" "}
                   <strong>{euros(commissionCents)}</strong>
+                </div>
+                <div style={{ fontSize: 13, color: "#334155" }}>
+                  Base comisionable: <strong>{euros(commissionBaseCents)}</strong>
+                </div>
+                <div style={{ fontSize: 12, color: "#475569" }}>
+                  Descuento asumido por promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa:{" "}
+                  <strong>{euros(companyDiscountCents)}</strong>
                 </div>
                 <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 800 }}>
                   Neto estimado a liquidar al partner: {euros(netAfterCommissionCents)}

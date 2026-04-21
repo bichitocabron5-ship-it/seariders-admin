@@ -11,6 +11,8 @@ type Props = {
   newAllowsPromotions: boolean;
   newCommissionEnabled: boolean;
   newCommissionPct: string;
+  newDiscountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
+  newPromoterDiscountSharePct: string;
   creating: boolean;
   setNewName: (value: string) => void;
   setNewKind: (value: "STANDARD" | "EXTERNAL_ACTIVITY") => void;
@@ -20,6 +22,8 @@ type Props = {
   setNewAllowsPromotions: (value: boolean) => void;
   setNewCommissionEnabled: (value: boolean) => void;
   setNewCommissionPct: (value: string) => void;
+  setNewDiscountResponsibility: (value: "COMPANY" | "PROMOTER" | "SHARED") => void;
+  setNewPromoterDiscountSharePct: (value: string) => void;
   createChannel: () => void | Promise<void>;
   panelStyle: CSSProperties;
   panelHeader: CSSProperties;
@@ -37,6 +41,8 @@ export default function CreateChannelSection({
   newAllowsPromotions,
   newCommissionEnabled,
   newCommissionPct,
+  newDiscountResponsibility,
+  newPromoterDiscountSharePct,
   creating,
   setNewName,
   setNewKind,
@@ -46,6 +52,8 @@ export default function CreateChannelSection({
   setNewAllowsPromotions,
   setNewCommissionEnabled,
   setNewCommissionPct,
+  setNewDiscountResponsibility,
+  setNewPromoterDiscountSharePct,
   createChannel,
   panelStyle,
   panelHeader,
@@ -58,7 +66,7 @@ export default function CreateChannelSection({
       <div style={panelHeader}>
         <div style={{ fontWeight: 950 }}>Crear canal</div>
         <div style={{ fontSize: 12, color: "#64748b" }}>
-          Alta rápida de un canal comercial con visibilidad, estado y comisión base inicial.
+          Alta rápida de un canal comercial con visibilidad, estado, comisión base y política de descuentos.
         </div>
       </div>
 
@@ -103,6 +111,34 @@ export default function CreateChannelSection({
               disabled={!newCommissionEnabled}
             />
           </label>
+
+          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+            Quién asume el descuento
+            <select
+              value={newDiscountResponsibility}
+              onChange={(e) => setNewDiscountResponsibility(e.target.value as "COMPANY" | "PROMOTER" | "SHARED")}
+              style={inputStyle}
+            >
+              <option value="COMPANY">Empresa</option>
+              <option value="PROMOTER">Promotor</option>
+              <option value="SHARED">Compartido</option>
+            </select>
+          </label>
+
+          {newDiscountResponsibility === "SHARED" ? (
+            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+              Parte del promotor (%)
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                value={newPromoterDiscountSharePct}
+                onChange={(e) => setNewPromoterDiscountSharePct(e.target.value)}
+                style={inputStyle}
+              />
+            </label>
+          ) : null}
 
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
             <input type="checkbox" checked={newVisibleInStore} onChange={(e) => setNewVisibleInStore(e.target.checked)} />

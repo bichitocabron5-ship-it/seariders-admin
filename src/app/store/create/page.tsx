@@ -6,6 +6,7 @@ import { getCountryOptionsEs } from "@/lib/countries";
 import { BUSINESS_TZ, shouldAutoFormalize } from "@/lib/tz-business";
 import { needsContractForCategory } from "@/lib/reservation-rules";
 import { opsStyles } from "@/components/ops-ui";
+import { computeCommissionableBase, resolveDiscountPolicy } from "@/lib/commission";
 import { AvailabilitySection, FutureReservationPaymentsSection, PricingSection, SubmitSection } from "./components/form-sections";
 import { ReservationBasicsSection } from "./components/reservation-basics-section";
 import { CartSection, ContractsSection } from "./components/store-sections";
@@ -67,6 +68,7 @@ function StoreCreatePageInner() {
   const [prefillChannelFallback, setPrefillChannelFallback] = useState<Channel | null>(null);
   const [prefillPricing, setPrefillPricing] = useState<{
     basePriceCents: number;
+    commissionBaseCents: number;
     manualDiscountCents: number;
     autoDiscountCents: number;
     totalPriceCents: number;
@@ -100,6 +102,8 @@ function StoreCreatePageInner() {
 
   const [manualDiscountEuros, setManualDiscountEuros] = useState<string>("");
   const [manualDiscountReason, setManualDiscountReason] = useState<string>("");
+  const [discountResponsibility, setDiscountResponsibility] = useState<"COMPANY" | "PROMOTER" | "SHARED">("COMPANY");
+  const [promoterDiscountSharePct, setPromoterDiscountSharePct] = useState<string>("50");
   const [selectedPromoCode, setSelectedPromoCode] = useState("");
   const [applyPromo, setApplyPromo] = useState(false);
   const [cartDiscountPreviews, setCartDiscountPreviews] = useState<Record<string, { baseTotalCents: number; autoDiscountCents: number; finalTotalCents: number }>>({});
@@ -138,8 +142,13 @@ function StoreCreatePageInner() {
       marketing?: string | null;
       companionsCount?: number | null;
       basePriceCents?: number | null;
+      commissionBaseCents?: number | null;
       manualDiscountCents?: number | null;
       autoDiscountCents?: number | null;
+      discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED" | null;
+      promoterDiscountShareBps?: number | null;
+      promoterDiscountCents?: number | null;
+      companyDiscountCents?: number | null;
       totalPriceCents?: number | null;
       totalServiceCents?: number | null;
       paidServiceCents?: number | null;
@@ -183,10 +192,13 @@ function StoreCreatePageInner() {
       setPrefillChannelFallback(res.channel ?? null);
       setPrefillPricing({
         basePriceCents: Number(res.basePriceCents ?? res.option?.basePriceCents ?? 0),
+        commissionBaseCents: Number(res.commissionBaseCents ?? 0),
         manualDiscountCents: Number(res.manualDiscountCents ?? 0),
         autoDiscountCents: Number(res.autoDiscountCents ?? 0),
         totalPriceCents: Number(res.totalPriceCents ?? 0),
       });
+      setDiscountResponsibility(res.discountResponsibility ?? "COMPANY");
+      setPromoterDiscountSharePct((Number(res.promoterDiscountShareBps ?? 0) / 100).toFixed(2));
       setPaymentSummary({
         totalServiceCents: Number(res.totalServiceCents ?? res.totalPriceCents ?? 0),
         paidServiceCents: Number(res.paidServiceCents ?? 0),
@@ -461,6 +473,20 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   );
 
   useEffect(() => {
+    if ((isEditMode || isMigrateMode) && prefillPricing) return;
+    const policy = resolveDiscountPolicy({ channel: selectedChannel });
+    setDiscountResponsibility(policy.discountResponsibility);
+    setPromoterDiscountSharePct((policy.promoterDiscountShareBps / 100).toFixed(2));
+  }, [
+    isEditMode,
+    isMigrateMode,
+    prefillPricing,
+    selectedChannel?.id,
+    selectedChannel?.discountResponsibility,
+    selectedChannel?.promoterDiscountShareBps,
+  ]);
+
+  useEffect(() => {
     if (selectedChannel?.allowsPromotions === false) {
       setApplyPromo(false);
       setSelectedPromoCode("");
@@ -669,6 +695,26 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   const shownFinalCentsWithManual = canEditPricing
     ? Math.max(0, shownFinalCents - manualDiscountCents)
     : shownFinalCents;
+  const commissionBreakdown = useMemo(
+    () =>
+      computeCommissionableBase({
+        grossBaseCents: shownBaseCents,
+        totalDiscountCents: canEditPricing
+          ? shownDiscountCents + manualDiscountCents
+          : Number((prefillPricing?.manualDiscountCents ?? 0) + (prefillPricing?.autoDiscountCents ?? 0)),
+        responsibility: canEditPricing ? discountResponsibility : prefillPricing ? discountResponsibility : "COMPANY",
+        promoterDiscountShareBps: Math.round(Number(promoterDiscountSharePct || "0") * 100),
+      }),
+    [
+      canEditPricing,
+      discountResponsibility,
+      manualDiscountCents,
+      prefillPricing,
+      promoterDiscountSharePct,
+      shownBaseCents,
+      shownDiscountCents,
+    ]
+  );
 
   function addToCart() {
     if (!serviceId) throw new Error("Servicio requerido");
@@ -893,6 +939,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         companions,
         manualDiscountCents,
         manualDiscountReason,
+        discountResponsibility,
+        promoterDiscountShareBps: Math.round(Number(promoterDiscountSharePct || "0") * 100),
         promoCode: applyPromo ? selectedPromoCode || null : null,
         router,
       });
@@ -1384,11 +1432,18 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               onManualDiscountEurosChange={setManualDiscountEuros}
               manualDiscountReason={manualDiscountReason}
               onManualDiscountReasonChange={setManualDiscountReason}
+              discountResponsibility={discountResponsibility}
+              onDiscountResponsibilityChange={setDiscountResponsibility}
+              promoterDiscountSharePct={promoterDiscountSharePct}
+              onPromoterDiscountSharePctChange={setPromoterDiscountSharePct}
               shownFinalCentsWithManual={shownFinalCentsWithManual}
               manualDiscountCentsRaw={manualDiscountCentsRaw}
               shownDiscountCents={shownDiscountCents}
               shownBaseCents={shownBaseCents}
               shownReason={shownReason ?? ""}
+              commissionBaseCents={commissionBreakdown.commissionBaseCents}
+              promoterDiscountCents={commissionBreakdown.promoterDiscountCents}
+              companyDiscountCents={commissionBreakdown.companyDiscountCents}
               pricingMeta={pricingMeta}
               channelPricingSummary={discountPreview?.channelPricingSummary ?? null}
               availablePromos={canEditReservationForm && canEditPricing ? (discountPreview?.availablePromos ?? []) : []}

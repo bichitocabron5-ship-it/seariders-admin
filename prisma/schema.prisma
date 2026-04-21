@@ -153,6 +153,8 @@ model Channel {
   name                       String                  @unique
   kind                       ChannelKind             @default(STANDARD)
   commissionPct              Float                   @default(0)
+  discountResponsibility     DiscountResponsibility  @default(COMPANY)
+  promoterDiscountShareBps   Int                     @default(0)
   isActive                   Boolean                 @default(true)
   visibleInStore             Boolean                 @default(true)
   visibleInBooth             Boolean                 @default(false)
@@ -318,8 +320,13 @@ model Reservation {
   pax                  Int                   @default(1)
   companionsCount      Int                   @default(0)
   basePriceCents       Int
+  commissionBaseCents  Int                   @default(0)
   manualDiscountCents  Int                   @default(0)
   autoDiscountCents    Int                   @default(0) // ✅ NUEVO (promo automática o por código)
+  discountResponsibility DiscountResponsibility @default(COMPANY)
+  promoterDiscountShareBps Int               @default(0)
+  promoterDiscountCents Int                  @default(0)
+  companyDiscountCents  Int                  @default(0)
   manualDiscountReason String?               @db.VarChar(200)
   promoCode            String? // ✅ NUEVO (si quieres guardar el código aplicado)
   totalPriceCents      Int
@@ -991,6 +998,12 @@ model Payment {
   origin          PaymentOrigin
   method          PaymentMethod
   amountCents     Int
+  commissionBaseCents Int          @default(0)
+  externalDiscountCents Int        @default(0)
+  discountResponsibility DiscountResponsibility @default(COMPANY)
+  promoterDiscountShareBps Int     @default(0)
+  promoterDiscountCents Int        @default(0)
+  companyDiscountCents Int         @default(0)
   isExternalCommissionOnly Boolean @default(false)
   externalGrossAmountCents Int?
   reversalOfPaymentId String?
@@ -2134,6 +2147,12 @@ enum DiscountScope {
   CATEGORY
   SERVICE
   OPTION
+}
+
+enum DiscountResponsibility {
+  COMPANY
+  PROMOTER
+  SHARED
 }
 
 enum RoleName {

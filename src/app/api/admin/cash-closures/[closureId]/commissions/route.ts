@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { commissionFromBase, resolveCommissionRate } from "@/lib/commission";
+import {
+  commissionFromBase,
+  proportionalCommissionBaseForCollected,
+  resolveCommissionRate,
+} from "@/lib/commission";
 import { PaymentOrigin } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -50,6 +54,7 @@ export async function GET(req: Request, { params }: Ctx) {
       serviceId: true,
       channelId: true,
       amountCents: true,
+      commissionBaseCents: true,
       isExternalCommissionOnly: true,
       externalGrossAmountCents: true,
       direction: true,
@@ -79,6 +84,8 @@ export async function GET(req: Request, { params }: Ctx) {
     select: {
       id: true,
       serviceId: true,
+      totalPriceCents: true,
+      commissionBaseCents: true,
       channelId: true,
       channel: {
         select: {
@@ -133,7 +140,15 @@ export async function GET(req: Request, { params }: Ctx) {
     });
     if (!rate) continue;
 
-    const baseService = netServiceByRes.get(r.id) ?? 0;
+    const rawNetService = netServiceByRes.get(r.id) ?? 0;
+    const baseService =
+      Number(r.commissionBaseCents ?? 0) > 0 && Number(r.totalPriceCents ?? 0) > 0
+        ? proportionalCommissionBaseForCollected({
+            collectedNetCents: rawNetService,
+            reservationNetCents: Number(r.totalPriceCents ?? 0),
+            reservationCommissionBaseCents: Number(r.commissionBaseCents ?? 0),
+          })
+        : rawNetService;
     const baseDeposit = netDepositByRes.get(r.id) ?? 0;
     const baseTotal = baseService + (ch.commissionAppliesToDeposit ? baseDeposit : 0);
 
@@ -187,7 +202,7 @@ export async function GET(req: Request, { params }: Ctx) {
       }
 
       const row = byChannel.get(ch.id)!;
-      const grossBase = signed(p.externalGrossAmountCents ?? p.amountCents, p.direction);
+      const grossBase = signed(p.commissionBaseCents ?? p.externalGrossAmountCents ?? p.amountCents, p.direction);
       if (p.isDeposit) row.baseDepositCents += grossBase;
       else row.baseServiceCents += grossBase;
       row.baseTotalCents += grossBase;
@@ -196,7 +211,7 @@ export async function GET(req: Request, { params }: Ctx) {
       continue;
     }
 
-    const baseTotal = p.isDeposit && !ch.commissionAppliesToDeposit ? 0 : signed(p.amountCents, p.direction);
+    const baseTotal = p.isDeposit && !ch.commissionAppliesToDeposit ? 0 : signed(p.commissionBaseCents ?? p.amountCents, p.direction);
     if (!baseTotal) continue;
 
     const c = commissionFromBase(

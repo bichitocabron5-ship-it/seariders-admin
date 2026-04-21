@@ -184,6 +184,8 @@ export function buildCreateBody(args: {
   companions: number;
   manualDiscountCents: number;
   manualDiscountReason: string;
+  discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
+  promoterDiscountShareBps: number;
   itemsToSend: Array<{ serviceId: string; optionId: string; quantity: number; pax: number; promoCode?: string | null }>;
 }) {
   return {
@@ -210,6 +212,8 @@ export function buildCreateBody(args: {
     pricingTier: args.pricingTier,
     manualDiscountCents: args.manualDiscountCents,
     manualDiscountReason: args.manualDiscountReason?.trim() || null,
+    discountResponsibility: args.discountResponsibility,
+    promoterDiscountShareBps: args.promoterDiscountShareBps,
     items: args.itemsToSend,
   };
 }

@@ -48,6 +48,8 @@ const Body = z.object({
 
   manualDiscountCents: z.number().int().min(0).max(1_000_000).optional(),
   manualDiscountReason: z.string().max(200).nullable().optional(),
+  discountResponsibility: z.enum(["COMPANY", "PROMOTER", "SHARED"]).optional(),
+  promoterDiscountShareBps: z.number().int().min(0).max(10000).optional(),
 
   // Siempre items (carrito / pack / normal)
   items: z.array(
@@ -167,6 +169,8 @@ export async function POST(req: Request) {
           pricingTier: b.pricingTier,
           manualDiscountCents: b.manualDiscountCents ?? 0,
           manualDiscountReason: b.manualDiscountReason ?? null,
+          discountResponsibility: b.discountResponsibility ?? "COMPANY",
+          promoterDiscountShareBps: b.promoterDiscountShareBps ?? 0,
           items,
           packId: b.packId ?? null,
           pricing,

@@ -16,6 +16,8 @@ type Channel = {
   allowsPromotions: boolean;
   commissionEnabled: boolean;
   commissionBps: number | null;
+  discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
+  promoterDiscountShareBps: number | null;
 };
 
 export default function AdminChannelsPage() {
@@ -32,6 +34,8 @@ export default function AdminChannelsPage() {
   const [newAllowsPromotions, setNewAllowsPromotions] = useState(false);
   const [newCommissionEnabled, setNewCommissionEnabled] = useState(false);
   const [newCommissionPct, setNewCommissionPct] = useState("0");
+  const [newDiscountResponsibility, setNewDiscountResponsibility] = useState<Channel["discountResponsibility"]>("COMPANY");
+  const [newPromoterDiscountSharePct, setNewPromoterDiscountSharePct] = useState("50");
 
   async function load() {
     setLoading(true);
@@ -105,6 +109,12 @@ export default function AdminChannelsPage() {
       }
 
       const commissionBps = Math.round(parsedPct * 100);
+      const promoterDiscountShareBps =
+        newDiscountResponsibility === "PROMOTER"
+          ? 10_000
+          : newDiscountResponsibility === "COMPANY"
+            ? 0
+            : Math.round(Math.max(0, Math.min(100, Number(newPromoterDiscountSharePct || "0"))) * 100);
 
       const r = await fetch("/api/admin/channels", {
         method: "POST",
@@ -118,6 +128,8 @@ export default function AdminChannelsPage() {
           allowsPromotions: newAllowsPromotions,
           commissionEnabled: newCommissionEnabled,
           commissionBps,
+          discountResponsibility: newDiscountResponsibility,
+          promoterDiscountShareBps,
         }),
       });
       if (!r.ok) throw new Error(await r.text());
@@ -137,6 +149,8 @@ export default function AdminChannelsPage() {
       setNewAllowsPromotions(false);
       setNewCommissionEnabled(false);
       setNewCommissionPct("0");
+      setNewDiscountResponsibility("COMPANY");
+      setNewPromoterDiscountSharePct("50");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error creando canal");
     } finally {
@@ -192,6 +206,8 @@ export default function AdminChannelsPage() {
         newAllowsPromotions={newAllowsPromotions}
         newCommissionEnabled={newCommissionEnabled}
         newCommissionPct={newCommissionPct}
+        newDiscountResponsibility={newDiscountResponsibility}
+        newPromoterDiscountSharePct={newPromoterDiscountSharePct}
         creating={creating}
         setNewName={setNewName}
         setNewKind={setNewKind}
@@ -201,6 +217,8 @@ export default function AdminChannelsPage() {
         setNewAllowsPromotions={setNewAllowsPromotions}
         setNewCommissionEnabled={setNewCommissionEnabled}
         setNewCommissionPct={setNewCommissionPct}
+        setNewDiscountResponsibility={setNewDiscountResponsibility}
+        setNewPromoterDiscountSharePct={setNewPromoterDiscountSharePct}
         createChannel={createChannel}
         panelStyle={panelStyle}
         panelHeader={panelHeader}

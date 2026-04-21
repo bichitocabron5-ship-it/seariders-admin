@@ -7,6 +7,10 @@ import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
+import {
+  computeCommissionableBase,
+  resolveDiscountPolicy,
+} from "@/lib/commission";
 
 type CreateItemInput = {
   serviceIdOrCode: string;
@@ -41,6 +45,8 @@ type CreateReservationInput = {
 
   manualDiscountCents?: number;
   manualDiscountReason?: string | null;
+  discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED";
+  promoterDiscountShareBps?: number;
 
   // items reales (actividades)
   items: CreateItemInput[];
@@ -101,9 +107,22 @@ export async function createReservationWithItems(params: {
   dayEndExclusiveUtc.setUTCDate(dayEndExclusiveUtc.getUTCDate() + 1);
 
   // Canal
-  const ch = await tx.channel.findUnique({ where: { id: input.channelId }, select: { id: true, allowsPromotions: true } });
+  const ch = await tx.channel.findUnique({
+    where: { id: input.channelId },
+    select: {
+      id: true,
+      allowsPromotions: true,
+      discountResponsibility: true,
+      promoterDiscountShareBps: true,
+    },
+  });
   if (!ch) throw new Error("Canal no existe");
   const promotionsEnabled = Boolean(ch.allowsPromotions);
+  const discountPolicy = resolveDiscountPolicy({
+    responsibility: input.discountResponsibility,
+    promoterDiscountShareBps: input.promoterDiscountShareBps,
+    channel: ch,
+  });
 
   const packQty = Math.max(1, Number(input.packQty ?? 1));
 
@@ -358,7 +377,14 @@ export async function createReservationWithItems(params: {
       manualDiscountCents = Math.max(0, Math.min(manualDiscountCents, maxManual));
     }
 
-      const finalTotalCents = Math.max(0, totalBeforeDiscounts - autoDiscountCents - manualDiscountCents);
+      const totalDiscountCents = autoDiscountCents + manualDiscountCents;
+      const discountBreakdown = computeCommissionableBase({
+        grossBaseCents: totalBeforeDiscounts,
+        totalDiscountCents,
+        responsibility: discountPolicy.discountResponsibility,
+        promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
+      });
+      const finalTotalCents = Math.max(0, totalBeforeDiscounts - totalDiscountCents);
 
       const depositCents = computeDepositFromResolvedItems({ isLicense, resolvedItems });
       
@@ -399,8 +425,13 @@ export async function createReservationWithItems(params: {
 
           // Totales
           basePriceCents,
+          commissionBaseCents: discountBreakdown.commissionBaseCents,
           autoDiscountCents,
           manualDiscountCents,
+          discountResponsibility: discountBreakdown.discountResponsibility,
+          promoterDiscountShareBps: discountBreakdown.promoterDiscountShareBps,
+          promoterDiscountCents: discountBreakdown.promoterDiscountCents,
+          companyDiscountCents: discountBreakdown.companyDiscountCents,
           manualDiscountReason: input.manualDiscountReason ?? null,
           totalPriceCents: finalTotalCents,
           depositCents,

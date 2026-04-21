@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
 
-    // 1) Reservas del dia de negocio con canal + item principal (isExtra=false)
+    // 1) Reservas del dia de negocio con canal
     const reservations = await prisma.reservation.findMany({
       where: {
         formalizedAt: { not: null },
@@ -25,6 +25,9 @@ export async function GET() {
       select: {
         id: true,
         channelId: true,
+        serviceId: true,
+        commissionBaseCents: true,
+        totalPriceCents: true,
         channel: {
           select: {
             id: true,
@@ -33,17 +36,11 @@ export async function GET() {
             commissionEnabled: true,
             commissionBps: true, // fallback
             commissionPct: true,
+            commissionRules: {
+              where: { isActive: true },
+              select: { serviceId: true, commissionPct: true },
+            },
           },
-        },
-        items: {
-          where: { isExtra: false },
-          orderBy: { createdAt: "asc" }, // estabilidad
-          select: {
-            serviceId: true,
-            totalPriceCents: true,
-            isExtra: true,
-          },
-          take: 1,
         },
       },
     });
@@ -53,7 +50,7 @@ export async function GET() {
     );
 
     const serviceIds = Array.from(
-      new Set(reservations.map((r) => r.items?.[0]?.serviceId).filter(Boolean) as string[])
+      new Set(reservations.map((r) => r.serviceId).filter(Boolean) as string[])
     );
 
     const externalPayments = await prisma.payment.findMany({
@@ -67,6 +64,7 @@ export async function GET() {
       },
       select: {
         amountCents: true,
+        commissionBaseCents: true,
         direction: true,
         isExternalCommissionOnly: true,
         externalGrossAmountCents: true,
@@ -142,18 +140,17 @@ export async function GET() {
       const ch = r.channel;
       if (!ch || !ch.commissionEnabled) continue;
 
-      const mainItem = r.items?.[0];
-      if (!mainItem) continue;
-      if (mainItem.isExtra) continue;
-
-      const base = Number(mainItem.totalPriceCents ?? 0);
+      const base =
+        Number(r.commissionBaseCents ?? 0) > 0
+          ? Number(r.commissionBaseCents ?? 0)
+          : Number(r.totalPriceCents ?? 0);
       if (base <= 0) continue; // evita "comisiones" sin base
 
-      const key = `${ch.id}:${mainItem.serviceId}`;
+      const key = `${ch.id}:${r.serviceId}`;
       const rulePct = ruleMap.get(key); // 0..100
       const rate = resolveCommissionRate({
         channel: ch,
-        serviceId: mainItem.serviceId,
+        serviceId: r.serviceId,
         rulePct: rulePct ?? null,
       });
       if (!rate) continue;
@@ -189,7 +186,7 @@ export async function GET() {
         continue;
       }
 
-      const base = signedAmount;
+      const base = Number(payment.commissionBaseCents ?? 0) > 0 ? Number(payment.commissionBaseCents ?? 0) : signedAmount;
       if (base <= 0) continue;
 
       const key = `${ch.id}:${payment.serviceId}`;

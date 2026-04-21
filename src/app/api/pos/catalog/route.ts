@@ -123,6 +123,8 @@ export async function GET(req: Request) {
         allowsPromotions: true,
         commissionEnabled: true,
         commissionBps: true,
+        discountResponsibility: true,
+        promoterDiscountShareBps: true,
         commissionRules: {
           where: { isActive: true },
           select: {

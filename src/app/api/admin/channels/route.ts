@@ -16,6 +16,8 @@ const CreateBody = z.object({
   allowsPromotions: z.boolean().optional(),
   commissionEnabled: z.boolean().optional(),
   commissionBps: z.number().int().min(0).max(10000).optional(),
+  discountResponsibility: z.enum(["COMPANY", "PROMOTER", "SHARED"]).optional(),
+  promoterDiscountShareBps: z.number().int().min(0).max(10000).optional(),
 });
 
 function normalizeCommissionInput(input: {
@@ -54,6 +56,8 @@ export async function GET() {
       allowsPromotions: true,
       commissionEnabled: true,
       commissionBps: true,
+      discountResponsibility: true,
+      promoterDiscountShareBps: true,
     },
   });
 
@@ -88,6 +92,13 @@ export async function POST(req: Request) {
         allowsPromotions: parsed.data.allowsPromotions ?? false,
         commissionEnabled: normalizedCommission.commissionEnabled,
         commissionBps: normalizedCommission.commissionBps,
+        discountResponsibility: parsed.data.discountResponsibility ?? "COMPANY",
+        promoterDiscountShareBps:
+          parsed.data.discountResponsibility === "PROMOTER"
+            ? 10_000
+            : parsed.data.discountResponsibility === "COMPANY"
+              ? 0
+              : Math.max(0, Math.min(10_000, Math.round(parsed.data.promoterDiscountShareBps ?? 0))),
       },
       select: {
         id: true,
@@ -99,6 +110,8 @@ export async function POST(req: Request) {
         allowsPromotions: true,
         commissionEnabled: true,
         commissionBps: true,
+        discountResponsibility: true,
+        promoterDiscountShareBps: true,
       },
     });
 
