@@ -162,14 +162,13 @@ export function PhoneWithCountryField({
   containerStyle?: React.CSSProperties;
 }) {
   const normalizedCountry = String(country ?? "").trim().toUpperCase();
-  const selectedDialCode = getDialCodeForCountry(normalizedCountry);
   const shellStyle: React.CSSProperties = {
     border: String(inputStyle.border ?? "1px solid #d0d9e4"),
     borderRadius: inputStyle.borderRadius ?? 14,
     background: String(inputStyle.background ?? "#fff"),
     minHeight: inputStyle.minHeight ?? 48,
     display: "grid",
-    gridTemplateColumns: "84px 88px minmax(0, 1fr)",
+    gridTemplateColumns: "minmax(140px, 220px) minmax(0, 1fr)",
     alignItems: "stretch",
     overflow: "hidden",
   };
@@ -201,27 +200,11 @@ export function PhoneWithCountryField({
             const suffix = dialCode ? ` (+${dialCode})` : "";
             return (
               <option key={option.value} value={option.value}>
-                {option.value}{suffix} {option.label}
+                {option.value}{suffix}
               </option>
             );
           })}
         </select>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            borderRight: "1px solid #e2e8f0",
-            color: "#475569",
-            fontSize: 14,
-            fontWeight: 800,
-            background: "#f8fafc",
-            padding: "0 10px",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {selectedDialCode ? `+${selectedDialCode}` : "--"}
-        </div>
         <input
           value={phone}
           onChange={(e) => onPhoneChange(e.target.value)}

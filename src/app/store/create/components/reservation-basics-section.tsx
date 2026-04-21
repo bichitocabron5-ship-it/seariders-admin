@@ -2,7 +2,7 @@
 "use client";
 
 import React from "react";
-import { BirthDateField, PhoneWithCountryField } from "@/components/customer-inputs";
+import { PhoneWithCountryField } from "@/components/customer-inputs";
 import type { CountryOption } from "@/lib/countries";
 import type { Channel, JetskiLicenseMode, Option, PackPreview, PricingTier, ServiceMain } from "../types";
 
@@ -46,7 +46,6 @@ export type ReservationBasicsSectionProps = {
     customerCountry: string;
     customerAddress: string;
     customerPostalCode: string;
-    customerBirthDate: string;
     customerDocType: string;
     customerDocNumber: string;
     marketingSource: string;
@@ -88,7 +87,6 @@ export type ReservationBasicsSectionProps = {
     onCustomerCountryChange: (value: string) => void;
     onCustomerAddressChange: (value: string) => void;
     onCustomerPostalCodeChange: (value: string) => void;
-    onCustomerBirthDateChange: (value: string) => void;
     onCustomerDocTypeChange: (value: string) => void;
     onCustomerDocNumberChange: (value: string) => void;
     onMarketingSourceChange: (value: string) => void;
@@ -207,12 +205,6 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                 />
               </label>
 
-              <BirthDateField
-                label="Fecha de nacimiento"
-                value={values.customerBirthDate}
-                onChange={handlers.onCustomerBirthDateChange}
-                style={inputStyle}
-              />
             </div>
 
             <div style={{ ...gridStyle, gridTemplateColumns: "minmax(240px, 420px)" }}>
