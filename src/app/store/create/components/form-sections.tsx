@@ -315,6 +315,20 @@ export function PricingSection({
         <div style={{ fontSize: 12, color: "#64748b" }}>Sin descuento automático.</div>
       )}
 
+      {promoterDiscountCents > 0 ? (
+        <div style={{ padding: 12, borderRadius: 14, background: "#fff7ed", border: "1px solid #fed7aa", fontSize: 13, color: "#7c2d12" }}>
+          <div>
+            Base comisionable: <strong>{euros(commissionBaseCents)}</strong>
+          </div>
+          <div style={{ marginTop: 6 }}>
+            El promotor asume <strong>{euros(promoterDiscountCents)}</strong> del descuento.
+          </div>
+          <div style={{ marginTop: 6 }}>
+            Comisión/promotor: <strong>{promoterNominalPct.toFixed(2)}%</strong> nominal → <strong>{promoterEffectivePct.toFixed(2)}%</strong> efectivo
+          </div>
+        </div>
+      ) : null}
+
       {channelPricingSummary ? (
         <div style={{ padding: 12, borderRadius: 14, background: "#fff7ed", border: "1px solid #fed7aa", fontSize: 13, color: "#7c2d12", display: "grid", gap: 6 }}>
           <div style={{ fontWeight: 900 }}>Canal {channelPricingSummary.channelName}: PVP comercial configurado</div>
