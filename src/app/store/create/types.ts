@@ -19,6 +19,7 @@ export type Option = {
 export type Channel = {
   id: string;
   name: string;
+  kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
   visibleInStore?: boolean | null;
   visibleInBooth?: boolean | null;
   allowsPromotions?: boolean | null;
@@ -26,6 +27,7 @@ export type Channel = {
   commissionBps?: number | null;
   discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED" | null;
   promoterDiscountShareBps?: number | null;
+  commissionRules?: Array<{ serviceId: string; commissionPct?: number | null }> | null;
 };
 
 export type CartItem = {

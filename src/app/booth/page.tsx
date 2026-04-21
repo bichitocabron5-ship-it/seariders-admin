@@ -364,6 +364,11 @@ const commissionCents = useMemo(
   [commissionBreakdown.commissionBaseCents, commissionPct]
 );
 const netAfterCommissionCents = useMemo(() => Math.max(0, finalTotalCents - commissionCents), [finalTotalCents, commissionCents]);
+const promoterNominalPct = useMemo(() => clampPct(100 - commissionPct), [commissionPct]);
+const promoterEffectivePct = useMemo(
+  () => (baseTotalCents > 0 ? clampPct((netAfterCommissionCents / baseTotalCents) * 100) : 0),
+  [baseTotalCents, netAfterCommissionCents]
+);
 
 async function load() {
   setError(null);
@@ -820,6 +825,8 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             promoterDiscountCents={commissionBreakdown.promoterDiscountCents}
             companyDiscountCents={commissionBreakdown.companyDiscountCents}
             commissionBaseCents={commissionBreakdown.commissionBaseCents}
+            promoterNominalPct={promoterNominalPct}
+            promoterEffectivePct={promoterEffectivePct}
             euros={euros}
             onSubmit={createPre}
             setFirstName={setFirstName}

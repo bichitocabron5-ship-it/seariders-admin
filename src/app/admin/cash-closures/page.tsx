@@ -48,6 +48,9 @@ type Row = {
     deposit?: Record<string, number>;
     total?: Record<string, number>;
   };
+  totalCommissionCents?: number;
+  companyCommissionCents?: number;
+  channelCommissionCostCents?: number;
   reviewedAt?: string | null;
   reviewNote?: string | null;
   reviewedByUser?: { fullName?: string | null; username?: string | null } | null;
@@ -62,14 +65,18 @@ type Row = {
 type CommissionsSummary = {
   ok: boolean;
   totalCommissionCents?: number;
+  totalCompanyCommissionCents?: number;
+  totalChannelCommissionCostCents?: number;
   rows?: Array<{
     channelId: string;
     name: string;
+    kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
     reservations: number;
     baseServiceCents: number;
     baseDepositCents: number;
     baseTotalCents: number;
     commissionCents: number;
+    effectivePct?: number;
   }>;
 };
 
@@ -171,6 +178,9 @@ export default function AdminCashClosuresPage() {
       declared: Record<string, number>;
       system: Record<string, number>;
       diff: Record<string, number>;
+      companyCommissionCents: number;
+      channelCommissionCostCents: number;
+      netAfterChannelCommissionCents: number;
     }>();
 
     for (const row of activeRows) {
@@ -180,11 +190,17 @@ export default function AdminCashClosuresPage() {
         declared: { CASH: 0, CARD: 0, BIZUM: 0, TRANSFER: 0, VOUCHER: 0 },
         system: { CASH: 0, CARD: 0, BIZUM: 0, TRANSFER: 0, VOUCHER: 0 },
         diff: { CASH: 0, CARD: 0, BIZUM: 0, TRANSFER: 0, VOUCHER: 0 },
+        companyCommissionCents: 0,
+        channelCommissionCostCents: 0,
+        netAfterChannelCommissionCents: 0,
       };
       current.closures += 1;
       current.declared = addMethodMaps(current.declared, row.declaredJson?.total);
       current.system = addMethodMaps(current.system, row.systemJson?.total);
       current.diff = addMethodMaps(current.diff, row.diffJson?.total);
+      current.companyCommissionCents += Number(row.companyCommissionCents ?? 0);
+      current.channelCommissionCostCents += Number(row.channelCommissionCostCents ?? 0);
+      current.netAfterChannelCommissionCents += netFrom(row.systemJson?.total) - Number(row.channelCommissionCostCents ?? 0);
       grouped.set(row.origin, current);
     }
 
@@ -198,8 +214,11 @@ export default function AdminCashClosuresPage() {
           declared: acc.declared + netFrom(row.declared),
           system: acc.system + netFrom(row.system),
           diff: acc.diff + netFrom(row.diff),
+          companyCommissionCents: acc.companyCommissionCents + row.companyCommissionCents,
+          channelCommissionCostCents: acc.channelCommissionCostCents + row.channelCommissionCostCents,
+          netAfterChannelCommissionCents: acc.netAfterChannelCommissionCents + row.netAfterChannelCommissionCents,
         }),
-        { closures: 0, declared: 0, system: 0, diff: 0 }
+        { closures: 0, declared: 0, system: 0, diff: 0, companyCommissionCents: 0, channelCommissionCostCents: 0, netAfterChannelCommissionCents: 0 }
       ),
     [dailySummary]
   );
@@ -346,6 +365,9 @@ export default function AdminCashClosuresPage() {
                     <th style={tableHeadRight}>Cierres</th>
                     <th style={tableHeadRight}>Declarado neto</th>
                     <th style={tableHeadRight}>Sistema neto</th>
+                    <th style={tableHeadRight}>Comisión empresa</th>
+                    <th style={tableHeadRight}>Coste canal</th>
+                    <th style={tableHeadRight}>Neto tras canal</th>
                     <th style={tableHeadRight}>Diferencia neta</th>
                   </tr>
                 </thead>
@@ -356,6 +378,9 @@ export default function AdminCashClosuresPage() {
                       <td style={tableCellRight}>{row.closures}</td>
                       <td style={tableCellRight}>{euros(netFrom(row.declared))}</td>
                       <td style={tableCellRight}>{euros(netFrom(row.system))}</td>
+                      <td style={tableCellRight}>{euros(row.companyCommissionCents)}</td>
+                      <td style={tableCellRight}>{euros(row.channelCommissionCostCents)}</td>
+                      <td style={{ ...tableCellRight, fontWeight: 800 }}>{euros(row.netAfterChannelCommissionCents)}</td>
                       <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(netFrom(row.diff))}</td>
                     </tr>
                   ))}
@@ -364,6 +389,9 @@ export default function AdminCashClosuresPage() {
                     <td style={{ ...tableCellRight, fontWeight: 900 }}>{dailyGrandTotal.closures}</td>
                     <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(dailyGrandTotal.declared)}</td>
                     <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(dailyGrandTotal.system)}</td>
+                    <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(dailyGrandTotal.companyCommissionCents)}</td>
+                    <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(dailyGrandTotal.channelCommissionCostCents)}</td>
+                    <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(dailyGrandTotal.netAfterChannelCommissionCents)}</td>
                     <td style={{ ...tableCellRight, fontWeight: 950 }}>{euros(dailyGrandTotal.diff)}</td>
                   </tr>
                 </tbody>

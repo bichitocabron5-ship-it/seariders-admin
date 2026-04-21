@@ -51,14 +51,20 @@ type VoidableClosure = Pick<Row, "id" | "origin" | "shift" | "businessDate" | "c
 type CommissionsSummary = {
   ok: boolean;
   totalCommissionCents?: number;
+  totalCompanyCommissionCents?: number;
+  totalChannelCommissionCostCents?: number;
   rows?: Array<{
     channelId: string;
     name: string;
+    kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
     reservations: number;
     baseServiceCents: number;
     baseDepositCents: number;
     baseTotalCents: number;
     commissionCents: number;
+    effectivePct?: number;
+    companyCommissionCents?: number;
+    channelCommissionCostCents?: number;
   }>;
 };
 
@@ -344,6 +350,14 @@ export default function CashClosureDetailSection({
                   <div style={{ opacity: 0.75, fontSize: 12 }}>Total comisiones estimado</div>
                   <div style={{ fontWeight: 900 }}>{euros(comm.totalCommissionCents ?? 0)}</div>
                 </div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ opacity: 0.75, fontSize: 12 }}>Comisión empresa</div>
+                  <div style={{ fontWeight: 900 }}>{euros(comm.totalCompanyCommissionCents ?? 0)}</div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ opacity: 0.75, fontSize: 12 }}>Coste canal</div>
+                  <div style={{ fontWeight: 900 }}>{euros(comm.totalChannelCommissionCostCents ?? 0)}</div>
+                </div>
 
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -356,6 +370,7 @@ export default function CashClosureDetailSection({
                           <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base fianza</th>
                         ) : null}
                         <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Base total</th>
+                        <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>% efectivo</th>
                         <th style={{ textAlign: "right", padding: 8, borderBottom: "1px solid #eee" }}>Comisión</th>
                       </tr>
                     </thead>
@@ -369,6 +384,7 @@ export default function CashClosureDetailSection({
                             <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{euros(row.baseDepositCents)}</td>
                           ) : null}
                           <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 800 }}>{euros(row.baseTotalCents)}</td>
+                          <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right" }}>{Number(row.effectivePct ?? 0).toFixed(2)}%</td>
                           <td style={{ padding: 8, borderBottom: "1px solid #f3f4f6", textAlign: "right", fontWeight: 900 }}>{euros(row.commissionCents)}</td>
                         </tr>
                       ))}

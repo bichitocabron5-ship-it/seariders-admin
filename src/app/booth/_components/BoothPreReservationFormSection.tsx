@@ -56,6 +56,8 @@ type Props = {
   promoterDiscountCents: number;
   companyDiscountCents: number;
   commissionBaseCents: number;
+  promoterNominalPct: number;
+  promoterEffectivePct: number;
   euros: (cents: number) => string;
   onSubmit: (e: React.FormEvent) => void | Promise<void>;
   setFirstName: (value: string) => void;
@@ -113,6 +115,8 @@ export default function BoothPreReservationFormSection({
   promoterDiscountCents,
   companyDiscountCents,
   commissionBaseCents,
+  promoterNominalPct,
+  promoterEffectivePct,
   euros,
   onSubmit,
   setFirstName,
@@ -316,6 +320,12 @@ export default function BoothPreReservationFormSection({
                   Descuento asumido por promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa:{" "}
                   <strong>{euros(companyDiscountCents)}</strong>
                 </div>
+                {promoterDiscountCents > 0 ? (
+                  <div style={{ fontSize: 12, color: "#475569" }}>
+                    Promotor: <strong>{promoterNominalPct.toFixed(2)}%</strong> nominal →{" "}
+                    <strong>{promoterEffectivePct.toFixed(2)}%</strong> efectivo
+                  </div>
+                ) : null}
                 <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 800 }}>
                   Neto estimado a liquidar al partner: {euros(netAfterCommissionCents)}
                 </div>

@@ -31,6 +31,7 @@ type HistoryRow = {
   channelName: string | null;
   paymentMethod: string | null;
   grossExternalAmountCents: number | null;
+  effectiveCommissionPct: number | null;
   canCancel: boolean;
 };
 
@@ -328,6 +329,9 @@ export default function BoothHistoryPage() {
                               : `${row.customerCountry || "-"} · Código ${row.boothCode || "-"}`
                             }
                           </div>
+                          {row.channelName ? (
+                            <div style={mutedStyle}>% efectivo canal: {Number(row.effectiveCommissionPct ?? 0).toFixed(2)}%</div>
+                          ) : null}
                           <div style={mutedStyle}>ID {row.id.slice(-6)}</div>
                         </div>
                       </td>

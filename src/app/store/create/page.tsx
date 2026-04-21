@@ -33,6 +33,11 @@ function hhmmNowRounded(step = 5) {
   return d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 }
 
+function clampPct(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
 function StoreCreatePageInner() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -714,6 +719,32 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       shownBaseCents,
       shownDiscountCents,
     ]
+  );
+  const storeCommissionPct = useMemo(() => {
+    if (useCart) return 0;
+    if (!selectedChannel?.commissionEnabled || !selectedService?.id) return 0;
+    const specificRule = selectedChannel.commissionRules?.find((rule) => rule.serviceId === selectedService.id);
+    const channelPct = specificRule?.commissionPct != null
+      ? Number(specificRule.commissionPct)
+      : Number(selectedChannel.commissionBps ?? 0) / 100;
+    return selectedChannel.kind === "EXTERNAL_ACTIVITY"
+      ? clampPct(100 - channelPct)
+      : clampPct(channelPct);
+  }, [selectedChannel, selectedService, useCart]);
+  const storeCommissionCents = useMemo(
+    () => Math.round(commissionBreakdown.commissionBaseCents * (storeCommissionPct / 100)),
+    [commissionBreakdown.commissionBaseCents, storeCommissionPct]
+  );
+  const storePromoterNominalPct = useMemo(
+    () => clampPct(100 - storeCommissionPct),
+    [storeCommissionPct]
+  );
+  const storePromoterEffectivePct = useMemo(
+    () =>
+      shownBaseCents > 0
+        ? clampPct(((shownFinalCentsWithManual - storeCommissionCents) / shownBaseCents) * 100)
+        : 0,
+    [shownBaseCents, shownFinalCentsWithManual, storeCommissionCents]
   );
 
   function addToCart() {
@@ -1444,6 +1475,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               commissionBaseCents={commissionBreakdown.commissionBaseCents}
               promoterDiscountCents={commissionBreakdown.promoterDiscountCents}
               companyDiscountCents={commissionBreakdown.companyDiscountCents}
+              promoterNominalPct={storePromoterNominalPct}
+              promoterEffectivePct={storePromoterEffectivePct}
               pricingMeta={pricingMeta}
               channelPricingSummary={discountPreview?.channelPricingSummary ?? null}
               availablePromos={canEditReservationForm && canEditPricing ? (discountPreview?.availablePromos ?? []) : []}

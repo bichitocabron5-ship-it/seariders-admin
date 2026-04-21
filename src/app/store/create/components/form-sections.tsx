@@ -121,6 +121,8 @@ export function PricingSection({
   commissionBaseCents,
   promoterDiscountCents,
   companyDiscountCents,
+  promoterNominalPct,
+  promoterEffectivePct,
   pricingMeta,
   channelPricingSummary,
   availablePromos,
@@ -150,6 +152,8 @@ export function PricingSection({
   commissionBaseCents: number;
   promoterDiscountCents: number;
   companyDiscountCents: number;
+  promoterNominalPct: number;
+  promoterEffectivePct: number;
   pricingMeta?: {
     pricingTier: "STANDARD" | "RESIDENT";
     unitPriceCents: number;
@@ -300,6 +304,11 @@ export function PricingSection({
           <div style={{ marginTop: 6 }}>
             Descuento promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa: <strong>{euros(companyDiscountCents)}</strong>
           </div>
+          {promoterDiscountCents > 0 ? (
+            <div style={{ marginTop: 6 }}>
+              Promotor: <strong>{promoterNominalPct.toFixed(2)}%</strong> nominal → <strong>{promoterEffectivePct.toFixed(2)}%</strong> efectivo
+            </div>
+          ) : null}
           {shownReason ? <div style={{ marginTop: 6 }}>{shownReason}</div> : null}
         </div>
       ) : (

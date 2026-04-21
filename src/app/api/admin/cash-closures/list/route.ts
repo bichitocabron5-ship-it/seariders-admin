@@ -7,6 +7,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { PaymentOrigin, ShiftName } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
+import { getCashClosureCommissionSummary } from "@/lib/cash-closure-commissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,9 +92,19 @@ export async function GET(req: Request) {
 
   const rowsWithDepositSummary = await Promise.all(
     rows.map(async (row) => {
+      const commSummary = await getCashClosureCommissionSummary({
+        closureId: row.id,
+        origin: row.origin,
+        windowFrom: row.windowFrom,
+        windowTo: row.windowTo,
+      });
+
       if (row.origin === "BOOTH") {
         return {
           ...row,
+          totalCommissionCents: commSummary.totalCommissionCents,
+          companyCommissionCents: commSummary.totalCompanyCommissionCents,
+          channelCommissionCostCents: commSummary.totalChannelCommissionCostCents,
           depositSummary: {
             returnedCents: 0,
             retainedNetCents: 0,
@@ -167,6 +178,9 @@ export async function GET(req: Request) {
 
       return {
         ...row,
+        totalCommissionCents: commSummary.totalCommissionCents,
+        companyCommissionCents: commSummary.totalCompanyCommissionCents,
+        channelCommissionCostCents: commSummary.totalChannelCommissionCostCents,
         depositSummary: {
           returnedCents,
           retainedNetCents: retained.reduce((sum, item) => sum + item.netHeld, 0),
