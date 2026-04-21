@@ -466,7 +466,7 @@ export function ContractCard({
         <div style={contractStatusStyle(c.status)}>{c.status}</div>
       </div>
 
-      {awaitingExternalSignature && c.status !== "SIGNED" ? (
+      {awaitingExternalSignature ? (
         <div style={externalSignaturePendingStyle}>
           <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 0.6, textTransform: "uppercase" }}>
             Esperando firma externa
