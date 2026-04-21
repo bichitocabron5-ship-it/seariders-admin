@@ -215,6 +215,8 @@ type WaitTimesResponse = {
     reservationId: string;
     label: string;
     phase: string;
+    source: string | null;
+    formalizedAt: string | null;
     waitedMin: number;
     targetMin: number;
     overByMin: number;
@@ -318,7 +320,7 @@ function severityLabel(level: "ok" | "warn" | "danger" | "neutral") {
   }
 }
 
-function phaseLink(row: { phase: string; reservationId: string }) {
+function phaseLink(row: { phase: string; reservationId: string; source?: string | null; formalizedAt?: string | null }) {
   const p = row.phase.toUpperCase();
 
   if (p.includes("BOOTH")) {
@@ -326,7 +328,9 @@ function phaseLink(row: { phase: string; reservationId: string }) {
   }
 
   if (p.includes("STORE")) {
-    return `/store/create?editFrom=${row.reservationId}`;
+    return row.source === "BOOTH" && !row.formalizedAt
+      ? `/store/create?migrateFrom=${row.reservationId}`
+      : `/store/create?editFrom=${row.reservationId}`;
   }
 
   if (p.includes("PLATFORM")) {

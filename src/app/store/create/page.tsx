@@ -58,6 +58,8 @@ function StoreCreatePageInner() {
   const defaultDate = sp.get("date") ?? todayMadridYMD();
 
   const [error, setError] = useState<string | null>(null);
+  const [submitBusy, setSubmitBusy] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [dateStr, setDateStr] = useState(defaultDate);
   const [timeStr, setTimeStr] = useState<string>("");
   const [availabilityTick, setAvailabilityTick] = useState(0);
@@ -79,6 +81,7 @@ function StoreCreatePageInner() {
     totalPriceCents: number;
   } | null>(null);
   const [prefillSource, setPrefillSource] = useState<string | null>(null);
+  const [prefillFormalizedAt, setPrefillFormalizedAt] = useState<string | null>(null);
 
   const [category, setCategory] = useState<string>("");
   const [serviceId, setServiceId] = useState<string>("");
@@ -158,6 +161,7 @@ function StoreCreatePageInner() {
       totalServiceCents?: number | null;
       paidServiceCents?: number | null;
       pendingServiceCents?: number | null;
+      formalizedAt?: string | null;
       source?: string | null;
       service?: ServiceMain | null;
       option?: Option | null;
@@ -210,11 +214,12 @@ function StoreCreatePageInner() {
         pendingServiceCents: Number(res.pendingServiceCents ?? 0),
       });
       setPrefillSource(res.source ?? null);
+      setPrefillFormalizedAt(res.formalizedAt ?? null);
     },
     []
   );
 
-  const { migrateLoading, migrateError, migrateFlags } = useReservationPrefill({
+  const { migrateLoading, migrateError, migrateFlags, refreshPrefill } = useReservationPrefill({
     prefillReservationId,
     optionsLength: options.length,
     applyReservation: applyPrefillReservation,
@@ -575,9 +580,15 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
   // Si es hoy pero la hora aun es futura, se trata como CREATE (pendiente de formalizar).
   const wantsTodayUi = modeParam !== "future" && shouldAutoFormalizeSelection;
+  const shouldForceFormalizeBooth =
+    isEditMode &&
+    prefillSource === "BOOTH" &&
+    !prefillFormalizedAt &&
+    !Boolean(migrateFlags?.isReadOnly);
 
   const uiMode: UIMode =
-    isEditMode ? "EDIT"
+    shouldForceFormalizeBooth ? "FORMALIZE"
+    : isEditMode ? "EDIT"
     : isMigrateMode ? "FORMALIZE"
     : wantsTodayUi ? "FORMALIZE"
     : "CREATE";
@@ -596,7 +607,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   const isCreateMode = uiMode === "CREATE";
   const isReadOnlyReservation = Boolean(migrateFlags?.isReadOnly);
 
-  const isContractsOnlyMode = Boolean(migrateReservationId);
+  const isContractsOnlyMode = Boolean(migrateReservationId || shouldForceFormalizeBooth);
   const isVoucherFormalizeFlow =
     isContractsOnlyMode && (Boolean(showGiftBadge) || Boolean(migrateFlags?.isGift) || Boolean(migrateFlags?.isPass));
   // (si quieres incluir edit, usa: Boolean(migrateReservationId || editReservationId))
@@ -860,6 +871,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   async function createReservation(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setSubmitSuccess(null);
+    setSubmitBusy(true);
     setAvailabilityTick((x) => x + 1);
 
     try {
@@ -872,8 +885,37 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         return;
       }
 
+      if (shouldForceFormalizeBooth && editReservationId) {
+        await submitStoreCreateMigrateFlow({
+          migrateReservationId: editReservationId,
+          customerName,
+          quantity,
+          pax,
+          isVoucherFormalizeFlow,
+          serviceId,
+          optionId,
+          channelId,
+          cartItemsLength: cartItems.length,
+          canCreate,
+          uiMode,
+          dateStr,
+          todayYmd: todayMadridYMD(),
+          customerPhone,
+          customerEmail,
+          customerCountry,
+          customerAddress,
+          customerDocType,
+          customerDocNumber,
+          marketingSource,
+          companions,
+          timeStr,
+          router,
+        });
+        return;
+      }
+
       if (isEditMode && editReservationId) {
-        await submitStoreCreateEditFlow({
+        const updated = await submitStoreCreateEditFlow({
           editReservationId,
           customerName,
           quantity,
@@ -906,8 +948,16 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           licenseType,
           licenseNumber,
           promoCode: applyPromo ? selectedPromoCode || null : null,
-          router,
         });
+        await refreshPrefill();
+        await refreshContracts(editReservationId);
+        router.replace(
+          Number(updated.requiredUnits ?? 0) > Number(updated.readyCount ?? 0)
+            ? `/store/create?editFrom=${updated.id}#contracts`
+            : `/store/create?editFrom=${updated.id}`,
+          { scroll: false }
+        );
+        setSubmitSuccess("Cambios guardados.");
         return;
       }
 
@@ -999,6 +1049,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         editReservationId,
       });
       setError(msg);
+    } finally {
+      setSubmitBusy(false);
     }
   }
 
@@ -1520,6 +1572,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             primaryDisabled={primaryDisabled}
             primaryLabel={primaryLabel}
             primaryDisabledReason={primaryDisabledReason}
+            primaryBusy={submitBusy}
+            successMessage={submitSuccess}
           />
         </form>
       </section>

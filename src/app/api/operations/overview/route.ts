@@ -533,7 +533,10 @@ export async function GET() {
       unformalized,
 
       notes: r.manualDiscountReason ?? null,
-      detailHref: `/store/create?editFrom=${r.id}`,
+      detailHref:
+        r.source === "BOOTH" && !r.formalizedAt
+          ? `/store/create?migrateFrom=${r.id}`
+          : `/store/create?editFrom=${r.id}`,
 
       items: r.items.map((it) => ({
         id: it.id,

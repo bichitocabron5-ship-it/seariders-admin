@@ -57,7 +57,7 @@ export async function GET(req: Request) {
   // 1) Reservas del mes (SOLO STORE)
   const reservations = await prisma.reservation.findMany({
     where: {
-      source: "STORE",
+      source: { in: ["STORE", "BOOTH"] },
       // usamos scheduledTime si existe, si no activityDate (lo resolvemos luego)
       OR: [
         { scheduledTime: { gte: start, lt: endExclusive } },
@@ -68,6 +68,7 @@ export async function GET(req: Request) {
     select: {
       id: true,
       status: true,
+      source: true,
       activityDate: true,
       scheduledTime: true,
       arrivalAt: true,
@@ -128,6 +129,7 @@ export async function GET(req: Request) {
   type MonthRow = {
     id: string;
     status: string;
+    source: string;
     storeFlowStage: string;
     activityDate: Date;
     scheduledTime: Date | null;
@@ -175,6 +177,7 @@ export async function GET(req: Request) {
     days[k].rows.push({
       id: r.id,
       status: r.status,
+      source: r.source,
       storeFlowStage: deriveStoreFlowStage(r.status, r.arrivalAt),
       activityDate: r.activityDate,
       scheduledTime: r.scheduledTime,

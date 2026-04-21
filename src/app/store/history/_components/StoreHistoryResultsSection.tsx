@@ -371,7 +371,7 @@ export default function StoreHistoryResultsSection({
 
                     <td style={cell}>
                       <div style={{ display: "grid", gap: 8, minWidth: 150 }}>
-                        <a href={reservationHref(row.id)} style={actionLink}>
+                        <a href={reservationHref(row)} style={actionLink}>
                           Ver ficha
                         </a>
 

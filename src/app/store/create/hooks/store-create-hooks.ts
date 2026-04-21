@@ -286,58 +286,60 @@ export function useReservationPrefill(args: {
   const [migrateError, setMigrateError] = useState<string | null>(null);
   const [migrateFlags, setMigrateFlags] = useState<MigrateFlags | null>(null);
 
-  useEffect(() => {
+  const refreshPrefill = useCallback(async () => {
     if (!prefillReservationId) return;
     if (optionsLength === 0) return;
 
-    (async () => {
-      setMigrateLoading(true);
-      setMigrateError(null);
-      try {
-        const r = await fetch(`/api/store/reservations/${prefillReservationId}/prefill`, { cache: "no-store" });
-        if (!r.ok) throw new Error(await r.text());
-        const data = await r.json();
-        const res = data.reservation;
+    setMigrateLoading(true);
+    setMigrateError(null);
+    try {
+      const r = await fetch(`/api/store/reservations/${prefillReservationId}/prefill`, { cache: "no-store" });
+      if (!r.ok) throw new Error(await r.text());
+      const data = await r.json();
+      const res = data.reservation;
 
-        setMigrateFlags((data.flags ?? null) as MigrateFlags | null);
-        applyReservation({
-          ...res,
-          totalServiceCents: Number(data.financial?.totalServiceCents ?? 0),
-          paidServiceCents: Number(data.financial?.paidServiceCents ?? 0),
-          pendingServiceCents: Number(data.financial?.pendingServiceCents ?? 0),
-        });
+      setMigrateFlags((data.flags ?? null) as MigrateFlags | null);
+      applyReservation({
+        ...res,
+        totalServiceCents: Number(data.financial?.totalServiceCents ?? 0),
+        paidServiceCents: Number(data.financial?.paidServiceCents ?? 0),
+        pendingServiceCents: Number(data.financial?.pendingServiceCents ?? 0),
+      });
 
-        const parts = new Intl.DateTimeFormat("en-CA", {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/Madrid",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(new Date(res.activityDate));
+      const y = parts.find((p) => p.type === "year")?.value;
+      const m = parts.find((p) => p.type === "month")?.value;
+      const d = parts.find((p) => p.type === "day")?.value;
+      setDateStr(`${y}-${m}-${d}`);
+
+      if (res.scheduledTime) {
+        const tParts = new Intl.DateTimeFormat("es-ES", {
           timeZone: "Europe/Madrid",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }).formatToParts(new Date(res.activityDate));
-        const y = parts.find((p) => p.type === "year")?.value;
-        const m = parts.find((p) => p.type === "month")?.value;
-        const d = parts.find((p) => p.type === "day")?.value;
-        setDateStr(`${y}-${m}-${d}`);
-
-        if (res.scheduledTime) {
-          const tParts = new Intl.DateTimeFormat("es-ES", {
-            timeZone: "Europe/Madrid",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-          }).formatToParts(new Date(res.scheduledTime));
-          const hh = tParts.find((p) => p.type === "hour")?.value ?? "00";
-          const mm = tParts.find((p) => p.type === "minute")?.value ?? "00";
-          setTimeStr(`${hh}:${mm}`);
-        }
-      } catch (e: unknown) {
-        setMigrateError(errorMessage(e, "No se pudo prellenar la reserva"));
-      } finally {
-        setMigrateLoading(false);
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).formatToParts(new Date(res.scheduledTime));
+        const hh = tParts.find((p) => p.type === "hour")?.value ?? "00";
+        const mm = tParts.find((p) => p.type === "minute")?.value ?? "00";
+        setTimeStr(`${hh}:${mm}`);
       }
-    })();
+    } catch (e: unknown) {
+      setMigrateError(errorMessage(e, "No se pudo prellenar la reserva"));
+    } finally {
+      setMigrateLoading(false);
+    }
   }, [prefillReservationId, optionsLength, applyReservation, setDateStr, setTimeStr]);
 
-  return { migrateLoading, migrateError, migrateFlags };
+  useEffect(() => {
+    void refreshPrefill();
+  }, [refreshPrefill]);
+
+  return { migrateLoading, migrateError, migrateFlags, refreshPrefill };
 }
 
 export function useAvailability(dateStr: string, availabilityTick: number) {

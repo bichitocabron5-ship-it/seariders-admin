@@ -347,10 +347,14 @@ export function SubmitSection({
   primaryDisabled,
   primaryLabel,
   primaryDisabledReason,
+  primaryBusy = false,
+  successMessage = null,
 }: {
   primaryDisabled: boolean;
   primaryLabel: string;
   primaryDisabledReason: string | null;
+  primaryBusy?: boolean;
+  successMessage?: string | null;
 }) {
   return (
     <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
@@ -360,23 +364,29 @@ export function SubmitSection({
       </div>
       <button
         type="submit"
-        disabled={primaryDisabled}
+        disabled={primaryDisabled || primaryBusy}
         style={{
           padding: "14px 16px",
           fontWeight: 900,
           borderRadius: 14,
           border: "1px solid #0f172a",
-          background: primaryDisabled ? "#cbd5e1" : "#0f172a",
-          color: primaryDisabled ? "#334155" : "#fff",
-          cursor: primaryDisabled ? "not-allowed" : "pointer",
+          background: primaryDisabled || primaryBusy ? "#cbd5e1" : "#0f172a",
+          color: primaryDisabled || primaryBusy ? "#334155" : "#fff",
+          cursor: primaryDisabled || primaryBusy ? "not-allowed" : "pointer",
         }}
       >
-        {primaryLabel}
+        {primaryBusy ? "Guardando..." : primaryLabel}
       </button>
 
       {primaryDisabledReason ? (
         <div style={{ padding: 12, border: "1px solid #fecaca", background: "#fff1f2", borderRadius: 12, color: "#991b1b", fontWeight: 700 }}>
           {primaryDisabledReason}
+        </div>
+      ) : null}
+
+      {successMessage ? (
+        <div style={{ padding: 12, border: "1px solid #bbf7d0", background: "#f0fdf4", borderRadius: 12, color: "#166534", fontWeight: 700 }}>
+          {successMessage}
         </div>
       ) : null}
     </section>

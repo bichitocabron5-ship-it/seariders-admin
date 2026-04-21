@@ -69,6 +69,10 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
   } = props;
 
   const router = useRouter();
+  const reservationHref =
+    r.source === "BOOTH" && !r.formalizedAt
+      ? `/store/create?migrateFrom=${r.id}`
+      : `/store/create?editFrom=${r.id}`;
 
   const serviceTotal = Number(r.serviceTotalCents ?? 0);
   const extrasTotal = Number(r.extrasTotalCents ?? 0);
@@ -129,7 +133,7 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
         needsContracts={needsContracts}
         contractsState={contractsState}
         isFullyPaid={isFullyPaid}
-        onEdit={() => router.push(`/store/create?editFrom=${r.id}`)}
+        onEdit={() => router.push(reservationHref)}
         onCancel={async () => {
           if (!hasRefundableAmount) {
             if (!window.confirm("¿Cancelar esta reserva?")) return;

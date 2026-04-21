@@ -9,6 +9,7 @@ type LiteRow = {
   id: string;
   status: string;
   storeFlowStage: string | null;
+  source?: string | null;
   activityDate: string;
   scheduledTime: string | null;
   arrivalAt?: string | null;
@@ -166,9 +167,15 @@ function rowDayKey(r: LiteRow) {
   }).format(new Date(src));
 }
 
+function reservationHrefForRow(r: Pick<LiteRow, "id" | "source" | "formalizedAt">) {
+  return r.source === "BOOTH" && !r.formalizedAt
+    ? `/store/create?migrateFrom=${r.id}`
+    : `/store/create?editFrom=${r.id}`;
+}
+
 function actionForRow(r: LiteRow): RowAction {
   if (isCanceledRow(r)) {
-    return { label: "Ver ficha", href: `/store/create?editFrom=${r.id}` };
+    return { label: "Ver ficha", href: reservationHrefForRow(r) };
   }
 
   const dayKey = rowDayKey(r);
@@ -177,15 +184,15 @@ function actionForRow(r: LiteRow): RowAction {
 
   if (isPendingFormalization(r)) {
     if (today) return { label: "Formalizar", href: `/store/create?migrateFrom=${r.id}` };
-    return { label: "Editar reserva", href: `/store/create?editFrom=${r.id}` };
+    return { label: "Editar reserva", href: reservationHrefForRow(r) };
   }
 
-  if (past) return { label: "Ver ficha", href: `/store/create?editFrom=${r.id}` };
+  if (past) return { label: "Ver ficha", href: reservationHrefForRow(r) };
 
   return {
     label: "Abrir ficha",
-    href: `/store/create?editFrom=${r.id}`,
-    secondary: { label: "Editar / reagendar", href: `/store/create?editFrom=${r.id}` },
+    href: reservationHrefForRow(r),
+    secondary: { label: "Editar / reagendar", href: reservationHrefForRow(r) },
   };
 }
 

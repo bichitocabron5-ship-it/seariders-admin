@@ -135,8 +135,10 @@ function dt(v: string | null | undefined) {
   });
 }
 
-function reservationHref(reservationId: string) {
-  return `/store/create?editFrom=${reservationId}`;
+function reservationHref(row: Pick<HistoryRow, "id" | "source" | "formalizedAt">) {
+  return row.source === "BOOTH" && !row.formalizedAt
+    ? `/store/create?migrateFrom=${row.id}`
+    : `/store/create?editFrom=${row.id}`;
 }
 
 function centsFromEuros(v: string) {
