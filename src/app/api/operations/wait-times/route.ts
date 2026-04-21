@@ -390,6 +390,7 @@ export async function GET() {
   for (const r of reservations) {
     const label = r.customerName?.trim() || `Reserva ${r.id.slice(-6)}`;
     const scheduledTime = r.scheduledTime?.toISOString() ?? null;
+    const formalizedAt = r.formalizedAt ? r.formalizedAt.toISOString() : null;
 
     if (r.boothCreatedAt && !r.taxiboatAssignedAt) {
       const waitedMin = diffMinutes(r.boothCreatedAt, now) ?? 0;
@@ -398,7 +399,7 @@ export async function GET() {
         label,
         phase: "BOOTH | esperando taxi",
         source: r.source,
-        formalizedAt: r.formalizedAt?.toISOString() ?? null,
+        formalizedAt,
         waitedMin,
         targetMin: SLA.boothAssignTaxiMin,
         overByMin: Math.max(0, waitedMin - SLA.boothAssignTaxiMin),
@@ -414,7 +415,7 @@ export async function GET() {
         label,
         phase: "BOOTH | esperando salida a Store",
         source: r.source,
-        formalizedAt: r.formalizedAt?.toISOString() ?? null,
+        formalizedAt,
         waitedMin,
         targetMin: SLA.boothToDepartMin,
         overByMin: Math.max(0, waitedMin - SLA.boothToDepartMin),
@@ -431,7 +432,7 @@ export async function GET() {
         label,
         phase: "STORE | cola / atencion",
         source: r.source,
-        formalizedAt: r.formalizedAt?.toISOString() ?? null,
+        formalizedAt,
         waitedMin,
         targetMin: SLA.storeQueueMin,
         overByMin: Math.max(0, waitedMin - SLA.storeQueueMin),
@@ -454,7 +455,7 @@ export async function GET() {
           ? "STORE | cobrado pendiente de READY"
           : "STORE | formalizado pendiente de READY",
         source: r.source,
-        formalizedAt: r.formalizedAt?.toISOString() ?? null,
+        formalizedAt,
         waitedMin,
         targetMin,
         overByMin: Math.max(0, waitedMin - targetMin),
@@ -476,7 +477,7 @@ export async function GET() {
           label,
           phase: "PLATFORM | cola sin asignacion",
           source: r.source,
-          formalizedAt: r.formalizedAt?.toISOString() ?? null,
+          formalizedAt,
           waitedMin,
           targetMin: SLA.platformQueueLiveMin,
           overByMin: Math.max(0, waitedMin - SLA.platformQueueLiveMin),
@@ -493,7 +494,7 @@ export async function GET() {
             label,
             phase: "PLATFORM | asignado sin salir al mar",
             source: r.source,
-            formalizedAt: r.formalizedAt?.toISOString() ?? null,
+            formalizedAt,
             waitedMin,
             targetMin: SLA.platformAssignToSeaMin,
             overByMin: Math.max(0, waitedMin - SLA.platformAssignToSeaMin),
