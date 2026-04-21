@@ -18,7 +18,10 @@ async function launchBrowser() {
   });
 }
 
-async function generatePdfFromHtml(html: string, language: PublicLanguage) {
+export async function generateContractPdfFromHtml(
+  html: string,
+  language: PublicLanguage = "es"
+) {
   const browser = await launchBrowser();
 
   try {
@@ -221,7 +224,7 @@ export async function regenerateSignedContractPdf(
     },
   });
 
-  const pdfBuffer = await generatePdfFromHtml(renderedHtml, language);
+  const pdfBuffer = await generateContractPdfFromHtml(renderedHtml, language);
 
   const uploaded = await uploadPdfToS3({
     key: buildContractPdfKey({

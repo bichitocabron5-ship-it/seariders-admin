@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import puppeteer from "puppeteer";
 import { buildContractPdfKey, uploadPdfToS3 } from "@/lib/s3";
+import { generateContractPdfFromHtml } from "@/lib/contracts/render-contract-pdf";
 
 export const runtime = "nodejs";
 
@@ -19,53 +19,6 @@ async function requireStoreOrAdmin() {
   if (!session?.userId) return null;
   if (session.role === "ADMIN" || session.role === "STORE") return session;
   return null;
-}
-
-async function generatePdfFromHtml(html: string) {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-
-  try {
-    const page = await browser.newPage();
-
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const htmlWithAbsoluteLogo = html.replace(
-      /src="\/logo-seariders\.png"/g,
-      `src="${baseUrl}/logo-seariders.png"`
-    );
-
-    await page.setContent(htmlWithAbsoluteLogo, {
-      waitUntil: "networkidle0",
-    });
-
-    const pdfBuffer = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      displayHeaderFooter: true,
-      margin: {
-        top: "20mm",
-        right: "12mm",
-        bottom: "20mm",
-        left: "12mm",
-      },
-      headerTemplate: `
-        <div style="width:100%; font-size:9px; padding:0 12mm; color:#222; text-align:center;">
-          UTE JETSKI CENTER- NOMAD NAUTIC · CIF: U16457343 · Tel: 608101272 · Email: seariderjetski@gmail.com · Dirección: C/ MARINA L-401 402, NUM 401 402 08330 PREMIÀ DE MAR - (BARCELONA)
-        </div>
-      `,
-      footerTemplate: `
-        <div style="width:100%; font-size:9px; padding:0 12mm; color:#444; display:flex; justify-content:flex-end;">
-          Página <span class="pageNumber"></span> / <span class="totalPages"></span>
-        </div>
-      `,
-    });
-
-    return Buffer.from(pdfBuffer);
-  } finally {
-    await browser.close();
-  }
 }
 
 export async function POST(
@@ -103,13 +56,12 @@ export async function POST(
     }
 
     if (!contract.renderedHtml?.trim()) {
-      return new NextResponse(
-        "Primero genera la vista previa del contrato",
-        { status: 400 }
-      );
+      return new NextResponse("Primero genera la vista previa del contrato", {
+        status: 400,
+      });
     }
 
-    const pdfBuffer = await generatePdfFromHtml(contract.renderedHtml);
+    const pdfBuffer = await generateContractPdfFromHtml(contract.renderedHtml);
 
     const pdfKey = buildContractPdfKey({
       reservationId: contract.reservationId,
