@@ -357,9 +357,15 @@ export function ContractCard({
   }
 
   async function handleDownloadFinalPdf() {
-    const data = await getSignedContractDownloadUrl(c.id);
-    if (data?.url) {
-      window.open(data.url, "_blank", "noopener,noreferrer");
+    try {
+      setErr(null);
+      const data = await getSignedContractDownloadUrl(c.id);
+      if (!data?.url) {
+        throw new Error("No se pudo obtener la URL del PDF");
+      }
+      window.location.assign(data.url);
+    } catch (e: unknown) {
+      setErr(errorMessage(e, "No se pudo descargar el PDF final"));
     }
   }
 
