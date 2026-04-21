@@ -159,7 +159,6 @@ export async function POST(req: Request) {
     const shiftSession = await findCurrentShiftSession({
       userId: session.userId,
       role: RoleName.BOOTH,
-      shift: session.shift ?? "MORNING",
       shiftSessionId: session.shiftSessionId,
     });
     if (!shiftSession && String(session.role) !== "ADMIN") {

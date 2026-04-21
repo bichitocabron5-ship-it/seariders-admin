@@ -487,14 +487,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     const policy = resolveDiscountPolicy({ channel: selectedChannel });
     setDiscountResponsibility(policy.discountResponsibility);
     setPromoterDiscountSharePct((policy.promoterDiscountShareBps / 100).toFixed(2));
-  }, [
-    isEditMode,
-    isMigrateMode,
-    prefillPricing,
-    selectedChannel?.id,
-    selectedChannel?.discountResponsibility,
-    selectedChannel?.promoterDiscountShareBps,
-  ]);
+  }, [isEditMode, isMigrateMode, prefillPricing, selectedChannel]);
 
   useEffect(() => {
     if (selectedChannel?.allowsPromotions === false) {
@@ -1524,6 +1517,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               onManualDiscountEurosChange={setManualDiscountEuros}
               manualDiscountReason={manualDiscountReason}
               onManualDiscountReasonChange={setManualDiscountReason}
+              showDiscountPolicy={selectedChannel?.showDiscountPolicyInStore !== false}
               discountResponsibility={discountResponsibility}
               onDiscountResponsibilityChange={setDiscountResponsibility}
               promoterDiscountSharePct={promoterDiscountSharePct}

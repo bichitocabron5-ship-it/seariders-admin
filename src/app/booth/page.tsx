@@ -19,6 +19,8 @@ type Channel = {
   kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;
+  showDiscountPolicyInStore?: boolean | null;
+  showDiscountPolicyInBooth?: boolean | null;
   discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED" | null;
   promoterDiscountShareBps?: number | null;
   commissionRules?: ChannelRule[] | null;
@@ -304,7 +306,7 @@ useEffect(() => {
   const policy = resolveDiscountPolicy({ channel: selectedChannel });
   setDiscountResponsibility(policy.discountResponsibility);
   setPromoterDiscountSharePct((policy.promoterDiscountShareBps / 100).toFixed(2));
-}, [selectedChannel?.id, selectedChannel?.discountResponsibility, selectedChannel?.promoterDiscountShareBps]);
+}, [selectedChannel]);
 
 const isExternalCharge = selectedChannel?.kind === "EXTERNAL_ACTIVITY" || selectedService?.isExternalActivity === true;
 
@@ -835,6 +837,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             commissionPct={commissionPct}
             commissionCents={commissionCents}
             netAfterCommissionCents={netAfterCommissionCents}
+            showDiscountPolicy={selectedChannel?.showDiscountPolicyInBooth !== false}
             discountResponsibility={discountResponsibility}
             promoterDiscountSharePct={promoterDiscountSharePct}
             promoterDiscountCents={commissionBreakdown.promoterDiscountCents}

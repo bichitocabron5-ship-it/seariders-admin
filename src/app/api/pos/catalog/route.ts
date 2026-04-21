@@ -120,6 +120,8 @@ export async function GET(req: Request) {
         kind: true,
         visibleInStore: true,
         visibleInBooth: true,
+        showDiscountPolicyInStore: true,
+        showDiscountPolicyInBooth: true,
         allowsPromotions: true,
         commissionEnabled: true,
         commissionBps: true,

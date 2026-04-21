@@ -12,6 +12,8 @@ type Channel = {
   kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;
+  showDiscountPolicyInStore?: boolean | null;
+  showDiscountPolicyInBooth?: boolean | null;
   discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED" | null;
   promoterDiscountShareBps?: number | null;
 };
@@ -51,6 +53,7 @@ type Props = {
   commissionPct: number;
   commissionCents: number;
   netAfterCommissionCents: number;
+  showDiscountPolicy: boolean;
   discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
   promoterDiscountSharePct: string;
   promoterDiscountCents: number;
@@ -110,6 +113,7 @@ export default function BoothPreReservationFormSection({
   commissionPct,
   commissionCents,
   netAfterCommissionCents,
+  showDiscountPolicy,
   discountResponsibility,
   promoterDiscountSharePct,
   promoterDiscountCents,
@@ -247,7 +251,7 @@ export default function BoothPreReservationFormSection({
           />
         </label>
 
-        {selectedChannel ? (
+        {selectedChannel && showDiscountPolicy ? (
           <>
             <label>
               Quien asume el descuento
@@ -316,11 +320,13 @@ export default function BoothPreReservationFormSection({
                 <div style={{ fontSize: 13, color: "#334155" }}>
                   Base comisionable: <strong>{euros(commissionBaseCents)}</strong>
                 </div>
-                <div style={{ fontSize: 12, color: "#475569" }}>
-                  Descuento asumido por promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa:{" "}
-                  <strong>{euros(companyDiscountCents)}</strong>
-                </div>
-                {promoterDiscountCents > 0 ? (
+                {showDiscountPolicy ? (
+                  <div style={{ fontSize: 12, color: "#475569" }}>
+                    Descuento asumido por promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa:{" "}
+                    <strong>{euros(companyDiscountCents)}</strong>
+                  </div>
+                ) : null}
+                {showDiscountPolicy && promoterDiscountCents > 0 ? (
                   <div style={{ fontSize: 12, color: "#475569" }}>
                     Promotor: <strong>{promoterNominalPct.toFixed(2)}%</strong> nominal →{" "}
                     <strong>{promoterEffectivePct.toFixed(2)}%</strong> efectivo

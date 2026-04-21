@@ -155,6 +155,8 @@ model Channel {
   commissionPct              Float                   @default(0)
   discountResponsibility     DiscountResponsibility  @default(COMPANY)
   promoterDiscountShareBps   Int                     @default(0)
+  showDiscountPolicyInStore  Boolean                 @default(true)
+  showDiscountPolicyInBooth  Boolean                 @default(true)
   isActive                   Boolean                 @default(true)
   visibleInStore             Boolean                 @default(true)
   visibleInBooth             Boolean                 @default(false)
