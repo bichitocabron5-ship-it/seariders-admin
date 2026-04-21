@@ -79,7 +79,7 @@ type Props = {
   statusLabel: (status: string | null | undefined) => string;
   mechanicsDetailHref: (incident: HistoryIncident) => string;
   mechanicsEventHref: (incident: HistoryIncident) => string;
-  reservationHref: (reservationId: string) => string;
+  reservationHref: (row: HistoryRow) => string;
   cell: CSSProperties;
   mutedText: CSSProperties;
   mutedStack: CSSProperties;
