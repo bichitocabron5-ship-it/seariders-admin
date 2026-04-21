@@ -109,10 +109,17 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: 12,
   };
-  const gridWideStyle: React.CSSProperties = {
+  const customerPrimaryGridStyle: React.CSSProperties = {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: 12,
+    alignItems: "start",
+  };
+  const customerSecondaryGridStyle: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 12,
+    alignItems: "start",
   };
   const fullRow: React.CSSProperties = { gridColumn: "1 / -1" };
 
@@ -152,7 +159,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
               </div>
             </div>
 
-            <div style={gridWideStyle}>
+            <div style={customerPrimaryGridStyle}>
               <label style={labelStyle}>
                 <span>Nombre *</span>
                 <input
@@ -174,7 +181,9 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                   style={{ ...inputStyle, opacity: flags.isEditMode ? 0.7 : 1 }}
                 />
               </label>
+            </div>
 
+            <div style={customerSecondaryGridStyle}>
               <PhoneWithCountryField
                 label="Teléfono *"
                 country={values.customerCountry}
@@ -185,6 +194,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                 inputStyle={inputStyle}
                 required
                 phonePlaceholder="Ej: 612345678"
+                containerStyle={{ minWidth: 0, gridColumn: "span 2" }}
               />
 
               <label style={labelStyle}>
@@ -205,7 +215,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
               />
             </div>
 
-            <div style={gridStyle}>
+            <div style={{ ...gridStyle, gridTemplateColumns: "minmax(240px, 420px)" }}>
               <label style={labelStyle}>
                 <span>¿Cómo nos conoció?</span>
                 <select

@@ -147,6 +147,7 @@ export function PhoneWithCountryField({
   disabled,
   required,
   phonePlaceholder,
+  containerStyle,
 }: {
   label: string;
   country: string;
@@ -158,29 +159,69 @@ export function PhoneWithCountryField({
   disabled?: boolean;
   required?: boolean;
   phonePlaceholder?: string;
+  containerStyle?: React.CSSProperties;
 }) {
   const normalizedCountry = String(country ?? "").trim().toUpperCase();
+  const selectedDialCode = getDialCodeForCountry(normalizedCountry);
+  const shellStyle: React.CSSProperties = {
+    border: String(inputStyle.border ?? "1px solid #d0d9e4"),
+    borderRadius: inputStyle.borderRadius ?? 14,
+    background: String(inputStyle.background ?? "#fff"),
+    minHeight: inputStyle.minHeight ?? 48,
+    display: "grid",
+    gridTemplateColumns: "84px 88px minmax(0, 1fr)",
+    alignItems: "stretch",
+    overflow: "hidden",
+  };
+  const innerControlStyle: React.CSSProperties = {
+    border: 0,
+    outline: "none",
+    background: "transparent",
+    padding: "0 12px",
+    minWidth: 0,
+    fontSize: 14,
+  };
 
   return (
-    <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+    <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700, ...containerStyle }}>
       <span>{label}</span>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(130px, 180px) minmax(0, 1fr)", gap: 8 }}>
+      <div style={shellStyle}>
         <select
           value={normalizedCountry}
           onChange={(e) => onCountryChange(e.target.value)}
           disabled={disabled}
-          style={inputStyle}
+          style={{
+            ...innerControlStyle,
+            borderRight: "1px solid #e2e8f0",
+            fontWeight: 800,
+          }}
         >
           {countryOptions.map((option) => {
             const dialCode = getDialCodeForCountry(option.value);
             const suffix = dialCode ? ` (+${dialCode})` : "";
             return (
               <option key={option.value} value={option.value}>
-                {option.value}{suffix}
+                {option.value}{suffix} {option.label}
               </option>
             );
           })}
         </select>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRight: "1px solid #e2e8f0",
+            color: "#475569",
+            fontSize: 14,
+            fontWeight: 800,
+            background: "#f8fafc",
+            padding: "0 10px",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {selectedDialCode ? `+${selectedDialCode}` : "--"}
+        </div>
         <input
           value={phone}
           onChange={(e) => onPhoneChange(e.target.value)}
@@ -188,7 +229,7 @@ export function PhoneWithCountryField({
           required={required}
           autoComplete="tel"
           placeholder={phonePlaceholder ?? "Ej: 612345678"}
-          style={inputStyle}
+          style={innerControlStyle}
         />
       </div>
     </label>
