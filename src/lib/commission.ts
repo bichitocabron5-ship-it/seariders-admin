@@ -1,5 +1,3 @@
-import { prisma } from "@/lib/prisma";
-
 export type DiscountResponsibility = "COMPANY" | "PROMOTER" | "SHARED";
 
 export type CommissionRuleLike = {
@@ -210,36 +208,4 @@ export function proportionalCommissionBaseForCollected(args: {
   if (collectedNetCents <= 0 || reservationNetCents <= 0 || reservationCommissionBaseCents <= 0) return 0;
 
   return roundCents(collectedNetCents * (reservationCommissionBaseCents / reservationNetCents));
-}
-
-/**
- * Regla:
- * 1) Si item es extra -> 0 (extras NO comisionan)
- * 2) Busca regla específica (channel+service)
- * 3) Si no hay, usa channel.commissionPct
- * 4) Si no hay, 0
- */
-export async function resolveCommissionPct(params: {
-  channelId: string | null;
-  serviceId: string;
-  isExtra: boolean;
-}) {
-  const { channelId, serviceId, isExtra } = params;
-
-  if (isExtra) return 0;
-  if (!channelId) return 0;
-
-  const rule = await prisma.channelCommissionRule.findFirst({
-    where: { channelId, serviceId, isActive: true },
-    select: { commissionPct: true },
-  });
-
-  if (rule) return rule.commissionPct;
-
-  const channel = await prisma.channel.findUnique({
-    where: { id: channelId },
-    select: { commissionPct: true },
-  });
-
-  return channel?.commissionPct ?? 0;
 }
