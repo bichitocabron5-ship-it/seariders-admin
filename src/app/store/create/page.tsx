@@ -731,20 +731,29 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       ? clampPct(100 - channelPct)
       : clampPct(channelPct);
   }, [selectedChannel, selectedService, useCart]);
+  const storePromoterBasePct = useMemo(() => {
+    if (useCart) return 0;
+    if (!selectedChannel?.commissionEnabled || !selectedService?.id) return 0;
+    const specificRule = selectedChannel.commissionRules?.find((rule) => rule.serviceId === selectedService.id);
+    return clampPct(
+      specificRule?.commissionPct != null
+        ? Number(specificRule.commissionPct)
+        : Number(selectedChannel.commissionBps ?? 0) / 100
+    );
+  }, [selectedChannel, selectedService, useCart]);
   const storeCommissionCents = useMemo(
     () => Math.round(commissionBreakdown.commissionBaseCents * (storeCommissionPct / 100)),
     [commissionBreakdown.commissionBaseCents, storeCommissionPct]
   );
-  const storePromoterNominalPct = useMemo(
-    () => clampPct(100 - storeCommissionPct),
-    [storeCommissionPct]
-  );
+  const storePromoterNominalPct = useMemo(() => storePromoterBasePct, [storePromoterBasePct]);
   const storePromoterEffectivePct = useMemo(
     () =>
       shownBaseCents > 0
-        ? clampPct(((shownFinalCentsWithManual - storeCommissionCents) / shownBaseCents) * 100)
+        ? selectedChannel?.kind === "EXTERNAL_ACTIVITY"
+          ? clampPct(((shownFinalCentsWithManual - storeCommissionCents) / shownBaseCents) * 100)
+          : clampPct((storeCommissionCents / shownBaseCents) * 100)
         : 0,
-    [shownBaseCents, shownFinalCentsWithManual, storeCommissionCents]
+    [selectedChannel?.kind, shownBaseCents, shownFinalCentsWithManual, storeCommissionCents]
   );
 
   function addToCart() {

@@ -347,6 +347,16 @@ const commissionPct = useMemo(() => {
 
   return searidersPctFromChannelPct(Number(selectedChannel.commissionBps ?? 0) / 100, selectedChannel.kind);
 }, [selectedChannel, selectedService]);
+const promoterBasePct = useMemo(() => {
+  if (!selectedChannel?.commissionEnabled || !selectedService?.id) return 0;
+
+  const specificRule = selectedChannel.commissionRules?.find((rule) => rule.serviceId === selectedService.id);
+  if (specificRule) {
+    return clampPct(Number(specificRule.commissionPct ?? 0));
+  }
+
+  return clampPct(Number(selectedChannel.commissionBps ?? 0) / 100);
+}, [selectedChannel, selectedService]);
 
 const commissionBreakdown = useMemo(
   () =>
@@ -364,10 +374,15 @@ const commissionCents = useMemo(
   [commissionBreakdown.commissionBaseCents, commissionPct]
 );
 const netAfterCommissionCents = useMemo(() => Math.max(0, finalTotalCents - commissionCents), [finalTotalCents, commissionCents]);
-const promoterNominalPct = useMemo(() => clampPct(100 - commissionPct), [commissionPct]);
+const promoterNominalPct = useMemo(() => promoterBasePct, [promoterBasePct]);
 const promoterEffectivePct = useMemo(
-  () => (baseTotalCents > 0 ? clampPct((netAfterCommissionCents / baseTotalCents) * 100) : 0),
-  [baseTotalCents, netAfterCommissionCents]
+  () =>
+    baseTotalCents > 0
+      ? selectedChannel?.kind === "EXTERNAL_ACTIVITY"
+        ? clampPct((netAfterCommissionCents / baseTotalCents) * 100)
+        : clampPct((commissionCents / baseTotalCents) * 100)
+      : 0,
+  [baseTotalCents, commissionCents, netAfterCommissionCents, selectedChannel?.kind]
 );
 
 async function load() {
