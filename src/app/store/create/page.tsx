@@ -1118,6 +1118,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       customerCountry,
       customerAddress,
       customerPostalCode,
+      customerBirthDate,
       customerDocType,
       customerDocNumber,
       marketingSource,

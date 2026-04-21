@@ -1,8 +1,11 @@
 "use client";
 
 import type React from "react";
-
+import { BirthDateField, PhoneWithCountryField } from "@/components/customer-inputs";
+import { getCountryOptionsEs } from "@/lib/countries";
 import type { ContractDto } from "../types";
+
+const COUNTRY_OPTIONS = getCountryOptionsEs();
 
 type PreparedOptions = {
   jetskis: Array<{ id: string; number: number | null; model: string | null; plate: string | null }>;
@@ -107,16 +110,19 @@ export function ContractLegalSection({
     <>
       <div style={subCardStyle}>
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={sectionEyebrowStyle}>Validación legal</div>
+          <div style={sectionEyebrowStyle}>Validacion legal</div>
           <div style={{ fontSize: 13, color: "#64748b" }}>
-            Edad y autorización del tutor cuando aplique antes de dejar el contrato en `READY`.
+            Edad y autorizacion del tutor cuando aplique antes de dejar el contrato en `READY`.
           </div>
         </div>
 
-        <label style={{ display: "grid", gap: 6 }}>
-          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Fecha de nacimiento *</div>
-          <input type="date" value={birthYmd} onChange={(e) => onBirthYmdChange(e.target.value)} style={inputStyle} />
-        </label>
+        <BirthDateField
+          label="Fecha de nacimiento *"
+          value={birthYmd}
+          onChange={onBirthYmdChange}
+          style={inputStyle}
+          required
+        />
 
         {isUnder16 ? (
           <div style={{ padding: 12, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 800 }}>
@@ -127,7 +133,7 @@ export function ContractLegalSection({
         {needsAuth ? (
           <label style={{ display: "flex", gap: 10, alignItems: "center", padding: 12, borderRadius: 12, border: "1px solid #fde68a", background: "#fffbeb" }}>
             <input type="checkbox" checked={minorAuthorizationProvided} onChange={(e) => onMinorAuthorizationProvidedChange(e.target.checked)} />
-            <div style={{ fontWeight: 800 }}>Menor de 16-17 años: requiere autorización del tutor.</div>
+            <div style={{ fontWeight: 800 }}>Menor de 16-17 anos: requiere autorizacion del tutor.</div>
           </label>
         ) : null}
       </div>
@@ -144,7 +150,7 @@ export function ContractLegalSection({
       >
         <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 700 }}>
           <input type="checkbox" checked={Boolean(imageConsentAccepted)} onChange={(e) => onImageConsentAcceptedChange(e.target.checked)} />
-          Acepto el uso de mi imagen según lo indicado
+          Acepto el uso de mi imagen segun lo indicado
         </label>
 
         {age != null && age < 18 ? (
@@ -159,7 +165,7 @@ export function ContractLegalSection({
             }}
           >
             <div style={{ fontSize: 13, fontWeight: 900, color: "#9a3412" }}>
-              Menor detectado: se requiere autorización de padre, madre o tutor.
+              Menor detectado: se requiere autorizacion de padre, madre o tutor.
             </div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -182,8 +188,8 @@ export function ContractLegalSection({
                 {minorUploadBusy
                   ? "Subiendo..."
                   : contract.minorAuthorizationFileName
-                    ? "Reemplazar autorización"
-                    : "Adjuntar autorización"}
+                    ? "Reemplazar autorizacion"
+                    : "Adjuntar autorizacion"}
                 <input
                   type="file"
                   accept=".pdf,image/png,image/jpeg,image/webp"
@@ -216,7 +222,7 @@ export function ContractLegalSection({
                     cursor: minorDeleteBusy ? "default" : "pointer",
                   }}
                 >
-                  {minorDeleteBusy ? "Eliminando..." : "Eliminar autorización"}
+                  {minorDeleteBusy ? "Eliminando..." : "Eliminar autorizacion"}
                 </button>
               ) : null}
             </div>
@@ -242,7 +248,7 @@ export function ContractLegalSection({
                       cursor: "pointer",
                     }}
                   >
-                    Ver autorización
+                    Ver autorizacion
                   </button>
                 ) : null}
               </div>
@@ -282,7 +288,7 @@ export function ContractDriverSection({
     <div style={subCardStyle}>
       <div style={{ display: "grid", gap: 4 }}>
         <div style={sectionEyebrowStyle}>Conductor</div>
-        <div style={{ fontSize: 13, color: "#64748b" }}>Completa los datos del conductor real que firmará este contrato.</div>
+        <div style={{ fontSize: 13, color: "#64748b" }}>Completa los datos del conductor real que firmara este contrato.</div>
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -300,24 +306,26 @@ export function ContractDriverSection({
           Nombre del conductor *
           <input value={driverName} onChange={(e) => onDriverNameChange(e.target.value)} style={inputStyle} />
         </label>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Teléfono
-          <input value={driverPhone} onChange={(e) => onDriverPhoneChange(e.target.value)} style={inputStyle} />
-        </label>
+        <PhoneWithCountryField
+          label="Telefono"
+          country={driverCountry}
+          phone={driverPhone}
+          onCountryChange={onDriverCountryChange}
+          onPhoneChange={onDriverPhoneChange}
+          countryOptions={COUNTRY_OPTIONS}
+          inputStyle={inputStyle}
+          phonePlaceholder="Ej: 612345678"
+        />
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Email
           <input value={driverEmail} onChange={(e) => onDriverEmailChange(e.target.value)} style={inputStyle} placeholder="conductor@email.com" />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          País (ISO-2) *
-          <input value={driverCountry} onChange={(e) => onDriverCountryChange(e.target.value)} style={inputStyle} placeholder="ES" />
-        </label>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Dirección *
+          Direccion *
           <input value={driverAddress} onChange={(e) => onDriverAddressChange(e.target.value)} style={inputStyle} />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Código postal
+          Codigo postal
           <input value={driverPostalCode} onChange={(e) => onDriverPostalCodeChange(e.target.value)} style={inputStyle} placeholder="08303" />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
@@ -330,7 +338,7 @@ export function ContractDriverSection({
           </select>
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Número de documento *
+          Numero de documento *
           <input value={driverDocNumber} onChange={(e) => onDriverDocNumberChange(e.target.value)} style={inputStyle} />
         </label>
       </div>
@@ -357,7 +365,7 @@ export function ContractLicenseSection({
       <div style={{ display: "grid", gap: 4 }}>
         <div style={sectionEyebrowStyle}>Licencia</div>
         <div style={{ fontSize: 13, color: "#64748b" }}>
-          Completa esta parte solo cuando la actividad exige licencia náutica.
+          Completa esta parte solo cuando la actividad exige licencia nautica.
         </div>
       </div>
 
@@ -371,7 +379,7 @@ export function ContractLicenseSection({
           <input value={licenseType} onChange={(e) => onLicenseTypeChange(e.target.value)} style={inputStyle} />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Número de licencia
+          Numero de licencia
           <input value={licenseNumber} onChange={(e) => onLicenseNumberChange(e.target.value)} style={inputStyle} />
         </label>
       </div>

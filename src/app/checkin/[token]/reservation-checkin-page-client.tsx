@@ -3,12 +3,16 @@
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
+import { BirthDateField, PhoneWithCountryField } from "@/components/customer-inputs";
+import { getCountryOptionsEs } from "@/lib/countries";
 import {
   formatPublicDate,
   formatPublicTime,
   getPublicCopy,
   type PublicLanguage,
 } from "@/lib/public-links/i18n";
+
+const COUNTRY_OPTIONS = getCountryOptionsEs();
 
 type ReservationView = {
   id: string;
@@ -100,6 +104,20 @@ export function ReservationCheckinPageClient({
   const sigRefs = useRef<Record<string, SignatureCanvas | null>>({});
   const lastSavedPayloadRef = useRef<string>("");
   const autosaveTimerRef = useRef<number | null>(null);
+  const reservationDraftRef = useRef({
+    customerName: "",
+    customerPhone: "",
+    customerEmail: "",
+    marketing: "",
+    customerCountry: "",
+    customerAddress: "",
+    customerPostalCode: "",
+    customerBirthDate: "",
+    customerDocType: "",
+    customerDocNumber: "",
+  });
+  const contractDraftsRef = useRef<Record<string, DraftContract>>({});
+  const saveRequestSeqRef = useRef(0);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -120,6 +138,14 @@ export function ReservationCheckinPageClient({
     customerDocNumber: "",
   });
   const [contractDrafts, setContractDrafts] = useState<Record<string, DraftContract>>({});
+
+  useEffect(() => {
+    reservationDraftRef.current = reservationDraft;
+  }, [reservationDraft]);
+
+  useEffect(() => {
+    contractDraftsRef.current = contractDrafts;
+  }, [contractDrafts]);
 
   const serializePayload = useCallback((reservation: typeof reservationDraft, drafts: Record<string, DraftContract>) => {
     return JSON.stringify({
@@ -167,6 +193,8 @@ export function ReservationCheckinPageClient({
       };
     }
     setContractDrafts(nextDrafts);
+    reservationDraftRef.current = nextReservationDraft;
+    contractDraftsRef.current = nextDrafts;
     lastSavedPayloadRef.current = serializePayload(nextReservationDraft, nextDrafts);
     setAutosaveState("idle");
   }, [serializePayload]);
@@ -199,6 +227,7 @@ export function ReservationCheckinPageClient({
       }
 
       const serialized = serializePayload(reservationDraft, contractDrafts);
+      const requestSeq = ++saveRequestSeqRef.current;
       const res = await fetch(`/api/public/checkin/${encodeURIComponent(token)}?lang=${encodeURIComponent(language)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -215,12 +244,21 @@ export function ReservationCheckinPageClient({
       });
       if (!res.ok) throw new Error(await res.text());
       const data = (await res.json()) as Snapshot;
-      hydrate(data);
-      lastSavedPayloadRef.current = serialized;
+      const latestSerialized = serializePayload(reservationDraftRef.current, contractDraftsRef.current);
+      const isLatestRequest = requestSeq === saveRequestSeqRef.current;
+      const hasLocalChangesSinceRequest = latestSerialized !== serialized;
+
+      if (mode === "manual" || (isLatestRequest && !hasLocalChangesSinceRequest)) {
+        hydrate(data);
+        lastSavedPayloadRef.current = serialized;
+      } else {
+        lastSavedPayloadRef.current = serialized;
+      }
+
       if (mode === "manual") {
         setSuccess(copy.checkinPage.saved);
       } else {
-        setAutosaveState("saved");
+        setAutosaveState(hasLocalChangesSinceRequest ? "idle" : "saved");
       }
       return true;
     } catch (e: unknown) {
@@ -328,6 +366,13 @@ export function ReservationCheckinPageClient({
   }
 
   const autosave = autosaveTone(autosaveState, copy);
+  const holderSummary = [
+    snapshot.reservation.customerName,
+    snapshot.reservation.customerPhone,
+    snapshot.reservation.customerEmail,
+  ]
+    .filter(Boolean)
+    .join(" | ");
 
   return (
     <main
@@ -374,7 +419,7 @@ export function ReservationCheckinPageClient({
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
             <MetricCard label={copy.checkinPage.metrics.contracts} value={`${snapshot.reservation.signedCount}/${snapshot.reservation.requiredUnits}`} description={copy.checkinPage.metrics.signed} />
             <MetricCard label={copy.checkinPage.metrics.ready} value={`${snapshot.reservation.readyCount}/${snapshot.reservation.requiredUnits}`} description={copy.checkinPage.metrics.prepared} />
-            <MetricCard label={copy.checkinPage.metrics.holder} value={reservationDraft.customerName || copy.checkinPage.metrics.pending} description={copy.checkinPage.metrics.holder} />
+            <MetricCard label={copy.checkinPage.metrics.holder} value={snapshot.reservation.customerName || copy.checkinPage.metrics.pending} description={copy.checkinPage.metrics.holder} />
           </div>
 
           <div style={{ padding: 14, borderRadius: 16, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8", fontSize: 14 }}>
@@ -386,15 +431,11 @@ export function ReservationCheckinPageClient({
 
           <section style={{ display: "grid", gap: 12 }}>
             <h2 style={{ margin: 0, fontSize: 20 }}>{copy.checkinPage.holderTitle}</h2>
-            <div style={{ fontSize: 13, color: "#64748b", fontWeight: 700 }}>
-              {copy.common.requiredFields}
+            <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
+              {copy.checkinPage.holderHelp}
             </div>
+            {holderSummary ? <ReadOnlyField label={copy.checkinPage.bookingSummary} value={holderSummary} /> : null}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-              <Field label={copy.checkinPage.holderName} value={reservationDraft.customerName} onChange={(value) => setReservationDraft((current) => ({ ...current, customerName: value }))} />
-              <Field label={copy.checkinPage.holderPhone} value={reservationDraft.customerPhone} onChange={(value) => setReservationDraft((current) => ({ ...current, customerPhone: value }))} />
-              <Field label={copy.checkinPage.holderEmail} value={reservationDraft.customerEmail} onChange={(value) => setReservationDraft((current) => ({ ...current, customerEmail: value }))} />
-              <SelectField label={copy.common.documentTypeLabel} value={reservationDraft.customerDocType} options={copy.common.documentTypeOptions} onChange={(value) => setReservationDraft((current) => ({ ...current, customerDocType: value }))} />
-              <Field label={copy.common.documentNumberLabel} value={reservationDraft.customerDocNumber} onChange={(value) => setReservationDraft((current) => ({ ...current, customerDocNumber: value }))} />
               <SelectField label={copy.common.marketingLabel} value={reservationDraft.marketing} options={copy.common.marketingOptions} onChange={(value) => setReservationDraft((current) => ({ ...current, marketing: value }))} />
             </div>
 
@@ -457,6 +498,10 @@ export function ReservationCheckinPageClient({
                   </a>
                 </div>
 
+                <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
+                  {copy.checkinPage.contractHelp}
+                </div>
+
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
                   <ReadOnlyField label={copy.checkinPage.scheduledTime} value={formatPublicTime(snapshot.reservation.scheduledTime, language)} />
                   <ReadOnlyField label={copy.checkinPage.duration} value={snapshot.reservation.durationMinutes ? `${snapshot.reservation.durationMinutes} min` : copy.checkinPage.accordingToReservation} />
@@ -465,12 +510,21 @@ export function ReservationCheckinPageClient({
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
                   <Field label={copy.checkinPage.driverName} value={draft?.driverName ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverName: value } }))} />
-                  <Field label={copy.checkinPage.driverPhone} value={draft?.driverPhone ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPhone: value } }))} />
+                  <PhoneWithCountryField
+                    label={copy.checkinPage.driverPhone}
+                    country={draft?.driverCountry ?? ""}
+                    phone={draft?.driverPhone ?? ""}
+                    disabled={disabled}
+                    onCountryChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverCountry: value } }))}
+                    onPhoneChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPhone: value } }))}
+                    countryOptions={COUNTRY_OPTIONS}
+                    inputStyle={inputStyle}
+                    phonePlaceholder="Ej: 612345678"
+                  />
                   <Field label={copy.checkinPage.driverEmail} value={draft?.driverEmail ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverEmail: value } }))} />
-                  <Field label={copy.checkinPage.driverCountry} value={draft?.driverCountry ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverCountry: value } }))} />
                   <Field label={copy.checkinPage.driverAddress} value={draft?.driverAddress ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverAddress: value } }))} />
                   <Field label={copy.checkinPage.driverPostalCode} value={draft?.driverPostalCode ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPostalCode: value } }))} />
-                  <DateField label={copy.checkinPage.driverBirthDate} value={draft?.driverBirthDate ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverBirthDate: value } }))} />
+                  <BirthDateField label={copy.checkinPage.driverBirthDate} value={draft?.driverBirthDate ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverBirthDate: value } }))} style={inputStyle} />
                   <SelectField label={`${copy.common.documentTypeLabel} *`} value={draft?.driverDocType ?? ""} disabled={disabled} options={copy.common.documentTypeOptions} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocType: value } }))} />
                   <Field label={`${copy.common.documentNumberLabel} *`} value={draft?.driverDocNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocNumber: value } }))} />
                   {snapshot.reservation.isLicense ? (
@@ -629,25 +683,6 @@ function SelectField({
           </option>
         ))}
       </select>
-    </label>
-  );
-}
-
-function DateField({
-  label,
-  value,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
-      <span>{label}</span>
-      <input type="date" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={inputStyle} />
     </label>
   );
 }

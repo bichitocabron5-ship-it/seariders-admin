@@ -124,6 +124,8 @@ type PublicCopy = {
     };
     intro: string;
     holderTitle: string;
+    holderHelp: string;
+    bookingSummary: string;
     holderName: string;
     holderPhone: string;
     holderEmail: string;
@@ -134,6 +136,7 @@ type PublicCopy = {
     pendingDriver: string;
     signedOn: (date: string) => string;
     useHolder: string;
+    contractHelp: string;
     printable: string;
     scheduledTime: string;
     duration: string;
@@ -176,10 +179,10 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
     { value: "Google", label: "Google" },
     { value: "Radio", label: "Radio" },
     { value: "TikTok", label: "TikTok" },
-    { value: "Youtube", label: "Youtube" },
+    { value: "YouTube", label: "YouTube" },
     { value: "Flyers", label: "Flyers" },
     { value: "Otros", label: language === "en" ? "Other" : "Otros" },
-    { value: "Hoteles", label: language === "en" ? "Hotels" : "Hoteles" },
+    { value: "Hoteles", label: language === "en" ? "Hotel / accommodation" : "Hotel / alojamiento" },
   ];
 
   if (language === "en") {
@@ -229,7 +232,7 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
         close: "Close",
         buildMessage: ({ recipientName, contractsCount, url, expiryLabel }) =>
           `Hello ${recipientName || "customer"},\n\n` +
-          `Here is your secure pre-check-in link to complete your booking details, review ${contractsCount === 1 ? "the contract" : "each contract"} and sign digitally before arrival.\n\n` +
+          `Here is your secure pre-check-in link to complete the contract details, review ${contractsCount === 1 ? "the contract" : "each contract"} and sign digitally before arrival.\n\n` +
           `${url}\n\n` +
           `Once completed, we will only need to review the final details on site before payment.\n\n` +
           `This link expires in ${expiryLabel}.\n\n` +
@@ -275,6 +278,8 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
         },
         intro: "Review each contract, complete the required details and sign at the end of each section. Fields marked with * are required. If the booking includes a minor with authorization, the documents will be validated on site before final payment.",
         holderTitle: "Booking holder details",
+        holderHelp: "The booking data is already registered. Here we only ask one short commercial question before you complete the legal details for each contract.",
+        bookingSummary: "Booking data already registered",
         holderName: "Full name *",
         holderPhone: "Phone *",
         holderEmail: "Email",
@@ -284,7 +289,8 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
         unitTitle: (index) => `Unit #${index}`,
         pendingDriver: "Driver pending",
         signedOn: (date) => `signed on ${date}`,
-        useHolder: "Use holder details",
+        useHolder: "Use booking holder details",
+        contractHelp: "Complete only the legal details of the person who will sign and use this contract.",
         printable: "PDF / printable view",
         scheduledTime: "Scheduled time",
         duration: "Duration",
@@ -318,7 +324,7 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
       requiredFields: "Los campos marcados con * son obligatorios.",
       documentTypeLabel: "Tipo de documento",
       documentNumberLabel: "Numero de documento",
-      marketingLabel: "Como nos conociste?",
+      marketingLabel: "Como nos conocio?",
       documentTypeOptions,
       marketingOptions,
     },
@@ -359,7 +365,7 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
       close: "Cerrar",
       buildMessage: ({ recipientName, contractsCount, url, expiryLabel }) =>
         `Hola ${recipientName || "cliente"},\n\n` +
-        `Le enviamos su enlace seguro de pre-checkin para completar los datos de la reserva, revisar el contrato${contractsCount === 1 ? "" : " de cada unidad"} y firmarlo digitalmente antes de su llegada.\n\n` +
+        `Le enviamos su enlace seguro de pre-checkin para completar los datos del contrato, revisar el contrato${contractsCount === 1 ? "" : " de cada unidad"} y firmarlo digitalmente antes de su llegada.\n\n` +
         `${url}\n\n` +
         `Una vez completado, en tienda solo revisaremos los datos finales para continuar con el cobro.\n\n` +
         `Este enlace caduca en ${expiryLabel}.\n\n` +
@@ -405,6 +411,8 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
       },
       intro: "Revise el contrato de cada unidad, complete los datos obligatorios y firme al final de cada bloque. Los campos marcados con * son obligatorios. Si la reserva incluye un menor con autorizacion, la documentacion debera validarse en tienda antes del cobro definitivo.",
       holderTitle: "Datos del titular",
+      holderHelp: "Los datos de la reserva ya estan registrados. Aqui solo le pedimos una breve pregunta comercial antes de completar los datos legales de cada contrato.",
+      bookingSummary: "Datos de reserva ya registrados",
       holderName: "Nombre y apellidos *",
       holderPhone: "Telefono *",
       holderEmail: "Email",
@@ -414,7 +422,8 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
       unitTitle: (index) => `Unidad #${index}`,
       pendingDriver: "Conductor pendiente",
       signedOn: (date) => `firmado el ${date}`,
-      useHolder: "Usar datos del titular",
+      useHolder: "Usar datos del titular de la reserva",
+      contractHelp: "Complete solo los datos legales de la persona que va a firmar y realizar esta unidad.",
       printable: "PDF / vista imprimible",
       scheduledTime: "Hora programada",
       duration: "Duracion",

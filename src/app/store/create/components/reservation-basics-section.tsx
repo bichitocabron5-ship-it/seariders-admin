@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { BirthDateField, PhoneWithCountryField } from "@/components/customer-inputs";
 import type { CountryOption } from "@/lib/countries";
 import type { Channel, JetskiLicenseMode, Option, PackPreview, PricingTier, ServiceMain } from "../types";
 
@@ -45,6 +46,7 @@ export type ReservationBasicsSectionProps = {
     customerCountry: string;
     customerAddress: string;
     customerPostalCode: string;
+    customerBirthDate: string;
     customerDocType: string;
     customerDocNumber: string;
     marketingSource: string;
@@ -86,6 +88,7 @@ export type ReservationBasicsSectionProps = {
     onCustomerCountryChange: (value: string) => void;
     onCustomerAddressChange: (value: string) => void;
     onCustomerPostalCodeChange: (value: string) => void;
+    onCustomerBirthDateChange: (value: string) => void;
     onCustomerDocTypeChange: (value: string) => void;
     onCustomerDocNumberChange: (value: string) => void;
     onMarketingSourceChange: (value: string) => void;
@@ -172,16 +175,17 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                 />
               </label>
 
-              <label style={labelStyle}>
-                <span>Teléfono *</span>
-                <input
-                  value={values.customerPhone}
-                  onChange={(e) => handlers.onCustomerPhoneChange(e.target.value)}
-                  required
-                  style={inputStyle}
-                  placeholder="Ej: +34 6xx xxx xxx"
-                />
-              </label>
+              <PhoneWithCountryField
+                label="Teléfono *"
+                country={values.customerCountry}
+                phone={values.customerPhone}
+                onCountryChange={handlers.onCustomerCountryChange}
+                onPhoneChange={handlers.onCustomerPhoneChange}
+                countryOptions={lists.countryOptions}
+                inputStyle={inputStyle}
+                required
+                phonePlaceholder="Ej: 612345678"
+              />
 
               <label style={labelStyle}>
                 <span>Email</span>
@@ -192,6 +196,13 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                   placeholder="cliente@email.com"
                 />
               </label>
+
+              <BirthDateField
+                label="Fecha de nacimiento"
+                value={values.customerBirthDate}
+                onChange={handlers.onCustomerBirthDateChange}
+                style={inputStyle}
+              />
             </div>
 
             <div style={gridStyle}>
