@@ -31,6 +31,50 @@ type ManualContractAttachment = {
   uploadedAt: string | null;
 };
 
+type HistoryMeta = {
+  reason: string;
+  reasonLabel: string;
+  historicalAt: string | null;
+};
+
+type CommercialSnapshot = {
+  holderName: string | null;
+  holderCountry: string | null;
+  source: string | null;
+  channelName: string | null;
+  serviceName: string | null;
+  serviceCategory: string | null;
+  durationMinutes: number | null;
+  quantity: number | null;
+  pax: number | null;
+  isLicense: boolean | null;
+  totalPriceCents: number | null;
+  servicePaidCents: number;
+  servicePendingCents: number;
+  depositCents: number | null;
+  paidDepositCents: number;
+  depositPendingCents: number;
+  totalToChargeCents: number;
+  formalizedAt: string | null;
+};
+
+type ContractualSnapshot = {
+  primaryDriverName: string | null;
+  driverNamesSummary: string | null;
+  contractsCount: number;
+  readyContractsCount: number;
+  signedContractsCount: number;
+};
+
+type AdjustmentSnapshot = {
+  isManualEntry: boolean;
+  manualEntryNote: string | null;
+  manualContractAttachments: ManualContractAttachment[];
+  financialAdjustmentNote: string | null;
+  financialAdjustedAt: string | null;
+  hasManualChanges: boolean;
+};
+
 type HistoryRow = {
   id: string;
   status: string;
@@ -69,6 +113,10 @@ type HistoryRow = {
   depositReturnedCents: number;
   depositRetainedCents: number;
   totalToChargeCents: number;
+  historyMeta: HistoryMeta;
+  commercial: CommercialSnapshot;
+  contractual: ContractualSnapshot;
+  adjustments: AdjustmentSnapshot;
   incidents: HistoryIncident[];
 };
 
@@ -111,8 +159,9 @@ type InternalStaffEmployee = { id: string; fullName: string; code?: string | nul
 type ManualPaymentDraft = { amountEuros: string; method: "CASH" | "CARD" | "BIZUM" | "TRANSFER"; isDeposit: boolean; direction: "IN" | "OUT" };
 type ManualPresetId = "COMPLETED_PAID" | "COMPLETED_WITH_DEPOSIT" | "PENDING_COLLECTION" | "RECORD_ONLY" | "STAFF_INTERNAL";
 
-function historyRowTimestamp(row: Pick<HistoryRow, "scheduledTime" | "activityDate" | "arrivalAt" | "formalizedAt">) {
+function historyRowTimestamp(row: Pick<HistoryRow, "scheduledTime" | "activityDate" | "arrivalAt" | "formalizedAt" | "historyMeta">) {
   return (
+    Date.parse(row.historyMeta?.historicalAt ?? "") ||
     Date.parse(row.scheduledTime ?? "") ||
     Date.parse(row.activityDate ?? "") ||
     Date.parse(row.arrivalAt ?? "") ||
@@ -217,19 +266,30 @@ function incidentTone(level: string) {
 }
 
 function countPaidServiceCents(row: HistoryRow) {
-  const paidServiceCents = Math.max(0, Number(row.paidCents ?? 0) - Number(row.paidDepositCents ?? 0));
-  const adjustedServiceTotalCents = Math.max(0, Number(row.totalPriceCents ?? 0));
-  return Math.min(paidServiceCents, adjustedServiceTotalCents);
+  return Math.max(
+    0,
+    Number(row.commercial?.servicePaidCents ?? Math.max(0, Number(row.paidCents ?? 0) - Number(row.paidDepositCents ?? 0)))
+  );
 }
 
 function countPendingServiceCents(row: HistoryRow) {
-  if (row.status === "CANCELED") return 0;
-  return Math.max(0, Number(row.totalPriceCents ?? 0) - countPaidServiceCents(row));
+  return Math.max(
+    0,
+    Number(
+      row.commercial?.servicePendingCents ??
+        (row.status === "CANCELED" ? 0 : Math.max(0, Number(row.totalPriceCents ?? 0) - countPaidServiceCents(row)))
+    )
+  );
 }
 
 function countPendingDepositCents(row: HistoryRow) {
-  if (row.status === "CANCELED") return 0;
-  return Math.max(0, Number(row.depositCents ?? 0) - Number(row.depositCollectedCents ?? 0));
+  return Math.max(
+    0,
+    Number(
+      row.commercial?.depositPendingCents ??
+        (row.status === "CANCELED" ? 0 : Math.max(0, Number(row.depositCents ?? 0) - Number(row.depositCollectedCents ?? 0)))
+    )
+  );
 }
 
 function statusLabel(stageOrStatus: string | null | undefined) {

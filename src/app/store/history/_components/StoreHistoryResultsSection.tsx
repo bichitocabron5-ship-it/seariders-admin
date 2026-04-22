@@ -28,6 +28,50 @@ type ManualContractAttachment = {
   uploadedAt: string | null;
 };
 
+type HistoryMeta = {
+  reason: string;
+  reasonLabel: string;
+  historicalAt: string | null;
+};
+
+type CommercialSnapshot = {
+  holderName: string | null;
+  holderCountry: string | null;
+  source: string | null;
+  channelName: string | null;
+  serviceName: string | null;
+  serviceCategory: string | null;
+  durationMinutes: number | null;
+  quantity: number | null;
+  pax: number | null;
+  isLicense: boolean | null;
+  totalPriceCents: number | null;
+  servicePaidCents: number;
+  servicePendingCents: number;
+  depositCents: number | null;
+  paidDepositCents: number;
+  depositPendingCents: number;
+  totalToChargeCents: number;
+  formalizedAt: string | null;
+};
+
+type ContractualSnapshot = {
+  primaryDriverName: string | null;
+  driverNamesSummary: string | null;
+  contractsCount: number;
+  readyContractsCount: number;
+  signedContractsCount: number;
+};
+
+type AdjustmentSnapshot = {
+  isManualEntry: boolean;
+  manualEntryNote: string | null;
+  manualContractAttachments: ManualContractAttachment[];
+  financialAdjustmentNote: string | null;
+  financialAdjustedAt: string | null;
+  hasManualChanges: boolean;
+};
+
 type HistoryRow = {
   id: string;
   status: string;
@@ -66,6 +110,10 @@ type HistoryRow = {
   depositReturnedCents: number;
   depositRetainedCents: number;
   totalToChargeCents: number;
+  historyMeta: HistoryMeta;
+  commercial: CommercialSnapshot;
+  contractual: ContractualSnapshot;
+  adjustments: AdjustmentSnapshot;
   incidents: HistoryIncident[];
 };
 
@@ -167,10 +215,10 @@ export default function StoreHistoryResultsSection({
               {rows.map((row) => {
                 const statusUi = statusTone(row.storeFlowStage ?? row.status);
                 const incidentCount = row.incidents.length;
-                const manualContracts = row.manualContractAttachments ?? [];
+                const manualContracts = row.adjustments?.manualContractAttachments ?? row.manualContractAttachments ?? [];
                 const manualContractsCount = manualContracts.length;
                 const maxManualContracts = Math.max(1, Number(row.quantity ?? 1));
-                const canUploadMoreManualContracts = row.isManualEntry && manualContractsCount < maxManualContracts;
+                const canUploadMoreManualContracts = (row.adjustments?.isManualEntry ?? row.isManualEntry) && manualContractsCount < maxManualContracts;
                 const holdStatus = row.depositHeld
                   ? row.depositReturnedCents > 0
                     ? "Retenida parcial"
@@ -184,14 +232,14 @@ export default function StoreHistoryResultsSection({
                     <td style={cell}>
                       <div style={{ display: "grid", gap: 8 }}>
                         <div style={{ fontWeight: 900, color: "#0f172a" }}>
-                          {row.customerName || "Sin nombre"}
+                          {row.commercial?.holderName || row.customerName || "Sin nombre"}
                         </div>
-                        {row.primaryDriverName ? (
+                        {row.contractual?.primaryDriverName || row.primaryDriverName ? (
                           <div style={mutedText}>
-                            Firmante principal: <strong style={{ color: "#0f172a" }}>{row.primaryDriverName}</strong>
+                            Firmante principal: <strong style={{ color: "#0f172a" }}>{row.contractual?.primaryDriverName || row.primaryDriverName}</strong>
                           </div>
                         ) : null}
-                        {row.isManualEntry ? (
+                        {(row.adjustments?.isManualEntry ?? row.isManualEntry) ? (
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             <Pill bg="#fff7ed" border="#fed7aa">Reserva manual</Pill>
                             <Pill bg={manualContractsCount > 0 ? "#ecfdf5" : "#f8fafc"} border={manualContractsCount > 0 ? "#bbf7d0" : "#cbd5e1"}>
@@ -200,10 +248,20 @@ export default function StoreHistoryResultsSection({
                           </div>
                         ) : null}
                         <div style={mutedStack}>
-                          <span>{row.customerCountry || "-"}</span>
-                          <span>{row.source || "Origen no indicado"}</span>
+                          <span>{row.commercial?.holderCountry || row.customerCountry || "-"}</span>
+                          <span>{row.commercial?.source || row.source || "Origen no indicado"}</span>
+                          <span>{row.historyMeta?.reasonLabel || "Histórico"}</span>
                         </div>
                         <div style={detailBlock}>
+                          <div>
+                            <strong>Reserva</strong>
+                            <div>{row.commercial?.serviceName || row.serviceName || "Servicio"}</div>
+                            <div>{row.commercial?.channelName || row.channelName || "Sin canal"}</div>
+                          </div>
+                          <div>
+                            <strong>Entrada en historico</strong>
+                            <div>{dt(row.historyMeta?.historicalAt || row.activityDate)}</div>
+                          </div>
                           <div>
                             <strong>Actividad</strong>
                             <div>{dt(row.scheduledTime || row.activityDate)}</div>
@@ -212,13 +270,13 @@ export default function StoreHistoryResultsSection({
                             <strong>Devuelta</strong>
                             <div>{dt(row.arrivalAt)}</div>
                           </div>
-                          {row.manualEntryNote ? (
+                          {(row.adjustments?.manualEntryNote || row.manualEntryNote) ? (
                             <div>
                               <strong>Nota manual</strong>
-                              <div>{row.manualEntryNote}</div>
+                              <div>{row.adjustments?.manualEntryNote || row.manualEntryNote}</div>
                             </div>
                           ) : null}
-                          {row.contractsCount > 0 ? (
+                          {(row.contractual?.contractsCount ?? row.contractsCount) > 0 ? (
                             <div>
                               <strong>Contratos</strong>
                               <div>
@@ -245,13 +303,13 @@ export default function StoreHistoryResultsSection({
 
                     <td style={cell}>
                       <div style={{ display: "grid", gap: 8 }}>
-                        <div style={{ fontWeight: 800 }}>{row.serviceName || "Servicio"}</div>
-                        <div style={mutedText}>{row.serviceCategory || "Categoría sin indicar"}</div>
+                        <div style={{ fontWeight: 800 }}>{row.commercial?.serviceName || row.serviceName || "Servicio"}</div>
+                        <div style={mutedText}>{row.commercial?.serviceCategory || row.serviceCategory || "Categoría sin indicar"}</div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          <Pill>{row.durationMinutes ? `${row.durationMinutes} min` : "Sin duración"}</Pill>
-                          <Pill>Cant {row.quantity ?? 0}</Pill>
-                          <Pill>PAX {row.pax ?? 0}</Pill>
-                          {row.isLicense ? <Pill>Licencia</Pill> : null}
+                          <Pill>{(row.commercial?.durationMinutes ?? row.durationMinutes) ? `${row.commercial?.durationMinutes ?? row.durationMinutes} min` : "Sin duración"}</Pill>
+                          <Pill>Cant {row.commercial?.quantity ?? row.quantity ?? 0}</Pill>
+                          <Pill>PAX {row.commercial?.pax ?? row.pax ?? 0}</Pill>
+                          {(row.commercial?.isLicense ?? row.isLicense) ? <Pill>Licencia</Pill> : null}
                         </div>
                       </div>
                     </td>
@@ -269,20 +327,23 @@ export default function StoreHistoryResultsSection({
                           {statusLabel(row.storeFlowStage ?? row.status)}
                         </span>
                         <div style={mutedText}>
-                          Formalizada: {row.formalizedAt ? dt(row.formalizedAt) : "No"}
+                          Formalizada: {row.commercial?.formalizedAt ? dt(row.commercial.formalizedAt) : row.formalizedAt ? dt(row.formalizedAt) : "No"}
                         </div>
-                        {row.financialAdjustedAt ? (
+                        {row.adjustments?.financialAdjustedAt || row.financialAdjustedAt ? (
                           <div style={mutedText}>
-                            Ajustada: {dt(row.financialAdjustedAt)}
+                            Ajustada: {dt(row.adjustments?.financialAdjustedAt || row.financialAdjustedAt)}
                           </div>
                         ) : null}
+                        <div style={mutedText}>
+                          Histórico por: {row.historyMeta?.reasonLabel || "criterio no indicado"}
+                        </div>
                       </div>
                     </td>
 
                     <td style={cell}>
                       <div style={{ display: "grid", gap: 6 }}>
                         <div style={moneyValue}>{euros(countPaidServiceCents(row))}</div>
-                        <div style={mutedText}>Cobrado en servicio · {euros(row.totalPriceCents)}</div>
+                        <div style={mutedText}>Comercial reserva · {euros(row.commercial?.totalPriceCents ?? row.totalPriceCents)}</div>
                         <div
                           style={{
                             color: countPendingServiceCents(row) > 0 ? "#b45309" : "#166534",
@@ -297,7 +358,7 @@ export default function StoreHistoryResultsSection({
                     <td style={cell}>
                       <div style={{ display: "grid", gap: 6 }}>
                         <div style={moneyValue}>
-                          {euros(row.paidDepositCents)} / {euros(row.depositCents)}
+                          {euros(row.commercial?.paidDepositCents ?? row.paidDepositCents)} / {euros(row.commercial?.depositCents ?? row.depositCents)}
                         </div>
                         <div style={mutedText}>Cobrada / prevista</div>
                         <div
@@ -314,7 +375,7 @@ export default function StoreHistoryResultsSection({
                           </div>
                         ) : null}
                         {row.depositHoldReason ? <div style={mutedText}>{row.depositHoldReason}</div> : null}
-                        {row.financialAdjustmentNote ? <div style={mutedText}>Ajuste: {row.financialAdjustmentNote}</div> : null}
+                        {row.adjustments?.financialAdjustmentNote || row.financialAdjustmentNote ? <div style={mutedText}>Ajuste: {row.adjustments?.financialAdjustmentNote || row.financialAdjustmentNote}</div> : null}
                       </div>
                     </td>
 
@@ -397,7 +458,7 @@ export default function StoreHistoryResultsSection({
                           Ajustar importes
                         </button>
 
-                        {row.isManualEntry ? (
+                        {(row.adjustments?.isManualEntry ?? row.isManualEntry) ? (
                           <label
                             style={{
                               ...actionLink,

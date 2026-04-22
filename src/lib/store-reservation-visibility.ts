@@ -66,3 +66,19 @@ export function buildStoreCalendarWhere(
     AND: [buildReservationOccursInRangeWhere(range)],
   };
 }
+
+export function buildStoreHistoryWhere(
+  range: ReservationDayRange
+): Prisma.ReservationWhereInput {
+  return {
+    OR: [
+      { status: { in: ["COMPLETED", "CANCELED"] } },
+      {
+        OR: [
+          { scheduledTime: { lt: range.start } },
+          { scheduledTime: null, activityDate: { lt: range.start } },
+        ],
+      },
+    ],
+  };
+}

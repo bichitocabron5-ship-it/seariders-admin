@@ -9,8 +9,10 @@ import { prisma } from "@/lib/prisma";
 import { type AppSession, sessionOptions } from "@/lib/session";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 import { getPassVoucherPaidCents, getSignedPaymentCents } from "@/lib/pass-vouchers";
-import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
 import { summarizeReservationContracts } from "@/lib/reservation-parties";
+import { buildStoreHistoryWhere } from "@/lib/store-reservation-visibility";
+import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
+import { deriveStoreHistoryMeta, storeHistoryReasonLabel } from "@/lib/store-history";
 
 export const runtime = "nodejs";
 
@@ -51,11 +53,21 @@ export async function GET(req: Request) {
   }
 
   const { q, status, hasIncident, depositHeld, dateFrom, dateTo, take } = parsed.data;
-  const where: Record<string, unknown> = {};
+  const historyStart = utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
+  const where: Record<string, unknown> = {
+    AND: [buildStoreHistoryWhere({ start: historyStart, endExclusive: historyStart })],
+  };
+
+  function pushAnd(filter: Record<string, unknown>) {
+    const and = Array.isArray(where.AND) ? where.AND : [];
+    and.push(filter);
+    where.AND = and;
+  }
 
   if (q?.trim()) {
     const query = q.trim();
-    where.OR = [
+    pushAnd({
+      OR: [
       {
         customerName: {
           contains: query,
@@ -72,30 +84,33 @@ export async function GET(req: Request) {
           },
         },
       },
-    ];
+    ],
+    });
   }
 
   if (status && status !== "ALL") {
-    where.status = status;
+    pushAnd({ status });
   }
 
   if (depositHeld) {
-    where.depositHeld = depositHeld === "true";
+    pushAnd({ depositHeld: depositHeld === "true" });
   }
 
   if (dateFrom || dateTo) {
-    where.activityDate = {
-      ...(dateFrom ? { gte: new Date(`${dateFrom}T00:00:00.000Z`) } : {}),
-      ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {}),
-    };
+    pushAnd({
+      activityDate: {
+        ...(dateFrom ? { gte: new Date(`${dateFrom}T00:00:00.000Z`) } : {}),
+        ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {}),
+      },
+    });
   }
 
   if (hasIncident === "true") {
-    where.incidents = { some: {} };
+    pushAnd({ incidents: { some: {} } });
   }
 
   if (hasIncident === "false") {
-    where.incidents = { none: {} };
+    pushAnd({ incidents: { none: {} } });
   }
 
   const rowsDb = await prisma.reservation.findMany({
@@ -105,6 +120,7 @@ export async function GET(req: Request) {
     select: {
       id: true,
       status: true,
+      createdAt: true,
       activityDate: true,
       scheduledTime: true,
       arrivalAt: true,
@@ -260,10 +276,34 @@ export async function GET(req: Request) {
         return sum + sign * payment.amountCents;
       }, 0);
 
+    const depositPlannedCents = computeReservationDepositCents({
+      storedDepositCents: reservation.depositCents,
+      quantity: reservation.quantity,
+      isLicense: Boolean(reservation.isLicense),
+      serviceCategory: reservation.service?.category ?? null,
+      items: reservation.items ?? [],
+    });
+    const servicePaidCents = Math.max(0, Number(paidCents ?? 0) - Number(paidDepositCents ?? 0));
+    const servicePendingCents =
+      reservation.status === "CANCELED"
+        ? 0
+        : Math.max(0, Number(reservation.totalPriceCents ?? 0) - servicePaidCents);
+    const depositPendingCents =
+      reservation.status === "CANCELED"
+        ? 0
+        : Math.max(0, Number(depositPlannedCents ?? 0) - Number(depositCollectedCents ?? 0));
+    const historyMeta = deriveStoreHistoryMeta({
+      status: reservation.status,
+      activityDate: reservation.activityDate,
+      scheduledTime: reservation.scheduledTime,
+      arrivalAt: reservation.arrivalAt,
+      createdAt: reservation.createdAt,
+    });
+
     return {
       id: reservation.id,
       status: reservation.status,
-      storeFlowStage: deriveStoreFlowStage(reservation.status, reservation.arrivalAt),
+      storeFlowStage: historyMeta.storeFlowStage,
       activityDate: reservation.activityDate,
       scheduledTime: reservation.scheduledTime,
       arrivalAt: reservation.arrivalAt,
@@ -278,13 +318,7 @@ export async function GET(req: Request) {
       pax: reservation.pax,
       isLicense: reservation.isLicense,
       totalPriceCents: reservation.totalPriceCents,
-      depositCents: computeReservationDepositCents({
-        storedDepositCents: reservation.depositCents,
-        quantity: reservation.quantity,
-        isLicense: Boolean(reservation.isLicense),
-        serviceCategory: reservation.service?.category ?? null,
-        items: reservation.items ?? [],
-      }),
+      depositCents: depositPlannedCents,
       depositHeld: reservation.depositHeld,
       depositHoldReason: reservation.depositHoldReason,
       isManualEntry: reservation.isManualEntry,
@@ -299,19 +333,58 @@ export async function GET(req: Request) {
       serviceCategory: displayService?.category ?? null,
       durationMinutes: displayDurationMinutes,
       paidCents,
+      servicePaidCents,
+      servicePendingCents,
       paidDepositCents,
+      depositPendingCents,
       depositCollectedCents,
       depositReturnedCents,
       depositRetainedCents: reservation.depositHeld ? Math.max(0, paidDepositCents) : 0,
-      totalToChargeCents:
-        Number(reservation.totalPriceCents ?? 0) +
-        computeReservationDepositCents({
-          storedDepositCents: reservation.depositCents,
-          quantity: reservation.quantity,
-          isLicense: Boolean(reservation.isLicense),
-          serviceCategory: reservation.service?.category ?? null,
-          items: reservation.items ?? [],
-        }),
+      totalToChargeCents: Number(reservation.totalPriceCents ?? 0) + depositPlannedCents,
+      historyMeta: {
+        reason: historyMeta.historicalReason,
+        reasonLabel: storeHistoryReasonLabel(historyMeta.historicalReason),
+        historicalAt: historyMeta.historicalAt,
+      },
+      commercial: {
+        holderName: reservation.customerName,
+        holderCountry: reservation.customerCountry,
+        source: reservation.source,
+        channelName: reservation.channel?.name ?? null,
+        serviceName: displayService?.name ?? null,
+        serviceCategory: displayService?.category ?? null,
+        durationMinutes: displayDurationMinutes,
+        quantity: reservation.quantity,
+        pax: reservation.pax,
+        isLicense: reservation.isLicense,
+        totalPriceCents: reservation.totalPriceCents,
+        servicePaidCents,
+        servicePendingCents,
+        depositCents: depositPlannedCents,
+        paidDepositCents,
+        depositPendingCents,
+        totalToChargeCents: Number(reservation.totalPriceCents ?? 0) + depositPlannedCents,
+        formalizedAt: reservation.formalizedAt,
+      },
+      contractual: {
+        primaryDriverName: contractsSummary.primaryDriverName,
+        driverNamesSummary: contractsSummary.driverNamesSummary,
+        contractsCount: contractsSummary.contractsCount,
+        readyContractsCount: contractsSummary.readyContractsCount,
+        signedContractsCount: contractsSummary.signedContractsCount,
+      },
+      adjustments: {
+        isManualEntry: reservation.isManualEntry,
+        manualEntryNote: reservation.manualEntryNote,
+        manualContractAttachments: attachment ?? [],
+        financialAdjustmentNote: reservation.financialAdjustmentNote,
+        financialAdjustedAt: reservation.financialAdjustedAt,
+        hasManualChanges:
+          Boolean(reservation.isManualEntry) ||
+          Boolean(reservation.financialAdjustedAt) ||
+          Boolean(reservation.financialAdjustmentNote) ||
+          Boolean((attachment ?? []).length),
+      },
       incidents: reservation.incidents,
     };
   });
