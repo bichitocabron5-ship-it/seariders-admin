@@ -1,5 +1,7 @@
 ﻿// src/lib/cashClosures.ts
 import { PaymentMethod, PaymentOrigin, PaymentDirection, RoleName, ShiftName } from "@prisma/client";
+import { getSlotPolicy } from "@/lib/slotting";
+import { BUSINESS_TZ, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
 
 export const METHODS: PaymentMethod[] = ["CASH", "CARD", "BIZUM", "TRANSFER", "VOUCHER"] as const;
 
@@ -80,7 +82,7 @@ export function originFromRoleName(role: RoleName): PaymentOrigin | null {
  *   En temporada alta, cambias STORE y BAR a true.
  */
 const SPLIT_BY_SHIFT: Partial<Record<PaymentOrigin, boolean>> = {
-  BOOTH: true,
+  BOOTH: false,
   STORE: false,
   BAR: false,
   WEB: false,
@@ -140,4 +142,32 @@ export function parseBusinessDate(yyyyMmDd?: string) {
   if (!Number.isFinite(d.getTime())) throw new Error("date inválida");
   d.setHours(0, 0, 0, 0);
   return d;
+}
+
+function ymdFromBusinessDate(businessDate: Date) {
+  const y = businessDate.getFullYear();
+  const m = String(businessDate.getMonth() + 1).padStart(2, "0");
+  const d = String(businessDate.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export async function getClosureWindow(
+  origin: PaymentOrigin,
+  businessDate: Date,
+  shift: ShiftName
+): Promise<{ from: Date; to: Date }> {
+  if (isOriginSplitByShift(origin)) {
+    return shiftWindow(origin, businessDate, shift);
+  }
+
+  const policy = await getSlotPolicy();
+  const ymd = ymdFromBusinessDate(businessDate);
+  const from = utcDateTimeFromYmdHmInTz(BUSINESS_TZ, ymd, policy.openTime);
+  const to = utcDateTimeFromYmdHmInTz(BUSINESS_TZ, ymd, policy.closeTime);
+
+  if (!from || !to) {
+    throw new Error("No se pudo resolver la ventana de cierre desde SlotPolicy.");
+  }
+
+  return { from, to };
 }

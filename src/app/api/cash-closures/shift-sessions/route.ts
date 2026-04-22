@@ -78,9 +78,7 @@ export async function GET(req: Request) {
     rows: filtered.map((r) => ({
       id: r.id,
       userId: r.user.id,
-      label: isOriginSplitByShift(origin)
-        ? (r.user.fullName ?? r.user.username ?? r.user.id)
-        : `${r.user.fullName ?? r.user.username ?? r.user.id} · ${r.shift === "AFTERNOON" ? "Tarde" : "Mañana"}`,
+      label: r.user.fullName ?? r.user.username ?? r.user.id,
       role: r.role.name,
       startedAt: r.startedAt,
       endedAt: r.endedAt,

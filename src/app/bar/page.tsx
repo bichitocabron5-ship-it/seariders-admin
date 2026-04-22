@@ -144,7 +144,7 @@ function labelAssetStatus(status: BarRentalAsset["status"]) {
 
 export default function BarPage() {
   const today = useMemo(() => businessDateToday(), []);
-  const [shift, setShift] = useState<"MORNING" | "AFTERNOON">("MORNING");
+  const shift = "MORNING" as const;
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -415,10 +415,6 @@ export default function BarPage() {
 
   const headerRight = (
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-      <Select value={shift} onChange={(e) => setShift(e.target.value as "MORNING" | "AFTERNOON")}>
-        <option value="MORNING">Mañana</option>
-        <option value="AFTERNOON">Tarde</option>
-      </Select>
       <Link href="/bar/cash-closures" style={{ ...styles.btn, textDecoration: "none" }}>
         Cierre de caja
       </Link>

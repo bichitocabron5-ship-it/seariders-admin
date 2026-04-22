@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Page, Card, Button, Input, Select, Alert, Stat, styles } from "@/components/ui";
+import { Page, Card, Button, Input, Alert, Stat, styles } from "@/components/ui";
 
 type Summary = {
   ok: boolean;
@@ -112,7 +112,7 @@ function MethodKeyPill({ m }: { m: Method }) {
 export default function BoothCashClosuresPage() {
   const origin = "BOOTH" as const;
 
-  const [shift, setShift] = useState<"MORNING" | "AFTERNOON">("MORNING");
+  const shift = "MORNING" as const;
   const [loading, setLoading] = useState(true);
   const [sum, setSum] = useState<Summary | null>(null);
 
@@ -308,7 +308,7 @@ export default function BoothCashClosuresPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shift]);
+  }, []);
 
   const windowFrom = sum?.computed?.meta?.windowFrom;
   const windowTo = sum?.computed?.meta?.windowTo;
@@ -317,10 +317,6 @@ export default function BoothCashClosuresPage() {
 
   const headerRight = (
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-      <Select value={shift} onChange={(e) => setShift(e.target.value as "MORNING" | "AFTERNOON")}>
-        <option value="MORNING">Mañana</option>
-        <option value="AFTERNOON">Tarde</option>
-      </Select>
       <Button onClick={load}>Refrescar</Button>
     </div>
   );

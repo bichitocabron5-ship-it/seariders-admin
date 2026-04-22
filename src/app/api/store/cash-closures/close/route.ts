@@ -7,7 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { PaymentOrigin, ShiftName, RoleName } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
-import { originFromRoleName, shiftWindow, sumByMethod, diffTotals, emptyMethodMap, METHODS, parseBusinessDate, isOriginSplitByShift, normalizeClosureShift } from "@/lib/cashClosures";
+import { originFromRoleName, getClosureWindow, sumByMethod, diffTotals, emptyMethodMap, METHODS, parseBusinessDate, isOriginSplitByShift, normalizeClosureShift } from "@/lib/cashClosures";
 
 export const runtime = "nodejs";
 
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const { from, to } = shiftWindow(origin, businessDate, shift);
+  const { from, to } = await getClosureWindow(origin, businessDate, shift);
 
   try {
     const result = await prisma.$transaction(async (tx) => {

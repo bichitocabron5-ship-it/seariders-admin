@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { PaymentOrigin, ShiftName, RoleName } from "@prisma/client";
-import { originFromRoleName, sumByMethod, parseBusinessDate, shiftWindow, isOriginSplitByShift, normalizeClosureShift } from "@/lib/cashClosures";
+import { originFromRoleName, sumByMethod, parseBusinessDate, getClosureWindow, isOriginSplitByShift, normalizeClosureShift } from "@/lib/cashClosures";
 
 export const runtime = "nodejs";
 const DEFAULT_CASH_FUND_CENTS = 10_000;
@@ -76,7 +76,7 @@ export async function GET(req: Request) {
     const shift = normalizeClosureShift(origin, requestedShift);
     const businessDate = parseBusinessDate(date);
 
-    const { from, to } = shiftWindow(origin, businessDate, shift);
+    const { from, to } = await getClosureWindow(origin, businessDate, shift);
     const payments = await prisma.payment.findMany({
       where: isOriginSplitByShift(origin)
         ? {

@@ -5,7 +5,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { PaymentOrigin, ShiftName, RoleName } from "@prisma/client";
-import { originFromRoleName, shiftWindow, sumByMethod, emptyMethodMap, METHODS, parseBusinessDate } from "@/lib/cashClosures";
+import { originFromRoleName, getClosureWindow, sumByMethod, emptyMethodMap, METHODS, parseBusinessDate } from "@/lib/cashClosures";
 
 export const runtime = "nodejs";
 
@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const { from, to } = shiftWindow(origin, businessDate, shift);
+  const { from, to } = await getClosureWindow(origin, businessDate, shift);
 
   const payments = await prisma.payment.findMany({
     where: {
