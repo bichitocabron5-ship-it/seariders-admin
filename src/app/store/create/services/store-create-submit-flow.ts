@@ -170,8 +170,8 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
   });
 
   await ensureOkResponse(res, "No se pudo formalizar la reserva");
-  const j = await res.json();
-  args.router.push(`/store/create?editFrom=${j.id}`);
+  await res.json();
+  args.router.push("/store");
 }
 
 export async function submitStoreCreateCreateFlow(args: SharedArgs & {

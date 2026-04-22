@@ -327,6 +327,28 @@ export function ContractCard({
     }
   }, [c.status]);
 
+  useEffect(() => {
+    if (!awaitingExternalSignature) return;
+    if (c.status === "SIGNED" || c.status === "VOID") return;
+
+    const intervalId = window.setInterval(() => {
+      void onSaved();
+    }, 2500);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void onSaved();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [awaitingExternalSignature, c.status, onSaved]);
+
   function validateBeforeAdvance(action: "ready" | "signer") {
     setAdvanceAttempted(true);
     if (hasContractAdvanceErrors) {
