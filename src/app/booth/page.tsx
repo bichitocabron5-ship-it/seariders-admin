@@ -781,7 +781,6 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
         <div style={{ display: "grid", gap: 16 }}>
           <BoothPreReservationFormSection
             cardStyle={cardStyle}
-            darkBtn={darkBtn}
             fieldStyle={fieldStyle}
             firstName={firstName}
             customerCountry={customerCountry}

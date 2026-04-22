@@ -1,6 +1,8 @@
 "use client";
 
+import type React from "react";
 import Select from "react-select";
+import { ActionButton, AlertBanner, SectionCard } from "@/components/seariders-ui";
 import type { CountryOption } from "@/lib/countries";
 
 type Service = { id: string; name: string; category: string; code?: string | null; isExternalActivity?: boolean | null };
@@ -18,7 +20,6 @@ type Channel = {
 
 type Props = {
   cardStyle: React.CSSProperties;
-  darkBtn: React.CSSProperties;
   fieldStyle: React.CSSProperties;
   firstName: string;
   customerCountry: string;
@@ -75,8 +76,6 @@ type Props = {
 };
 
 export default function BoothPreReservationFormSection({
-  cardStyle,
-  darkBtn,
   fieldStyle,
   firstName,
   customerCountry,
@@ -132,16 +131,7 @@ export default function BoothPreReservationFormSection({
   setBoothNote,
 }: Props) {
   return (
-    <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
-      <div>
-        <h2 style={{ margin: 0, fontSize: 22 }}>{isExternalCharge ? "Cobro externo" : "Pre-reserva"}</h2>
-        <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-          {isExternalCharge
-            ? "Registro directo de cobro con comision para actividad externa."
-            : "Alta rapida para carpa con precio, descuento y canal."}
-        </div>
-      </div>
-
+    <SectionCard eyebrow="Booth" title={isExternalCharge ? "Cobro externo" : "Pre-reserva"}>
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
           <label>
@@ -151,7 +141,7 @@ export default function BoothPreReservationFormSection({
         </div>
 
         <div style={{ display: "grid", gap: 6 }}>
-          <div>Pais</div>
+          <div>País</div>
           <Select<CountryOption, false>
             instanceId="booth-country"
             inputId="booth-country"
@@ -163,7 +153,7 @@ export default function BoothPreReservationFormSection({
         </div>
 
         <label>
-          Categoria
+          Categoría
           <select
             value={category}
             onChange={(e) => {
@@ -198,7 +188,7 @@ export default function BoothPreReservationFormSection({
         </label>
 
         <label>
-          Duracion
+          Duración
           <select value={optionId} onChange={(e) => setOptionId(e.target.value)} style={fieldStyle}>
             {optionsForService.map((option) => (
               <option key={option.id} value={option.id}>
@@ -248,7 +238,7 @@ export default function BoothPreReservationFormSection({
         {selectedChannel && showDiscountPolicy ? (
           <>
             <label>
-              Quien asume el descuento
+              Quién asume el descuento
               <select
                 value={discountResponsibility}
                 onChange={(e) => setDiscountResponsibility(e.target.value as "COMPANY" | "PROMOTER" | "SHARED")}
@@ -284,72 +274,64 @@ export default function BoothPreReservationFormSection({
           ) : null}
         </div>
 
-        <div
-          style={{
-            padding: 12,
-            borderRadius: 14,
-            border: "1px solid #dbeafe",
-            background: "#f8fbff",
-            display: "grid",
-            gap: 6,
-          }}
-        >
-          <div style={{ fontSize: 12, color: "#475569", fontWeight: 800 }}>Resumen antes de registrar</div>
-          <div style={{ fontSize: 13, color: "#334155" }}>
-            Precio base: <strong>{euros(baseTotalCents)}</strong>
-          </div>
-          <div style={{ fontSize: 13, color: discountCentsClamped > 0 ? "#0f172a" : "#64748b" }}>
-            Descuento aplicado: <strong>-{euros(discountCentsClamped)}</strong>
-          </div>
-          <div style={{ fontSize: 15, color: "#0f172a", fontWeight: 900 }}>
-            {isExternalCharge ? "Importe final del cobro" : "Precio final de la reserva"}: {euros(finalTotalCents)}
-          </div>
-          {selectedChannel ? (
-            commissionPct > 0 ? (
-              <>
-                <div style={{ fontSize: 13, color: "#334155" }}>
-                  Comision estimada para Seariders ({selectedChannel.name} · {commissionPct.toFixed(2)}%):{" "}
-                  <strong>{euros(commissionCents)}</strong>
-                </div>
-                <div style={{ fontSize: 13, color: "#334155" }}>
-                  Base comisionable: <strong>{euros(commissionBaseCents)}</strong>
-                </div>
-                {showDiscountPolicy ? (
-                  <div style={{ fontSize: 12, color: "#475569" }}>
-                    Descuento asumido por promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa:{" "}
-                    <strong>{euros(companyDiscountCents)}</strong>
+        <SectionCard eyebrow="Booth" title="Resumen antes de registrar">
+          <div style={{ display: "grid", gap: 6 }}>
+            <div style={{ fontSize: 13, color: "#334155" }}>
+              Precio base: <strong>{euros(baseTotalCents)}</strong>
+            </div>
+            <div style={{ fontSize: 13, color: discountCentsClamped > 0 ? "#0f172a" : "#64748b" }}>
+              Descuento aplicado: <strong>-{euros(discountCentsClamped)}</strong>
+            </div>
+            <div style={{ fontSize: 15, color: "#0f172a", fontWeight: 900 }}>
+              {isExternalCharge ? "Importe final del cobro" : "Precio final de la reserva"}: {euros(finalTotalCents)}
+            </div>
+            {selectedChannel ? (
+              commissionPct > 0 ? (
+                <>
+                  <div style={{ fontSize: 13, color: "#334155" }}>
+                    Comisión estimada para SeaRiders ({selectedChannel.name} · {commissionPct.toFixed(2)}%):{" "}
+                    <strong>{euros(commissionCents)}</strong>
                   </div>
-                ) : null}
-                <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 800 }}>
-                  Neto estimado a liquidar al partner: {euros(netAfterCommissionCents)}
+                  <div style={{ fontSize: 13, color: "#334155" }}>
+                    Base comisionable: <strong>{euros(commissionBaseCents)}</strong>
+                  </div>
+                  {showDiscountPolicy ? (
+                    <div style={{ fontSize: 12, color: "#475569" }}>
+                      Descuento asumido por promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa:{" "}
+                      <strong>{euros(companyDiscountCents)}</strong>
+                    </div>
+                  ) : null}
+                  <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 800 }}>
+                    Neto estimado a liquidar al partner: {euros(netAfterCommissionCents)}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 12, color: "#64748b" }}>
+                  El canal seleccionado no tiene comisión configurada para esta actividad.
                 </div>
-              </>
+              )
+            ) : null}
+            {isJetski && quantity > 1 ? (
+              <div style={{ fontSize: 13, color: "#334155" }}>
+                Precio final por moto: <strong>{euros(Math.round(finalTotalCents / quantity))}</strong>
+              </div>
+            ) : null}
+            {discountCentsRaw > maxManualDiscountCents ? (
+              <AlertBanner tone="warning" title="Descuento limitado">
+                El descuento introducido supera el máximo permitido y se aplicará el importe limitado.
+              </AlertBanner>
             ) : (
               <div style={{ fontSize: 12, color: "#64748b" }}>
-                El canal seleccionado no tiene comision configurada para esta actividad.
+                {isExternalCharge
+                  ? "Se registrará un cobro directo en caja, sin generar código ni reserva."
+                  : "Este será el total que se guardará al crear la reserva."}
               </div>
-            )
-          ) : null}
-          {isJetski && quantity > 1 ? (
-            <div style={{ fontSize: 13, color: "#334155" }}>
-              Precio final por moto: <strong>{euros(Math.round(finalTotalCents / quantity))}</strong>
-            </div>
-          ) : null}
-          {discountCentsRaw > maxManualDiscountCents ? (
-            <div style={{ fontSize: 12, color: "#b91c1c" }}>
-              El descuento introducido supera el maximo permitido y se aplicara el importe limitado.
-            </div>
-          ) : (
-            <div style={{ fontSize: 12, color: "#64748b" }}>
-              {isExternalCharge
-                ? "Se registrara un cobro directo en caja, sin generar codigo ni reserva."
-                : "Este sera el total que se guardara al crear la reserva."}
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        </SectionCard>
 
         <label>
-          {selectedService?.isExternalActivity ? "Canal de comision externa" : "Canal opcional"}
+          {selectedService?.isExternalActivity ? "Canal de comisión externa" : "Canal opcional"}
           <select value={channelId} onChange={(e) => setChannelId(e.target.value)} style={fieldStyle}>
             <option value="">(ninguno)</option>
             {channels.map((channel) => (
@@ -361,13 +343,13 @@ export default function BoothPreReservationFormSection({
         </label>
         {selectedService?.isExternalActivity ? (
           <div style={{ fontSize: 12, color: "#64748b" }}>
-            Solo se muestran partners externos habilitados para liquidar comision en Booth.
+            Solo se muestran partners externos habilitados para liquidar comisión en Booth.
           </div>
         ) : null}
 
         {isExternalCharge ? (
           <label>
-            Metodo de pago
+            Método de pago
             <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PayMethod)} style={fieldStyle}>
               <option value="CARD">Tarjeta</option>
               <option value="CASH">Efectivo</option>
@@ -384,15 +366,15 @@ export default function BoothPreReservationFormSection({
             onChange={(e) => setBoothNote(e.target.value)}
             maxLength={500}
             rows={4}
-            placeholder="Ej: cliente viene con bebe, atencion en ingles, espera a otro grupo..."
+            placeholder="Ej: cliente viene con bebé, atención en inglés, espera a otro grupo..."
             style={{ ...fieldStyle, minHeight: 96, resize: "vertical" }}
           />
         </label>
 
-        <button type="submit" style={{ ...darkBtn, width: "100%" }}>
-          {isExternalCharge ? "Registrar cobro con comision" : "Crear y generar codigo"}
-        </button>
+        <ActionButton type="submit" variant="primary" style={{ width: "100%" }}>
+          {isExternalCharge ? "Registrar cobro con comisión" : "Crear y generar código"}
+        </ActionButton>
       </form>
-    </section>
+    </SectionCard>
   );
 }

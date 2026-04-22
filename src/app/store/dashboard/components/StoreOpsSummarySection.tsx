@@ -2,6 +2,8 @@
 
 import type React from "react";
 
+import { SectionCard, StatusBadge } from "@/components/seariders-ui";
+import { brand } from "@/lib/brand";
 import { StoreMetricCard, StoreMetricGrid } from "@/components/store-ui";
 
 import type { CashClosureSummary, CashSummary, CommissionSummary } from "../types";
@@ -17,17 +19,12 @@ type StoreOpsSummarySectionProps = {
 };
 
 const panelCard: React.CSSProperties = {
-  padding: 16,
-  border: "1px solid #dde4ee",
-  borderRadius: 20,
-  background: "#fff",
+  padding: 10,
+  border: `1px solid ${brand.colors.border}`,
+  borderRadius: 16,
+  background: brand.colors.surface,
   display: "grid",
   gap: 12,
-};
-
-const panelTitle: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 20,
 };
 
 const smallLabel: React.CSSProperties = {
@@ -46,8 +43,7 @@ export function StoreOpsSummarySection({
   return (
     <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
       {cashSummary ? (
-        <div style={panelCard}>
-          <div style={panelTitle}>Caja de hoy</div>
+        <SectionCard eyebrow="Store" title="Caja de hoy">
           <StoreMetricGrid>
             <StoreMetricCard label="Cobrado total" value={euros(cashSummary.totalCents)} />
             <StoreMetricCard label="Servicio" value={euros(cashSummary.serviceCents)} />
@@ -74,12 +70,14 @@ export function StoreOpsSummarySection({
               ))}
             </div>
           </div>
-        </div>
+        </SectionCard>
       ) : null}
 
-      <div style={panelCard}>
-        <div style={panelTitle}>Comisiones</div>
-        <div style={{ fontSize: 12, opacity: 0.8 }}>Estado: {commissionSummary ? "Cargado" : "Sin datos"}</div>
+      <SectionCard
+        eyebrow="Store"
+        title="Comisiones"
+        action={<StatusBadge tone={commissionSummary ? "success" : "neutral"}>{commissionSummary ? "Cargado" : "Sin datos"}</StatusBadge>}
+      >
         {commissionSummary ? (
           <div style={{ display: "grid", gap: 6 }}>
             <div>
@@ -89,12 +87,9 @@ export function StoreOpsSummarySection({
               <div
                 key={origin}
                 style={{
-                  display: "grid",
-                  gap: 6,
+                  ...panelCard,
                   padding: 10,
-                  borderRadius: 14,
-                  border: "1px solid #e5e7eb",
-                  background: "#f8fafc",
+                  background: brand.colors.surfaceSoft,
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -113,10 +108,17 @@ export function StoreOpsSummarySection({
         ) : (
           <div style={{ opacity: 0.6 }}>No hay datos de comisión o falló la carga.</div>
         )}
-      </div>
+      </SectionCard>
 
-      <div style={panelCard}>
-        <div style={panelTitle}>Estado operativo</div>
+      <SectionCard
+        eyebrow="Store"
+        title="Estado operativo"
+        action={
+          <StatusBadge tone={cashClosureSummary?.isClosed ? "warning" : "success"}>
+            {cashClosureSummary?.isClosed ? "Caja cerrada" : "Caja abierta"}
+          </StatusBadge>
+        }
+      >
         <div style={{ display: "grid", gap: 8 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
             <span style={smallLabel}>Cierre de caja</span>
@@ -140,7 +142,7 @@ export function StoreOpsSummarySection({
               : "Pendiente de cierre en este turno."}
           </div>
         </div>
-      </div>
+      </SectionCard>
     </section>
   );
 }
