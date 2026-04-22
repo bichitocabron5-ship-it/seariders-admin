@@ -2,7 +2,7 @@
 "use client";
 
 import type React from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import CashChangeHelper from "@/components/cash-change-helper";
 
@@ -67,6 +67,7 @@ export function ReservationOpsPanel({
     { amountEuros: "", method: "CASH", receivedEuros: "" },
   ]);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const busyActionRef = useRef<string | null>(null);
   const pendingService = Number(r.pendingServiceCents ?? 0);
   const pendingDeposit = Number(r.pendingDepositCents ?? 0);
   const paidDepositCents = Number(r.paidDepositCents ?? 0);
@@ -77,11 +78,13 @@ export function ReservationOpsPanel({
   const isBusy = busyAction !== null;
 
   async function runBusy(action: string, work: () => Promise<void>) {
-    if (busyAction) return;
+    if (busyActionRef.current) return;
+    busyActionRef.current = action;
     setBusyAction(action);
     try {
       await work();
     } finally {
+      busyActionRef.current = null;
       setBusyAction(null);
     }
   }

@@ -96,6 +96,8 @@ export async function POST(req: Request) {
     await assertCashOpenForUser(session.userId, session.role as RoleName);
 
     const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "Reservation" WHERE "id" = ${reservationId} FOR UPDATE`;
+
       const reservation = await tx.reservation.findUnique({
         where: { id: reservationId },
         select: {
