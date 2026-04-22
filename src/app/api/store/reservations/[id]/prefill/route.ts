@@ -20,6 +20,14 @@ function startOfToday() {
   return d;
 }
 
+function fallbackOptionalString(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const normalized = String(value ?? "").trim();
+    if (normalized && normalized !== "-") return normalized;
+  }
+  return null;
+}
+
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await requireStore();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -67,6 +75,21 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       licenseSchool: true,
       licenseType: true,
       licenseNumber: true,
+      contracts: {
+        orderBy: { unitIndex: "asc" },
+        take: 1,
+        select: {
+          driverName: true,
+          driverPhone: true,
+          driverEmail: true,
+          driverCountry: true,
+          driverAddress: true,
+          driverPostalCode: true,
+          driverBirthDate: true,
+          driverDocType: true,
+          driverDocNumber: true,
+        },
+      },
       giftVoucherId: true,
       passVoucherId: true,
       payments: {
@@ -111,6 +134,22 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   if (!r) return NextResponse.json({ error: "No existe" }, { status: 404 });
 
+  const primaryContract = r.contracts[0] ?? null;
+  const boothCompatibilityFallback =
+    r.source === "BOOTH" && !r.formalizedAt ? primaryContract : null;
+  const reservation = {
+    ...r,
+    customerName: fallbackOptionalString(r.customerName, boothCompatibilityFallback?.driverName),
+    customerPhone: fallbackOptionalString(r.customerPhone, boothCompatibilityFallback?.driverPhone),
+    customerEmail: fallbackOptionalString(r.customerEmail, boothCompatibilityFallback?.driverEmail),
+    customerCountry: fallbackOptionalString(r.customerCountry, boothCompatibilityFallback?.driverCountry),
+    customerAddress: fallbackOptionalString(r.customerAddress, boothCompatibilityFallback?.driverAddress),
+    customerPostalCode: fallbackOptionalString(r.customerPostalCode, boothCompatibilityFallback?.driverPostalCode),
+    customerBirthDate: r.customerBirthDate ?? boothCompatibilityFallback?.driverBirthDate ?? null,
+    customerDocType: fallbackOptionalString(r.customerDocType, boothCompatibilityFallback?.driverDocType),
+    customerDocNumber: fallbackOptionalString(r.customerDocNumber, boothCompatibilityFallback?.driverDocNumber),
+  };
+
   const isPast = r.activityDate < startOfToday();
   const isHistorical = isPast && (r.status === "COMPLETED" || r.status === "CANCELED");
   const isCanceled = r.status === "CANCELED";
@@ -126,7 +165,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const pendingServiceCents = Math.max(0, totalServiceCents - paidServiceCents);
 
   return NextResponse.json({
-    reservation: r,
+    reservation,
     financial: {
       totalServiceCents,
       paidServiceCents: Math.max(0, paidServiceCents),

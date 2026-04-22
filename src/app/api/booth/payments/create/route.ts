@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   const json = await req.json().catch(() => null);
   const parsed = BodySchema.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Body inválido", details: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json({ error: "Body invalido", details: parsed.error.flatten() }, { status: 400 });
   }
 
   await assertCashOpenForUser(session.userId, session.role as RoleName, session.shiftSessionId);
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
 
   if (amountCents > pending) {
     return NextResponse.json(
-      { error: `Importe supera lo pendiente. Pendiente: ${pending} céntimos` },
+      { error: `Importe supera lo pendiente. Pendiente: ${pending} centimos` },
       { status: 400 }
     );
   }
@@ -77,10 +77,6 @@ export async function POST(req: Request) {
     role: RoleName.BOOTH,
     shiftSessionId: session.shiftSessionId,
   });
-
-  if (!shiftSession && String(session.role) !== "ADMIN") {
-    return NextResponse.json({ error: "No hay shift session de carpa válida para este cobro." }, { status: 400 });
-  }
 
   const payment = await prisma.payment.create({
     data: {
