@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { brand } from "@/lib/brand";
 
 export const styles = {
   page: {
@@ -82,8 +83,8 @@ export const styles = {
   btnPrimary: {
     padding: "10px 14px",
     borderRadius: 12,
-    border: "1px solid #0f172a",
-    background: "#0f172a",
+    border: `1px solid ${brand.colors.primary}`,
+    background: brand.colors.primary,
     color: "#fff",
     fontWeight: 950,
     cursor: "pointer",
@@ -93,8 +94,8 @@ export const styles = {
   btnDanger: {
     padding: "10px 12px",
     borderRadius: 12,
-    border: "1px solid #b91c1c",
-    background: "#b91c1c",
+    border: `1px solid ${brand.colors.danger}`,
+    background: brand.colors.danger,
     color: "#fff",
     fontWeight: 950,
     cursor: "pointer",
@@ -197,9 +198,9 @@ export function Alert(props: { kind?: "error" | "info"; children: React.ReactNod
       style={{
         padding: 13,
         borderRadius: 16,
-        border: `1px solid ${isErr ? "#fecaca" : "#dbe4ea"}`,
+        border: `1px solid ${isErr ? "#fecaca" : brand.colors.border}`,
         background: isErr ? "#fff1f2" : "rgba(248, 250, 252, 0.92)",
-        color: isErr ? "#991b1b" : "#334155",
+        color: isErr ? "#991b1b" : brand.colors.muted,
         boxShadow: isErr ? "none" : "0 8px 20px rgba(15, 23, 42, 0.03)",
       }}
     >

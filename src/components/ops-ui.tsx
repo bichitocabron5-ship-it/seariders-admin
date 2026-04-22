@@ -1,6 +1,7 @@
 "use client";
 
 import type React from "react";
+import { brand } from "@/lib/brand";
 
 export const opsStyles = {
   pageShell: {
@@ -40,16 +41,16 @@ export const opsStyles = {
     borderRadius: 12,
     background: "#fff",
     textDecoration: "none",
-    color: "#111",
+    color: brand.colors.primary,
     textAlign: "center",
   } as React.CSSProperties,
 
   primaryButton: {
     padding: "10px 14px",
     fontWeight: 900,
-    border: "1px solid #111",
+    border: `1px solid ${brand.colors.primary}`,
     borderRadius: 12,
-    background: "#111",
+    background: brand.colors.primary,
     color: "#fff",
   } as React.CSSProperties,
 
@@ -57,7 +58,7 @@ export const opsStyles = {
     padding: "6px 12px",
     borderRadius: 999,
     border: "1px solid rgba(153, 246, 228, 0.35)",
-    background: "rgba(15, 23, 42, 0.24)",
+    background: "rgba(11, 34, 57, 0.28)",
     fontWeight: 900,
     color: "#fff",
   } as React.CSSProperties,

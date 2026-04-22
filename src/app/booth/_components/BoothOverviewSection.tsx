@@ -1,6 +1,7 @@
 "use client";
 
 import type React from "react";
+import { brand } from "@/lib/brand";
 
 type CashClosureSummary = {
   ok: boolean;
@@ -45,8 +46,7 @@ export default function BoothOverviewSection({
     <>
       <section
         style={{
-          background:
-            "radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 30%), radial-gradient(circle at right bottom, rgba(45, 212, 191, 0.12), transparent 28%), linear-gradient(135deg, #082f49 0%, #0f766e 55%, #052e2b 100%)",
+          background: brand.gradients.hero,
           color: "#ecfeff",
           display: "grid",
           gap: 18,
@@ -58,7 +58,7 @@ export default function BoothOverviewSection({
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
           <div style={{ display: "grid", gap: 8, maxWidth: 760 }}>
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#99f6e4" }}>
-              Operativa de carpa
+              SeaRiders Booth
             </div>
             <h1 style={{ margin: 0, fontSize: "clamp(2rem, 5vw, 3.25rem)", lineHeight: 1, fontWeight: 950 }}>Booth</h1>
             <div style={{ fontSize: 14, color: "#ccfbf1" }}>

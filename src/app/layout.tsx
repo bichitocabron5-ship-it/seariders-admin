@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { brand } from "@/lib/brand";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,25 +14,28 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  applicationName: brand.adminName,
   title: {
-    default: "SeaRiders Admin",
-    template: "%s | SeaRiders Admin",
+    default: brand.adminName,
+    template: `%s | ${brand.adminName}`,
   },
-  description: "Panel operativo y de administracion de SeaRiders para tienda, plataforma, carpa y flota.",
+  description: brand.description,
   icons: {
-    icon: [{ url: "/logo-seariders.png", type: "image/png" }],
-    shortcut: ["/logo-seariders.png"],
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    shortcut: ["/icon.svg"],
     apple: [{ url: "/logo-seariders.png", type: "image/png" }],
   },
+  themeColor: "#0b2239",
   openGraph: {
-    title: "SeaRiders Admin",
-    description: "Panel operativo y de administracion de SeaRiders.",
-    images: [{ url: "/logo-seariders.png" }],
+    title: brand.adminName,
+    description: brand.description,
+    siteName: brand.name,
+    images: [{ url: "/logo-seariders.png", alt: brand.adminName }],
   },
   twitter: {
     card: "summary",
-    title: "SeaRiders Admin",
-    description: "Panel operativo y de administracion de SeaRiders.",
+    title: brand.adminName,
+    description: brand.description,
     images: ["/logo-seariders.png"],
   },
 };

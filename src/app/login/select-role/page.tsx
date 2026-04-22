@@ -2,7 +2,8 @@ import { RoleName } from "@prisma/client";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-
+import { SeaRidersLogo } from "@/components/brand";
+import { brand } from "@/lib/brand";
 import { type AppSession, sessionOptions } from "@/lib/session";
 
 const ROLE_LABEL: Record<RoleName, string> = {
@@ -11,7 +12,7 @@ const ROLE_LABEL: Record<RoleName, string> = {
   PLATFORM: "Plataforma",
   BOOTH: "Carpa",
   BAR: "Bar",
-  MECHANIC: "Mecánica",
+  MECHANIC: "Mecanica",
   HR: "RR. HH.",
 };
 
@@ -33,14 +34,14 @@ export default async function LoginSelectRolePage({
   const params = await searchParams;
   const errorText =
     params.error === "invalid_role"
-      ? "Selecciona un acceso válido para este usuario."
+      ? "Selecciona un acceso valido para este usuario."
       : null;
 
   return (
     <div
       className="login-shell"
       style={{
-        background: "linear-gradient(135deg, #e0f2fe 0%, #f8fafc 45%, #ecfccb 100%)",
+        background: brand.gradients.publicHero,
       }}
     >
       <div className="login-card">
@@ -48,34 +49,20 @@ export default async function LoginSelectRolePage({
           className="login-aside"
           style={{
             padding: 32,
-            background: "linear-gradient(160deg, #082f49 0%, #0f766e 55%, #164e63 100%)",
+            background: brand.gradients.hero,
             color: "#f8fafc",
             display: "grid",
-            gap: 18,
+            gap: 20,
             alignContent: "space-between",
           }}
         >
-          <div style={{ display: "grid", gap: 16 }}>
-            <div
-              style={{
-                display: "inline-flex",
-                width: "fit-content",
-                padding: "8px 12px",
-                borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.18)",
-                background: "rgba(255,255,255,0.08)",
-                fontSize: 12,
-                fontWeight: 800,
-              }}
-            >
-              SeaRiders Admin
-            </div>
-            <div style={{ fontSize: 42, lineHeight: 1.02, fontWeight: 950, maxWidth: 360 }}>
+          <div style={{ display: "grid", gap: 18 }}>
+            <SeaRidersLogo light compact subtitle="Role selection" />
+            <div style={{ fontSize: 42, lineHeight: 1.02, fontWeight: 950, maxWidth: 380 }}>
               Selecciona el acceso con el que vas a trabajar.
             </div>
-            <div style={{ fontSize: 15, lineHeight: 1.55, opacity: 0.86, maxWidth: 420 }}>
-              El mismo usuario puede entrar con distintos perfiles. Elige el rol operativo que
-              necesitas para este turno.
+            <div style={{ fontSize: 15, lineHeight: 1.55, opacity: 0.88, maxWidth: 430 }}>
+              El mismo usuario puede entrar con distintos perfiles. Elige el rol operativo que necesitas para este turno.
             </div>
           </div>
 
@@ -85,7 +72,7 @@ export default async function LoginSelectRolePage({
             </div>
             <div>
               <strong>Turno:</strong>{" "}
-              {session.pendingLogin.shift === "MORNING" ? "Mañana" : "Tarde"}
+              {session.pendingLogin.shift === "MORNING" ? "Manana" : "Tarde"}
             </div>
           </div>
         </div>
@@ -97,18 +84,36 @@ export default async function LoginSelectRolePage({
             display: "grid",
             alignContent: "center",
             gap: 16,
-            background: "rgba(255,255,255,0.88)",
+            background: "rgba(255,255,255,0.9)",
           }}
         >
           <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#0f766e", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: brand.colors.secondary, textTransform: "uppercase", letterSpacing: 0.5 }}>
               Acceso
             </div>
-            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 950, color: "#111827" }}>
+            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 950, color: brand.colors.primary }}>
               Elegir rol de entrada
             </h1>
             <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>
-              La sesión se abrirá con el rol seleccionado y te llevará al módulo correcto.
+              La sesion se abrira con el rol seleccionado y te llevara al modulo correcto.
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: 14,
+              border: "1px solid #dbe4ea",
+              background: "#f8fafc",
+              display: "grid",
+              gap: 4,
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 900, color: brand.colors.primary, textTransform: "uppercase", letterSpacing: 0.04 }}>
+              Roles disponibles
+            </div>
+            <div style={{ fontSize: 13, color: "#526277", lineHeight: 1.5 }}>
+              {session.pendingLogin.roles.length} acceso(s) operativo(s) habilitado(s) para este usuario.
             </div>
           </div>
 
@@ -137,7 +142,7 @@ export default async function LoginSelectRolePage({
                 style={{
                   padding: 16,
                   borderRadius: 14,
-                  border: "1px solid #d1d5db",
+                  border: "1px solid #d1dbe6",
                   background: "#fff",
                   textAlign: "left",
                   display: "grid",
@@ -145,7 +150,7 @@ export default async function LoginSelectRolePage({
                   cursor: "pointer",
                 }}
               >
-                <span style={{ fontSize: 15, fontWeight: 900, color: "#111827" }}>
+                <span style={{ fontSize: 15, fontWeight: 900, color: brand.colors.primary }}>
                   {ROLE_LABEL[role as RoleName] ?? role}
                 </span>
                 <span style={{ fontSize: 12, color: "#64748b" }}>{role}</span>

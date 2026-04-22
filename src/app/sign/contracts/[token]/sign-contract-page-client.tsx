@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
+import { PublicBrandHeader } from "@/components/brand";
+import { brand } from "@/lib/brand";
 import { getPublicCopy, type PublicLanguage } from "@/lib/public-links/i18n";
 
 type ContractView = {
@@ -105,7 +107,7 @@ export function SignContractPageClient({
     <main
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)",
+        background: brand.gradients.publicHero,
         display: "grid",
         placeItems: "center",
         padding: 16,
@@ -114,62 +116,76 @@ export function SignContractPageClient({
       <section
         style={{
           width: "min(980px, 100%)",
-          background: "#fff",
-          borderRadius: 20,
-          border: "1px solid #e2e8f0",
-          boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
-          padding: 18,
           display: "grid",
-          gap: 14,
+          gap: 16,
         }}
       >
-        <div style={{ display: "grid", gap: 6 }}>
-          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>
-            {copy.signPage.eyebrow}
-          </div>
-          <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>{copy.signPage.title(contract.unitIndex)}</h1>
-          <div style={{ fontSize: 14, color: "#475569" }}>
-            {contract.serviceName}
-            {contract.durationMinutes ? ` | ${contract.durationMinutes} min` : ""}
-            {contract.customerName ? ` | ${contract.customerName}` : ""}
-          </div>
-        </div>
+        <PublicBrandHeader
+          eyebrow={copy.signPage.eyebrow}
+          title={copy.signPage.title(contract.unitIndex)}
+          subtitle="Firma remota de contrato con identidad visual alineada a SeaRiders."
+        />
 
-        {done ? (
-          <div style={{ padding: 14, borderRadius: 14, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534", fontWeight: 900 }}>
-            {copy.signPage.done}
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: 20,
+            border: "1px solid #dbe4ea",
+            boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+            padding: 18,
+            display: "grid",
+            gap: 14,
+          }}
+        >
+          <div style={{ display: "grid", gap: 6 }}>
+            <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>{copy.signPage.title(contract.unitIndex)}</h1>
+            <div style={{ fontSize: 14, color: "#475569" }}>
+              {contract.serviceName}
+              {contract.durationMinutes ? ` | ${contract.durationMinutes} min` : ""}
+              {contract.customerName ? ` | ${contract.customerName}` : ""}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={metaPillStyle}>{contract.serviceName}</span>
+              {contract.durationMinutes ? <span style={metaPillStyle}>{contract.durationMinutes} min</span> : null}
+              {contract.customerName ? <span style={metaPillStyle}>{contract.customerName}</span> : null}
+            </div>
           </div>
-        ) : (
-          <div style={{ padding: 14, borderRadius: 14, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8", fontWeight: 700 }}>
-            {copy.signPage.intro}
+
+          {done ? (
+            <div style={{ padding: 14, borderRadius: 14, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534", fontWeight: 900 }}>
+              {copy.signPage.done}
+            </div>
+          ) : (
+            <div style={{ padding: 14, borderRadius: 14, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8", fontWeight: 700 }}>
+              {copy.signPage.intro}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <a
+              href={`/api/sign/contracts/${encodeURIComponent(token)}/pdf?lang=${encodeURIComponent(language)}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "12px 14px",
+                borderRadius: 12,
+                border: `1px solid ${brand.colors.primary}`,
+                background: brand.colors.primary,
+                color: "#fff",
+                fontWeight: 900,
+                textDecoration: "none",
+              }}
+            >
+              {copy.signPage.download}
+            </a>
           </div>
-        )}
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <a
-            href={`/api/sign/contracts/${encodeURIComponent(token)}/pdf?lang=${encodeURIComponent(language)}`}
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "12px 14px",
-              borderRadius: 12,
-              border: "1px solid #0f172a",
-              background: "#0f172a",
-              color: "#fff",
-              fontWeight: 900,
-              textDecoration: "none",
-            }}
-          >
-            {copy.signPage.download}
-          </a>
-        </div>
-
-        <div style={{ fontSize: 12, color: "#64748b" }}>
-          {copy.signPage.pdfHint}
-        </div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>
+            {copy.signPage.pdfHint}
+          </div>
 
         <div style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
           <iframe
@@ -239,7 +255,7 @@ export function SignContractPageClient({
           </div>
         ) : null}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
           <button
             type="button"
             onClick={() => sigRef.current?.clear()}
@@ -255,8 +271,8 @@ export function SignContractPageClient({
             style={{
               padding: "14px 16px",
               borderRadius: 12,
-              border: "1px solid #0f172a",
-              background: "#0f172a",
+              border: `1px solid ${brand.colors.primary}`,
+              background: brand.colors.primary,
               color: "#fff",
               fontWeight: 900,
               opacity: busy || done || !confirmedRead ? 0.7 : 1,
@@ -265,7 +281,20 @@ export function SignContractPageClient({
             {busy ? copy.signPage.saving : done ? copy.signPage.signed : copy.signPage.sign}
           </button>
         </div>
+        </div>
       </section>
     </main>
   );
 }
+
+const metaPillStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "7px 11px",
+  borderRadius: 999,
+  border: "1px solid #dbe4ea",
+  background: "#f8fafc",
+  color: "#31455f",
+  fontSize: 12,
+  fontWeight: 800,
+};

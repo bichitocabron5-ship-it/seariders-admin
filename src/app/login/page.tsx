@@ -2,6 +2,8 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { SeaRidersLogo } from "@/components/brand";
+import { brand } from "@/lib/brand";
 
 export default function LoginPage() {
   return (
@@ -17,15 +19,15 @@ function LoginContent() {
 
   const errorText =
     error === "bad_credentials"
-      ? "Usuario o contraseña incorrectos."
+      ? "Usuario o contrasena incorrectos."
       : error === "no_role"
         ? "Tu usuario no tiene un rol asignado."
         : error === "invalid_form"
-          ? "Formulario inválido."
+          ? "Formulario invalido."
           : error === "invalid_role"
-            ? "El rol seleccionado no es válido para este usuario."
+            ? "El rol seleccionado no es valido para este usuario."
             : error === "session_expired"
-              ? "La selección de acceso ha expirado. Vuelve a entrar."
+              ? "La seleccion de acceso ha expirado. Vuelve a entrar."
               : null;
 
   return <LoginView errorText={errorText} />;
@@ -36,7 +38,7 @@ function LoginView({ errorText }: { errorText: string | null }) {
     width: "100%",
     padding: 12,
     borderRadius: 12,
-    border: "1px solid #d1d5db",
+    border: "1px solid #d1dbe6",
     background: "#fff",
   };
 
@@ -44,7 +46,7 @@ function LoginView({ errorText }: { errorText: string | null }) {
     <div
       className="login-shell"
       style={{
-        background: "linear-gradient(135deg, #e0f2fe 0%, #f8fafc 45%, #ecfccb 100%)",
+        background: brand.gradients.publicHero,
       }}
     >
       <div className="login-card">
@@ -52,35 +54,20 @@ function LoginView({ errorText }: { errorText: string | null }) {
           className="login-aside"
           style={{
             padding: 32,
-            background: "linear-gradient(160deg, #082f49 0%, #0f766e 55%, #164e63 100%)",
+            background: brand.gradients.hero,
             color: "#f8fafc",
             display: "grid",
-            gap: 18,
+            gap: 20,
             alignContent: "space-between",
           }}
         >
-          <div style={{ display: "grid", gap: 16 }}>
-            <div
-              style={{
-                display: "inline-flex",
-                width: "fit-content",
-                padding: "8px 12px",
-                borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.18)",
-                background: "rgba(255,255,255,0.08)",
-                fontSize: 12,
-                fontWeight: 800,
-              }}
-            >
-              SeaRiders Admin
-            </div>
-            <div style={{ fontSize: 42, lineHeight: 1.02, fontWeight: 950, maxWidth: 360 }}>
+          <div style={{ display: "grid", gap: 18 }}>
+            <SeaRidersLogo light compact subtitle="Operations access" />
+            <div style={{ fontSize: 42, lineHeight: 1.02, fontWeight: 950, maxWidth: 380 }}>
               Control operativo para tienda, plataforma y flota.
             </div>
-            <div style={{ fontSize: 15, lineHeight: 1.55, opacity: 0.86, maxWidth: 420 }}>
-              Accede al panel diario con una vista más limpia, rápida y preparada para caja,
-              reservas y operativa real. Si tu usuario tiene varios accesos, podrás elegir el rol
-              después de validar la contraseña.
+            <div style={{ fontSize: 15, lineHeight: 1.55, opacity: 0.88, maxWidth: 430 }}>
+              Accede al panel diario con una identidad mas clara y una entrada preparada para operativa real, caja y reservas.
             </div>
           </div>
 
@@ -123,7 +110,7 @@ function LoginView({ errorText }: { errorText: string | null }) {
             display: "grid",
             alignContent: "center",
             gap: 16,
-            background: "rgba(255,255,255,0.88)",
+            background: "rgba(255,255,255,0.9)",
           }}
         >
           <div style={{ display: "grid", gap: 6 }}>
@@ -131,18 +118,36 @@ function LoginView({ errorText }: { errorText: string | null }) {
               style={{
                 fontSize: 13,
                 fontWeight: 800,
-                color: "#0f766e",
+                color: brand.colors.secondary,
                 textTransform: "uppercase",
                 letterSpacing: 0.5,
               }}
             >
               Login
             </div>
-            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 950, color: "#111827" }}>
+            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 950, color: brand.colors.primary }}>
               Entrar al panel
             </h1>
             <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>
               Usa tu usuario interno y selecciona el turno de trabajo.
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: 14,
+              border: "1px solid #dbe4ea",
+              background: "#f8fafc",
+              display: "grid",
+              gap: 4,
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 900, color: brand.colors.primary, textTransform: "uppercase", letterSpacing: 0.04 }}>
+              Acceso operativo
+            </div>
+            <div style={{ fontSize: 13, color: "#526277", lineHeight: 1.5 }}>
+              Entrada para Store, Booth, Platform, Bar, HR y administracion interna de SeaRiders.
             </div>
           </div>
 
@@ -168,14 +173,14 @@ function LoginView({ errorText }: { errorText: string | null }) {
             </label>
 
             <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700, color: "#374151" }}>
-              Contraseña
+              Contrasena
               <input name="password" type="password" required style={inputStyle} />
             </label>
 
             <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700, color: "#374151" }}>
               Turno
               <select name="shift" required style={inputStyle}>
-                <option value="MORNING">Mañana</option>
+                <option value="MORNING">Manana</option>
                 <option value="AFTERNOON">Tarde</option>
               </select>
             </label>
@@ -186,8 +191,8 @@ function LoginView({ errorText }: { errorText: string | null }) {
                 padding: 14,
                 fontWeight: 900,
                 borderRadius: 14,
-                border: "1px solid #0f172a",
-                background: "#0f172a",
+                border: `1px solid ${brand.colors.primary}`,
+                background: brand.colors.primary,
                 color: "#fff",
               }}
             >

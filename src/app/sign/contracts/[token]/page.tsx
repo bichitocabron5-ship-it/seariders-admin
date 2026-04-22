@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { verifyContractSignatureToken } from "@/lib/contracts/signature-link";
@@ -10,6 +11,10 @@ import { normalizePublicLanguage } from "@/lib/public-links/i18n";
 import { SignContractPageClient } from "./sign-contract-page-client";
 
 export const runtime = "nodejs";
+export const metadata: Metadata = {
+  title: "Firma de contrato",
+  description: "Firma publica de contratos SeaRiders.",
+};
 
 export default async function SignContractPage({
   params,

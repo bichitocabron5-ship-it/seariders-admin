@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { PublicBrandHeader } from "@/components/brand";
+import { brand } from "@/lib/brand";
 import { verifyPassPortalToken } from "@/lib/passes/public-pass-link";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
+export const metadata: Metadata = {
+  title: "Bono SeaRiders",
+  description: "Portal publico de bonos y bolsas de horas de SeaRiders.",
+};
 
 function formatDateTime(value: Date | null | undefined) {
   if (!value) return "-";
@@ -65,12 +72,18 @@ export default async function PassPortalPage({
     <main
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #ecfeff 0%, #f8fafc 42%, #ffffff 100%)",
+        background: brand.gradients.publicHero,
         padding: "32px 18px 64px",
-        color: "#0f172a",
+        color: brand.colors.primary,
       }}
     >
       <div style={{ width: "min(920px, 100%)", margin: "0 auto", display: "grid", gap: 18 }}>
+        <PublicBrandHeader
+          eyebrow="Bono SeaRiders"
+          title={voucher.product?.name ?? "Bolsa de horas"}
+          subtitle="Consulta de saldo y consumos dentro del portal publico de SeaRiders."
+        />
+
         <section
           style={{
             background: "#ffffffee",
@@ -82,14 +95,15 @@ export default async function PassPortalPage({
             gap: 12,
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>
-            Bono Seariders
-          </div>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div>
               <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.05 }}>{voucher.product?.name ?? "Bolsa de horas"}</h1>
               <div style={{ marginTop: 8, color: "#475569" }}>
-                Codigo {voucher.code} · Servicio {voucher.product?.service?.name ?? "-"}
+                Codigo {voucher.code} | Servicio {voucher.product?.service?.name ?? "-"}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                <span style={metaPillStyle}>Codigo {voucher.code}</span>
+                <span style={metaPillStyle}>Servicio {voucher.product?.service?.name ?? "-"}</span>
               </div>
             </div>
             <div style={{ padding: "10px 14px", borderRadius: 999, background: "#dcfce7", color: "#166534", fontWeight: 900 }}>
@@ -203,3 +217,15 @@ function InfoCard({ label, value }: { label: string; value: string }) {
     </article>
   );
 }
+
+const metaPillStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "7px 11px",
+  borderRadius: 999,
+  border: "1px solid #dbe4ea",
+  background: "#f8fafc",
+  color: "#31455f",
+  fontSize: 12,
+  fontWeight: 800,
+};

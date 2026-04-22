@@ -477,6 +477,7 @@ export default function StoreDashboard() {
       <StoreHero
         title="Tienda"
         description="Operativa del día, cobros, pendientes y seguimiento de plataforma en una sola vista."
+        eyebrow="SeaRiders Store"
         eyebrowColor="#58708f"
         background="linear-gradient(135deg, #ffffff 0%, #f4f7fb 100%)"
         actions={

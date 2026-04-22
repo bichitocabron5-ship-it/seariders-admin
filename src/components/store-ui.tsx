@@ -3,6 +3,7 @@
 import type React from "react";
 
 import { opsStyles } from "@/components/ops-ui";
+import { brand } from "@/lib/brand";
 
 type StoreHeroProps = {
   title: string;
@@ -65,7 +66,7 @@ export const storeStyles = {
     ...opsStyles.ghostButton,
     padding: "12px 16px",
     fontWeight: 700,
-    color: "#111827",
+    color: brand.colors.primary,
   } as React.CSSProperties,
 };
 
@@ -80,9 +81,9 @@ export function StoreHero({
   description,
   actions,
   eyebrow = "Store",
-  titleColor = "#0f172a",
-  eyebrowColor = "#0f766e",
-  background = "linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%)",
+  titleColor = brand.colors.primary,
+  eyebrowColor = brand.colors.secondary,
+  background = "linear-gradient(135deg, #f8fafc 0%, #e7f4f2 100%)",
   children,
 }: StoreHeroProps) {
   return (
@@ -108,7 +109,7 @@ export function StoreHero({
   );
 }
 
-export function StoreSectionHeader({ eyebrow, title, description, action, eyebrowColor = "#0f766e" }: StoreSectionHeaderProps) {
+export function StoreSectionHeader({ eyebrow, title, description, action, eyebrowColor = brand.colors.secondary }: StoreSectionHeaderProps) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
       <div>
@@ -130,7 +131,7 @@ export function StoreMetricCard({
   value,
   description,
   accentColor = "#64748b",
-  valueColor = "#0f172a",
+  valueColor = brand.colors.primary,
   children,
 }: StoreMetricCardProps) {
   return (

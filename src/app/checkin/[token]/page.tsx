@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { ReservationCheckinPageClient } from "./reservation-checkin-page-client";
 import { normalizePublicLanguage } from "@/lib/public-links/i18n";
 
 export const runtime = "nodejs";
+export const metadata: Metadata = {
+  title: "Pre-checkin",
+  description: "Pre-checkin publico de SeaRiders para revisar datos y firmar contratos.",
+};
 
 export default async function ReservationCheckinPage({
   params,

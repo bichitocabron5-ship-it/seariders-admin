@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getIronSession } from "iron-session";
+import { SeaRidersLogo } from "@/components/brand";
 import { sessionOptions, AppSession } from "@/lib/session";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
@@ -17,26 +18,25 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       <div className="topbar-shell">
         <div className="topbar-shell__inner">
           <div className="admin-topbar">
-            <a href="/admin" className="admin-brand">
-              <span className="admin-brand__title">SeaRiders Admin</span>
-              <span className="admin-brand__meta">Configuración comercial, operativa y de flota</span>
-            </a>
+            <div className="admin-brand">
+              <SeaRidersLogo href="/admin" subtitle="Configuracion comercial, operativa y de flota" />
+            </div>
 
             <div className="admin-user-badge">
-              <span>Usuario activo</span>
+              <span>SeaRiders System</span>
               <strong>{session.username ?? session.userId}</strong>
             </div>
           </div>
 
-          <nav className="admin-nav" aria-label="Navegación de administración">
+          <nav className="admin-nav" aria-label="Navegacion de administracion">
             <a href="/admin/catalog" className="admin-nav__link">
-              Catálogo
+              Catalogo
             </a>
             <a href="/admin/pricing" className="admin-nav__link">
               Precios
             </a>
             <a href="/admin/pricing/history" className="admin-nav__link">
-              Histórico
+              Historico
             </a>
             <a href="/admin/channels" className="admin-nav__link">
               Canales y comisiones
@@ -60,7 +60,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
               Bonos
             </a>
             <a href="/admin/assets" className="admin-nav__link">
-              Náutica
+              Nautica
             </a>
             <a href="/admin/jetskis" className="admin-nav__link">
               JetSkis

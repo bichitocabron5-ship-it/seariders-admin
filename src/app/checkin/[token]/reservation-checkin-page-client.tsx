@@ -3,7 +3,9 @@
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
+import { PublicBrandHeader } from "@/components/brand";
 import { BirthDateField, PhoneWithCountryField } from "@/components/customer-inputs";
+import { brand } from "@/lib/brand";
 import { getCountryOptionsEs } from "@/lib/countries";
 import {
   formatPublicDate,
@@ -533,7 +535,7 @@ export function ReservationCheckinPageClient({
     <main
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)",
+        background: brand.gradients.publicHero,
         padding: isMobile ? "16px 12px 32px" : "24px 16px 40px",
       }}
     >
@@ -545,11 +547,16 @@ export function ReservationCheckinPageClient({
           gap: 16,
         }}
       >
+        <PublicBrandHeader
+          eyebrow={copy.checkinPage.eyebrow}
+          title={copy.checkinPage.title}
+          subtitle="Revision de datos, pre-checkin y firma de contratos dentro del ecosistema SeaRiders."
+        />
         <div
           style={{
             background: "#fff",
             borderRadius: 24,
-            border: "1px solid #e2e8f0",
+            border: "1px solid #dbe4ea",
             padding: 20,
             boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
             display: "grid",
@@ -557,14 +564,16 @@ export function ReservationCheckinPageClient({
           }}
         >
           <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>
-              {copy.checkinPage.eyebrow}
-            </div>
             <h1 style={{ margin: 0, fontSize: "clamp(24px, 4vw, 30px)", lineHeight: 1.1 }}>{copy.checkinPage.title}</h1>
             <div style={{ color: "#475569", fontSize: 14 }}>
               {snapshot.reservation.serviceName}
               {snapshot.reservation.durationMinutes ? ` | ${snapshot.reservation.durationMinutes} min` : ""}
               {` | ${formatPublicDate(snapshot.reservation.activityDate, language)} | ${formatPublicTime(snapshot.reservation.scheduledTime, language)}`}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={metaPillStyle}>{snapshot.reservation.serviceName}</span>
+              {snapshot.reservation.durationMinutes ? <span style={metaPillStyle}>{snapshot.reservation.durationMinutes} min</span> : null}
+              <span style={metaPillStyle}>{formatPublicDate(snapshot.reservation.activityDate, language)}</span>
             </div>
             <div style={{ fontSize: 12, color: autosave.color, fontWeight: 800 }}>
               {autosave.label}
@@ -632,6 +641,7 @@ export function ReservationCheckinPageClient({
                   listStyle: "none",
                   cursor: "pointer",
                   padding: 18,
+                  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -961,8 +971,8 @@ const inlineErrorStyle: React.CSSProperties = {
 const primaryButtonStyle: React.CSSProperties = {
   padding: "12px 14px",
   borderRadius: 12,
-  border: "1px solid #0f172a",
-  background: "#0f172a",
+  border: `1px solid ${brand.colors.primary}`,
+  background: brand.colors.primary,
   color: "#fff",
   fontWeight: 900,
   cursor: "pointer",
@@ -983,9 +993,9 @@ const secondaryLinkStyle: React.CSSProperties = {
   justifyContent: "center",
   padding: "12px 14px",
   borderRadius: 12,
-  border: "1px solid #0f172a",
+  border: `1px solid ${brand.colors.primary}`,
   background: "#fff",
-  color: "#0f172a",
+  color: brand.colors.primary,
   fontWeight: 900,
   textDecoration: "none",
 };
@@ -996,4 +1006,16 @@ const checkboxLabelStyle: React.CSSProperties = {
   alignItems: "flex-start",
   fontSize: 14,
   color: "#0f172a",
+};
+
+const metaPillStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "7px 11px",
+  borderRadius: 999,
+  border: "1px solid #dbe4ea",
+  background: "#f8fafc",
+  color: "#31455f",
+  fontSize: 12,
+  fontWeight: 800,
 };
