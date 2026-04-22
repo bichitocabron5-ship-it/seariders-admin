@@ -60,6 +60,7 @@ function StoreCreatePageInner() {
   const [error, setError] = useState<string | null>(null);
   const [submitBusy, setSubmitBusy] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [dateStr, setDateStr] = useState(defaultDate);
   const [timeStr, setTimeStr] = useState<string>("");
   const [availabilityTick, setAvailabilityTick] = useState(0);
@@ -626,7 +627,22 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   const contractsReadyForFormalize =
     !isMigrateMode || requiredUnits <= 0 || readyCount >= requiredUnits;
 
-  const primaryDisabledReason =
+  const customerFieldErrors = {
+    firstName: firstName.trim() ? null : "Indica el nombre.",
+    lastName: lastName.trim() ? null : "Indica los apellidos.",
+    customerPhone: customerPhone.trim() ? null : "Indica el telefono.",
+  };
+
+  const softPrimaryBlockedReason =
+    isFormalizeMode && !contractsReadyForFormalize
+      ? `Faltan contratos por completar: ${readyCount}/${requiredUnits} listos.`
+      : requiredFormalizeMissing
+        ? "Para formalizar faltan datos mínimos (nombre, apellidos y teléfono)."
+        : requiredCreateMissing
+          ? "Para crear faltan datos mínimos (nombre, apellidos y teléfono)."
+          : null;
+
+  const hardPrimaryDisabledReason =
     isReadOnlyReservation
       ? migrateFlags?.isCanceled
         ? "Reserva cancelada: ficha en solo lectura."
@@ -635,17 +651,12 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       ? "Reserva histórica: no se puede formalizar."
       : strictFormalizeBlocked
           ? "Solo puedes formalizar el mismo día."
-        : isFormalizeMode && !contractsReadyForFormalize
-          ? `Faltan contratos por completar: ${readyCount}/${requiredUnits} listos.`
-        : requiredFormalizeMissing
-          ? "Para formalizar faltan datos mínimos (nombre, apellidos y teléfono)."
-          : requiredCreateMissing
-            ? "Para crear faltan datos mínimos (nombre, apellidos y teléfono)."
-            : (isCreateMode && !canCreate)
-              ? "Esta opción no tiene precio vigente."
-              : null;
+          : (isCreateMode && !canCreate)
+            ? "Esta opción no tiene precio vigente."
+            : null;
 
-  const primaryDisabled = Boolean(primaryDisabledReason);
+  const primaryDisabledReason = hardPrimaryDisabledReason ?? softPrimaryBlockedReason;
+  const primaryDisabled = Boolean(hardPrimaryDisabledReason);
 
   const countryOptions = useMemo(() => getCountryOptionsEs(), []);
   const selectedCountryOpt = useMemo(
@@ -863,8 +874,10 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
   async function createReservation(e: FormEvent) {
     e.preventDefault();
+    setSubmitAttempted(true);
     setError(null);
     setSubmitSuccess(null);
+    if (primaryDisabledReason) return;
     setSubmitBusy(true);
     setAvailabilityTick((x) => x + 1);
 
@@ -1140,6 +1153,10 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       isVoucherFormalizeFlow,
       selectedCategory,
       isJetskiSelection,
+    },
+    validation: {
+      showErrors: submitAttempted && Boolean(requiredCreateMissing || requiredFormalizeMissing),
+      ...customerFieldErrors,
     },
     lists: {
       countryOptions,
@@ -1566,6 +1583,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             primaryDisabledReason={primaryDisabledReason}
             primaryBusy={submitBusy}
             successMessage={submitSuccess}
+            showPrimaryDisabledReason={Boolean(hardPrimaryDisabledReason) || submitAttempted}
           />
         </form>
       </section>

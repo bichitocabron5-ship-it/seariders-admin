@@ -51,6 +51,7 @@ export function BirthDateField({
   style,
   disabled,
   required,
+  error,
 }: {
   label: string;
   value: string;
@@ -58,6 +59,7 @@ export function BirthDateField({
   style: React.CSSProperties;
   disabled?: boolean;
   required?: boolean;
+  error?: string | null;
 }) {
   const [text, setText] = useState(formatBirthDateTextFromYmd(value));
   const nativeInputRef = useRef<HTMLInputElement | null>(null);
@@ -131,7 +133,9 @@ export function BirthDateField({
           style={{ position: "absolute", opacity: 0, width: 1, height: 1, pointerEvents: "none" }}
         />
       </div>
-      <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>{helperText}</div>
+      <div style={{ fontSize: 12, color: error ? "#b91c1c" : "#64748b", fontWeight: 600 }}>
+        {error || helperText}
+      </div>
     </label>
   );
 }
@@ -148,6 +152,7 @@ export function PhoneWithCountryField({
   required,
   phonePlaceholder,
   containerStyle,
+  error,
 }: {
   label: string;
   country: string;
@@ -160,6 +165,7 @@ export function PhoneWithCountryField({
   required?: boolean;
   phonePlaceholder?: string;
   containerStyle?: React.CSSProperties;
+  error?: string | null;
 }) {
   const normalizedCountry = String(country ?? "").trim().toUpperCase();
   const shellStyle: React.CSSProperties = {
@@ -215,6 +221,7 @@ export function PhoneWithCountryField({
           style={innerControlStyle}
         />
       </div>
+      {error ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{error}</div> : null}
     </label>
   );
 }

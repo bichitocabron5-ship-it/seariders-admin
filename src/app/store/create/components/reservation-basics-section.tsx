@@ -99,9 +99,15 @@ export type ReservationBasicsSectionProps = {
     onCompanionsChange: (value: number) => void;
     onJetskiLicenseModeChange: (value: JetskiLicenseMode) => void;
   };
+  validation?: {
+    showErrors: boolean;
+    firstName?: string | null;
+    lastName?: string | null;
+    customerPhone?: string | null;
+  };
 };
 
-export function ReservationBasicsSection({ values, flags, lists, handlers }: ReservationBasicsSectionProps) {
+export function ReservationBasicsSection({ values, flags, lists, handlers, validation }: ReservationBasicsSectionProps) {
   const gridStyle: React.CSSProperties = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -120,6 +126,10 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
     alignItems: "start",
   };
   const fullRow: React.CSSProperties = { gridColumn: "1 / -1" };
+  const withErrorStyle = (hasError?: string | null): React.CSSProperties =>
+    hasError
+      ? { ...inputStyle, border: "1px solid #ef4444", background: "#fff5f5" }
+      : inputStyle;
 
   return (
     <section style={{ display: "grid", gap: 14 }}>
@@ -165,8 +175,9 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                   onChange={(e) => handlers.onFirstNameChange(e.target.value)}
                   required={!flags.isEditMode}
                   disabled={flags.isEditMode}
-                  style={{ ...inputStyle, opacity: flags.isEditMode ? 0.7 : 1 }}
+                  style={{ ...withErrorStyle(validation?.showErrors ? validation?.firstName : null), opacity: flags.isEditMode ? 0.7 : 1 }}
                 />
+                {validation?.showErrors && validation?.firstName ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{validation.firstName}</div> : null}
               </label>
 
               <label style={labelStyle}>
@@ -176,8 +187,9 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                   onChange={(e) => handlers.onLastNameChange(e.target.value)}
                   required={!flags.isEditMode}
                   disabled={flags.isEditMode}
-                  style={{ ...inputStyle, opacity: flags.isEditMode ? 0.7 : 1 }}
+                  style={{ ...withErrorStyle(validation?.showErrors ? validation?.lastName : null), opacity: flags.isEditMode ? 0.7 : 1 }}
                 />
+                {validation?.showErrors && validation?.lastName ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{validation.lastName}</div> : null}
               </label>
             </div>
 
@@ -193,6 +205,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers }: Res
                 required
                 phonePlaceholder="Ej: 612345678"
                 containerStyle={{ minWidth: 0, gridColumn: "span 2" }}
+                error={validation?.showErrors ? validation?.customerPhone : null}
               />
 
               <label style={labelStyle}>

@@ -349,12 +349,14 @@ export function SubmitSection({
   primaryDisabledReason,
   primaryBusy = false,
   successMessage = null,
+  showPrimaryDisabledReason = Boolean(primaryDisabledReason),
 }: {
   primaryDisabled: boolean;
   primaryLabel: string;
   primaryDisabledReason: string | null;
   primaryBusy?: boolean;
   successMessage?: string | null;
+  showPrimaryDisabledReason?: boolean;
 }) {
   return (
     <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
@@ -378,7 +380,7 @@ export function SubmitSection({
         {primaryBusy ? "Guardando..." : primaryLabel}
       </button>
 
-      {primaryDisabledReason ? (
+      {showPrimaryDisabledReason && primaryDisabledReason ? (
         <div style={{ padding: 12, border: "1px solid #fecaca", background: "#fff1f2", borderRadius: 12, color: "#991b1b", fontWeight: 700 }}>
           {primaryDisabledReason}
         </div>

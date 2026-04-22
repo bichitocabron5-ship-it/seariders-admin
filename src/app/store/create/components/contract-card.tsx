@@ -191,6 +191,7 @@ export function ContractCard({
   const [saving, setSaving] = React.useState(false);
   const [signerLinkBusy, setSignerLinkBusy] = React.useState(false);
   const [retryNotificationBusy, setRetryNotificationBusy] = React.useState(false);
+  const [advanceAttempted, setAdvanceAttempted] = React.useState(false);
   const [signerLinkModal, setSignerLinkModal] = React.useState<{
     url: string;
     expiresInMinutes: number;
@@ -240,6 +241,39 @@ export function ContractCard({
     Boolean(c.signedAt) &&
     Boolean(c.signatureImageKey || c.signatureImageUrl) &&
     Boolean(c.renderedPdfKey || c.renderedPdfUrl);
+  const contractFieldErrors = React.useMemo(() => {
+    const errors: Record<string, string | null> = {
+      driverName: driverName.trim() ? null : "Indica el nombre del conductor.",
+      driverPhone: driverPhone.trim() ? null : "Indica el telefono del conductor.",
+      driverAddress: driverAddress.trim() ? null : "Indica la direccion del conductor.",
+      driverDocType: driverDocType.trim() ? null : "Selecciona el tipo de documento.",
+      driverDocNumber: driverDocNumber.trim() ? null : "Indica el numero de documento.",
+      birthYmd: birthYmd.trim() ? null : "Indica la fecha de nacimiento.",
+      minorAuthorizationProvided:
+        needsAuth && !minorAuthorizationProvided ? "Debes confirmar la autorizacion del tutor." : null,
+      minorAuthorizationFile:
+        needsAuth && !c.minorAuthorizationFileKey ? "Adjunta la autorizacion del tutor antes de avanzar." : null,
+      licenseSchool: isLicense && !licenseSchool.trim() ? "Indica la escuela de licencia." : null,
+      licenseType: isLicense && !licenseType.trim() ? "Indica el tipo de licencia." : null,
+      licenseNumber: isLicense && !licenseNumber.trim() ? "Indica el numero de licencia." : null,
+    };
+    return errors;
+  }, [
+    birthYmd,
+    c.minorAuthorizationFileKey,
+    driverAddress,
+    driverDocNumber,
+    driverDocType,
+    driverName,
+    driverPhone,
+    licenseNumber,
+    licenseSchool,
+    licenseType,
+    minorAuthorizationProvided,
+    needsAuth,
+    isLicense,
+  ]);
+  const hasContractAdvanceErrors = Object.values(contractFieldErrors).some(Boolean);
 
   useEffect(() => {
     let cancelled = false;
@@ -293,6 +327,19 @@ export function ContractCard({
     }
   }, [c.status]);
 
+  function validateBeforeAdvance(action: "ready" | "signer") {
+    setAdvanceAttempted(true);
+    if (hasContractAdvanceErrors) {
+      setErr(
+        action === "signer"
+          ? "Completa los campos obligatorios antes de abrir la firma o el enlace de WhatsApp."
+          : "Completa los campos obligatorios antes de dejar el contrato listo para firma."
+      );
+      return false;
+    }
+    return true;
+  }
+
   function buildPayload() {
     return {
       driverName: driverName || null,
@@ -333,6 +380,7 @@ export function ContractCard({
   }
 
   async function markReady() {
+    if (!validateBeforeAdvance("ready")) return;
     const payload: ContractPatch = { status: "READY", ...buildPayload() };
     await savePartial(payload);
   }
@@ -380,6 +428,7 @@ export function ContractCard({
 
   async function handleOpenSignerLink() {
     try {
+      if (!validateBeforeAdvance("signer")) return;
       setSignerLinkBusy(true);
       setErr(null);
       await savePartial(buildPayload());
@@ -490,6 +539,15 @@ export function ContractCard({
         contract={c}
         minorUploadBusy={minorUploadBusy}
         minorDeleteBusy={minorDeleteBusy}
+        fieldErrors={
+          advanceAttempted
+            ? {
+                birthYmd: contractFieldErrors.birthYmd,
+                minorAuthorizationProvided: contractFieldErrors.minorAuthorizationProvided,
+                minorAuthorizationFile: contractFieldErrors.minorAuthorizationFile,
+              }
+            : undefined
+        }
         onBirthYmdChange={setBirthYmd}
         onMinorAuthorizationProvidedChange={setMinorAuthorizationProvided}
         onImageConsentAcceptedChange={setImageConsentAccepted}
@@ -517,6 +575,17 @@ export function ContractCard({
         driverPostalCode={driverPostalCode}
         driverDocType={driverDocType}
         driverDocNumber={driverDocNumber}
+        fieldErrors={
+          advanceAttempted
+            ? {
+                driverName: contractFieldErrors.driverName,
+                driverPhone: contractFieldErrors.driverPhone,
+                driverAddress: contractFieldErrors.driverAddress,
+                driverDocType: contractFieldErrors.driverDocType,
+                driverDocNumber: contractFieldErrors.driverDocNumber,
+              }
+            : undefined
+        }
         onDriverNameChange={setDriverName}
         onDriverPhoneChange={setDriverPhone}
         onDriverEmailChange={setDriverEmail}
@@ -549,6 +618,15 @@ export function ContractCard({
         licenseSchool={licenseSchool}
         licenseType={licenseType}
         licenseNumber={licenseNumber}
+        fieldErrors={
+          advanceAttempted
+            ? {
+                licenseSchool: contractFieldErrors.licenseSchool,
+                licenseType: contractFieldErrors.licenseType,
+                licenseNumber: contractFieldErrors.licenseNumber,
+              }
+            : undefined
+        }
         onLicenseSchoolChange={setLicenseSchool}
         onLicenseTypeChange={setLicenseType}
         onLicenseNumberChange={setLicenseNumber}
@@ -580,8 +658,6 @@ export function ContractCard({
           });
         }}
       />
-
-      {err ? <div style={{ padding: 12, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 800 }}>{err}</div> : null}
 
       <div style={{ ...subCardStyle, gap: 10 }}>
         <div style={sectionEyebrowStyle}>Notificaciones</div>
@@ -639,6 +715,8 @@ export function ContractCard({
         onDownloadFinalPdf={() => void handleDownloadFinalPdf()}
         onOpenSignerLink={() => void handleOpenSignerLink()}
       />
+
+      {err ? <div style={{ padding: 12, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 800 }}>{err}</div> : null}
 
       {showLicenseFields ? (
         <div style={{ fontSize: 12, color: "#64748b" }}>

@@ -37,6 +37,11 @@ type ContractLegalSectionProps = CommonStyles & {
   contract: ContractDto;
   minorUploadBusy: boolean;
   minorDeleteBusy: boolean;
+  fieldErrors?: {
+    birthYmd?: string | null;
+    minorAuthorizationProvided?: string | null;
+    minorAuthorizationFile?: string | null;
+  };
   onBirthYmdChange: (value: string) => void;
   onMinorAuthorizationProvidedChange: (value: boolean) => void;
   onImageConsentAcceptedChange: (value: boolean) => void;
@@ -55,6 +60,13 @@ type ContractDriverSectionProps = CommonStyles & {
   driverPostalCode: string;
   driverDocType: string;
   driverDocNumber: string;
+  fieldErrors?: {
+    driverName?: string | null;
+    driverPhone?: string | null;
+    driverAddress?: string | null;
+    driverDocType?: string | null;
+    driverDocNumber?: string | null;
+  };
   onDriverNameChange: (value: string) => void;
   onDriverPhoneChange: (value: string) => void;
   onDriverEmailChange: (value: string) => void;
@@ -71,6 +83,11 @@ type ContractLicenseSectionProps = CommonStyles & {
   licenseSchool: string;
   licenseType: string;
   licenseNumber: string;
+  fieldErrors?: {
+    licenseSchool?: string | null;
+    licenseType?: string | null;
+    licenseNumber?: string | null;
+  };
   onLicenseSchoolChange: (value: string) => void;
   onLicenseTypeChange: (value: string) => void;
   onLicenseNumberChange: (value: string) => void;
@@ -99,6 +116,7 @@ export function ContractLegalSection({
   contract,
   minorUploadBusy,
   minorDeleteBusy,
+  fieldErrors,
   onBirthYmdChange,
   onMinorAuthorizationProvidedChange,
   onImageConsentAcceptedChange,
@@ -106,6 +124,9 @@ export function ContractLegalSection({
   onMinorAuthorizationDelete,
   onOpenMinorAuthorization,
 }: ContractLegalSectionProps) {
+  const withErrorStyle = (error?: string | null): React.CSSProperties =>
+    error ? { ...inputStyle, border: "1px solid #ef4444", background: "#fff5f5" } : inputStyle;
+
   return (
     <>
       <div style={subCardStyle}>
@@ -120,8 +141,9 @@ export function ContractLegalSection({
           label="Fecha de nacimiento *"
           value={birthYmd}
           onChange={onBirthYmdChange}
-          style={inputStyle}
+          style={withErrorStyle(fieldErrors?.birthYmd)}
           required
+          error={fieldErrors?.birthYmd}
         />
 
         {isUnder16 ? (
@@ -131,11 +153,12 @@ export function ContractLegalSection({
         ) : null}
 
         {needsAuth ? (
-          <label style={{ display: "flex", gap: 10, alignItems: "center", padding: 12, borderRadius: 12, border: "1px solid #fde68a", background: "#fffbeb" }}>
+          <label style={{ display: "flex", gap: 10, alignItems: "center", padding: 12, borderRadius: 12, border: fieldErrors?.minorAuthorizationProvided ? "1px solid #ef4444" : "1px solid #fde68a", background: fieldErrors?.minorAuthorizationProvided ? "#fff5f5" : "#fffbeb" }}>
             <input type="checkbox" checked={minorAuthorizationProvided} onChange={(e) => onMinorAuthorizationProvidedChange(e.target.checked)} />
             <div style={{ fontWeight: 800 }}>Menor de 16-17 anos: requiere autorizacion del tutor.</div>
           </label>
         ) : null}
+        {fieldErrors?.minorAuthorizationProvided ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.minorAuthorizationProvided}</div> : null}
       </div>
 
       <div
@@ -160,8 +183,8 @@ export function ContractLegalSection({
               gap: 8,
               padding: 10,
               borderRadius: 10,
-              border: "1px solid #fecaca",
-              background: "#fff7ed",
+              border: fieldErrors?.minorAuthorizationFile ? "1px solid #ef4444" : "1px solid #fecaca",
+              background: fieldErrors?.minorAuthorizationFile ? "#fff5f5" : "#fff7ed",
             }}
           >
             <div style={{ fontSize: 13, fontWeight: 900, color: "#9a3412" }}>
@@ -253,6 +276,7 @@ export function ContractLegalSection({
                 ) : null}
               </div>
             ) : null}
+            {fieldErrors?.minorAuthorizationFile ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.minorAuthorizationFile}</div> : null}
           </div>
         ) : null}
       </div>
@@ -274,6 +298,7 @@ export function ContractDriverSection({
   driverPostalCode,
   driverDocType,
   driverDocNumber,
+  fieldErrors,
   onDriverNameChange,
   onDriverPhoneChange,
   onDriverEmailChange,
@@ -284,6 +309,9 @@ export function ContractDriverSection({
   onDriverDocNumberChange,
   onCopyCustomerData,
 }: ContractDriverSectionProps) {
+  const withErrorStyle = (error?: string | null): React.CSSProperties =>
+    error ? { ...inputStyle, border: "1px solid #ef4444", background: "#fff5f5" } : inputStyle;
+
   return (
     <div style={subCardStyle}>
       <div style={{ display: "grid", gap: 4 }}>
@@ -304,7 +332,8 @@ export function ContractDriverSection({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Nombre del conductor *
-          <input value={driverName} onChange={(e) => onDriverNameChange(e.target.value)} style={inputStyle} />
+          <input value={driverName} onChange={(e) => onDriverNameChange(e.target.value)} style={withErrorStyle(fieldErrors?.driverName)} />
+          {fieldErrors?.driverName ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverName}</div> : null}
         </label>
         <PhoneWithCountryField
           label="Telefono"
@@ -313,8 +342,9 @@ export function ContractDriverSection({
           onCountryChange={onDriverCountryChange}
           onPhoneChange={onDriverPhoneChange}
           countryOptions={COUNTRY_OPTIONS}
-          inputStyle={inputStyle}
+          inputStyle={withErrorStyle(fieldErrors?.driverPhone)}
           phonePlaceholder="Ej: 612345678"
+          error={fieldErrors?.driverPhone}
         />
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Email
@@ -322,7 +352,8 @@ export function ContractDriverSection({
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Direccion *
-          <input value={driverAddress} onChange={(e) => onDriverAddressChange(e.target.value)} style={inputStyle} />
+          <input value={driverAddress} onChange={(e) => onDriverAddressChange(e.target.value)} style={withErrorStyle(fieldErrors?.driverAddress)} />
+          {fieldErrors?.driverAddress ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverAddress}</div> : null}
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Codigo postal
@@ -330,16 +361,18 @@ export function ContractDriverSection({
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Tipo de documento *
-          <select value={driverDocType} onChange={(e) => onDriverDocTypeChange(e.target.value)} style={inputStyle}>
+          <select value={driverDocType} onChange={(e) => onDriverDocTypeChange(e.target.value)} style={withErrorStyle(fieldErrors?.driverDocType)}>
             <option value="">Selecciona...</option>
             <option value="DNI">DNI</option>
             <option value="NIE">NIE</option>
             <option value="PASSPORT">Pasaporte</option>
           </select>
+          {fieldErrors?.driverDocType ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverDocType}</div> : null}
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Numero de documento *
-          <input value={driverDocNumber} onChange={(e) => onDriverDocNumberChange(e.target.value)} style={inputStyle} />
+          <input value={driverDocNumber} onChange={(e) => onDriverDocNumberChange(e.target.value)} style={withErrorStyle(fieldErrors?.driverDocNumber)} />
+          {fieldErrors?.driverDocNumber ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverDocNumber}</div> : null}
         </label>
       </div>
     </div>
@@ -354,11 +387,14 @@ export function ContractLicenseSection({
   licenseSchool,
   licenseType,
   licenseNumber,
+  fieldErrors,
   onLicenseSchoolChange,
   onLicenseTypeChange,
   onLicenseNumberChange,
 }: ContractLicenseSectionProps) {
   if (!showLicenseFields) return null;
+  const withErrorStyle = (error?: string | null): React.CSSProperties =>
+    error ? { ...inputStyle, border: "1px solid #ef4444", background: "#fff5f5" } : inputStyle;
 
   return (
     <div style={subCardStyle}>
@@ -372,15 +408,18 @@ export function ContractLicenseSection({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Escuela de licencia
-          <input value={licenseSchool} onChange={(e) => onLicenseSchoolChange(e.target.value)} style={inputStyle} />
+          <input value={licenseSchool} onChange={(e) => onLicenseSchoolChange(e.target.value)} style={withErrorStyle(fieldErrors?.licenseSchool)} />
+          {fieldErrors?.licenseSchool ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.licenseSchool}</div> : null}
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Tipo de licencia
-          <input value={licenseType} onChange={(e) => onLicenseTypeChange(e.target.value)} style={inputStyle} />
+          <input value={licenseType} onChange={(e) => onLicenseTypeChange(e.target.value)} style={withErrorStyle(fieldErrors?.licenseType)} />
+          {fieldErrors?.licenseType ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.licenseType}</div> : null}
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Numero de licencia
-          <input value={licenseNumber} onChange={(e) => onLicenseNumberChange(e.target.value)} style={inputStyle} />
+          <input value={licenseNumber} onChange={(e) => onLicenseNumberChange(e.target.value)} style={withErrorStyle(fieldErrors?.licenseNumber)} />
+          {fieldErrors?.licenseNumber ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.licenseNumber}</div> : null}
         </label>
       </div>
     </div>
