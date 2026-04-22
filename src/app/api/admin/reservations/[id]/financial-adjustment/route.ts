@@ -39,11 +39,18 @@ type PaymentLine = {
   shiftSessionId: string | null;
 };
 
+type ReservationItemLine = {
+  id: string;
+  totalPriceCents: number;
+  quantity: number;
+  isExtra: boolean;
+};
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function allocateAmounts(lines: PaymentLine[], targetGrossCents: number) {
+function allocateAmounts(lines: Array<{ id: string; amountCents: number }>, targetGrossCents: number) {
   const target = Math.max(0, Math.trunc(targetGrossCents));
   if (lines.length === 0) return [] as Array<{ id: string; amountCents: number }>;
   if (target === 0) return lines.map((line) => ({ id: line.id, amountCents: 0 }));
@@ -79,6 +86,25 @@ function allocateAmounts(lines: PaymentLine[], targetGrossCents: number) {
     });
 
   return scaled.map(({ id, amountCents }) => ({ id, amountCents }));
+}
+
+function allocateReservationItemTotals(lines: ReservationItemLine[], targetGrossCents: number) {
+  const allocated = allocateAmounts(
+    lines.map((line) => ({ id: line.id, amountCents: line.totalPriceCents })),
+    targetGrossCents
+  );
+
+  const byId = new Map(lines.map((line) => [line.id, line]));
+  return allocated.map((entry) => {
+    const current = byId.get(entry.id);
+    const quantity = Math.max(1, Number(current?.quantity ?? 1));
+    return {
+      id: entry.id,
+      totalPriceCents: entry.amountCents,
+      unitPriceCents: Math.round(entry.amountCents / quantity),
+      isExtra: Boolean(current?.isExtra),
+    };
+  });
 }
 
 async function rebalancePaymentLinesTx(args: {
@@ -147,8 +173,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           totalPriceCents: true,
           depositCents: true,
           basePriceCents: true,
+          commissionBaseCents: true,
           autoDiscountCents: true,
           manualDiscountCents: true,
+          discountResponsibility: true,
+          promoterDiscountShareBps: true,
+          promoterDiscountCents: true,
+          companyDiscountCents: true,
           payments: {
             orderBy: { createdAt: "asc" },
             select: {
@@ -159,6 +190,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
               method: true,
               origin: true,
               shiftSessionId: true,
+            },
+          },
+          items: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              totalPriceCents: true,
+              quantity: true,
+              isExtra: true,
             },
           },
         },
@@ -205,12 +245,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         createdByUserId: session.userId ?? null,
       };
 
+      const adjustedItemTotals = allocateReservationItemTotals(
+        reservation.items.map((item) => ({
+          id: item.id,
+          totalPriceCents: Number(item.totalPriceCents ?? 0),
+          quantity: Number(item.quantity ?? 1),
+          isExtra: Boolean(item.isExtra),
+        })),
+        body.totalPriceCents
+      );
+      const adjustedBasePriceCents = adjustedItemTotals
+        .filter((item) => !item.isExtra)
+        .reduce((sum, item) => sum + item.totalPriceCents, 0);
+
       await tx.reservation.update({
         where: { id },
         data: {
-          basePriceCents: body.totalPriceCents,
+          basePriceCents: adjustedItemTotals.length > 0 ? adjustedBasePriceCents : body.totalPriceCents,
+          commissionBaseCents: body.totalPriceCents,
           autoDiscountCents: 0,
           manualDiscountCents: 0,
+          discountResponsibility: reservation.discountResponsibility,
+          promoterDiscountShareBps: reservation.promoterDiscountShareBps,
+          promoterDiscountCents: 0,
+          companyDiscountCents: 0,
           manualDiscountReason: null,
           promoCode: null,
           totalPriceCents: body.totalPriceCents,
@@ -251,19 +309,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         fallback,
       });
 
-      const mainItem = await tx.reservationItem.findFirst({
-        where: { reservationId: id, isExtra: false },
-        orderBy: { createdAt: "asc" },
-        select: { id: true, quantity: true },
-      });
-
-      if (mainItem) {
-        const qty = Math.max(1, Number(mainItem.quantity ?? 1));
+      for (const item of adjustedItemTotals) {
         await tx.reservationItem.update({
-          where: { id: mainItem.id },
+          where: { id: item.id },
           data: {
-            unitPriceCents: Math.round(body.totalPriceCents / qty),
-            totalPriceCents: body.totalPriceCents,
+            unitPriceCents: item.unitPriceCents,
+            totalPriceCents: item.totalPriceCents,
           },
         });
       }
@@ -279,8 +330,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
               totalPriceCents: reservation.totalPriceCents,
               depositCents: reservation.depositCents,
               basePriceCents: reservation.basePriceCents,
+              commissionBaseCents: reservation.commissionBaseCents,
               autoDiscountCents: reservation.autoDiscountCents,
               manualDiscountCents: reservation.manualDiscountCents,
+              promoterDiscountCents: reservation.promoterDiscountCents,
+              companyDiscountCents: reservation.companyDiscountCents,
               serviceInGrossCents: reservation.payments
                 .filter((payment) => !payment.isDeposit && payment.direction === PaymentDirection.IN)
                 .reduce((sum, payment) => sum + payment.amountCents, 0),
@@ -291,10 +345,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             after: {
               totalPriceCents: body.totalPriceCents,
               depositCents: body.depositCents,
+              basePriceCents: adjustedItemTotals.length > 0 ? adjustedBasePriceCents : body.totalPriceCents,
+              commissionBaseCents: body.totalPriceCents,
+              autoDiscountCents: 0,
+              manualDiscountCents: 0,
+              promoterDiscountCents: 0,
+              companyDiscountCents: 0,
               serviceInGrossCents: targetServiceInGrossCents,
               serviceOutGrossCents,
               depositInGrossCents: targetDepositInGrossCents,
               depositOutGrossCents: targetDepositOutGrossCents,
+              adjustedItems: adjustedItemTotals,
             },
           },
           createdByUserId: session.userId,

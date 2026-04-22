@@ -16,11 +16,12 @@ import { cookies } from "next/headers";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import {
   commissionFromBase,
-  computeCommissionableBase,
   resolveCommissionRate,
+  resolveDiscountPolicy,
 } from "@/lib/commission";
 import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
 import { findCurrentShiftSession } from "@/lib/shiftSessions";
+import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 
 const BodySchema = z.object({
   customerName: z.string().min(1),
@@ -132,14 +133,30 @@ export async function POST(req: Request) {
     );
   }
 
-  const totalPriceCents = Math.max(0, grossTotalCents - discountCents);
-  const discountBreakdown = computeCommissionableBase({
-    grossBaseCents: grossTotalCents,
-    totalDiscountCents: discountCents,
-    responsibility: parsed.data.discountResponsibility ?? channel?.discountResponsibility ?? "COMPANY",
-    promoterDiscountShareBps: Math.round(
-      (Number.isFinite(promoterDiscountSharePct) ? promoterDiscountSharePct : 0) * 100
-    ) || channel?.promoterDiscountShareBps || 0,
+  const discountPolicy = resolveDiscountPolicy({
+    responsibility: parsed.data.discountResponsibility ?? undefined,
+    promoterDiscountShareBps:
+      Math.round((Number.isFinite(promoterDiscountSharePct) ? promoterDiscountSharePct : 0) * 100) || undefined,
+    channel,
+  });
+  const commercial = await computeReservationCommercialBreakdown({
+    when: now,
+    discountLines: [
+      {
+        serviceId: service.id,
+        optionId: option.id,
+        category: null,
+        quantity: parsed.data.quantity,
+        lineBaseCents: grossTotalCents,
+        promoCode: null,
+      },
+    ],
+    customerCountry: parsed.data.customerCountry,
+    promotionsEnabled: false,
+    totalBeforeDiscountsCents: grossTotalCents,
+    manualDiscountCents: discountCents,
+    discountResponsibility: discountPolicy.discountResponsibility,
+    promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
   });
   const isExternalCharge = channel?.kind === "EXTERNAL_ACTIVITY" || service.isExternalActivity;
 
@@ -169,7 +186,7 @@ export async function POST(req: Request) {
       channel,
       serviceId: service.id,
     });
-    const commissionCents = commissionFromBase(discountBreakdown.commissionBaseCents, commissionRate);
+    const commissionCents = commissionFromBase(commercial.commissionBaseCents, commissionRate);
     const commissionPct = Number((commissionRate * 100).toFixed(2));
 
     const payment = await prisma.payment.create({
@@ -177,12 +194,12 @@ export async function POST(req: Request) {
         origin: PaymentOrigin.BOOTH,
         method: parsed.data.paymentMethod,
         amountCents: commissionCents,
-        commissionBaseCents: discountBreakdown.commissionBaseCents,
-        externalDiscountCents: discountBreakdown.discountCents,
-        discountResponsibility: discountBreakdown.discountResponsibility,
-        promoterDiscountShareBps: discountBreakdown.promoterDiscountShareBps,
-        promoterDiscountCents: discountBreakdown.promoterDiscountCents,
-        companyDiscountCents: discountBreakdown.companyDiscountCents,
+        commissionBaseCents: commercial.commissionBaseCents,
+        externalDiscountCents: commercial.totalDiscountCents,
+        discountResponsibility: commercial.discountResponsibility,
+        promoterDiscountShareBps: commercial.promoterDiscountShareBps,
+        promoterDiscountCents: commercial.promoterDiscountCents,
+        companyDiscountCents: commercial.companyDiscountCents,
         isExternalCommissionOnly: true,
         externalGrossAmountCents: grossTotalCents,
         isDeposit: false,
@@ -204,7 +221,7 @@ export async function POST(req: Request) {
       paymentId: payment.id,
       amountCents: commissionCents,
       grossAmountCents: grossTotalCents,
-      commissionBaseCents: discountBreakdown.commissionBaseCents,
+      commissionBaseCents: commercial.commissionBaseCents,
       commissionCents,
       commissionPct,
     });
@@ -230,13 +247,14 @@ export async function POST(req: Request) {
       quantity: parsed.data.quantity,
       pax: parsed.data.pax,
       basePriceCents,
-      commissionBaseCents: discountBreakdown.commissionBaseCents,
-      manualDiscountCents: discountCents,
-      discountResponsibility: discountBreakdown.discountResponsibility,
-      promoterDiscountShareBps: discountBreakdown.promoterDiscountShareBps,
-      promoterDiscountCents: discountBreakdown.promoterDiscountCents,
-      companyDiscountCents: discountBreakdown.companyDiscountCents,
-      totalPriceCents,
+      commissionBaseCents: commercial.commissionBaseCents,
+      autoDiscountCents: commercial.autoDiscountCents,
+      manualDiscountCents: commercial.manualDiscountCents,
+      discountResponsibility: commercial.discountResponsibility,
+      promoterDiscountShareBps: commercial.promoterDiscountShareBps,
+      promoterDiscountCents: commercial.promoterDiscountCents,
+      companyDiscountCents: commercial.companyDiscountCents,
+      totalPriceCents: commercial.finalTotalCents,
       customerName: parsed.data.customerName,
       customerCountry: parsed.data.customerCountry,
       customerAddress: "-",

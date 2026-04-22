@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { computeAutoDiscountDetail } from "@/lib/discounts";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
 import { JetskiLicenseMode, PricingTier, ReservationStatus } from "@prisma/client";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
@@ -13,6 +12,8 @@ import type { Prisma } from "@prisma/client";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
+import { resolveDiscountPolicy } from "@/lib/commission";
+import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import {
   contractLogicalUnitIndex,
   countReadyVisibleContracts,
@@ -27,11 +28,6 @@ async function requireStore() {
   const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
   if (!session?.userId || !["STORE", "ADMIN"].includes(session.role as string)) return null;
   return session;
-}
-
-function capManual30(totalBeforeDiscountsCents: number, manualDiscountCents: number) {
-  const maxManual = Math.floor((totalBeforeDiscountsCents * 30) / 100);
-  return Math.max(0, Math.min(Math.max(0, manualDiscountCents || 0), maxManual));
 }
 
 function accumulateLineQuantity(
@@ -374,6 +370,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       licenseNumber: true,
 
       manualDiscountCents: true,
+      discountResponsibility: true,
+      promoterDiscountShareBps: true,
+      commissionBaseCents: true,
+      promoterDiscountCents: true,
+      companyDiscountCents: true,
       isPackParent: true,
       source: true,
       items: {
@@ -604,34 +605,21 @@ if (hasProItems) {
 
     const totalBeforeDiscounts = serviceSubtotal + extrasTotal;
 
-    // Auto-discount por item (recomendado)
     const effectiveChannelId = b.channelId !== undefined ? b.channelId : existing.channelId;
     const channel = effectiveChannelId
-      ? await prisma.channel.findUnique({ where: { id: effectiveChannelId }, select: { allowsPromotions: true } })
+      ? await prisma.channel.findUnique({
+          where: { id: effectiveChannelId },
+          select: { allowsPromotions: true, discountResponsibility: true, promoterDiscountShareBps: true },
+        })
       : null;
     const promotionsEnabled =
       existingPack.source === "BOOTH" ? false : (channel ? Boolean(channel.allowsPromotions) : true);
     const country = normalizeOptionalString(b.customerCountry) ?? existingPack.customerCountry ?? "ES";
-
-    let autoDiscountCents = 0;
-    for (const l of lineCreates) {
-      if (!promotionsEnabled) continue;
-      const detail = await computeAutoDiscountDetail({
-        when: pricingWhen,
-        item: {
-          serviceId: l.serviceId,
-          optionId: l.optionId,
-          category: l.category,
-          isExtra: false,
-          lineBaseCents: l.totalPriceCents,
-          quantity: l.quantity,
-        },
-        promoCode: l.promoCode ?? null,
-        customerCountry: country,
-        promotionsEnabled,
-      });
-      autoDiscountCents += Number(detail.discountCents ?? 0);
-    }
+    const discountPolicy = resolveDiscountPolicy({
+      responsibility: existing.discountResponsibility,
+      promoterDiscountShareBps: existing.promoterDiscountShareBps,
+      channel,
+    });
 
     // Manual discount (cap 30% del totalBeforeDiscounts)
     const originalLineKey = `${existing.serviceId}::${existing.optionId}`;
@@ -649,9 +637,23 @@ if (hasProItems) {
             nextMatchingQuantity: matchingBoothLineQty,
           })
         : (b.manualDiscountCents !== undefined ? Number(b.manualDiscountCents) : Number(existingPack.manualDiscountCents ?? 0));
-    const manualDiscountCents = capManual30(totalBeforeDiscounts, incomingManual);
-
-    const finalTotalCents = Math.max(0, totalBeforeDiscounts - autoDiscountCents - manualDiscountCents);
+    const commercial = await computeReservationCommercialBreakdown({
+      when: pricingWhen,
+      discountLines: lineCreates.map((line) => ({
+        serviceId: line.serviceId,
+        optionId: line.optionId,
+        category: line.category,
+        quantity: line.quantity,
+        lineBaseCents: line.totalPriceCents,
+        promoCode: line.promoCode ?? null,
+      })),
+      customerCountry: country,
+      promotionsEnabled,
+      totalBeforeDiscountsCents: totalBeforeDiscounts,
+      manualDiscountCents: incomingManual,
+      discountResponsibility: discountPolicy.discountResponsibility,
+      promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
+    });
 
     // Fianza (jetski units)
     const jetskiUnits = lineCreates.filter(l => l.category === "JETSKI").reduce((s, l) => s + l.quantity, 0);
@@ -684,14 +686,16 @@ if (hasProItems) {
       optionId: main.optionId,
 
       basePriceCents: serviceSubtotal,
-      autoDiscountCents,
-      manualDiscountCents,
+      commissionBaseCents: commercial.commissionBaseCents,
+      autoDiscountCents: commercial.autoDiscountCents,
+      manualDiscountCents: commercial.manualDiscountCents,
+      discountResponsibility: commercial.discountResponsibility,
+      promoterDiscountShareBps: commercial.promoterDiscountShareBps,
+      promoterDiscountCents: commercial.promoterDiscountCents,
+      companyDiscountCents: commercial.companyDiscountCents,
       manualDiscountReason: b.manualDiscountReason ?? null,
-      promoCode: promotionsEnabled ? (() => {
-        const promoCodes = Array.from(new Set(lineCreates.map((line) => line.promoCode).filter(Boolean)));
-        return promoCodes.length === 1 ? promoCodes[0] : null;
-      })() : null,
-      totalPriceCents: finalTotalCents,
+      promoCode: commercial.promoCode,
+      totalPriceCents: commercial.finalTotalCents,
     };
 
     Object.assign(data, buildOptionalData());
@@ -936,9 +940,17 @@ if (hasProItems) {
   const result = await prisma.$transaction(async (tx) => {
     const effectiveChannelId = b.channelId !== undefined ? b.channelId : existing.channelId;
     const channel = effectiveChannelId
-      ? await tx.channel.findUnique({ where: { id: effectiveChannelId }, select: { allowsPromotions: true } })
+      ? await tx.channel.findUnique({
+          where: { id: effectiveChannelId },
+          select: { allowsPromotions: true, discountResponsibility: true, promoterDiscountShareBps: true },
+        })
       : null;
     const promotionsEnabled = isBoothReservation ? false : (channel ? Boolean(channel.allowsPromotions) : true);
+    const discountPolicy = resolveDiscountPolicy({
+      responsibility: existing.discountResponsibility,
+      promoterDiscountShareBps: existing.promoterDiscountShareBps,
+      channel,
+    });
     const data: Prisma.ReservationUncheckedUpdateInput = {
       serviceId: svc.id,
       optionId: opt.id,
@@ -999,38 +1011,45 @@ if (hasProItems) {
     const serviceSubtotal = Number(mainSum._sum.totalPriceCents ?? 0);
     const totalBeforeDiscounts = Number(allSum._sum.totalPriceCents ?? 0);
 
-    const autoDiscountCents = promotionsEnabled
-      ? Number((await computeAutoDiscountDetail({
-          when: pricingWhen,
-          item: {
-            serviceId: svc.id,
-            optionId: opt.id,
-            category: svc.category ?? null,
-            isExtra: false,
-            lineBaseCents: serviceSubtotal,
-            quantity: Number(b.quantity),
-          },
-          promoCode: null,
-          customerCountry: customerCountry === undefined ? existing.customerCountry : customerCountry,
-          promotionsEnabled,
-        })).discountCents ?? 0)
-      : 0;
-    const manualDiscountCents = isBoothReservation
+    const incomingManualDiscountCents = isBoothReservation
       ? getScaledBoothDiscountCents({
           boothUnitDiscountCents,
           nextMatchingQuantity: existing.serviceId === b.serviceId && existing.optionId === b.optionId ? b.quantity : 0,
         })
       : Number(existing.manualDiscountCents ?? 0);
-
-    const finalTotalCents = Math.max(0, totalBeforeDiscounts - autoDiscountCents - manualDiscountCents);
+    const commercial = await computeReservationCommercialBreakdown({
+      when: pricingWhen,
+      discountLines: [
+        {
+          serviceId: svc.id,
+          optionId: opt.id,
+          category: svc.category ?? null,
+          quantity: Number(b.quantity),
+          lineBaseCents: serviceSubtotal,
+          promoCode: null,
+        },
+      ],
+      customerCountry: customerCountry === undefined ? existing.customerCountry : customerCountry,
+      promotionsEnabled,
+      totalBeforeDiscountsCents: totalBeforeDiscounts,
+      manualDiscountCents: incomingManualDiscountCents,
+      discountResponsibility: discountPolicy.discountResponsibility,
+      promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
+    });
 
     await tx.reservation.update({
       where: { id },
       data: {
         basePriceCents: serviceSubtotal,
-        autoDiscountCents,
-        promoCode: isBoothReservation ? null : undefined,
-        totalPriceCents: finalTotalCents,
+        commissionBaseCents: commercial.commissionBaseCents,
+        autoDiscountCents: commercial.autoDiscountCents,
+        manualDiscountCents: commercial.manualDiscountCents,
+        discountResponsibility: commercial.discountResponsibility,
+        promoterDiscountShareBps: commercial.promoterDiscountShareBps,
+        promoterDiscountCents: commercial.promoterDiscountCents,
+        companyDiscountCents: commercial.companyDiscountCents,
+        promoCode: commercial.promoCode,
+        totalPriceCents: commercial.finalTotalCents,
       },
       select: { id: true },
     });

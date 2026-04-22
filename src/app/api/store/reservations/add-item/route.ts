@@ -5,7 +5,8 @@ import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { computeAutoDiscountDetail } from "@/lib/discounts";
+import { resolveDiscountPolicy } from "@/lib/commission";
+import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 
 export const runtime = "nodejs";
@@ -125,7 +126,6 @@ export async function POST(req: Request) {
       ]);
 
       const serviceSubtotal = Number(mainSum._sum.totalPriceCents ?? 0);
-      const mainQuantity = Number(mainSum._sum.quantity ?? 1);
       const newTotal = Number(allSum._sum.totalPriceCents ?? 0);
 
       const reservationPricing = await tx.reservation.findUnique({
@@ -138,12 +138,16 @@ export async function POST(req: Request) {
           channelId: true,
           serviceId: true,
           optionId: true,
+          discountResponsibility: true,
+          promoterDiscountShareBps: true,
           items: {
             where: { isExtra: false },
             select: {
               serviceId: true,
               optionId: true,
               quantity: true,
+              totalPriceCents: true,
+              service: { select: { category: true } },
             },
           },
         },
@@ -152,31 +156,21 @@ export async function POST(req: Request) {
 
       const isBoothReservation = reservationPricing.source === "BOOTH";
       const channel = reservationPricing.channelId
-        ? await tx.channel.findUnique({ where: { id: reservationPricing.channelId }, select: { allowsPromotions: true } })
+        ? await tx.channel.findUnique({
+            where: { id: reservationPricing.channelId },
+            select: {
+              allowsPromotions: true,
+              discountResponsibility: true,
+              promoterDiscountShareBps: true,
+            },
+          })
         : null;
       const promotionsEnabled = isBoothReservation ? false : (channel ? Boolean(channel.allowsPromotions) : true);
-
-      const mainSvc = await tx.service.findUnique({
-        where: { id: reservationPricing.serviceId },
-        select: { category: true },
+      const discountPolicy = resolveDiscountPolicy({
+        responsibility: reservationPricing.discountResponsibility,
+        promoterDiscountShareBps: reservationPricing.promoterDiscountShareBps,
+        channel,
       });
-
-      const autoDiscountCents = isBoothReservation
-        ? 0
-        : Number((await computeAutoDiscountDetail({
-            when: new Date(),
-            item: {
-              serviceId: reservationPricing.serviceId,
-              optionId: reservationPricing.optionId,
-              category: mainSvc?.category ?? null,
-              isExtra: false,
-              lineBaseCents: serviceSubtotal,
-              quantity: mainQuantity,
-            },
-            promoCode: promotionsEnabled ? (reservationPricing.promoCode ?? null) : null,
-            customerCountry: reservationPricing.customerCountry ?? null,
-            promotionsEnabled,
-          })).discountCents ?? 0);
       const currentMatchingQuantity = (reservationPricing.items ?? []).reduce(
         (sum, item) =>
           item.serviceId === reservationPricing.serviceId &&
@@ -202,19 +196,37 @@ export async function POST(req: Request) {
             nextMatchingQuantity,
           })
         : Number(reservationPricing.manualDiscountCents ?? 0);
-      const finalTotal = Math.max(
-        0,
-        newTotal - manualDiscountCents - autoDiscountCents
-      );
+      const commercial = await computeReservationCommercialBreakdown({
+        when: new Date(),
+        discountLines: (reservationPricing.items ?? []).map((item) => ({
+          serviceId: item.serviceId,
+          optionId: item.optionId,
+          category: item.service?.category ?? null,
+          quantity: Number(item.quantity ?? 0),
+          lineBaseCents: Number(item.totalPriceCents ?? 0),
+          promoCode: promotionsEnabled ? (reservationPricing.promoCode ?? null) : null,
+        })),
+        customerCountry: reservationPricing.customerCountry ?? null,
+        promotionsEnabled,
+        totalBeforeDiscountsCents: newTotal,
+        manualDiscountCents,
+        discountResponsibility: discountPolicy.discountResponsibility,
+        promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
+      });
 
       await tx.reservation.update({
         where: { id: reservationId },
         data: {
           basePriceCents: serviceSubtotal,
-          autoDiscountCents,
-          manualDiscountCents,
-          promoCode: isBoothReservation ? null : reservationPricing.promoCode ?? null,
-          totalPriceCents: finalTotal,
+          commissionBaseCents: commercial.commissionBaseCents,
+          autoDiscountCents: commercial.autoDiscountCents,
+          manualDiscountCents: commercial.manualDiscountCents,
+          discountResponsibility: commercial.discountResponsibility,
+          promoterDiscountShareBps: commercial.promoterDiscountShareBps,
+          promoterDiscountCents: commercial.promoterDiscountCents,
+          companyDiscountCents: commercial.companyDiscountCents,
+          promoCode: commercial.promoCode,
+          totalPriceCents: commercial.finalTotalCents,
         },
         select: { id: true },
       });
@@ -224,8 +236,8 @@ export async function POST(req: Request) {
       return {
         serviceSubtotalCents: serviceSubtotal,
         newTotalBeforeDiscountsCents: newTotal,
-        autoDiscountCents,
-        finalTotalCents: finalTotal,
+        autoDiscountCents: commercial.autoDiscountCents,
+        finalTotalCents: commercial.finalTotalCents,
       };
     });
 

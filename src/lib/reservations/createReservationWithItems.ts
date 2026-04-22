@@ -1,16 +1,13 @@
 // src/lib/reservations/createReservationWithItems.ts
 import { JetskiLicenseMode, PricingTier, type Prisma } from "@prisma/client";
-import { computeAutoDiscountDetail } from "@/lib/discounts";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz, shouldAutoFormalize, todayYmdInTz } from "@/lib/tz-business";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
-import {
-  computeCommissionableBase,
-  resolveDiscountPolicy,
-} from "@/lib/commission";
+import { resolveDiscountPolicy } from "@/lib/commission";
+import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 
 type CreateItemInput = {
   serviceIdOrCode: string;
@@ -238,8 +235,6 @@ export async function createReservationWithItems(params: {
       : (input.pricingTier ?? PricingTier.STANDARD);
 
   let basePriceCents = 0;
-  let autoDiscountCents = 0;
-  let manualDiscountCents = Math.max(0, Number(input.manualDiscountCents ?? 0));
   let totalBeforeDiscounts = 0;
 
   // Depósito (misma lógica actual: jetski units)
@@ -281,28 +276,6 @@ export async function createReservationWithItems(params: {
     basePriceCents = lineTotal;
     totalBeforeDiscounts = lineTotal;
 
-    // Manual cap 30%
-    const maxManual = Math.floor((totalBeforeDiscounts * 30) / 100);
-    manualDiscountCents = Math.max(0, Math.min(manualDiscountCents, maxManual));
-
-    // Auto descuento (igual que tu quick)
-    const detail = await computeAutoDiscountDetail({
-      when: pricingWhen,
-      item: {
-        serviceId: it.serviceId,
-        optionId: it.optionId,
-        category: it.category,
-        isExtra: false,
-        lineBaseCents: basePriceCents,
-        quantity: it.quantity,
-      },
-      promoCode: promotionsEnabled ? (it.promoCode ?? null) : null,
-      customerCountry,
-      promotionsEnabled,
-    });
-
-    autoDiscountCents = Number(detail.discountCents ?? 0);
-
     itemCreates.push({
       serviceId: it.serviceId,
       optionId: it.optionId,
@@ -317,7 +290,6 @@ export async function createReservationWithItems(params: {
       // precio real por línea
       totalBeforeDiscounts = 0;
       basePriceCents = 0;
-      autoDiscountCents = 0;
 
       for (const it of resolvedItems) {
         const price = await findActiveServicePrice(tx, {
@@ -336,23 +308,6 @@ export async function createReservationWithItems(params: {
         totalBeforeDiscounts += lineTotal;
         basePriceCents += lineTotal;
 
-        // auto descuento por línea (mismo patrón que quick)
-        const detail = await computeAutoDiscountDetail({
-          when: pricingWhen,
-          item: {
-            serviceId: it.serviceId,
-            optionId: it.optionId,
-            category: it.category,
-            isExtra: false,
-            lineBaseCents: lineTotal,
-            quantity: it.quantity,
-          },
-          promoCode: promotionsEnabled ? (it.promoCode ?? null) : null,
-          customerCountry,
-          promotionsEnabled,
-        });
-        autoDiscountCents += Number(detail.discountCents ?? 0);
-
         itemCreates.push({
           serviceId: it.serviceId,
           optionId: it.optionId,
@@ -369,22 +324,30 @@ export async function createReservationWithItems(params: {
       if (input.pricing.mode === "PACK_FIXED_TOTAL") {
         totalBeforeDiscounts = Math.max(0, Number(input.pricing.totalBeforeDiscountsCents ?? 0));
         basePriceCents = totalBeforeDiscounts;
-        autoDiscountCents = 0;
       }
-
-      // manual cap 30% sobre totalBeforeDiscounts (incluye PACK_FIXED_TOTAL)
-      const maxManual = Math.floor((Math.max(0, totalBeforeDiscounts) * 30) / 100);
-      manualDiscountCents = Math.max(0, Math.min(manualDiscountCents, maxManual));
     }
 
-      const totalDiscountCents = autoDiscountCents + manualDiscountCents;
-      const discountBreakdown = computeCommissionableBase({
-        grossBaseCents: totalBeforeDiscounts,
-        totalDiscountCents,
-        responsibility: discountPolicy.discountResponsibility,
+      const commercial = await computeReservationCommercialBreakdown({
+        when: pricingWhen,
+        discountLines: itemCreates.map((item) => ({
+          serviceId: item.serviceId,
+          optionId: item.optionId,
+          category: resolvedItems.find(
+            (resolved) =>
+              resolved.serviceId === item.serviceId && resolved.optionId === item.optionId
+          )?.category ?? null,
+          quantity: item.quantity,
+          lineBaseCents: item.totalPriceCents,
+          promoCode: promotionsEnabled ? item.promoCode ?? null : null,
+        })),
+        customerCountry,
+        promotionsEnabled,
+        totalBeforeDiscountsCents: totalBeforeDiscounts,
+        manualDiscountCents: input.manualDiscountCents ?? 0,
+        discountResponsibility: discountPolicy.discountResponsibility,
         promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
+        allowAutoDiscount: input.pricing.mode !== "PACK_FIXED_TOTAL",
       });
-      const finalTotalCents = Math.max(0, totalBeforeDiscounts - totalDiscountCents);
 
       const depositCents = computeDepositFromResolvedItems({ isLicense, resolvedItems });
       
@@ -425,15 +388,15 @@ export async function createReservationWithItems(params: {
 
           // Totales
           basePriceCents,
-          commissionBaseCents: discountBreakdown.commissionBaseCents,
-          autoDiscountCents,
-          manualDiscountCents,
-          discountResponsibility: discountBreakdown.discountResponsibility,
-          promoterDiscountShareBps: discountBreakdown.promoterDiscountShareBps,
-          promoterDiscountCents: discountBreakdown.promoterDiscountCents,
-          companyDiscountCents: discountBreakdown.companyDiscountCents,
+          commissionBaseCents: commercial.commissionBaseCents,
+          autoDiscountCents: commercial.autoDiscountCents,
+          manualDiscountCents: commercial.manualDiscountCents,
+          discountResponsibility: commercial.discountResponsibility,
+          promoterDiscountShareBps: commercial.promoterDiscountShareBps,
+          promoterDiscountCents: commercial.promoterDiscountCents,
+          companyDiscountCents: commercial.companyDiscountCents,
           manualDiscountReason: input.manualDiscountReason ?? null,
-          totalPriceCents: finalTotalCents,
+          totalPriceCents: commercial.finalTotalCents,
           depositCents,
 
           // placeholders (como ya haces)
@@ -471,11 +434,10 @@ export async function createReservationWithItems(params: {
       });
     }
 
-    const uniquePromoCodes = Array.from(new Set(itemCreates.map((it) => it.promoCode).filter(Boolean)));
-    if (uniquePromoCodes.length <= 1) {
+    if (commercial.promoCode !== null || itemCreates.every((it) => !it.promoCode)) {
       await tx.reservation.update({
         where: { id: reservation.id },
-        data: { promoCode: uniquePromoCodes[0] ?? null },
+        data: { promoCode: commercial.promoCode },
         select: { id: true },
       });
     }
