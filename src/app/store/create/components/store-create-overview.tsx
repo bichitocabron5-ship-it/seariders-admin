@@ -130,8 +130,9 @@ export function StoreCreateCustomerProfileSection({
                     {customer.customerDocNumber || "Sin documento"} · {customer.phone || "Sin teléfono"} · {customer.email || "Sin email"}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.65 }}>
-                    Última actividad:{" "}
+                    Última reserva:{" "}
                     {customer.lastActivityAt ? new Date(customer.lastActivityAt).toLocaleDateString("es-ES") : "—"}
+                    {customer.serviceName ? ` · ${customer.serviceName}` : ""}
                   </div>
                 </div>
 

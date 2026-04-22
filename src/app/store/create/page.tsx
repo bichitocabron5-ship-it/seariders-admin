@@ -15,7 +15,7 @@ import { StoreCreateCustomerProfileSection, StoreCreateSummaryStrip } from "./co
 import { useAvailability, useContractsState, useCustomerProfileSearch, useDiscountPreview, useReservationPrefill, useStoreCreateCatalog, useStoreCreateSelection } from "./hooks/store-create-hooks";
 import { submitStoreCreateCreateFlow, submitStoreCreateEditFlow, submitStoreCreateMigrateFlow } from "./services/store-create-submit-flow";
 import { errorMessage } from "./utils/errors";
-import type { CartItem, Channel, JetskiLicenseMode, Option, ServiceMain, UIMode } from "./types";
+import type { CartItem, Channel, JetskiLicenseMode, Option, RecoveredContractProfile, ServiceMain, UIMode } from "./types";
 import type { AssetAvailability } from "../services/assets";
 
 function todayMadridYMD() {
@@ -38,6 +38,8 @@ function clampPct(value: number) {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, value));
 }
+
+const RECOVERED_CONTRACT_PROFILE_STORAGE_KEY = "store-create-recovered-contract-profile";
 
 function StoreCreatePageInner() {
   const router = useRouter();
@@ -111,6 +113,7 @@ function StoreCreatePageInner() {
   const [customerDocNumber, setCustomerDocNumber] = useState("");
   const [marketingSource, setMarketingSource] = useState("");
   const [boothNote, setBoothNote] = useState("");
+  const [recoveredContractProfile, setRecoveredContractProfile] = useState<RecoveredContractProfile | null>(null);
 
   const [manualDiscountEuros, setManualDiscountEuros] = useState<string>("");
   const [manualDiscountReason, setManualDiscountReason] = useState<string>("");
@@ -276,14 +279,53 @@ function StoreCreatePageInner() {
       if (p.customerName != null) setCustomerName(p.customerName);
       if (p.email != null) setCustomerEmail(p.email);
       if (p.phone != null) setCustomerPhone(p.phone);
+      if (p.customerDocType != null) setCustomerDocType(p.customerDocType);
       if (p.customerDocNumber != null) setCustomerDocNumber(p.customerDocNumber);
       if (p.country != null) setCustomerCountry(p.country);
       if (p.birthDate != null) setCustomerBirthDate(p.birthDate);
       if (p.address != null) setCustomerAddress(p.address);
       if (p.postalCode != null) setCustomerPostalCode(p.postalCode);
+      if (p.licenseSchool != null) setLicenseSchool(p.licenseSchool);
+      if (p.licenseType != null) setLicenseType(p.licenseType);
       if (p.licenseNumber != null) setLicenseNumber(p.licenseNumber);
+      setRecoveredContractProfile(p.contractProfile ?? null);
+
+      if (typeof window !== "undefined") {
+        if (p.contractProfile) {
+          window.sessionStorage.setItem(
+            RECOVERED_CONTRACT_PROFILE_STORAGE_KEY,
+            JSON.stringify({
+              savedAt: Date.now(),
+              profile: p.contractProfile,
+            })
+          );
+        } else {
+          window.sessionStorage.removeItem(RECOVERED_CONTRACT_PROFILE_STORAGE_KEY);
+        }
+      }
     },
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (recoveredContractProfile) return;
+
+    const raw = window.sessionStorage.getItem(RECOVERED_CONTRACT_PROFILE_STORAGE_KEY);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as { savedAt?: number; profile?: RecoveredContractProfile | null };
+      const savedAt = Number(parsed?.savedAt ?? 0);
+      if (!parsed?.profile || !savedAt || Date.now() - savedAt > 6 * 60 * 60 * 1000) {
+        window.sessionStorage.removeItem(RECOVERED_CONTRACT_PROFILE_STORAGE_KEY);
+        return;
+      }
+
+      setRecoveredContractProfile(parsed.profile);
+    } catch {
+      window.sessionStorage.removeItem(RECOVERED_CONTRACT_PROFILE_STORAGE_KEY);
+    }
+  }, [recoveredContractProfile]);
 
   // opcional: si entras en edit y ya hay customerName, lo separa "a lo bestia" una vez
   useEffect(() => {
@@ -1553,6 +1595,13 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               contractsLoading={contractsLoading}
               contractsError={contractsError}
               requiresLicense={Boolean(isLicense)}
+              recoveredContractProfile={recoveredContractProfile}
+              onRecoveredContractProfileApplied={() => {
+                setRecoveredContractProfile(null);
+                if (typeof window !== "undefined") {
+                  window.sessionStorage.removeItem(RECOVERED_CONTRACT_PROFILE_STORAGE_KEY);
+                }
+              }}
               customer={{
                 name: customerName,
                 phone: customerPhone,

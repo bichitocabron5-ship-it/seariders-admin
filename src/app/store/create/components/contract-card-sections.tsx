@@ -131,9 +131,9 @@ export function ContractLegalSection({
     <>
       <div style={subCardStyle}>
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={sectionEyebrowStyle}>Validacion legal</div>
+          <div style={sectionEyebrowStyle}>Validación legal</div>
           <div style={{ fontSize: 13, color: "#64748b" }}>
-            Edad y autorizacion del tutor cuando aplique antes de dejar el contrato en `READY`.
+            Edad y autorización del tutor cuando aplique antes de dejar el contrato en `READY`.
           </div>
         </div>
 
@@ -155,7 +155,7 @@ export function ContractLegalSection({
         {needsAuth ? (
           <label style={{ display: "flex", gap: 10, alignItems: "center", padding: 12, borderRadius: 12, border: fieldErrors?.minorAuthorizationProvided ? "1px solid #ef4444" : "1px solid #fde68a", background: fieldErrors?.minorAuthorizationProvided ? "#fff5f5" : "#fffbeb" }}>
             <input type="checkbox" checked={minorAuthorizationProvided} onChange={(e) => onMinorAuthorizationProvidedChange(e.target.checked)} />
-            <div style={{ fontWeight: 800 }}>Menor de 16-17 anos: requiere autorizacion del tutor.</div>
+            <div style={{ fontWeight: 800 }}>Menor de 16-17 años: requiere autorización del tutor.</div>
           </label>
         ) : null}
         {fieldErrors?.minorAuthorizationProvided ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.minorAuthorizationProvided}</div> : null}
@@ -173,7 +173,7 @@ export function ContractLegalSection({
       >
         <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 700 }}>
           <input type="checkbox" checked={Boolean(imageConsentAccepted)} onChange={(e) => onImageConsentAcceptedChange(e.target.checked)} />
-          Acepto el uso de mi imagen segun lo indicado
+          Acepto el uso de mi imagen según lo indicado
         </label>
 
         {age != null && age < 18 ? (
@@ -188,7 +188,7 @@ export function ContractLegalSection({
             }}
           >
             <div style={{ fontSize: 13, fontWeight: 900, color: "#9a3412" }}>
-              Menor detectado: se requiere autorizacion de padre, madre o tutor.
+              Menor detectado: se requiere autorización de padre, madre o tutor.
             </div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -211,8 +211,8 @@ export function ContractLegalSection({
                 {minorUploadBusy
                   ? "Subiendo..."
                   : contract.minorAuthorizationFileName
-                    ? "Reemplazar autorizacion"
-                    : "Adjuntar autorizacion"}
+                    ? "Reemplazar autorización"
+                    : "Adjuntar autorización"}
                 <input
                   type="file"
                   accept=".pdf,image/png,image/jpeg,image/webp"
@@ -245,7 +245,7 @@ export function ContractLegalSection({
                     cursor: minorDeleteBusy ? "default" : "pointer",
                   }}
                 >
-                  {minorDeleteBusy ? "Eliminando..." : "Eliminar autorizacion"}
+                  {minorDeleteBusy ? "Eliminando..." : "Eliminar autorización"}
                 </button>
               ) : null}
             </div>
@@ -271,7 +271,7 @@ export function ContractLegalSection({
                       cursor: "pointer",
                     }}
                   >
-                    Ver autorizacion
+                    Ver autorización
                   </button>
                 ) : null}
               </div>
@@ -338,7 +338,7 @@ export function ContractDriverSection({
             value={driverName}
             onChange={(e) => onDriverNameChange(e.target.value)}
             style={withErrorStyle(fieldErrors?.driverName)}
-            placeholder="Nombre completo segun documento"
+            placeholder="Nombre completo según documento"
           />
           {fieldErrors?.driverName ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverName}</div> : null}
         </label>
@@ -358,12 +358,12 @@ export function ContractDriverSection({
           <input value={driverEmail} onChange={(e) => onDriverEmailChange(e.target.value)} style={inputStyle} placeholder="conductor@email.com" />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Direccion *
+          Dirección *
           <input value={driverAddress} onChange={(e) => onDriverAddressChange(e.target.value)} style={withErrorStyle(fieldErrors?.driverAddress)} />
           {fieldErrors?.driverAddress ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverAddress}</div> : null}
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Codigo postal
+          Código postal
           <input value={driverPostalCode} onChange={(e) => onDriverPostalCodeChange(e.target.value)} style={inputStyle} placeholder="08303" />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
@@ -377,7 +377,7 @@ export function ContractDriverSection({
           {fieldErrors?.driverDocType ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverDocType}</div> : null}
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Numero de documento *
+          Número de documento *
           <input value={driverDocNumber} onChange={(e) => onDriverDocNumberChange(e.target.value)} style={withErrorStyle(fieldErrors?.driverDocNumber)} />
           {fieldErrors?.driverDocNumber ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverDocNumber}</div> : null}
         </label>
@@ -408,7 +408,7 @@ export function ContractLicenseSection({
       <div style={{ display: "grid", gap: 4 }}>
         <div style={sectionEyebrowStyle}>Licencia</div>
         <div style={{ fontSize: 13, color: "#64748b" }}>
-          Completa esta parte solo cuando la actividad exige licencia nautica.
+          Completa esta parte solo cuando la actividad exige licencia náutica.
         </div>
       </div>
 
@@ -424,7 +424,7 @@ export function ContractLicenseSection({
           {fieldErrors?.licenseType ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.licenseType}</div> : null}
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Numero de licencia
+          Número de licencia
           <input value={licenseNumber} onChange={(e) => onLicenseNumberChange(e.target.value)} style={withErrorStyle(fieldErrors?.licenseNumber)} />
           {fieldErrors?.licenseNumber ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.licenseNumber}</div> : null}
         </label>

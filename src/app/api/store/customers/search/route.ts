@@ -70,6 +70,11 @@ export async function GET(req: Request) {
       customerAddress: true,
       licenseNumber: true,
       activityDate: true,
+      service: {
+        select: {
+          name: true,
+        },
+      },
     },
   });
 
@@ -77,13 +82,15 @@ export async function GET(req: Request) {
     ok: true,
     rows: rows.map((r) => ({
       reservationId: r.id,
-      customername: r.customerName ?? null,
+      customerName: r.customerName ?? null,
+      serviceName: r.service?.name ?? null,
       email: r.customerEmail ?? null,
       phone: r.customerPhone ?? null,
       customerDocNumber: r.customerDocNumber ?? null,
       country: r.customerCountry ?? null,
       birthDate: r.customerBirthDate ?? null,
       address: r.customerAddress ?? null,
+      postalCode: r.customerPostalCode ?? null,
       licenseNumber: r.licenseNumber ?? null,
       lastActivityAt: r.activityDate ?? null,
     })),

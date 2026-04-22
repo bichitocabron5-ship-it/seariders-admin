@@ -3,12 +3,13 @@
 
 import React, { useState } from "react";
 import { opsStyles } from "@/components/ops-ui";
-import type { CartItem, ContractDto, Option, ServiceMain } from "../types";
+import type { CartItem, ContractDto, Option, RecoveredContractProfile, ServiceMain } from "../types";
 import { errorMessage } from "../utils/errors";
 import {
   deleteMinorAuthorization,
   generateContractPdf,
   getReservationPrecheckinLink,
+  patchContract,
   renderContract,
   saveContractSignature,
   signContract,
@@ -62,6 +63,8 @@ export function ContractsSection({
   contractsLoading,
   contractsError,
   requiresLicense,
+  recoveredContractProfile,
+  onRecoveredContractProfileApplied,
   customer,
   onRefresh,
 }: {
@@ -72,6 +75,8 @@ export function ContractsSection({
   contractsLoading: boolean;
   contractsError: string | null;
   requiresLicense: boolean;
+  recoveredContractProfile: RecoveredContractProfile | null;
+  onRecoveredContractProfileApplied: () => void;
   customer: {
     name: string;
     phone: string;
@@ -96,6 +101,7 @@ export function ContractsSection({
     url: string;
     expiresInMinutes: number;
   } | null>(null);
+  const [recoveringProfile, setRecoveringProfile] = useState(false);
   const previewContract = previewContractId
     ? contracts.find((contract) => contract.id === previewContractId) ?? null
     : null;
@@ -106,6 +112,78 @@ export function ContractsSection({
   });
   const signedCount = contracts.filter((contract) => contract.status === "SIGNED").length;
   const pendingCount = Math.max(requiredUnits - readyCount, 0);
+
+  React.useEffect(() => {
+    if (!recoveredContractProfile) return;
+    if (!contracts.length) return;
+    if (recoveringProfile) return;
+
+    const emptyDraftContracts = contracts.filter((contract) => {
+      if (contract.status !== "DRAFT") return false;
+      return ![
+        contract.driverName,
+        contract.driverPhone,
+        contract.driverEmail,
+        contract.driverCountry,
+        contract.driverAddress,
+        contract.driverPostalCode,
+        contract.driverDocType,
+        contract.driverDocNumber,
+        contract.driverBirthDate,
+        contract.licenseSchool,
+        contract.licenseType,
+        contract.licenseNumber,
+      ].some((value) => String(value ?? "").trim().length > 0) && !contract.imageConsentAccepted && !contract.minorAuthorizationProvided;
+    });
+
+    if (!emptyDraftContracts.length) {
+      onRecoveredContractProfileApplied();
+      return;
+    }
+
+    let cancelled = false;
+
+    const applyRecoveredProfile = async () => {
+      try {
+        setRecoveringProfile(true);
+        await Promise.all(
+          emptyDraftContracts.map((contract) =>
+            patchContract(reservationId, contract.id, {
+              driverName: recoveredContractProfile.driverName ?? null,
+              driverPhone: recoveredContractProfile.driverPhone ?? null,
+              driverEmail: recoveredContractProfile.driverEmail ?? null,
+              driverCountry: recoveredContractProfile.driverCountry ?? null,
+              driverAddress: recoveredContractProfile.driverAddress ?? null,
+              driverPostalCode: recoveredContractProfile.driverPostalCode ?? null,
+              driverDocType: recoveredContractProfile.driverDocType ?? null,
+              driverDocNumber: recoveredContractProfile.driverDocNumber ?? null,
+              driverBirthDate: recoveredContractProfile.driverBirthDate ?? null,
+              minorAuthorizationProvided: Boolean(recoveredContractProfile.minorAuthorizationProvided),
+              imageConsentAccepted: Boolean(recoveredContractProfile.imageConsentAccepted),
+              licenseSchool: recoveredContractProfile.licenseSchool ?? null,
+              licenseType: recoveredContractProfile.licenseType ?? null,
+              licenseNumber: recoveredContractProfile.licenseNumber ?? null,
+            })
+          )
+        );
+
+        if (cancelled) return;
+        onRecoveredContractProfileApplied();
+        await onRefresh();
+      } catch (e: unknown) {
+        if (cancelled) return;
+        setPreviewError(e instanceof Error ? e.message : "No se pudo recuperar la ficha legal del contrato");
+      } finally {
+        if (!cancelled) setRecoveringProfile(false);
+      }
+    };
+
+    void applyRecoveredProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contracts, onRecoveredContractProfileApplied, onRefresh, recoveredContractProfile, recoveringProfile, reservationId]);
 
   async function handlePreview(contractId: string) {
     try {
@@ -258,6 +336,27 @@ export function ContractsSection({
           <div style={{ fontSize: 13 }}>
             La reserva requiere {requiredUnits} contrato{requiredUnits === 1 ? "" : "s"} y todavía faltan {pendingCount}.
             Si has subido la cantidad o añadido otra unidad, revisa y completa los contratos nuevos antes de formalizar.
+          </div>
+        </div>
+      ) : null}
+
+      {recoveredContractProfile ? (
+        <div
+          style={{
+            padding: 14,
+            borderRadius: 14,
+            border: "1px solid #bfdbfe",
+            background: "#eff6ff",
+            color: "#1d4ed8",
+            display: "grid",
+            gap: 4,
+          }}
+        >
+          <div style={{ fontWeight: 900 }}>Ficha legal recuperada</div>
+          <div style={{ fontSize: 13 }}>
+            {recoveringProfile
+              ? "Aplicando automáticamente los datos del último contrato a los borradores de esta reserva."
+              : "Los contratos nuevos usarán los datos recuperados del último contrato para que solo tengas que revisar y firmar."}
           </div>
         </div>
       ) : null}

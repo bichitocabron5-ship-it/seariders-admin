@@ -31,6 +31,18 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
           id: true,
           quantity: true,
           isLicense: true,
+          customerName: true,
+          customerPhone: true,
+          customerEmail: true,
+          customerCountry: true,
+          customerAddress: true,
+          customerPostalCode: true,
+          customerBirthDate: true,
+          customerDocType: true,
+          customerDocNumber: true,
+          licenseSchool: true,
+          licenseType: true,
+          licenseNumber: true,
           service: { select: { category: true } },
           items: {
             select: {
@@ -91,10 +103,38 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       });
       const missingSlots = listMissingLogicalUnits(existingRows, requiredUnits);
       const maxUnitIndex = Math.max(0, ...existingRows.map((c) => Number(c.unitIndex ?? 0)));
-      const toCreate: Array<{ reservationId: string; unitIndex: number; logicalUnitIndex: number }> = missingSlots.map((slot, idx) => ({
+      const toCreate: Array<{
+        reservationId: string;
+        unitIndex: number;
+        logicalUnitIndex: number;
+        driverName: string | null;
+        driverPhone: string | null;
+        driverEmail: string | null;
+        driverCountry: string | null;
+        driverAddress: string | null;
+        driverPostalCode: string | null;
+        driverDocType: string | null;
+        driverDocNumber: string | null;
+        driverBirthDate: Date | null;
+        licenseSchool: string | null;
+        licenseType: string | null;
+        licenseNumber: string | null;
+      }> = missingSlots.map((slot, idx) => ({
         reservationId: id,
         unitIndex: maxUnitIndex + idx + 1,
         logicalUnitIndex: slot,
+        driverName: res.customerName ?? null,
+        driverPhone: res.customerPhone ?? null,
+        driverEmail: res.customerEmail ?? null,
+        driverCountry: res.customerCountry ?? null,
+        driverAddress: res.customerAddress ?? null,
+        driverPostalCode: res.customerPostalCode ?? null,
+        driverDocType: res.customerDocType ?? null,
+        driverDocNumber: res.customerDocNumber ?? null,
+        driverBirthDate: res.customerBirthDate ?? null,
+        licenseSchool: res.isLicense ? res.licenseSchool ?? null : null,
+        licenseType: res.isLicense ? res.licenseType ?? null : null,
+        licenseNumber: res.isLicense ? res.licenseNumber ?? null : null,
       }));
 
       if (toCreate.length) {

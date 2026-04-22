@@ -52,6 +52,7 @@ export type DiscountPromoChoice = {
 export type CustomerSearchRow = {
   reservationId: string;
   customerName: string | null;
+  serviceName?: string | null;
   email: string | null;
   phone: string | null;
   customerDocNumber: string | null;
@@ -61,6 +62,25 @@ export type CustomerSearchRow = {
   postalCode: string | null;
   licenseNumber: string | null;
   lastActivityAt: string | null;
+};
+
+export type RecoveredContractProfile = {
+  sourceReservationId: string;
+  sourceReservationLabel?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  driverEmail?: string | null;
+  driverCountry?: string | null;
+  driverAddress?: string | null;
+  driverPostalCode?: string | null;
+  driverDocType?: string | null;
+  driverDocNumber?: string | null;
+  driverBirthDate?: string | null;
+  minorAuthorizationProvided?: boolean | null;
+  imageConsentAccepted?: boolean | null;
+  licenseSchool?: string | null;
+  licenseType?: string | null;
+  licenseNumber?: string | null;
 };
 
 export type UIMode = "CREATE" | "FORMALIZE" | "EDIT";

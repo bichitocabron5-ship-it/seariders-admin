@@ -1,4 +1,4 @@
-import fs from "node:fs/promises";
+﻿import fs from "node:fs/promises";
 import path from "node:path";
 import type { PublicLanguage } from "@/lib/public-links/i18n";
 import { translateContractHtml } from "@/lib/contracts/render-contract-i18n";
@@ -75,7 +75,7 @@ function esc(v: unknown) {
 }
 
 function formatDate(v: Date | string | null | undefined) {
-  if (!v) return "—";
+  if (!v) return "â€”";
   const d = new Date(v);
   return d.toLocaleDateString("es-ES");
 }
@@ -105,7 +105,7 @@ export async function loadLogoSrc() {
 }
 
 function formatTime(v: Date | string | null | undefined) {
-  if (!v) return "—";
+  if (!v) return "â€”";
   const d = new Date(v);
   return d.toLocaleTimeString("es-ES", {
     hour: "2-digit",
@@ -141,16 +141,36 @@ function preparedResourceSummary(contract: ContractRenderDriver) {
   if (contract.preparedAsset) {
     return {
       kind: contract.preparedAsset.type ? `ASSET ${contract.preparedAsset.type}` : "ASSET",
-      name: contract.preparedAsset.name ?? "EMBARCACIÓN",
+      name: contract.preparedAsset.name ?? "EMBARCACIÃ“N",
       plate: contract.preparedAsset.plate ?? "",
     };
   }
 
   return {
     kind: "RECURSO",
-    name: "PENDIENTE DE ASIGNACIÓN",
+    name: "PENDIENTE DE ASIGNACIÃ“N",
     plate: "",
   };
+}
+
+function fixMojibake(html: string) {
+  return html
+    .replaceAll("\u00C2\u00B7", "\u00B7")
+    .replaceAll("\u00E2\u20AC\u201D", "\u2014")
+    .replaceAll("\u00E2\u201A\u00AC", "\u20AC")
+    .replaceAll("\u00E2\u20AC\u00A2", "\u2022")
+    .replaceAll("\u00C3\u00A1", "\u00E1")
+    .replaceAll("\u00C3\u00A9", "\u00E9")
+    .replaceAll("\u00C3\u00AD", "\u00ED")
+    .replaceAll("\u00C3\u00B3", "\u00F3")
+    .replaceAll("\u00C3\u00BA", "\u00FA")
+    .replaceAll("\u00C3\u0081", "\u00C1")
+    .replaceAll("\u00C3\u0089", "\u00C9")
+    .replaceAll("\u00C3\u008D", "\u00CD")
+    .replaceAll("\u00C3\u0093", "\u00D3")
+    .replaceAll("\u00C3\u009A", "\u00DA")
+    .replaceAll("\u00C3\u00B1", "\u00F1")
+    .replaceAll("\u00C3\u0091", "\u00D1");
 }
 
 export function buildContractHtml(input: ContractRenderInput) {
@@ -167,7 +187,7 @@ export function buildContractHtml(input: ContractRenderInput) {
   })();
 
   return translateContractHtml({
-    html: baseHtml,
+    html: fixMojibake(baseHtml),
     language: input.language ?? "es",
     templateCode: input.templateCode,
   });
@@ -189,7 +209,7 @@ function signatureBlockHtml(args: {
           style="max-width:220px; max-height:70px; object-fit:contain; display:block; margin:0 auto 4px auto;"
         />
         <div style="border-top:1px solid #111; width:220px; margin:0 auto; padding-top:6px; font-size:11px;">
-          ${esc(args.label)}${args.signatureSignedBy ? ` · ${esc(args.signatureSignedBy)}` : ""}${signedDate ? ` · ${esc(signedDate)}` : ""}
+          ${esc(args.label)}${args.signatureSignedBy ? ` Â· ${esc(args.signatureSignedBy)}` : ""}${signedDate ? ` Â· ${esc(signedDate)}` : ""}
         </div>
       </div>
     `;
@@ -214,6 +234,9 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
   const endTime = addMinutes(baseDate, reservation.durationMinutes);
   const endTimeText = endTime ? formatTime(endTime) : "—";
   const durationText = reservation.durationMinutes ? `${reservation.durationMinutes} min` : "—";
+  const reservationSummary = [reservation.customerName, reservation.serviceName, dateText]
+    .filter((value) => String(value ?? "").trim().length > 0)
+    .join(" · ");
 
   const driverDocLabel =
     safeUpper(contract.driverDocType) === "PASSPORT"
@@ -227,10 +250,10 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
   const phone = esc(contract.driverPhone || "");
   const email = esc(contract.driverEmail || "");
   const postalCountry =
-    `${esc(contract.driverPostalCode || "")}${contract.driverCountry ? ` · ${esc(contract.driverCountry)}` : ""}`.trim();
+    `${esc(contract.driverPostalCode || "")}${contract.driverCountry ? ` Â· ${esc(contract.driverCountry)}` : ""}`.trim();
 
   const legalHeader =
-    "UTE JETSKI CENTER- NOMAD NAUTIC · CIF: U16457343 · Tel: 608101272 · Email: seariderjetski@gmail.com · Dirección: C/ MARINA L-401 402, NUM 401 402 08330 PREMIÀ DE MAR - (BARCELONA)";
+    "UTE JETSKI CENTER- NOMAD NAUTIC Â· CIF: U16457343 Â· Tel: 608101272 Â· Email: seariderjetski@gmail.com Â· DirecciÃ³n: C/ MARINA L-401 402, NUM 401 402 08330 PREMIÃ€ DE MAR - (BARCELONA)";
 
   return `
 <!doctype html>
@@ -395,36 +418,36 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
       <img src="${esc(input.logoSrc)}" class="logo" />
     </div>
 
-    <div class="title">ALQUILER DE MOTOS ACUÁTICAS SIN LICENCIA</div>
-    <div class="subtitle">Plantilla ${esc(templateCode)} · Versión ${esc(templateVersion)}</div>
+    <div class="title">ALQUILER DE MOTOS ACUÃTICAS SIN LICENCIA</div>
+    <div class="subtitle">Plantilla ${esc(templateCode)} Â· VersiÃ³n ${esc(templateVersion)}</div>
 
-    <div class="section-title">1. NORMAS DE NAVEGACIÓN</div>
+    <div class="section-title">1. NORMAS DE NAVEGACIÃ“N</div>
 
-    <p class="clause-item"><b>a.</b> Se saldrá del puerto a una velocidad máxima de 3 nudos.</p>
-    <p class="clause-item"><b>b.</b> Se mantendrá siempre una distancia mínima de seguridad de 50 metros entre las motos o respeto a otras embarcaciones.</p>
-    <p class="clause-item"><b>c.</b> Las motos navegarán en fila, siempre detrás del monitor.</p>
-    <p class="clause-item"><b>d.</b> Un monitor observará a las motos y a su tripulación durante la navegación y aclarará cualquier duda que puedan tener al respecto.</p>
-    <p class="clause-item"><b>e.</b> En caso de confusión o no poder controlar la moto, debemos estirar de la llave que desconectará el motor y deberá esperar sobre la moto a que venga el monitor, sin abandonar en ningún caso la embarcación y efectuando señales con los brazos hacia la dirección del monitor.</p>
-    <p class="clause-item"><b>f.</b> En ningún caso, se permite conducir motos de agua a los menores de 18 años. Los menores entre 16 y 18 años deberán presentar una autorización firmada del padre/madre/ tutor legal.</p>
+    <p class="clause-item"><b>a.</b> Se saldrÃ¡ del puerto a una velocidad mÃ¡xima de 3 nudos.</p>
+    <p class="clause-item"><b>b.</b> Se mantendrÃ¡ siempre una distancia mÃ­nima de seguridad de 50 metros entre las motos o respeto a otras embarcaciones.</p>
+    <p class="clause-item"><b>c.</b> Las motos navegarÃ¡n en fila, siempre detrÃ¡s del monitor.</p>
+    <p class="clause-item"><b>d.</b> Un monitor observarÃ¡ a las motos y a su tripulaciÃ³n durante la navegaciÃ³n y aclararÃ¡ cualquier duda que puedan tener al respecto.</p>
+    <p class="clause-item"><b>e.</b> En caso de confusiÃ³n o no poder controlar la moto, debemos estirar de la llave que desconectarÃ¡ el motor y deberÃ¡ esperar sobre la moto a que venga el monitor, sin abandonar en ningÃºn caso la embarcaciÃ³n y efectuando seÃ±ales con los brazos hacia la direcciÃ³n del monitor.</p>
+    <p class="clause-item"><b>f.</b> En ningÃºn caso, se permite conducir motos de agua a los menores de 18 aÃ±os. Los menores entre 16 y 18 aÃ±os deberÃ¡n presentar una autorizaciÃ³n firmada del padre/madre/ tutor legal.</p>
     <p class="clause-item"><b>g.</b> Es obligatorio el chaleco salvavidas.</p>
-    <p class="clause-item"><b>h.</b> Antes de iniciar la navegación, asegúrese de haber comprendido las normas de seguridad y funcionamiento de la moto, no dude en consultar cualquier duda respecto a estas.</p>
-    <p class="clause-item"><b>i.</b> Está totalmente prohibido entrar a la zona de bañistas y se mantendrá siempre una distancia mínima de 300 metros respecto a la playa y de 50 metros entre las motos y las demás embarcaciones.</p>
+    <p class="clause-item"><b>h.</b> Antes de iniciar la navegaciÃ³n, asegÃºrese de haber comprendido las normas de seguridad y funcionamiento de la moto, no dude en consultar cualquier duda respecto a estas.</p>
+    <p class="clause-item"><b>i.</b> EstÃ¡ totalmente prohibido entrar a la zona de baÃ±istas y se mantendrÃ¡ siempre una distancia mÃ­nima de 300 metros respecto a la playa y de 50 metros entre las motos y las demÃ¡s embarcaciones.</p>
 
     <div class="section-title">2. CONDICIONES DEL CONTRATO</div>
 
     <p class="clause-item"><b>a.</b> El usuario se compromete a leer y respetar las normas de seguridad detalladas en el contrato.</p>
-    <p class="clause-item"><b>b.</b> El usuario que infrinja cualquiera de las normas de seguridad y navegación detalladas en el contrato responderá ante las autoridades españolas, en caso de responsabilidad civil, dando lugar a la cancelación instantánea del contrato de alquiler sin derecho a la reclamación o indemnización y se somete expresamente al fuero de los tribunales de Barcelona.</p>
-    <p class="clause-item"><b>c.</b> Esta actividad está cubierta con una póliza de responsabilidad civil.</p>
-    <p class="clause-item"><b>d.</b> El usuario reconoce que recibe el vehículo en perfectas condiciones y se compromete a conservar en buen estado, a conducir respetando las normas de navegación vigentes en este país, así como seguir con las normas indicadas anteriormente.</p>
-    <p class="clause-item"><b>e.</b> El usuario libera de toda responsabilidad civil a la empresa o persona física de todos los daños físicos que se puedan causar por el mal uso y el erróneo disfrute de los servicios que se le proporcionarán por esta empresa.</p>
-    <p class="clause-item"><b>f.</b> Queda totalmente prohibido el uso del teléfono móvil, a menos que el instructor dé permiso para utilizarlo. Solo se podrá utilizar el teléfono móvil cuando el instructor nos lo indique. El uso de este en cualquier otro momento puede comportar la retirada de fianza o cancelación de la actividad sin derecho a reclamación.</p>
-    <p class="clause-item"><b>g.</b> El cliente declara no haber consumido ningún tipo de drogas, alcohol o estupefacientes, así como que no padece ninguna enfermedad, en la que la actividad pueda peligrar su salud.</p>
-    <p class="clause-item"><b>h.</b> Si el usuario hace caso omiso al instructor, este suspenderá la actividad sin que se pueda reclamar la devolución del dinero de la actividad, o la fianza de la misma.</p>
+    <p class="clause-item"><b>b.</b> El usuario que infrinja cualquiera de las normas de seguridad y navegaciÃ³n detalladas en el contrato responderÃ¡ ante las autoridades espaÃ±olas, en caso de responsabilidad civil, dando lugar a la cancelaciÃ³n instantÃ¡nea del contrato de alquiler sin derecho a la reclamaciÃ³n o indemnizaciÃ³n y se somete expresamente al fuero de los tribunales de Barcelona.</p>
+    <p class="clause-item"><b>c.</b> Esta actividad estÃ¡ cubierta con una pÃ³liza de responsabilidad civil.</p>
+    <p class="clause-item"><b>d.</b> El usuario reconoce que recibe el vehÃ­culo en perfectas condiciones y se compromete a conservar en buen estado, a conducir respetando las normas de navegaciÃ³n vigentes en este paÃ­s, asÃ­ como seguir con las normas indicadas anteriormente.</p>
+    <p class="clause-item"><b>e.</b> El usuario libera de toda responsabilidad civil a la empresa o persona fÃ­sica de todos los daÃ±os fÃ­sicos que se puedan causar por el mal uso y el errÃ³neo disfrute de los servicios que se le proporcionarÃ¡n por esta empresa.</p>
+    <p class="clause-item"><b>f.</b> Queda totalmente prohibido el uso del telÃ©fono mÃ³vil, a menos que el instructor dÃ© permiso para utilizarlo. Solo se podrÃ¡ utilizar el telÃ©fono mÃ³vil cuando el instructor nos lo indique. El uso de este en cualquier otro momento puede comportar la retirada de fianza o cancelaciÃ³n de la actividad sin derecho a reclamaciÃ³n.</p>
+    <p class="clause-item"><b>g.</b> El cliente declara no haber consumido ningÃºn tipo de drogas, alcohol o estupefacientes, asÃ­ como que no padece ninguna enfermedad, en la que la actividad pueda peligrar su salud.</p>
+    <p class="clause-item"><b>h.</b> Si el usuario hace caso omiso al instructor, este suspenderÃ¡ la actividad sin que se pueda reclamar la devoluciÃ³n del dinero de la actividad, o la fianza de la misma.</p>
     <p class="clause-item"><b>i.</b> El arrendatario declara haber comprendido correctamente todas las instrucciones para el correcto uso de la moto y el correcto desarrollo de la actividad.</p>
 
     <div class="footer">
       <div>${esc(legalHeader)}</div>
-      <div>Reserva ${esc(reservation.id)} · Contrato #${esc(contract.logicalUnitIndex ?? contract.unitIndex)}</div>
+      <div>${esc(reservationSummary || "Reserva")} · Contrato #${esc(contract.logicalUnitIndex ?? contract.unitIndex)}</div>
     </div>
   </div>
 
@@ -437,7 +460,7 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
     <div class="section-title">3. ACCIDENTES Y REPARACIONES</div>
 
     <p class="clause-item">
-      En caso de accidente o rotura por negligencia del cliente, este se compromete a abonar los desperfectos causados en las motos de acuerdo con las tarifas de precios vigentes, y a rellenar la declaración del accidente con sus datos.
+      En caso de accidente o rotura por negligencia del cliente, este se compromete a abonar los desperfectos causados en las motos de acuerdo con las tarifas de precios vigentes, y a rellenar la declaraciÃ³n del accidente con sus datos.
     </p>
 
     <div class="box">
@@ -447,12 +470,12 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
           <div class="field-line ${!name ? "empty" : ""}">${name || " "}</div>
         </div>
         <div class="field">
-          <div class="field-label">NOMBRE DEL MENOR O DEL ACOMPAÑANTE</div>
+          <div class="field-label">NOMBRE DEL MENOR O DEL ACOMPAÃ‘ANTE</div>
           <div class="field-line empty"> </div>
         </div>
 
         <div class="field">
-          <div class="field-label">DIRECCIÓN</div>
+          <div class="field-label">DIRECCIÃ“N</div>
           <div class="field-line ${!address ? "empty" : ""}">${address || " "}</div>
         </div>
         <div class="field">
@@ -461,7 +484,7 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
         </div>
 
         <div class="field">
-          <div class="field-label">TELÉFONO</div>
+          <div class="field-label">TELÃ‰FONO</div>
           <div class="field-line ${!phone ? "empty" : ""}">${phone || " "}</div>
         </div>
         <div class="field">
@@ -470,7 +493,7 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
         </div>
 
         <div class="field">
-          <div class="field-label">CÓDIGO POSTAL / PAÍS</div>
+          <div class="field-label">CÃ“DIGO POSTAL / PAÃS</div>
           <div class="field-line ${!postalCountry ? "empty" : ""}">${postalCountry || " "}</div>
         </div>
         <div class="field">
@@ -497,7 +520,7 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
 
       <div class="field" style="margin-top:10px;">
         <div class="field-label">TIEMPO DE USO</div>
-        <div class="field-line">${esc(durationText)} · ${esc(startTimeText)} - ${esc(endTimeText)}</div>
+        <div class="field-line">${esc(durationText)} Â· ${esc(startTimeText)} - ${esc(endTimeText)}</div>
       </div>
 
       <div class="field" style="margin-top:12px;">
@@ -512,32 +535,32 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
     </div>
 
     <div class="box final-legal">
-      <div class="section-title" style="margin-top:0;">FIANZA Y AUTORIZACIÓN DE IMAGEN</div>
+      <div class="section-title" style="margin-top:0;">FIANZA Y AUTORIZACIÃ“N DE IMAGEN</div>
 
       <p class="clause-item">
-        COMO GARANTÍA POR EL CORRECTO USO DE LA MOTO DE AGUA Y EL CUMPLIMIENTO DE LAS CONDICIONES DEL ALQUILER, SE COBRARÁ UNA FIANZA DE 100 EUROS AL MOMENTO DE LA FIRMA DEL CONTRATO O ANTES DEL INICIO DE LA ACTIVIDAD.
+        COMO GARANTÃA POR EL CORRECTO USO DE LA MOTO DE AGUA Y EL CUMPLIMIENTO DE LAS CONDICIONES DEL ALQUILER, SE COBRARÃ UNA FIANZA DE 100 EUROS AL MOMENTO DE LA FIRMA DEL CONTRATO O ANTES DEL INICIO DE LA ACTIVIDAD.
       </p>
 
       <div class="bullet-block">
-        <p><b>• ESTA FIANZA SERÁ REEMBOLSADA ÍNTEGRAMENTE AL FINALIZAR EL SERVICIO, SIEMPRE QUE:</b></p>
-        <p><b>o</b> LA MOTO DE AGUA SE DEVUELVA EN EL MISMO ESTADO EN EL QUE SE ENTREGÓ.</p>
-        <p><b>o</b> NO SE HAYA PRODUCIDO NINGÚN DAÑO O MAL USO DEL EQUIPO.</p>
+        <p><b>â€¢ ESTA FIANZA SERÃ REEMBOLSADA ÃNTEGRAMENTE AL FINALIZAR EL SERVICIO, SIEMPRE QUE:</b></p>
+        <p><b>o</b> LA MOTO DE AGUA SE DEVUELVA EN EL MISMO ESTADO EN EL QUE SE ENTREGÃ“.</p>
+        <p><b>o</b> NO SE HAYA PRODUCIDO NINGÃšN DAÃ‘O O MAL USO DEL EQUIPO.</p>
         <p><b>o</b> SE HAYAN CUMPLIDO LAS NORMAS DE SEGURIDAD Y COMPORTAMIENTO INDICADAS POR EL PERSONAL.</p>
       </div>
 
       <p class="clause-item" style="margin-top:10px;">
-        EL PAGO DE LA FIANZA PODRÁ REALIZARSE EN EFECTIVO O MEDIANTE TARJETA BANCARIA, SEGÚN DISPONIBILIDAD.
+        EL PAGO DE LA FIANZA PODRÃ REALIZARSE EN EFECTIVO O MEDIANTE TARJETA BANCARIA, SEGÃšN DISPONIBILIDAD.
       </p>
 
       <p class="clause-item">
-        El cliente autoriza a UTE JERSKI CENTER- NOMAD NAUTIC a utilizar las fotografías y vídeos tomados durante la actividad para su publicación en redes sociales, página web y material publicitario de la empresa. Esta autorización es gratuita y podrá ser revocada en cualquier momento mediante notificación por escrito.
+        El cliente autoriza a UTE JERSKI CENTER- NOMAD NAUTIC a utilizar las fotografÃ­as y vÃ­deos tomados durante la actividad para su publicaciÃ³n en redes sociales, pÃ¡gina web y material publicitario de la empresa. Esta autorizaciÃ³n es gratuita y podrÃ¡ ser revocada en cualquier momento mediante notificaciÃ³n por escrito.
       </p>
 
     </div>
 
     <div class="footer">
       <div>${esc(legalHeader)}</div>
-      <div>Reserva ${esc(reservation.id)} · Contrato #${esc(contract.logicalUnitIndex ?? contract.unitIndex)}</div>
+      <div>${esc(reservationSummary || "Reserva")} · Contrato #${esc(contract.logicalUnitIndex ?? contract.unitIndex)}</div>
     </div>
   </div>
 
@@ -550,13 +573,13 @@ function buildLicensedHtml(input: ContractRenderInput) {
   const { reservation, contract } = input;
 
   const legalHeader =
-    "UTE JETSKI CENTER- NOMAD NAUTIC · CIF: U16457343 · Tel: 608101272 · Email: seariderjetski@gmail.com · Dirección: C/ MARINA L-401 402, NUM 401 402 08330 PREMIÀ DE MAR - (BARCELONA)";
+    "UTE JETSKI CENTER- NOMAD NAUTIC Â· CIF: U16457343 Â· Tel: 608101272 Â· Email: seariderjetski@gmail.com Â· DirecciÃ³n: C/ MARINA L-401 402, NUM 401 402 08330 PREMIÃ€ DE MAR - (BARCELONA)";
 
   const baseDate = reservation.scheduledTime ?? reservation.activityDate;
   const dateText = formatDate(baseDate);
   const startTimeText = formatTime(reservation.scheduledTime);
   const endTime = addMinutes(baseDate, reservation.durationMinutes);
-  const endTimeText = endTime ? formatTime(endTime) : "—";
+  const endTimeText = endTime ? formatTime(endTime) : "â€”";
 
   const priceText = eurosFromCents(reservation.totalPriceCents);
   const depositText = "500 €";
@@ -577,8 +600,8 @@ function buildLicensedHtml(input: ContractRenderInput) {
   const resourceName = contract.preparedJetski
     ? `${contract.preparedJetski.model ?? "MOTO"}${contract.preparedJetski.number ? ` ${contract.preparedJetski.number}` : ""}`.trim()
     : contract.preparedAsset
-      ? `${contract.preparedAsset.name ?? "EMBARCACIÓN"}${contract.preparedAsset.type ? ` ${contract.preparedAsset.type}` : ""}`.trim()
-      : "PENDIENTE DE ASIGNACIÓN";
+      ? `${contract.preparedAsset.name ?? "EMBARCACIÃ“N"}${contract.preparedAsset.type ? ` ${contract.preparedAsset.type}` : ""}`.trim()
+      : "PENDIENTE DE ASIGNACIÃ“N";
 
   const resourcePlate =
     contract.preparedJetski?.plate ??
@@ -588,12 +611,12 @@ function buildLicensedHtml(input: ContractRenderInput) {
   const isJetskiContract =
     reservation.serviceCategory === "JETSKI" ||
     Boolean(contract.preparedJetski);
-  const assetLabel = isJetskiContract ? "moto de agua" : "embarcación";
+  const assetLabel = isJetskiContract ? "moto de agua" : "embarcaciÃ³n";
   const assetLabelPlural = isJetskiContract ? "motos de agua" : "embarcaciones";
-  const assetLabelTitle = isJetskiContract ? "MOTO DE AGUA" : "EMBARCACIÓN";
+  const assetLabelTitle = isJetskiContract ? "MOTO DE AGUA" : "EMBARCACIÃ“N";
 
   const dispatchPersonsText =
-    reservation.pax ? `MÁXIMO ${reservation.pax} PERSONAS EN LA ${assetLabelTitle}` : "";
+    reservation.pax ? `MÃXIMO ${reservation.pax} PERSONAS EN LA ${assetLabelTitle}` : "";
 
   return `
 <!doctype html>
@@ -772,7 +795,7 @@ function buildLicensedHtml(input: ContractRenderInput) {
     <div class="title">CONTRATO DE ${assetLabelTitle} CON LICENCIA</div>
 
     <p class="intro">
-      De una parte, la entidad UTE JETSKI CENTER- NOMAD NAUTIC · domiciliada en C/ MARINA L-401 402, NUM 401 402 08330 PREMIÀ DE MAR - (BARCELONA) provista de CIF B- U16457343 (en adelante Arrendador), y de otra parte,
+      De una parte, la entidad UTE JETSKI CENTER- NOMAD NAUTIC Â· domiciliada en C/ MARINA L-401 402, NUM 401 402 08330 PREMIÃ€ DE MAR - (BARCELONA) provista de CIF B- U16457343 (en adelante Arrendador), y de otra parte,
     </p>
 
     <table>
@@ -783,17 +806,17 @@ function buildLicensedHtml(input: ContractRenderInput) {
       <tr>
         <td class="label-cell">Tipo documento</td>
         <td colspan="2">${driverDocType}</td>
-        <td class="label-cell">Número documento</td>
+        <td class="label-cell">NÃºmero documento</td>
         <td colspan="2">${driverDoc}</td>
       </tr>
       <tr>
         <td class="label-cell">Fecha nacimiento</td>
         <td colspan="2">${driverBirthDate}</td>
-        <td class="label-cell">Teléfono</td>
+        <td class="label-cell">TelÃ©fono</td>
         <td colspan="2">${driverPhone}</td>
       </tr>
       <tr>
-        <td class="label-cell">Dirección</td>
+        <td class="label-cell">DirecciÃ³n</td>
         <td colspan="2">${driverAddress}</td>
         <td class="label-cell">C.P.</td>
         <td>${driverPostalCode}</td>
@@ -806,7 +829,7 @@ function buildLicensedHtml(input: ContractRenderInput) {
       <tr>
         <td class="label-cell">Licencia</td>
         <td colspan="2">${licenseType}</td>
-        <td class="label-cell">Número licencia</td>
+        <td class="label-cell">NÃºmero licencia</td>
         <td colspan="2">${licenseNumber}</td>
       </tr>
       <tr>
@@ -816,14 +839,14 @@ function buildLicensedHtml(input: ContractRenderInput) {
     </table>
 
     <p class="intro">
-      En adelante Arrendatario. El Arrendador arrienda al Arrendatario, la embarcación:
+      En adelante Arrendatario. El Arrendador arrienda al Arrendatario, la embarcaciÃ³n:
     </p>
 
     <table>
       <tr>
         <th>Tipo</th>
         <th>Nombre</th>
-        <th>Matrícula</th>
+        <th>MatrÃ­cula</th>
         <th>Despacho Personas</th>
       </tr>
       <tr>
@@ -844,9 +867,9 @@ function buildLicensedHtml(input: ContractRenderInput) {
         <th colspan="2">Hasta</th>
       </tr>
       <tr>
-        <td class="label-cell">Día:</td>
+        <td class="label-cell">DÃ­a:</td>
         <td>${esc(dateText)}</td>
-        <td class="label-cell">Día:</td>
+        <td class="label-cell">DÃ­a:</td>
         <td>${esc(dateText)}</td>
       </tr>
       <tr>
@@ -861,19 +884,19 @@ function buildLicensedHtml(input: ContractRenderInput) {
       El precio del arrendamiento se fija en la cantidad de <b>${esc(priceText)}</b> IVA incluido y una Fianza de <b>${esc(depositText)}</b> IVA incluido
     </p>
 
-    <div class="section-title">CLÁUSULAS:</div>
+    <div class="section-title">CLÃUSULAS:</div>
 
-    <div class="clause-title">1. ENTREGA DE LA EMBARCACIÓN.</div>
+    <div class="clause-title">1. ENTREGA DE LA EMBARCACIÃ“N.</div>
     <p class="clause">
-      a. En el momento de la entrega, el arrendatario revisará el estado general del casco y el nivel de combustible, comprometiéndose a entregar la ${assetLabel} en el mismo estado en el que le fue entregada por el arrendador.
+      a. En el momento de la entrega, el arrendatario revisarÃ¡ el estado general del casco y el nivel de combustible, comprometiÃ©ndose a entregar la ${assetLabel} en el mismo estado en el que le fue entregada por el arrendador.
     </p>
 
-    <div class="clause-title">2. ZONA DE NAVEGACIÓN.</div>
+    <div class="clause-title">2. ZONA DE NAVEGACIÃ“N.</div>
     <p class="clause">
-      La zona de navegación permitida se establece dentro del litoral catalán, valenciano e Islas Baleares. El arrendatario solicitará un permiso escrito de UTE JETSKI CENTER – NOMAD NAUTIC para navegar por zonas diferentes a las aquí referidas o fuera de las Aguas Territoriales Españolas.
+      La zona de navegaciÃ³n permitida se establece dentro del litoral catalÃ¡n, valenciano e Islas Baleares. El arrendatario solicitarÃ¡ un permiso escrito de UTE JETSKI CENTER â€“ NOMAD NAUTIC para navegar por zonas diferentes a las aquÃ­ referidas o fuera de las Aguas Territoriales EspaÃ±olas.
     </p>
     <p class="clause">
-      En el caso de alquilar una ${assetLabel}, esta no podrá navegar a menos de 200m de la zona reservada para los bañistas delimitada con boyas amarillas, ni por dentro de los canales balizados reservados para las entradas y salidas de ${assetLabelPlural}. Está PROHIBIDO estar a menos de 200m de la costa, playas o calas salvo permiso previo UTE JETSKI CENTER- NOMAD NAUTIC cuando la zona de bañistas no esté delimitada.
+      En el caso de alquilar una ${assetLabel}, esta no podrÃ¡ navegar a menos de 200m de la zona reservada para los baÃ±istas delimitada con boyas amarillas, ni por dentro de los canales balizados reservados para las entradas y salidas de ${assetLabelPlural}. EstÃ¡ PROHIBIDO estar a menos de 200m de la costa, playas o calas salvo permiso previo UTE JETSKI CENTER- NOMAD NAUTIC cuando la zona de baÃ±istas no estÃ© delimitada.
     </p>
 
     <div class="footer">${esc(legalHeader)}</div>
@@ -881,57 +904,57 @@ function buildLicensedHtml(input: ContractRenderInput) {
 
   <div class="page page-break">
 
-    <div class="clause-title">3. USO DE LA EMBARCACIÓN.</div>
-    <p class="clause">a. El arrendatario se obliga a utilizar la embarcación alquilada correctamente y respetar las normas establecidas por las autoridades marítimas, aduaneras, sanitarias y de hacienda, así como a las policías nacionales o extranjeras en su caso. En caso de infracción a las ordenanzas por parte del arrendatario, este se hará cargo de todas las sanciones, multas, etc.</p>
-    <p class="clause">b. El arrendatario se obliga a no transportar a bordo un número mayor de personas que el permitido según el certificado de seguridad de la embarcación; a utilizar la embarcación solo para cruceros de recreo. Así mismo se obliga a no ceder, subcontratar o subarrendar total o parcialmente la embarcación.</p>
-    <p class="clause">c. Queda totalmente prohibido el remolque de otras embarcaciones salvo en los casos de urgencia, así mismo solo se dejará remolcar la embarcación alquilada en los mismos casos y siempre con cabos propios para evitar los altos costes de salvamento. El arrendatario no aceptará acuerdos ni asumirá responsabilidades sin autorización de UTE JETSKI CENTER- NOMAD NAUTIC.</p>
-    <p class="clause">d. En el supuesto de obtener un premio por salvamento, este se repartirá al 50% para UTE JETSKI CENTER- NOMAD NAUTIC y 50% para el arrendatario.</p>
-    <p class="clause">e. En el caso de informes meteorológicos peligrosos sobre el tiempo o la mar (superior a fuerza 6 Beaufort o 27 nudos de viento) el arrendatario se obliga a no salir del puerto en el que se encuentre o bien a ir al puerto o fondeadero seguro más próximo de su posición.</p>
-    <p class="clause">f. El arrendatario es responsable de cualquier daño o perjuicio que se produzca en la embarcación arrendada, de la pérdida de sus elementos y de los retrasos en la devolución de la embarcación.</p>
+    <div class="clause-title">3. USO DE LA EMBARCACIÃ“N.</div>
+    <p class="clause">a. El arrendatario se obliga a utilizar la embarcaciÃ³n alquilada correctamente y respetar las normas establecidas por las autoridades marÃ­timas, aduaneras, sanitarias y de hacienda, asÃ­ como a las policÃ­as nacionales o extranjeras en su caso. En caso de infracciÃ³n a las ordenanzas por parte del arrendatario, este se harÃ¡ cargo de todas las sanciones, multas, etc.</p>
+    <p class="clause">b. El arrendatario se obliga a no transportar a bordo un nÃºmero mayor de personas que el permitido segÃºn el certificado de seguridad de la embarcaciÃ³n; a utilizar la embarcaciÃ³n solo para cruceros de recreo. AsÃ­ mismo se obliga a no ceder, subcontratar o subarrendar total o parcialmente la embarcaciÃ³n.</p>
+    <p class="clause">c. Queda totalmente prohibido el remolque de otras embarcaciones salvo en los casos de urgencia, asÃ­ mismo solo se dejarÃ¡ remolcar la embarcaciÃ³n alquilada en los mismos casos y siempre con cabos propios para evitar los altos costes de salvamento. El arrendatario no aceptarÃ¡ acuerdos ni asumirÃ¡ responsabilidades sin autorizaciÃ³n de UTE JETSKI CENTER- NOMAD NAUTIC.</p>
+    <p class="clause">d. En el supuesto de obtener un premio por salvamento, este se repartirÃ¡ al 50% para UTE JETSKI CENTER- NOMAD NAUTIC y 50% para el arrendatario.</p>
+    <p class="clause">e. En el caso de informes meteorolÃ³gicos peligrosos sobre el tiempo o la mar (superior a fuerza 6 Beaufort o 27 nudos de viento) el arrendatario se obliga a no salir del puerto en el que se encuentre o bien a ir al puerto o fondeadero seguro mÃ¡s prÃ³ximo de su posiciÃ³n.</p>
+    <p class="clause">f. El arrendatario es responsable de cualquier daÃ±o o perjuicio que se produzca en la embarcaciÃ³n arrendada, de la pÃ©rdida de sus elementos y de los retrasos en la devoluciÃ³n de la embarcaciÃ³n.</p>
 
     <div class="clause-title">4. SEGUROS.</div>
-    <p class="clause">a. En el precio del arrendamiento, está incluido el seguro de la embarcación.</p>
-    <p class="clause">b. UTE JETSKI CENTER- NOMAD NAUTIC no será responsable en ningún caso de los daños a personas, las pérdidas o daños que pudieran sufrir los efectos personales del arrendatario, tripulantes o invitados a bordo de la embarcación.</p>
+    <p class="clause">a. En el precio del arrendamiento, estÃ¡ incluido el seguro de la embarcaciÃ³n.</p>
+    <p class="clause">b. UTE JETSKI CENTER- NOMAD NAUTIC no serÃ¡ responsable en ningÃºn caso de los daÃ±os a personas, las pÃ©rdidas o daÃ±os que pudieran sufrir los efectos personales del arrendatario, tripulantes o invitados a bordo de la embarcaciÃ³n.</p>
 
-    <div class="clause-title">5. DEVOLUCIÓN DE LA EMBARCACIÓN.</div>
-    <p class="clause">a. El arrendatario declara conocer el estado de conservación de la embarcación, por tanto, acepta expresamente entregar la embarcación en las mismas condiciones en que la recibió, con los depósitos de combustible. De no entregarse en estas condiciones, se deducirá de la fianza el coste de llenado de dichos depósitos. El coste del combustible se fija en 25€ por cada línea que marca el aforador.</p>
-    <p class="clause">b. Al devolver la embarcación, se llevará a cabo una revisión de la misma, por parte de UTE JETSKI CENTER- NOMAD NAUTIC, tras lo cual la fianza será restituida al arrendatario. Si se encuentran daños en la embarcación o pérdida o rotura de su equipamiento, UTE JETSKI CENTER- NOMAD NAUTIC reducirá de la fianza el importe necesario para arreglar dichos daños. UTE JETSKI CENTER- NOMAD NAUTIC se reserva el derecho a exigir un importe que supere el de la fianza, si los gastos por las reparaciones superan el importe de la fianza depositada.</p>
-    <p class="clause">c. La embarcación deberá devolverse en el mismo puerto en el que se realizó la entrega. El arrendatario soportará todos los gastos derivados de este cambio en el lugar de devolución. Dichos gastos serán de 10 euros por milla recorrida más el desplazamiento de la tripulación reduciéndose este importe de la fianza depositada.</p>
-    <p class="clause">d. El arrendatario se compromete a informar a UTE JETSKI CENTER- NOMAD NAUTIC de cualquier anomalía o incidencia o problemas que hayan surgido durante la navegación.</p>
+    <div class="clause-title">5. DEVOLUCIÃ“N DE LA EMBARCACIÃ“N.</div>
+    <p class="clause">a. El arrendatario declara conocer el estado de conservaciÃ³n de la embarcaciÃ³n, por tanto, acepta expresamente entregar la embarcaciÃ³n en las mismas condiciones en que la recibiÃ³, con los depÃ³sitos de combustible. De no entregarse en estas condiciones, se deducirÃ¡ de la fianza el coste de llenado de dichos depÃ³sitos. El coste del combustible se fija en 25â‚¬ por cada lÃ­nea que marca el aforador.</p>
+    <p class="clause">b. Al devolver la embarcaciÃ³n, se llevarÃ¡ a cabo una revisiÃ³n de la misma, por parte de UTE JETSKI CENTER- NOMAD NAUTIC, tras lo cual la fianza serÃ¡ restituida al arrendatario. Si se encuentran daÃ±os en la embarcaciÃ³n o pÃ©rdida o rotura de su equipamiento, UTE JETSKI CENTER- NOMAD NAUTIC reducirÃ¡ de la fianza el importe necesario para arreglar dichos daÃ±os. UTE JETSKI CENTER- NOMAD NAUTIC se reserva el derecho a exigir un importe que supere el de la fianza, si los gastos por las reparaciones superan el importe de la fianza depositada.</p>
+    <p class="clause">c. La embarcaciÃ³n deberÃ¡ devolverse en el mismo puerto en el que se realizÃ³ la entrega. El arrendatario soportarÃ¡ todos los gastos derivados de este cambio en el lugar de devoluciÃ³n. Dichos gastos serÃ¡n de 10 euros por milla recorrida mÃ¡s el desplazamiento de la tripulaciÃ³n reduciÃ©ndose este importe de la fianza depositada.</p>
+    <p class="clause">d. El arrendatario se compromete a informar a UTE JETSKI CENTER- NOMAD NAUTIC de cualquier anomalÃ­a o incidencia o problemas que hayan surgido durante la navegaciÃ³n.</p>
 
     <div class="footer">${esc(legalHeader)}</div>
   </div>
 
   <div class="page page-break">
 
-    <div class="clause-title">6. RETRASOS EN LA DEVOLUCIÓN.</div>
-    <p class="clause">En el caso de que se produzca un retraso en la devolución de la embarcación el arrendatario estará obligado:</p>
-    <p class="clause">a. El arrendatario pagará a UTE JETSKI CENTER- NOMAD NAUTIC la parte proporcional del tiempo extra utilizado pudiendo UTE JETSKI CENTER- NOMAD NAUTIC restarlo del importe de la fianza. Si transcurridas 24 horas del término del contrato, no se ha devuelto la embarcación ni se tienen noticias de la misma, se iniciará la búsqueda comunicándose su desaparición a las autoridades de marina. Los gastos que de ello se deriven correrán a cargo del arrendatario.</p>
-    <p class="clause">También será considerado como retraso en la devolución, el tiempo empleado para la reparación de los daños que presente la embarcación.</p>
+    <div class="clause-title">6. RETRASOS EN LA DEVOLUCIÃ“N.</div>
+    <p class="clause">En el caso de que se produzca un retraso en la devoluciÃ³n de la embarcaciÃ³n el arrendatario estarÃ¡ obligado:</p>
+    <p class="clause">a. El arrendatario pagarÃ¡ a UTE JETSKI CENTER- NOMAD NAUTIC la parte proporcional del tiempo extra utilizado pudiendo UTE JETSKI CENTER- NOMAD NAUTIC restarlo del importe de la fianza. Si transcurridas 24 horas del tÃ©rmino del contrato, no se ha devuelto la embarcaciÃ³n ni se tienen noticias de la misma, se iniciarÃ¡ la bÃºsqueda comunicÃ¡ndose su desapariciÃ³n a las autoridades de marina. Los gastos que de ello se deriven correrÃ¡n a cargo del arrendatario.</p>
+    <p class="clause">TambiÃ©n serÃ¡ considerado como retraso en la devoluciÃ³n, el tiempo empleado para la reparaciÃ³n de los daÃ±os que presente la embarcaciÃ³n.</p>
 
-    <div class="clause-title">7. DAÑOS, ACCIDENTES Y AVERÍAS.</div>
-    <p class="clause">a) Si durante el periodo de alquiler, se producen en la embarcación arrendada averías, daños, desperfectos o pérdidas de material, el arrendatario está en la obligación de comunicarlo inmediatamente a Barcodealquiler.com el cual le dará las oportunas instrucciones a seguir.</p>
-    <p class="clause">b) Si se producen accidentes con participación de terceros, estos deben ser declarados por el arrendatario ante las autoridades competentes, siendo anotados los datos de las embarcaciones que hayan intervenido en el accidente. El arrendatario, además, redactará un informe sobre lo ocurrido que entregará a UTE JETSKI CENTER- NOMAD NAUTIC.</p>
-    <p class="clause">c) El arrendatario está obligado a comunicar a UTE JETSKI CENTER- NOMAD NAUTIC cualquier contacto de la embarcación con el fondo marino con el objeto de poder determinar las consecuencias de dichos contactos y evitar poner en peligro a posteriores tripulaciones.</p>
+    <div class="clause-title">7. DAÃ‘OS, ACCIDENTES Y AVERÃAS.</div>
+    <p class="clause">a) Si durante el periodo de alquiler, se producen en la embarcaciÃ³n arrendada averÃ­as, daÃ±os, desperfectos o pÃ©rdidas de material, el arrendatario estÃ¡ en la obligaciÃ³n de comunicarlo inmediatamente a Barcodealquiler.com el cual le darÃ¡ las oportunas instrucciones a seguir.</p>
+    <p class="clause">b) Si se producen accidentes con participaciÃ³n de terceros, estos deben ser declarados por el arrendatario ante las autoridades competentes, siendo anotados los datos de las embarcaciones que hayan intervenido en el accidente. El arrendatario, ademÃ¡s, redactarÃ¡ un informe sobre lo ocurrido que entregarÃ¡ a UTE JETSKI CENTER- NOMAD NAUTIC.</p>
+    <p class="clause">c) El arrendatario estÃ¡ obligado a comunicar a UTE JETSKI CENTER- NOMAD NAUTIC cualquier contacto de la embarcaciÃ³n con el fondo marino con el objeto de poder determinar las consecuencias de dichos contactos y evitar poner en peligro a posteriores tripulaciones.</p>
 
     <div class="clause-title">8. ANULACIONES Y RESOLUCIONES</div>
-    <p class="clause">En el supuesto de negligencia en el uso de la embarcación infringiendo la legislación vigente, será motivo para la resolución automática del contrato, quedando las cantidades pagadas a favor de UTE JETSKI CENTER- NOMAD NAUTIC.</p>
+    <p class="clause">En el supuesto de negligencia en el uso de la embarcaciÃ³n infringiendo la legislaciÃ³n vigente, serÃ¡ motivo para la resoluciÃ³n automÃ¡tica del contrato, quedando las cantidades pagadas a favor de UTE JETSKI CENTER- NOMAD NAUTIC.</p>
 
     <div class="clause-title">9.</div>
-    <p class="clause">El cliente declara no haber tomado alcohol ni haber consumido ninguna clase de estupefacientes así como sustancias psicoactivas y que no padece ninguna enfermedad o impedimento físico para el correcto manejo de la embarcación.</p>
+    <p class="clause">El cliente declara no haber tomado alcohol ni haber consumido ninguna clase de estupefacientes asÃ­ como sustancias psicoactivas y que no padece ninguna enfermedad o impedimento fÃ­sico para el correcto manejo de la embarcaciÃ³n.</p>
 
     <div class="clause-title">10. RESPONSABILIDAD FRENTE A TERCEROS</div>
-    <p class="clause">En el supuesto de reclamaciones por parte de terceros contra el arrendatario, por el uso de la embarcación alquilada, UTE JETSKI CENTER- NOMAD NAUTIC queda exonerada de cualquier tipo de responsabilidad. De las faltas que pueda cometer el patrón de la embarcación, responde también conjuntamente el arrendatario.</p>
+    <p class="clause">En el supuesto de reclamaciones por parte de terceros contra el arrendatario, por el uso de la embarcaciÃ³n alquilada, UTE JETSKI CENTER- NOMAD NAUTIC queda exonerada de cualquier tipo de responsabilidad. De las faltas que pueda cometer el patrÃ³n de la embarcaciÃ³n, responde tambiÃ©n conjuntamente el arrendatario.</p>
 
-    <div class="clause-title">11. EXPERIENCIA DEL PATRÓN.</div>
+    <div class="clause-title">11. EXPERIENCIA DEL PATRÃ“N.</div>
     <p class="clause">
-      El arrendatario asegura que posee los conocimientos y la experiencia necesarios para la realización del crucero y que posee el siguiente título náutico:
+      El arrendatario asegura que posee los conocimientos y la experiencia necesarios para la realizaciÃ³n del crucero y que posee el siguiente tÃ­tulo nÃ¡utico:
       <b>${esc(contract.licenseType || "")}</b> expedido por <b>${esc(contract.licenseSchool || "")}</b> que designa al Sr./Sra
-      <b>${esc(contract.driverName || "")}</b> que es poseedor del título náutico mencionado anteriormente con identificación:
-      <b>${esc(contract.driverDocNumber || "")}</b> como patrón de la embarcación. En ningún caso podrá cederse el gobierno de la embarcación a persona distinta a la que consta como patrón.
+      <b>${esc(contract.driverName || "")}</b> que es poseedor del tÃ­tulo nÃ¡utico mencionado anteriormente con identificaciÃ³n:
+      <b>${esc(contract.driverDocNumber || "")}</b> como patrÃ³n de la embarcaciÃ³n. En ningÃºn caso podrÃ¡ cederse el gobierno de la embarcaciÃ³n a persona distinta a la que consta como patrÃ³n.
     </p>
     <p class="clause">
-      UTE JETSKI CENTER- NOMAD NAUTIC se reserva el derecho de cancelar el presente contrato si el patrón no dispusiera de la capacitación y competencia suficientes para el gobierno con seguridad de la embarcación. En este supuesto, el arrendador no tendrá derecho a devolución alguna del alquiler, no obstante, UTE JETSKI CENTER- NOMAD NAUTIC pondrá a disposición del arrendatario otro patrón (si lo hubiere). Los emolumentos que pudiera cobrar este, serán asumidos por el arrendatario.
+      UTE JETSKI CENTER- NOMAD NAUTIC se reserva el derecho de cancelar el presente contrato si el patrÃ³n no dispusiera de la capacitaciÃ³n y competencia suficientes para el gobierno con seguridad de la embarcaciÃ³n. En este supuesto, el arrendador no tendrÃ¡ derecho a devoluciÃ³n alguna del alquiler, no obstante, UTE JETSKI CENTER- NOMAD NAUTIC pondrÃ¡ a disposiciÃ³n del arrendatario otro patrÃ³n (si lo hubiere). Los emolumentos que pudiera cobrar este, serÃ¡n asumidos por el arrendatario.
     </p>
 
     <div class="footer">${esc(legalHeader)}</div>
@@ -940,18 +963,18 @@ function buildLicensedHtml(input: ContractRenderInput) {
   <div class="page page-break">
 
     <div class="clause-title">12. EFICACIA</div>
-    <p class="clause">En el supuesto de que alguna de las cláusulas del contrato pierda su validez, esto no afectará de ningún modo a las demás que seguirán siendo, a todos los efectos, eficaces entre las partes.</p>
+    <p class="clause">En el supuesto de que alguna de las clÃ¡usulas del contrato pierda su validez, esto no afectarÃ¡ de ningÃºn modo a las demÃ¡s que seguirÃ¡n siendo, a todos los efectos, eficaces entre las partes.</p>
 
-    <div class="clause-title">13. PROTECCIÓN DE DATOS</div>
-    <p class="clause">En cumplimiento con lo establecido en la Ley Orgánica 15/1999, de 13 de diciembre, de Protección de Datos de Carácter Personal, con la aceptación del presente contrato, le informamos que sus datos personales serán tratados y quedarán incorporados en ficheros responsabilidad de UTE JETSKI CENTER- NOMAD NAUTIC registrados en la Agencia Española de Protección de Datos, con la finalidad de la gestión de los clientes y contratos.</p>
-    <p class="clause">Se le solicitan resultan necesarios, de manera que de no facilitarse no será posible la prestación del servicio requerido, en este sentido, usted consiente expresamente la recogida y el tratamiento de los mismos para la citada finalidad. De igual forma, autoriza la comunicación de sus datos de carácter personal a otras entidades que sea necesario para realizar el servicio solicitado.</p>
-    <p class="clause">También autoriza la utilización de sus datos para realizar comunicaciones periódicas, incluyendo las que se realizan vía correo electrónico, que nuestra empresa llevará a cabo para informar de las actividades que desarrolla por sí o a través de sus empresas colaboradoras. En todo caso, puede ejercitar los derechos de acceso, rectificación, cancelación y oposición dirigiéndose a la siguiente dirección de correo electrónico: <b>SEARIDERSJETSKI@GMAIL.COM</b> o llamando al <b>608-10-12-72</b>.</p>
+    <div class="clause-title">13. PROTECCIÃ“N DE DATOS</div>
+    <p class="clause">En cumplimiento con lo establecido en la Ley OrgÃ¡nica 15/1999, de 13 de diciembre, de ProtecciÃ³n de Datos de CarÃ¡cter Personal, con la aceptaciÃ³n del presente contrato, le informamos que sus datos personales serÃ¡n tratados y quedarÃ¡n incorporados en ficheros responsabilidad de UTE JETSKI CENTER- NOMAD NAUTIC registrados en la Agencia EspaÃ±ola de ProtecciÃ³n de Datos, con la finalidad de la gestiÃ³n de los clientes y contratos.</p>
+    <p class="clause">Se le solicitan resultan necesarios, de manera que de no facilitarse no serÃ¡ posible la prestaciÃ³n del servicio requerido, en este sentido, usted consiente expresamente la recogida y el tratamiento de los mismos para la citada finalidad. De igual forma, autoriza la comunicaciÃ³n de sus datos de carÃ¡cter personal a otras entidades que sea necesario para realizar el servicio solicitado.</p>
+    <p class="clause">TambiÃ©n autoriza la utilizaciÃ³n de sus datos para realizar comunicaciones periÃ³dicas, incluyendo las que se realizan vÃ­a correo electrÃ³nico, que nuestra empresa llevarÃ¡ a cabo para informar de las actividades que desarrolla por sÃ­ o a travÃ©s de sus empresas colaboradoras. En todo caso, puede ejercitar los derechos de acceso, rectificaciÃ³n, cancelaciÃ³n y oposiciÃ³n dirigiÃ©ndose a la siguiente direcciÃ³n de correo electrÃ³nico: <b>SEARIDERSJETSKI@GMAIL.COM</b> o llamando al <b>608-10-12-72</b>.</p>
 
-    <div class="clause-title">14. DERECHO Y JURISDICCIÓN</div>
-    <p class="clause">El presente contrato, está sometido a la legislación española. Todas las cuestiones litigiosas o diferencias que puedan surgir en la ejecución, modificación, resolución y efectos del presente contrato se resolverán en los tribunales de la ciudad de BARCELONA, a cuya jurisdicción se someten expresamente las partes.</p>
+    <div class="clause-title">14. DERECHO Y JURISDICCIÃ“N</div>
+    <p class="clause">El presente contrato, estÃ¡ sometido a la legislaciÃ³n espaÃ±ola. Todas las cuestiones litigiosas o diferencias que puedan surgir en la ejecuciÃ³n, modificaciÃ³n, resoluciÃ³n y efectos del presente contrato se resolverÃ¡n en los tribunales de la ciudad de BARCELONA, a cuya jurisdicciÃ³n se someten expresamente las partes.</p>
 
     <div class="signature-zone">
-      <p><b>En prueba de conformidad</b>, las partes firman por duplicado el presente contrato de arrendamiento de embarcación en el lugar y fecha que figuran a continuación:</p>
+      <p><b>En prueba de conformidad</b>, las partes firman por duplicado el presente contrato de arrendamiento de embarcaciÃ³n en el lugar y fecha que figuran a continuaciÃ³n:</p>
       <p><b>BADALONA a :</b> ${esc(dateText)}</p>
 
       <div class="signature-row">
@@ -971,15 +994,15 @@ function buildLicensedHtml(input: ContractRenderInput) {
 
     <div class="final-box">
       <p>
-        <b>COMO GARANTÍA POR EL CORRECTO USO DE LA ${assetLabelTitle} Y EL CUMPLIMIENTO DE LAS CONDICIONES DEL ALQUILER, SE COBRARÁ UNA FIANZA DE 500 EUROS AL MOMENTO DE LA FIRMA DEL CONTRATO O ANTES DEL INICIO DE LA ACTIVIDAD.</b>
+        <b>COMO GARANTÃA POR EL CORRECTO USO DE LA ${assetLabelTitle} Y EL CUMPLIMIENTO DE LAS CONDICIONES DEL ALQUILER, SE COBRARÃ UNA FIANZA DE 500 EUROS AL MOMENTO DE LA FIRMA DEL CONTRATO O ANTES DEL INICIO DE LA ACTIVIDAD.</b>
       </p>
-      <p><b>• ESTA FIANZA SERÁ REEMBOLSADA ÍNTEGRAMENTE AL FINALIZAR EL SERVICIO, SIEMPRE QUE:</b></p>
-      <p class="bullet">o LA ${assetLabelTitle} SE DEVUELVA EN EL MISMO ESTADO EN EL QUE SE ENTREGÓ.</p>
-      <p class="bullet">o NO SE HAYA PRODUCIDO NINGÚN DAÑO O MAL USO DEL EQUIPO.</p>
+      <p><b>â€¢ ESTA FIANZA SERÃ REEMBOLSADA ÃNTEGRAMENTE AL FINALIZAR EL SERVICIO, SIEMPRE QUE:</b></p>
+      <p class="bullet">o LA ${assetLabelTitle} SE DEVUELVA EN EL MISMO ESTADO EN EL QUE SE ENTREGÃ“.</p>
+      <p class="bullet">o NO SE HAYA PRODUCIDO NINGÃšN DAÃ‘O O MAL USO DEL EQUIPO.</p>
       <p class="bullet">o SE HAYAN CUMPLIDO LAS NORMAS DE SEGURIDAD Y COMPORTAMIENTO INDICADAS POR EL PERSONAL.</p>
-      <p>EL PAGO DE LA FIANZA PODRÁ REALIZARSE EN EFECTIVO O MEDIANTE TARJETA BANCARIA, SEGÚN DISPONIBILIDAD.</p>
+      <p>EL PAGO DE LA FIANZA PODRÃ REALIZARSE EN EFECTIVO O MEDIANTE TARJETA BANCARIA, SEGÃšN DISPONIBILIDAD.</p>
       <p>
-        El cliente autoriza a UTE JERSKI CENTER- NOMAD NAUTIC a utilizar las fotografías y vídeos tomados durante la actividad para su publicación en redes sociales, página web y material publicitario de la empresa. Esta autorización es gratuita y podrá ser revocada en cualquier momento mediante notificación por escrito.
+        El cliente autoriza a UTE JERSKI CENTER- NOMAD NAUTIC a utilizar las fotografÃ­as y vÃ­deos tomados durante la actividad para su publicaciÃ³n en redes sociales, pÃ¡gina web y material publicitario de la empresa. Esta autorizaciÃ³n es gratuita y podrÃ¡ ser revocada en cualquier momento mediante notificaciÃ³n por escrito.
       </p>
     </div>
 

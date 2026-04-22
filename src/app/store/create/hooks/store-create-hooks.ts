@@ -16,6 +16,7 @@ import type {
   MigrateFlags,
   Option,
   PackPreview,
+  RecoveredContractProfile,
   ServiceMain,
 } from "../types";
 import { errorMessage, isAbortError } from "../utils/errors";
@@ -486,12 +487,16 @@ export function useCustomerProfileSearch(args: {
     customerName?: string | null;
     email?: string | null;
     phone?: string | null;
+    customerDocType?: string | null;
     customerDocNumber?: string | null;
     country?: string | null;
     birthDate?: string | null;
     address?: string | null;
     postalCode?: string | null;
+    licenseSchool?: string | null;
+    licenseType?: string | null;
     licenseNumber?: string | null;
+    contractProfile?: RecoveredContractProfile | null;
   }) => void;
 }) {
   const { onApplyProfile } = args;
