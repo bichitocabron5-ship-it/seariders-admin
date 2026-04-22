@@ -1,32 +1,51 @@
 // scripts/delete-last-canceled.ts
 import "dotenv/config";
+import { ReservationSource, ReservationStatus } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
-import { ReservationStatus } from "@prisma/client";
+
+const TARGET_SOURCES = [ReservationSource.STORE, ReservationSource.BOOTH] as const;
 
 async function main() {
   const reservations = await prisma.reservation.findMany({
     where: {
       status: ReservationStatus.CANCELED,
+      source: { in: [...TARGET_SOURCES] },
     },
     orderBy: {
       createdAt: "desc",
     },
-    take: 4,
     select: {
       id: true,
+      source: true,
       createdAt: true,
     },
   });
 
   if (reservations.length === 0) {
-    console.log("No hay reservas canceladas para borrar.");
+    console.log("No hay reservas canceladas de STORE/BOOTH para borrar.");
     return;
   }
 
-  const ids = reservations.map((r) => r.id);
+  const ids = reservations.map((reservation) => reservation.id);
+  console.log(`Total canceladas STORE/BOOTH a borrar: ${reservations.length}`);
   console.log("Reservas a borrar:", reservations);
 
   await prisma.$transaction(async (tx) => {
+    await (tx as any).giftVoucher?.updateMany?.({
+      where: { redeemedReservationId: { in: ids } },
+      data: { redeemedReservationId: null },
+    });
+
+    await (tx as any).passConsume?.updateMany?.({
+      where: { reservationId: { in: ids } },
+      data: { reservationId: null },
+    });
+
+    await (tx as any).reservationItem?.updateMany?.({
+      where: { splitReservationId: { in: ids } },
+      data: { splitReservationId: null },
+    });
+
     await (tx as any).reservationItem?.deleteMany?.({
       where: { reservationId: { in: ids } },
     });
@@ -56,12 +75,12 @@ async function main() {
     });
   });
 
-  console.log("✅ Reservas eliminadas correctamente");
+  console.log("Reservas canceladas de STORE/BOOTH eliminadas correctamente.");
 }
 
 main()
-  .catch((e) => {
-    console.error("❌ Error borrando reservas:", e);
+  .catch((error) => {
+    console.error("Error borrando reservas:", error);
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
