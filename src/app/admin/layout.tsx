@@ -53,6 +53,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             <a href="/admin/gifts" className="admin-nav__link">
               Regalos
             </a>
+            <a href="/admin/design-system" className="admin-nav__link">
+              Design system
+            </a>
             <a href="/admin/slots" className="admin-nav__link">
               Slots
             </a>
