@@ -1,6 +1,7 @@
 "use client";
 
 import type React from "react";
+import { ActionButton, StatusBadge } from "@/components/seariders-ui";
 import { brand } from "@/lib/brand";
 
 type CashClosureSummary = {
@@ -22,8 +23,6 @@ export default function BoothOverviewSection({
   euros,
   cardStyle,
   metricCard,
-  ghostBtn,
-  darkBtn,
   onReload,
 }: {
   rowsCount: number;
@@ -36,8 +35,6 @@ export default function BoothOverviewSection({
   euros: (cents: number) => string;
   cardStyle: React.CSSProperties;
   metricCard: React.CSSProperties;
-  ghostBtn: React.CSSProperties;
-  darkBtn: React.CSSProperties;
   onReload: () => void;
 }) {
   const shiftLabel = cashClosureSummary?.computed?.meta?.shift === "AFTERNOON" ? "Tarde" : "Mañana";
@@ -66,22 +63,24 @@ export default function BoothOverviewSection({
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, width: "min(100%, 380px)" }}>
-            <a href="/booth/cash-closures" style={{ ...ghostBtn, background: "rgba(255,255,255,0.9)" }}>
+            <ActionButton href="/booth/cash-closures" variant="secondary" style={{ background: "rgba(255,255,255,0.92)" }}>
               Cierre de caja
-            </a>
-            <a href="/booth/history" style={{ ...ghostBtn, background: "rgba(255,255,255,0.9)" }}>
+            </ActionButton>
+            <ActionButton href="/booth/history" variant="secondary" style={{ background: "rgba(255,255,255,0.92)" }}>
               Histórico
-            </a>
-            <button onClick={onReload} style={{ ...darkBtn, border: "1px solid rgba(255,255,255,0.24)", background: "#0f172a", width: "100%" }}>
+            </ActionButton>
+            <ActionButton onClick={onReload} variant="primary" style={{ width: "100%" }}>
               Refrescar
-            </button>
+            </ActionButton>
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <span style={heroPill}>Reservas hoy: {rowsCount}</span>
-          <span style={heroPill}>Viajes OPEN: {openTrips}</span>
-          <span style={heroPill}>Caja: {isCashClosed ? "Cerrada" : "Abierta"}</span>
+          <StatusBadge tone="info">Reservas hoy: {rowsCount}</StatusBadge>
+          <StatusBadge tone="neutral">Viajes OPEN: {openTrips}</StatusBadge>
+          <StatusBadge tone={isCashClosed ? "warning" : "success"}>
+            Caja: {isCashClosed ? "Cerrada" : "Abierta"}
+          </StatusBadge>
         </div>
       </section>
 
@@ -108,35 +107,25 @@ export default function BoothOverviewSection({
         <section style={cardStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontWeight: 900 }}>Cierre de caja (BOOTH · {shiftLabel})</div>
+              <div style={{ fontWeight: 900 }}>Cierre de caja (BOOTH | {shiftLabel})</div>
               <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-                Sistema neto: <b>{euros(cashClosureSummary.computed?.all?.NET ?? 0)}</b> · Estado: {cashClosureSummary.isClosed ? "CERRADO" : "ABIERTO"}
+                Sistema neto: <b>{euros(cashClosureSummary.computed?.all?.NET ?? 0)}</b> | Estado: {cashClosureSummary.isClosed ? "CERRADO" : "ABIERTO"}
               </div>
             </div>
-            <a
+            <ActionButton
               href="/booth/cash-closures"
+              variant="secondary"
               style={{
-                ...ghostBtn,
-                background: cashClosureSummary.isClosed ? "#f3f4f6" : "white",
+                background: cashClosureSummary.isClosed ? "#f3f4f6" : "#fff",
                 pointerEvents: cashClosureSummary.isClosed ? "none" : "auto",
                 opacity: cashClosureSummary.isClosed ? 0.6 : 1,
               }}
             >
               {cashClosureSummary.isClosed ? "Caja cerrada" : "Cerrar caja"}
-            </a>
+            </ActionButton>
           </div>
         </section>
       ) : null}
     </>
   );
 }
-
-const heroPill: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 999,
-  fontWeight: 900,
-  fontSize: 12,
-  border: "1px solid rgba(153, 246, 228, 0.4)",
-  background: "rgba(255,255,255,0.1)",
-  color: "#ecfeff",
-};

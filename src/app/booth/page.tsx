@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { AlertBanner } from "@/components/seariders-ui";
 import { getCountryOptionsEs } from "@/lib/countries";
 import { opsStyles } from "@/components/ops-ui";
 import { computeCommissionableBase, resolveDiscountPolicy } from "@/lib/commission";
@@ -262,9 +263,9 @@ const isCashClosed = Boolean(cashClosureSummary?.isClosed && !cashClosureSummary
 
 const CashClosedBanner = () =>
   isCashClosed ? (
-    <div style={{ marginTop: 12, padding: 12, border: "1px solid #fecaca", background: "#fff1f2", borderRadius: 12 }}>
-      <b>Caja cerrada.</b> No se pueden registrar cobros en este turno. Si hay que reabrir, pídeselo a Admin.
-    </div>
+    <AlertBanner tone="warning" title="Caja cerrada">
+      No se pueden registrar cobros en este turno. Si hay que reabrir, pídeselo a Admin.
+    </AlertBanner>
   ) : null;
 
 
@@ -768,14 +769,12 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
         euros={euros}
         cardStyle={cardStyle}
         metricCard={metricCard}
-        ghostBtn={ghostBtn}
-        darkBtn={darkBtn}
         onReload={() => {
           void load();
         }}
       />
 
-      {error ? <div style={{ padding: 12, background: "#fff1f2", border: "1px solid #fecaca", borderRadius: 12 }}>{error}</div> : null}
+      {error ? <AlertBanner tone="danger" title="Error operativo">{error}</AlertBanner> : null}
       <CashClosedBanner />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 18, alignItems: "start" }}>

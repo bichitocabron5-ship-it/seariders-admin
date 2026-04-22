@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { ActionButton, AlertBanner, StatusBadge } from "@/components/seariders-ui";
 import { StoreHero, StoreMetricCard, StoreMetricGrid, storeStyles } from "@/components/store-ui";
 import { StoreOpsSummarySection } from "./dashboard/components/StoreOpsSummarySection";
 import { StorePendingColumnSection } from "./dashboard/components/StorePendingColumnSection";
@@ -50,13 +51,6 @@ export default function StoreDashboard() {
 
   const btnSecondary: CSSProperties = {
     ...storeStyles.secondaryButton,
-    fontWeight: 900,
-    cursor: "pointer",
-    textDecoration: "none",
-  };
-
-  const btnPrimary: CSSProperties = {
-    ...storeStyles.primaryButton,
     fontWeight: 900,
     cursor: "pointer",
     textDecoration: "none",
@@ -123,9 +117,9 @@ export default function StoreDashboard() {
 
   const CashClosedBanner = () =>
     isCashClosed ? (
-      <div style={{ marginTop: 12, padding: 12, border: "1px solid #fecaca", background: "#fff1f2", borderRadius: 12 }}>
-        <b>Caja cerrada.</b> No se pueden registrar cobros en este turno. Si hay que reabrir, pídeselo a Admin.
-      </div>
+      <AlertBanner tone="warning" title="Caja cerrada">
+        No se pueden registrar cobros en este turno. Si hay que reabrir, pídeselo a Admin.
+      </AlertBanner>
     ) : null;
 
   useEffect(() => {
@@ -482,26 +476,18 @@ export default function StoreDashboard() {
         background="linear-gradient(135deg, #ffffff 0%, #f4f7fb 100%)"
         actions={
           <>
-            <a
-              href={cashClosureHref}
-              style={{
-                ...btnSecondary,
-                borderColor: cashClosureSummary?.isClosed ? "#dbe4ea" : "#111",
-                background: cashClosureSummary?.isClosed ? "#fff" : "#111",
-                color: cashClosureSummary?.isClosed ? "#111" : "#fff",
-              }}
-            >
+            <ActionButton href={cashClosureHref} variant={cashClosureSummary?.isClosed ? "secondary" : "primary"}>
               {cashClosureLabel}
-            </a>
-            <a href="/store/history" style={btnSecondary}>Histórico</a>
-            <a href="/store/booth" style={btnSecondary}>Carpa</a>
-            <a href="/operations" style={btnSecondary}>Operaciones</a>
-            <a href="/store/gifts" style={btnSecondary}>Regalos</a>
-            <a href="/store/bonos" style={btnSecondary}>Bonos</a>
-            <a href="/store/calendar" style={btnSecondary}>Calendario</a>
-            <a href="/store/create" style={btnPrimary}>
+            </ActionButton>
+            <ActionButton href="/store/history" variant="secondary">Histórico</ActionButton>
+            <ActionButton href="/store/booth" variant="secondary">Carpa</ActionButton>
+            <ActionButton href="/operations" variant="secondary">Operaciones</ActionButton>
+            <ActionButton href="/store/gifts" variant="secondary">Regalos</ActionButton>
+            <ActionButton href="/store/bonos" variant="secondary">Bonos</ActionButton>
+            <ActionButton href="/store/calendar" variant="secondary">Calendario</ActionButton>
+            <ActionButton href="/store/create" variant="primary">
               + Crear reserva
-            </a>
+            </ActionButton>
           </>
         }
       >
@@ -527,29 +513,30 @@ export default function StoreDashboard() {
         </StoreMetricGrid>
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ fontSize: 13, color: "#51627b" }}>Consulta rápida de pendientes y acceso directo al calendario operativo.</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ fontSize: 13, color: "#51627b" }}>Consulta rápida de pendientes y acceso directo al calendario operativo.</div>
+            <div>
+              <StatusBadge tone={pendingCount > 0 ? "warning" : "success"}>
+                {pendingCount > 0 ? `${pendingCount} pendientes de formalizar` : "Formalización al día"}
+              </StatusBadge>
+            </div>
+          </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button onClick={loadPending} style={btnSecondary} disabled={pendingLoading}>{pendingLoading ? "Actualizando..." : "Refrescar"}</button>
-            <a
+            <ActionButton onClick={loadPending} variant="secondary" disabled={pendingLoading}>
+              {pendingLoading ? "Actualizando..." : "Refrescar"}
+            </ActionButton>
+            <ActionButton
               href={`/store/calendar?day=${todayLocalYMD()}`}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #111",
-                background: pendingCount > 0 ? "#111" : "#fff",
-                color: pendingCount > 0 ? "#fff" : "#111",
-                fontWeight: 900,
-                textDecoration: "none",
-                opacity: pendingLoading ? 0.8 : 1,
-              }}
+              variant={pendingCount > 0 ? "primary" : "secondary"}
+              style={{ opacity: pendingLoading ? 0.8 : 1 }}
             >
               Ver en calendario
-            </a>
+            </ActionButton>
           </div>
         </div>
       </StoreHero>
 
-      {error ? <div style={{ padding: 12, border: "1px solid #fecaca", background: "#fee2e2", borderRadius: 14 }}>{error}</div> : null}
+      {error ? <AlertBanner tone="danger" title="Error operativo">{error}</AlertBanner> : null}
       <CashClosedBanner />
 
       <StoreOpsSummarySection
