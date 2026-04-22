@@ -17,7 +17,23 @@ export const metadata: Metadata = {
     default: "SeaRiders Admin",
     template: "%s | SeaRiders Admin",
   },
-  description: "Panel operativo y de administración de SeaRiders para tienda, plataforma, carpa y flota.",
+  description: "Panel operativo y de administracion de SeaRiders para tienda, plataforma, carpa y flota.",
+  icons: {
+    icon: [{ url: "/logo-seariders.png", type: "image/png" }],
+    shortcut: ["/logo-seariders.png"],
+    apple: [{ url: "/logo-seariders.png", type: "image/png" }],
+  },
+  openGraph: {
+    title: "SeaRiders Admin",
+    description: "Panel operativo y de administracion de SeaRiders.",
+    images: [{ url: "/logo-seariders.png" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "SeaRiders Admin",
+    description: "Panel operativo y de administracion de SeaRiders.",
+    images: ["/logo-seariders.png"],
+  },
 };
 
 export default function RootLayout({

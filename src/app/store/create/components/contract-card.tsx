@@ -453,7 +453,7 @@ export function ContractCard({
       if (!validateBeforeAdvance("signer")) return;
       setSignerLinkBusy(true);
       setErr(null);
-      await savePartial(buildPayload());
+      await savePartial({ status: "READY", ...buildPayload() });
       const data = await getContractSignerLink(c.id);
       if (!data.url) throw new Error("No se pudo generar el enlace de firma");
       setAwaitingExternalSignature(true);
@@ -476,7 +476,7 @@ export function ContractCard({
     try {
       setRetryNotificationBusy(true);
       setErr(null);
-      await savePartial(buildPayload());
+      await savePartial({ status: "READY", ...buildPayload() });
       await resendContractSignerWhatsapp(c.id);
       await onSaved();
     } catch (e: unknown) {

@@ -188,7 +188,13 @@ export function useContractsState(args: {
     if (!prefillReservationId) return;
     if (isHistorical) return;
 
-    const hasContractsAwaitingSignature = contracts.some((contract) => contract.status === "READY");
+    const hasContractsAwaitingSignature = contracts.some((contract) => {
+      if (contract.status === "READY") return true;
+      if (contract.status === "SIGNED" || contract.status === "VOID") return false;
+      return (contract.notifications ?? []).some((notification) =>
+        ["PENDING", "SENT", "DELIVERED", "READ"].includes(String(notification.status ?? "").toUpperCase())
+      );
+    });
     if (!hasContractsAwaitingSignature) return;
 
     const timer = window.setInterval(() => {
