@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { getCountryOptionsEs } from "@/lib/countries";
 import { BUSINESS_TZ, shouldAutoFormalize } from "@/lib/tz-business";
 import { needsContractForCategory } from "@/lib/reservation-rules";
+import { getReservationWorkflowState, type ReservationWorkflowResult } from "@/lib/reservation-workflow";
 import { opsStyles } from "@/components/ops-ui";
 import { computeCommissionableBase, resolveDiscountPolicy } from "@/lib/commission";
 import { AvailabilitySection, FutureReservationPaymentsSection, PricingSection, SubmitSection } from "./components/form-sections";
@@ -83,6 +84,8 @@ function StoreCreatePageInner() {
   } | null>(null);
   const [prefillSource, setPrefillSource] = useState<string | null>(null);
   const [prefillFormalizedAt, setPrefillFormalizedAt] = useState<string | null>(null);
+  const [prefillStatus, setPrefillStatus] = useState<string | null>(null);
+  const [prefillWorkflow, setPrefillWorkflow] = useState<ReservationWorkflowResult | null>(null);
 
   const [category, setCategory] = useState<string>("");
   const [serviceId, setServiceId] = useState<string>("");
@@ -163,6 +166,7 @@ function StoreCreatePageInner() {
       paidServiceCents?: number | null;
       pendingServiceCents?: number | null;
       formalizedAt?: string | null;
+      status?: string | null;
       source?: string | null;
       service?: ServiceMain | null;
       option?: Option | null;
@@ -216,6 +220,7 @@ function StoreCreatePageInner() {
       });
       setPrefillSource(res.source ?? null);
       setPrefillFormalizedAt(res.formalizedAt ?? null);
+      setPrefillStatus(res.status ?? null);
     },
     []
   );
@@ -224,6 +229,7 @@ function StoreCreatePageInner() {
     prefillReservationId,
     optionsLength: options.length,
     applyReservation: applyPrefillReservation,
+    applyWorkflow: setPrefillWorkflow,
     setDateStr,
     setTimeStr,
   });
@@ -770,6 +776,59 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         : 0,
     [selectedChannel?.kind, shownBaseCents, shownFinalCentsWithManual, storeCommissionCents]
   );
+  const workflowState = useMemo(() => {
+    const current = getReservationWorkflowState({
+      uiMode,
+      reservationId: prefillReservationId,
+      status: prefillStatus,
+      formalizedAt: prefillFormalizedAt,
+      customerName,
+      customerPhone,
+      isReadOnly: isReadOnlyReservation,
+      isCanceled: Boolean(migrateFlags?.isCanceled),
+      isCompleted: Boolean(migrateFlags?.isCompleted),
+      requiredUnits,
+      readyCount,
+      signedCount: contracts.filter((contract) => contract.status === "SIGNED").length,
+      pendingServiceCents: paymentSummary.pendingServiceCents,
+      pendingDepositCents: 0,
+    });
+    return current.visibleState === "draft" && prefillWorkflow ? { ...current, description: prefillWorkflow.description } : current;
+  }, [
+    uiMode,
+    prefillReservationId,
+    prefillStatus,
+    prefillFormalizedAt,
+    customerName,
+    customerPhone,
+    isReadOnlyReservation,
+    migrateFlags?.isCanceled,
+    migrateFlags?.isCompleted,
+    requiredUnits,
+    readyCount,
+    contracts,
+    paymentSummary.pendingServiceCents,
+    prefillWorkflow,
+  ]);
+
+  const workflowSubmitLabel =
+    workflowState.primaryAction.kind === "submit"
+      ? workflowState.primaryAction.label
+      : primaryLabel;
+
+  const workflowActionTargetId =
+    workflowState.primaryAction.kind === "contracts" || workflowState.primaryAction.kind === "payments"
+      ? workflowState.primaryAction.targetId ?? null
+      : null;
+
+  const handleWorkflowAction = useCallback(() => {
+    if (!workflowActionTargetId) return;
+    const el = document.getElementById(workflowActionTargetId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.history.replaceState({}, "", `#${workflowActionTargetId}`);
+    }
+  }, [workflowActionTargetId]);
 
   function addToCart() {
     if (!serviceId) throw new Error("Servicio requerido");
@@ -1095,6 +1154,11 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         pendingServiceCents: Math.max(0, prev.pendingServiceCents - amountCents),
       }));
       setPaymentAmountEuros("");
+      await refreshPrefill();
+      if (editReservationId) {
+        await refreshContracts(editReservationId);
+      }
+      setSubmitSuccess("Cobro registrado. Estado actualizado.");
     } catch (e: unknown) {
       setPaymentError(errorMessage(e, "No se pudo registrar el cobro"));
     } finally {
@@ -1579,11 +1643,21 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
           <SubmitSection
             primaryDisabled={primaryDisabled}
-            primaryLabel={primaryLabel}
+            primaryLabel={workflowSubmitLabel}
             primaryDisabledReason={primaryDisabledReason}
             primaryBusy={submitBusy}
             successMessage={submitSuccess}
             showPrimaryDisabledReason={Boolean(hardPrimaryDisabledReason) || submitAttempted}
+            workflowLabel={workflowState.label}
+            workflowDescription={workflowState.description}
+            workflowMissingRequirements={workflowState.missingRequirements}
+            workflowActionLabel={
+              workflowState.primaryAction.kind === "contracts" || workflowState.primaryAction.kind === "payments"
+                ? workflowState.primaryAction.label
+                : null
+            }
+            workflowActionTargetId={workflowActionTargetId}
+            onWorkflowAction={handleWorkflowAction}
           />
         </form>
       </section>

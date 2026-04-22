@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReservationWorkflowResult } from "@/lib/reservation-workflow";
 import type {
   AvailabilityData,
   CartItem,
@@ -280,10 +281,11 @@ export function useReservationPrefill(args: {
       activityDate: string;
       scheduledTime?: string | null;
     }) => void;
+  applyWorkflow?: (workflow: ReservationWorkflowResult | null) => void;
   setDateStr: (v: string) => void;
   setTimeStr: (v: string) => void;
 }) {
-  const { prefillReservationId, optionsLength, applyReservation, setDateStr, setTimeStr } = args;
+  const { prefillReservationId, optionsLength, applyReservation, applyWorkflow, setDateStr, setTimeStr } = args;
   const [migrateLoading, setMigrateLoading] = useState(false);
   const [migrateError, setMigrateError] = useState<string | null>(null);
   const [migrateFlags, setMigrateFlags] = useState<MigrateFlags | null>(null);
@@ -301,6 +303,7 @@ export function useReservationPrefill(args: {
       const res = data.reservation;
 
       setMigrateFlags((data.flags ?? null) as MigrateFlags | null);
+      applyWorkflow?.((data.workflow ?? null) as ReservationWorkflowResult | null);
       applyReservation({
         ...res,
         totalServiceCents: Number(data.financial?.totalServiceCents ?? 0),
@@ -335,7 +338,7 @@ export function useReservationPrefill(args: {
     } finally {
       setMigrateLoading(false);
     }
-  }, [prefillReservationId, optionsLength, applyReservation, setDateStr, setTimeStr]);
+  }, [prefillReservationId, optionsLength, applyReservation, applyWorkflow, setDateStr, setTimeStr]);
 
   useEffect(() => {
     void refreshPrefill();

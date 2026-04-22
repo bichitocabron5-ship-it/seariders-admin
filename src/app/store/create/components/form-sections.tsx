@@ -350,6 +350,12 @@ export function SubmitSection({
   primaryBusy = false,
   successMessage = null,
   showPrimaryDisabledReason = Boolean(primaryDisabledReason),
+  workflowLabel = null,
+  workflowDescription = null,
+  workflowMissingRequirements = [],
+  workflowActionLabel = null,
+  workflowActionTargetId = null,
+  onWorkflowAction = undefined,
 }: {
   primaryDisabled: boolean;
   primaryLabel: string;
@@ -357,13 +363,49 @@ export function SubmitSection({
   primaryBusy?: boolean;
   successMessage?: string | null;
   showPrimaryDisabledReason?: boolean;
+  workflowLabel?: string | null;
+  workflowDescription?: string | null;
+  workflowMissingRequirements?: string[];
+  workflowActionLabel?: string | null;
+  workflowActionTargetId?: string | null;
+  onWorkflowAction?: (() => void) | undefined;
 }) {
   return (
     <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
       <div style={{ display: "grid", gap: 4 }}>
         <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f172a" }}>Acción</div>
         <div style={{ fontSize: 18, fontWeight: 900 }}>Confirmación</div>
+        {workflowLabel ? <div style={{ fontSize: 13, fontWeight: 800, color: "#0f766e" }}>Estado visible: {workflowLabel}</div> : null}
+        {workflowDescription ? <div style={{ fontSize: 13, color: "#64748b" }}>{workflowDescription}</div> : null}
       </div>
+
+      {workflowMissingRequirements.length > 0 ? (
+        <div style={{ padding: 12, border: "1px solid #fed7aa", background: "#fff7ed", borderRadius: 12, color: "#9a3412", display: "grid", gap: 6 }}>
+          <div style={{ fontWeight: 800 }}>Qué falta</div>
+          {workflowMissingRequirements.map((requirement) => (
+            <div key={requirement} style={{ fontSize: 13 }}>{requirement}</div>
+          ))}
+        </div>
+      ) : null}
+
+      {workflowActionLabel && workflowActionTargetId && onWorkflowAction ? (
+        <button
+          type="button"
+          onClick={onWorkflowAction}
+          style={{
+            padding: "12px 14px",
+            fontWeight: 900,
+            borderRadius: 14,
+            border: "1px solid #0f766e",
+            background: "#ecfeff",
+            color: "#0f766e",
+            cursor: "pointer",
+          }}
+        >
+          {workflowActionLabel}
+        </button>
+      ) : null}
+
       <button
         type="submit"
         disabled={primaryDisabled || primaryBusy}

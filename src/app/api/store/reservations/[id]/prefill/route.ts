@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
+import { getReservationWorkflowState } from "@/lib/reservation-workflow";
+import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 
 export const runtime = "nodejs";
 
@@ -77,8 +79,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       licenseNumber: true,
       contracts: {
         orderBy: { unitIndex: "asc" },
-        take: 1,
+        take: 20,
         select: {
+          status: true,
           driverName: true,
           driverPhone: true,
           driverEmail: true,
@@ -92,6 +95,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       },
       giftVoucherId: true,
       passVoucherId: true,
+      items: {
+        select: {
+          quantity: true,
+          isExtra: true,
+          service: { select: { category: true } },
+        },
+      },
       payments: {
         select: {
           amountCents: true,
@@ -162,6 +172,29 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     );
   const totalServiceCents = Number(r.totalPriceCents ?? 0);
   const pendingServiceCents = Math.max(0, totalServiceCents - paidServiceCents);
+  const requiredUnits = computeRequiredContractUnits({
+    quantity: r.quantity ?? 0,
+    isLicense: Boolean(r.isLicense),
+    serviceCategory: r.service?.category ?? null,
+    items: r.items ?? [],
+  });
+  const readyCount = (r.contracts ?? []).filter((contract) => contract.status === "READY" || contract.status === "SIGNED").length;
+  const signedCount = (r.contracts ?? []).filter((contract) => contract.status === "SIGNED").length;
+  const workflow = getReservationWorkflowState({
+    reservationId: r.id,
+    status: r.status,
+    formalizedAt: r.formalizedAt,
+    customerName: reservation.customerName,
+    customerPhone: reservation.customerPhone,
+    isReadOnly,
+    isCanceled,
+    isCompleted,
+    requiredUnits,
+    readyCount,
+    pendingServiceCents,
+    pendingDepositCents: 0,
+    signedCount,
+  });
 
   return NextResponse.json({
     reservation,
@@ -179,6 +212,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       isGift: Boolean(r.giftVoucherId),
       isPass: Boolean(r.passVoucherId),
     },
+    workflow,
   });
 }
 
