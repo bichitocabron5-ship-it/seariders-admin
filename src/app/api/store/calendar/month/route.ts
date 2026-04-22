@@ -8,6 +8,7 @@ import { BUSINESS_TZ, tzLocalToUtcDate, todayYmdInTz } from "@/lib/tz-business";
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
+import { buildStoreCalendarWhere } from "@/lib/store-reservation-visibility";
 
 export const runtime = "nodejs";
 
@@ -56,15 +57,7 @@ export async function GET(req: Request) {
 
   // 1) Reservas del mes (SOLO STORE)
   const reservations = await prisma.reservation.findMany({
-    where: {
-      source: { in: ["STORE", "BOOTH"] },
-      // usamos scheduledTime si existe, si no activityDate (lo resolvemos luego)
-      OR: [
-        { scheduledTime: { gte: start, lt: endExclusive } },
-        { scheduledTime: null, activityDate: { gte: start, lt: endExclusive } },
-      ],
-
-    },
+    where: buildStoreCalendarWhere({ start, endExclusive }),
     select: {
       id: true,
       status: true,

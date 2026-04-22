@@ -5,10 +5,9 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { ReservationStatus } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
-import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
+import { ensureReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 
 export const runtime = "nodejs";
 
@@ -23,50 +22,6 @@ function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d;
-}
-
-async function ensureUnitsTx(
-  tx: Prisma.TransactionClient,
-  reservation: {
-    id: string;
-    quantity: number | null;
-    isPackParent: boolean | null;
-    parentReservationId: string | null;
-    isLicense: boolean;
-    serviceCategory?: string | null;
-    items: Array<{ quantity: number | null; isExtra: boolean; service: { category: string | null } | null }>;
-  },
-  readyAt?: Date
-) {
-  if (reservation.isPackParent && !reservation.parentReservationId) return;
-
-  const requiredUnits = computeRequiredPlatformUnits({
-    quantity: reservation.quantity,
-    serviceCategory: reservation.serviceCategory ?? null,
-    items: reservation.items ?? [],
-  });
-  if (requiredUnits <= 0) return;
-
-  const existing = await tx.reservationUnit.findMany({
-    where: { reservationId: reservation.id },
-    select: { unitIndex: true },
-  });
-  const set = new Set(existing.map((u: { unitIndex: number }) => Number(u.unitIndex)));
-
-  const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
-  for (let i = 1; i <= requiredUnits; i++) {
-    if (!set.has(i)) {
-      toCreate.push({
-        reservationId: reservation.id,
-        unitIndex: i,
-        ...(readyAt ? { readyForPlatformAt: readyAt } : {}),
-      });
-    }
-  }
-
-  if (toCreate.length > 0) {
-    await tx.reservationUnit.createMany({ data: toCreate, skipDuplicates: true });
-  }
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -166,12 +121,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           readyForPlatformAt: readyAt,
         }
       });
-      await ensureUnitsTx(tx, {
+      await ensureReservationPlatformUnitsTx(tx, {
         id: parent.id,
         quantity: parent.quantity,
         isPackParent: parent.isPackParent,
         parentReservationId: parent.parentReservationId,
-        isLicense: Boolean(parent.isLicense),
         serviceCategory: parent.service?.category ?? null,
         items: (parent.items ?? []).map((it) => ({
           quantity: it.quantity ?? 0,
@@ -252,12 +206,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           },
           select: { id: true },
         });
-        await ensureUnitsTx(tx, {
+        await ensureReservationPlatformUnitsTx(tx, {
           id: child.id,
           quantity: Number(it.quantity ?? 1),
           isPackParent: false,
           parentReservationId: parent.id,
-          isLicense: false,
           items: [
             {
               quantity: Number(it.quantity ?? 1),

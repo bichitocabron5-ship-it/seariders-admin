@@ -7,12 +7,12 @@ import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import type { Prisma } from "@prisma/client";
-import { computeRequiredContractUnits, computeRequiredPlatformUnits } from "@/lib/reservation-rules";
+import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
+import { ensureReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 
 export const runtime = "nodejs";
 
@@ -20,54 +20,6 @@ function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d;
-}
-
-async function ensureUnitsTx(
-  tx: Prisma.TransactionClient,
-  reservation: {
-    id: string;
-    quantity: number | null;
-    isPackParent: boolean | null;
-    parentReservationId: string | null;
-    isLicense: boolean;
-    serviceCategory?: string | null;
-    items: Array<{ quantity: number | null; isExtra: boolean; service: { category: string | null } | null }>;
-  },
-  readyAt?: Date
-) {
-  // Pack padre: la operativa vive en hijas
-  if (reservation.isPackParent && !reservation.parentReservationId) return;
-
-  const requiredPlatformUnits = computeRequiredPlatformUnits({
-    quantity: reservation.quantity,
-    serviceCategory: reservation.serviceCategory ?? null,
-    items: reservation.items ?? [],
-  });
-  if (requiredPlatformUnits <= 0) return;
-
-  const existing = await tx.reservationUnit.findMany({
-    where: { reservationId: reservation.id },
-    select: { unitIndex: true },
-  });
-
-  const existingSet = new Set(existing.map((u: { unitIndex: number }) => Number(u.unitIndex)));
-  const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
-  for (let i = 1; i <= requiredPlatformUnits; i++) {
-    if (!existingSet.has(i)) {
-      toCreate.push({
-        reservationId: reservation.id,
-        unitIndex: i,
-        ...(readyAt ? { readyForPlatformAt: readyAt } : {}),
-      });
-    }
-  }
-
-  if (toCreate.length > 0) {
-    await tx.reservationUnit.createMany({
-      data: toCreate,
-      skipDuplicates: true,
-    });
-  }
 }
 
 export async function POST(req: Request) {
@@ -309,12 +261,11 @@ export async function POST(req: Request) {
         }
 
         // Plataforma consume ReservationUnit; sin units no aparece en cola.
-        await ensureUnitsTx(tx, {
+        await ensureReservationPlatformUnitsTx(tx, {
           id: reservation.id,
           quantity: reservation.quantity,
           isPackParent: reservation.isPackParent,
           parentReservationId: reservation.parentReservationId,
-          isLicense: Boolean(reservation.isLicense),
           serviceCategory: reservation.service?.category ?? null,
           items: (reservation.items ?? []).map((it) => ({
             quantity: it.quantity ?? 0,
@@ -382,12 +333,11 @@ export async function POST(req: Request) {
                 select: { id: true },
               });
 
-            await ensureUnitsTx(tx, {
+            await ensureReservationPlatformUnitsTx(tx, {
               id: child.id,
                 quantity: Number(it.quantity ?? 1),
                 isPackParent: false,
                 parentReservationId: reservation.id,
-                isLicense: false,
                 items: [
                   {
                     quantity: Number(it.quantity ?? 1),

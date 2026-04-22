@@ -5,9 +5,10 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z, type ZodIssue } from "zod";
-import { ReservationStatus, type Prisma } from "@prisma/client";
-import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
+import { ReservationStatus } from "@prisma/client";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
+import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
+import { ensureReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 
 export const runtime = "nodejs";
 
@@ -32,50 +33,6 @@ const Body = z.object({
 function validationMessage(issues: ZodIssue[]) {
   const first = issues[0];
   return first?.message || "Body inválido";
-}
-
-async function ensureUnitsTx(
-  tx: Prisma.TransactionClient,
-  reservation: {
-    id: string;
-    quantity: number | null;
-    isPackParent: boolean | null;
-    parentReservationId: string | null;
-    isLicense: boolean;
-    serviceCategory?: string | null;
-    items: Array<{ quantity: number | null; isExtra: boolean; service: { category: string | null } | null }>;
-  },
-  readyAt?: Date
-) {
-  if (reservation.isPackParent && !reservation.parentReservationId) return;
-
-  const requiredUnits = computeRequiredPlatformUnits({
-    quantity: reservation.quantity,
-    serviceCategory: reservation.serviceCategory ?? null,
-    items: reservation.items ?? [],
-  });
-  if (requiredUnits <= 0) return;
-
-  const existing = await tx.reservationUnit.findMany({
-    where: { reservationId: reservation.id },
-    select: { unitIndex: true },
-  });
-  const set = new Set(existing.map((u) => Number(u.unitIndex)));
-
-  const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
-  for (let i = 1; i <= requiredUnits; i++) {
-    if (!set.has(i)) {
-      toCreate.push({
-        reservationId: reservation.id,
-        unitIndex: i,
-        ...(readyAt ? { readyForPlatformAt: readyAt } : {}),
-      });
-    }
-  }
-
-  if (toCreate.length > 0) {
-    await tx.reservationUnit.createMany({ data: toCreate, skipDuplicates: true });
-  }
 }
 
 export async function POST(
@@ -106,6 +63,8 @@ export async function POST(
           status: true,
           formalizedAt: true,
           paymentCompletedAt: true,
+          totalPriceCents: true,
+          depositCents: true,
           quantity: true,
           isPackParent: true,
           parentReservationId: true,
@@ -116,6 +75,22 @@ export async function POST(
               quantity: true,
               isExtra: true,
               service: { select: { category: true } },
+            },
+          },
+          contracts: {
+            select: {
+              unitIndex: true,
+              logicalUnitIndex: true,
+              status: true,
+              supersededAt: true,
+              createdAt: true,
+            },
+          },
+          payments: {
+            select: {
+              amountCents: true,
+              isDeposit: true,
+              direction: true,
             },
           },
         },
@@ -138,8 +113,34 @@ export async function POST(
           return reservation;
         }
 
-        if (!["WAITING", "SCHEDULED"].includes(reservation.status)) {
-          throw new Error(`No se puede pasar a READY desde estado ${reservation.status}.`);
+        const readyCheck = evaluateReadyForPlatform({
+          status: reservation.status,
+          formalizedAt: reservation.formalizedAt,
+          totalPriceCents: reservation.totalPriceCents,
+          depositCents: reservation.depositCents,
+          quantity: reservation.quantity,
+          isLicense: Boolean(reservation.isLicense),
+          service: reservation.service,
+          items: (reservation.items ?? []).map((item) => ({
+            quantity: item.quantity ?? 0,
+            isExtra: Boolean(item.isExtra),
+            service: item.service ? { category: item.service.category ?? null } : null,
+          })),
+          contracts: (reservation.contracts ?? []).map((contract) => ({
+            unitIndex: Number(contract.unitIndex ?? 0),
+            logicalUnitIndex: contract.logicalUnitIndex ?? null,
+            status: contract.status,
+            supersededAt: contract.supersededAt ?? null,
+            createdAt: contract.createdAt ?? null,
+          })),
+          payments: (reservation.payments ?? []).map((payment) => ({
+            amountCents: Number(payment.amountCents ?? 0),
+            isDeposit: Boolean(payment.isDeposit),
+            direction: payment.direction,
+          })),
+        });
+        if (!readyCheck.ok) {
+          throw new Error(readyCheck.error);
         }
 
         const readyAt = new Date();
@@ -157,14 +158,13 @@ export async function POST(
           },
         });
 
-        await ensureUnitsTx(
+        await ensureReservationPlatformUnitsTx(
           tx,
           {
             id: reservation.id,
             quantity: reservation.quantity,
             isPackParent: reservation.isPackParent,
             parentReservationId: reservation.parentReservationId,
-            isLicense: Boolean(reservation.isLicense),
             serviceCategory: reservation.service?.category ?? null,
             items: (reservation.items ?? []).map((item) => ({
               quantity: item.quantity ?? 0,

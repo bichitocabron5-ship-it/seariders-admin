@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
+import { buildStorePendingTodayWhere } from "@/lib/store-reservation-visibility";
 
 export const runtime = "nodejs";
 
@@ -98,26 +99,7 @@ export async function GET() {
   const { start, endExclusive } = tzDayRangeUtc(tz, new Date());
 
   const rows = await prisma.reservation.findMany({
-    where: {
-      status: "WAITING",
-      formalizedAt: null,
-
-      OR: [
-        // scheduledTime dentro del día de Madrid (en UTC)
-        { scheduledTime: { gte: start, lt: endExclusive } },
-        // si no tiene hora, activityDate dentro del día de Madrid
-        { scheduledTime: null, activityDate: { gte: start, lt: endExclusive } },
-      ],
-
-      AND: [
-        {
-          OR: [
-            { source: "STORE" },
-            { source: "BOOTH", arrivedStoreAt: { not: null } },
-          ],
-        },
-      ],
-    },
+    where: buildStorePendingTodayWhere({ start, endExclusive }),
     orderBy: [{ scheduledTime: "asc" }, { activityDate: "asc" }],
     select: {
       id: true,

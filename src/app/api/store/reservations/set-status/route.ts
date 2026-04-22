@@ -5,10 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { MonitorRunStatus, ReservationUnitStatus, RunAssignmentStatus, type Prisma } from "@prisma/client";
-import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
+import { MonitorRunStatus, ReservationUnitStatus, RunAssignmentStatus } from "@prisma/client";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
+import { ensureReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 
 export const runtime = "nodejs";
 
@@ -32,63 +32,6 @@ async function requireStoreOrAdmin() {
   return null;
 }
 
-type ItemForUnits = { quantity: number | null; isExtra: boolean; service: { category: string | null } | null };
-type UnitIndex = { unitIndex: number };
-
-async function ensureUnitsTx(tx: Prisma.TransactionClient, reservationId: string) {
-  const r = await tx.reservation.findUnique({
-    where: { id: reservationId },
-    select: {
-      id: true,
-      status: true,
-      readyForPlatformAt: true,
-      quantity: true,
-      isPackParent: true,
-      parentReservationId: true,
-      isLicense: true,
-      service: { select: { category: true } },
-      items: {
-        select: {
-          quantity: true,
-          isExtra: true,
-          service: { select: { category: true } },
-        },
-      },
-    },
-  });
-  if (!r) return;
-  if (r.isPackParent && !r.parentReservationId) return;
-
-  const requiredUnits = computeRequiredPlatformUnits({
-    quantity: r.quantity,
-    serviceCategory: r.service?.category ?? null,
-    items: (r.items ?? []).map((it): ItemForUnits => ({
-      quantity: it.quantity ?? 0,
-      isExtra: Boolean(it.isExtra),
-      service: it.service ? { category: it.service.category ?? null } : null,
-    })),
-  });
-  if (requiredUnits <= 0) return;
-
-  const existing = await tx.reservationUnit.findMany({
-    where: { reservationId: r.id },
-    select: { unitIndex: true },
-  });
-  const set = new Set(existing.map((u: UnitIndex) => Number(u.unitIndex)));
-
-  const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
-  for (let i = 1; i <= requiredUnits; i++) {
-    if (!set.has(i)) {
-      toCreate.push({
-        reservationId: r.id,
-        unitIndex: i,
-        ...(r.status === "READY_FOR_PLATFORM" && r.readyForPlatformAt ? { readyForPlatformAt: r.readyForPlatformAt } : {}),
-      });
-    }
-  }
-  if (toCreate.length > 0) await tx.reservationUnit.createMany({ data: toCreate, skipDuplicates: true });
-}
-
 export async function POST(req: Request) {
   const session = await requireStoreOrAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -109,6 +52,8 @@ export async function POST(req: Request) {
         depositCents: true,
         quantity: true,
         isLicense: true,
+        isPackParent: true,
+        parentReservationId: true,
         service: { select: { category: true } },
         items: {
           select: {
@@ -181,7 +126,18 @@ export async function POST(req: Request) {
     });
 
     if (parsed.data.status === "READY_FOR_PLATFORM") {
-      await ensureUnitsTx(tx, parsed.data.id);
+      await ensureReservationPlatformUnitsTx(tx, {
+        id: current.id,
+        quantity: current.quantity,
+        isPackParent: current.isPackParent,
+        parentReservationId: current.parentReservationId,
+        serviceCategory: current.service?.category ?? null,
+        items: (current.items ?? []).map((it) => ({
+          quantity: it.quantity ?? 0,
+          isExtra: Boolean(it.isExtra),
+          service: it.service ? { category: it.service.category ?? null } : null,
+        })),
+      }, readyAt ?? undefined);
       await tx.reservationUnit.updateMany({
         where: { reservationId: parsed.data.id, status: "READY_FOR_PLATFORM" },
         data: { readyForPlatformAt: readyAt ?? undefined },

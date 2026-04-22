@@ -8,6 +8,7 @@ import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
+import { buildStoreTodayWhere } from "@/lib/store-reservation-visibility";
 
 export const runtime = "nodejs";
 
@@ -24,28 +25,7 @@ export async function GET() {
   const { start, endExclusive } = tzDayRangeUtc(tz, new Date());
 
   const rowsDb = await prisma.reservation.findMany({
-    where: {
-      status: { in: ["WAITING", "READY_FOR_PLATFORM", "IN_SEA", "SCHEDULED"] },
-
-      // ✅ clave: que esté formalizada
-      formalizedAt: { not: null },
-
-      // ✅ hoy = reservas con scheduledTime hoy, o si no tienen scheduledTime, activityDate hoy
-      OR: [
-        { scheduledTime: { gte: start, lt: endExclusive } },
-        { scheduledTime: null, activityDate: { gte: start, lt: endExclusive } },
-      ],
-
-      // y tu filtro de origen se queda igual:
-      AND: [
-        {
-          OR: [
-            { source: "STORE" },
-            { source: "BOOTH", arrivedStoreAt: { not: null } },
-          ],
-        },
-      ],
-    },
+    where: buildStoreTodayWhere({ start, endExclusive }),
     orderBy: [{ scheduledTime: "asc" }, { activityDate: "asc" }],
     select: {
       id: true,
