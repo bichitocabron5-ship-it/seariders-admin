@@ -84,6 +84,7 @@ export async function GET() {
 
   const rows = rowsDb.map((r) => {
     const paidCents = (r.payments ?? []).reduce((acc, p) => {
+      if (p.origin !== "BOOTH" || p.isDeposit) return acc;
       const sign = p.direction === "OUT" ? -1 : 1;
       return acc + sign * Number(p.amountCents || 0);
     }, 0);

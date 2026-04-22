@@ -103,6 +103,7 @@ export async function GET(req: Request) {
                 direction: true,
                 method: true,
                 createdAt: true,
+                origin: true,
               },
               orderBy: { createdAt: "asc" },
             },
@@ -172,18 +173,21 @@ export async function GET(req: Request) {
 
   const reservationRows = reservationRowsDb.map((reservation) => {
     const servicePaidCents = reservation.payments
-      .filter((payment) => !payment.isDeposit)
+      .filter((payment) => payment.origin === "BOOTH" && !payment.isDeposit)
       .reduce((sum, payment) => {
         const sign = payment.direction === "OUT" ? -1 : 1;
         return sum + sign * Number(payment.amountCents ?? 0);
       }, 0);
 
     const depositPaidCents = reservation.payments
-      .filter((payment) => payment.isDeposit)
+      .filter((payment) => payment.origin === "BOOTH" && payment.isDeposit)
       .reduce((sum, payment) => {
         const sign = payment.direction === "OUT" ? -1 : 1;
         return sum + sign * Number(payment.amountCents ?? 0);
       }, 0);
+
+    const boothPayments = reservation.payments.filter((payment) => payment.origin === "BOOTH");
+    const lastBoothPaymentAt = boothPayments[boothPayments.length - 1]?.createdAt ?? null;
 
     return {
       id: reservation.id,
@@ -205,8 +209,8 @@ export async function GET(req: Request) {
       servicePaidCents,
       servicePendingCents: Math.max(0, Number(reservation.totalPriceCents ?? 0) - servicePaidCents),
       depositPaidCents,
-      paymentsCount: reservation.payments.length,
-      lastPaymentAt: reservation.payments[reservation.payments.length - 1]?.createdAt ?? null,
+      paymentsCount: boothPayments.length,
+      lastPaymentAt: lastBoothPaymentAt,
       rowKind: "RESERVATION" as const,
       channelName: reservation.channel?.name ?? null,
       paymentMethod: null,

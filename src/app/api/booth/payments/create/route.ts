@@ -43,16 +43,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Solo se puede cobrar en reservas de carpa" }, { status: 400 });
   }
 
-  const agg = await prisma.payment.aggregate({
+  const boothPayments = await prisma.payment.findMany({
     where: {
       reservationId,
-      direction: PaymentDirection.IN,
+      origin: PaymentOrigin.BOOTH,
       isDeposit: false,
     },
-    _sum: { amountCents: true },
+    select: {
+      amountCents: true,
+      direction: true,
+    },
   });
 
-  const paidSoFar = agg._sum.amountCents ?? 0;
+  const paidSoFar = boothPayments.reduce(
+    (sum, payment) =>
+      sum +
+      (payment.direction === PaymentDirection.OUT
+        ? -Number(payment.amountCents ?? 0)
+        : Number(payment.amountCents ?? 0)),
+    0
+  );
   const pending = Math.max(0, reservation.totalPriceCents - paidSoFar);
 
   if (amountCents > pending) {

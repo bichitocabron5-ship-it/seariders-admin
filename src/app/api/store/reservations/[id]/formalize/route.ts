@@ -55,6 +55,14 @@ function normalizeOptionalString(v: string | null | undefined) {
   return t.length ? t : null;
 }
 
+function fallbackOptionalString(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const normalized = normalizeOptionalString(value);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
 function toYmdInTz(d: Date, tz: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
@@ -185,6 +193,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         where: { id },
         select: {
           id: true,
+          source: true,
           status: true,
           formalizedAt: true,
           giftVoucherId: true,
@@ -230,6 +239,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             orderBy: { unitIndex: "asc" },
             select: {
               id: true,
+              driverName: true,
+              driverPhone: true,
+              driverEmail: true,
+              driverCountry: true,
+              driverAddress: true,
+              driverPostalCode: true,
+              driverBirthDate: true,
+              driverDocType: true,
+              driverDocNumber: true,
             },
           },
         },
@@ -268,36 +286,41 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         normalizeOptionalString(b.customerName) ??
         normalizeOptionalString(current.customerName) ??
         "";
+      const primaryContract = current.contracts[0] ?? null;
+      const boothCompatibilityFallback =
+        current.source === "BOOTH" && !current.formalizedAt ? primaryContract : null;
       const customerPhone =
         b.customerPhone !== undefined
           ? normalizeOptionalString(b.customerPhone)
-          : normalizeOptionalString(current.customerPhone);
+          : fallbackOptionalString(current.customerPhone, boothCompatibilityFallback?.driverPhone);
       const customerEmail =
         b.customerEmail !== undefined
           ? normalizeOptionalString(b.customerEmail)
-          : normalizeOptionalString(current.customerEmail);
+          : fallbackOptionalString(current.customerEmail, boothCompatibilityFallback?.driverEmail);
       const customerCountry =
         b.customerCountry !== undefined
           ? normalizeOptionalString(b.customerCountry)
-          : normalizeOptionalString(current.customerCountry);
+          : fallbackOptionalString(current.customerCountry, boothCompatibilityFallback?.driverCountry);
       const customerAddress =
         b.customerAddress !== undefined
           ? normalizeOptionalString(b.customerAddress)
-          : normalizeOptionalString(current.customerAddress);
+          : fallbackOptionalString(current.customerAddress, boothCompatibilityFallback?.driverAddress);
       const customerPostalCode =
         b.customerPostalCode !== undefined
           ? normalizeOptionalString(b.customerPostalCode)
-          : normalizeOptionalString(current.customerPostalCode);
+          : fallbackOptionalString(current.customerPostalCode, boothCompatibilityFallback?.driverPostalCode);
       const customerBirthDate =
-        b.customerBirthDate !== undefined ? (b.customerBirthDate ? new Date(b.customerBirthDate) : null) : current.customerBirthDate;
+        b.customerBirthDate !== undefined
+          ? (b.customerBirthDate ? new Date(b.customerBirthDate) : null)
+          : current.customerBirthDate ?? boothCompatibilityFallback?.driverBirthDate ?? null;
       const customerDocType =
         b.customerDocType !== undefined
           ? normalizeOptionalString(b.customerDocType)
-          : normalizeOptionalString(current.customerDocType);
+          : fallbackOptionalString(current.customerDocType, boothCompatibilityFallback?.driverDocType);
       const customerDocNumber =
         b.customerDocNumber !== undefined
           ? normalizeOptionalString(b.customerDocNumber)
-          : normalizeOptionalString(current.customerDocNumber);
+          : fallbackOptionalString(current.customerDocNumber, boothCompatibilityFallback?.driverDocNumber);
       const marketing = normalizeOptionalString(
         b.marketing !== undefined ? b.marketing : current.marketing
       );
