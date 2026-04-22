@@ -13,6 +13,7 @@ import {
 } from "@prisma/client";
 import { requireMechanicsOrAdmin } from "@/lib/mechanics-auth";
 import { createMaintenanceEventLog } from "@/lib/mechanics-event-log";
+import { formatFaultCodes } from "@/lib/mechanics-fault-codes";
 
 export const runtime = "nodejs";
 
@@ -41,7 +42,7 @@ const Body = z.object({
   laborCostCents: z.coerce.number().int().min(0).optional().nullable(),
   partsCostCents: z.coerce.number().int().min(0).optional().nullable(),
   resolvedAt: z.string().datetime().optional().nullable(),
-  faultCode: z.string().trim().max(80).optional().nullable(),
+  faultCode: z.string().trim().max(300).optional().nullable(),
   affectsOperability: z.boolean().optional().default(false),
   operabilityOnOpen: z.nativeEnum(PlatformOperabilityStatus).optional().nullable(),
   operabilityOnResolved: z.nativeEnum(PlatformOperabilityStatus).optional().nullable(),
@@ -278,7 +279,7 @@ export async function POST(req: Request) {
           laborCostCents: laborCostCents ?? null,
           partsCostCents: calculatedPartsCostCents,
           resolvedAt: resolvedAt ? new Date(resolvedAt) : null,
-          faultCode: faultCode?.trim() || null,
+          faultCode: formatFaultCodes([faultCode ?? ""]),
           affectsOperability,
           operabilityOnOpen: operabilityOnOpen ?? null,
           operabilityOnResolved: operabilityOnResolved ?? null,
@@ -307,7 +308,7 @@ export async function POST(req: Request) {
           severity,
           hoursAtService: effectiveHours,
           externalWorkshop,
-          faultCode: faultCode?.trim() || null,
+          faultCode: formatFaultCodes([faultCode ?? ""]),
           partsUsedCount: normalizedPartsUsed.length,
           calculatedPartsCostCents,
         },

@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 import { requireMechanicsOrAdmin } from "@/lib/mechanics-auth";
 import { createMaintenanceEventLog } from "@/lib/mechanics-event-log";
+import { formatFaultCodes } from "@/lib/mechanics-fault-codes";
 import type { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -24,7 +25,7 @@ const PatchBody = z.object({
   laborCostCents: z.coerce.number().int().min(0).optional().nullable(),
   partsCostCents: z.coerce.number().int().min(0).optional().nullable(),
   resolvedAt: z.string().datetime().optional().nullable(),
-  faultCode: z.string().trim().max(80).optional().nullable(),
+  faultCode: z.string().trim().max(300).optional().nullable(),
   affectsOperability: z.boolean().optional(),
   operabilityOnOpen: z.nativeEnum(PlatformOperabilityStatus).optional().nullable(),
   operabilityOnResolved: z.nativeEnum(PlatformOperabilityStatus).optional().nullable(),
@@ -270,7 +271,7 @@ export async function PATCH(
           ? { partsCostCents: b.partsCostCents }
           : {}),
         ...(b.faultCode !== undefined
-          ? { faultCode: b.faultCode?.trim() || null }
+          ? { faultCode: formatFaultCodes([b.faultCode ?? ""]) }
           : {}),
         ...(b.affectsOperability !== undefined
           ? { affectsOperability: b.affectsOperability }

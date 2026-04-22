@@ -1,6 +1,7 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
+import { addFaultCode, formatFaultCodes } from "@/lib/mechanics-fault-codes";
 
 type MaintenanceEventType =
   | "SERVICE"
@@ -68,6 +69,8 @@ type Props = {
   setPartsCostCents: Dispatch<SetStateAction<string>>;
   faultCode: string;
   setFaultCode: Dispatch<SetStateAction<string>>;
+  faultCodes: string[];
+  setFaultCodes: Dispatch<SetStateAction<string[]>>;
   faultCodeOptions: FaultCodeRow[];
   faultCodeLoading: boolean;
   faultCodeLookupError: string | null;
@@ -122,6 +125,8 @@ export default function CreateMaintenanceEventModal({
   setPartsCostCents,
   faultCode,
   setFaultCode,
+  faultCodes,
+  setFaultCodes,
   faultCodeOptions,
   faultCodeLoading,
   faultCodeLookupError,
@@ -147,6 +152,13 @@ export default function CreateMaintenanceEventModal({
   onSubmit,
 }: Props) {
   if (!open) return null;
+
+  const addCurrentFaultCode = () => {
+    const normalized = formatFaultCodes([faultCode]);
+    if (!normalized) return;
+    setFaultCodes((current) => addFaultCode(current, normalized));
+    setFaultCode("");
+  };
 
   return (
     <div
@@ -323,13 +335,54 @@ export default function CreateMaintenanceEventModal({
             </label>
 
             <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-              Código de avería
-              <input
-                value={faultCode}
-                onChange={(e) => setFaultCode(e.target.value.toUpperCase())}
-                placeholder="Ej: P0562 / P0122 / U0129"
-                style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-              />
+              Códigos de avería
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={faultCode}
+                  onChange={(e) => setFaultCode(e.target.value.toUpperCase())}
+                  placeholder="Ej: P0562"
+                  style={{ flex: 1, padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
+                />
+                <button
+                  type="button"
+                  onClick={addCurrentFaultCode}
+                  style={{
+                    border: "1px solid #111",
+                    background: "#111",
+                    color: "#fff",
+                    borderRadius: 10,
+                    padding: "0 12px",
+                    fontWeight: 900,
+                  }}
+                >
+                  Añadir
+                </button>
+              </div>
+              {faultCodes.length ? (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {faultCodes.map((code) => (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => setFaultCodes((current) => current.filter((item) => item !== code))}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        border: "1px solid #dbe4ea",
+                        background: "#fff",
+                        fontSize: 12,
+                        fontWeight: 900,
+                      }}
+                    >
+                      {code} ×
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  Puedes añadir varios códigos en el mismo evento.
+                </div>
+              )}
             </label>
 
             <div
@@ -467,6 +520,12 @@ export default function CreateMaintenanceEventModal({
                 {exactFaultCodeMatch
                   ? "Código reconocido en catálogo."
                   : "Código no encontrado en catálogo. Se guardará como código libre."}
+              </div>
+            ) : null}
+
+            {faultCodes.length ? (
+              <div style={{ fontSize: 13, opacity: 0.85 }}>
+                Se guardarán: <b>{faultCodes.join(", ")}</b>
               </div>
             ) : null}
 

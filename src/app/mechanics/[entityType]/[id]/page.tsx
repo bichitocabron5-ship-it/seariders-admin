@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { eurFromCents } from "@/lib/mechanics-format";
+import { formatFaultCodes, parseFaultCodes } from "@/lib/mechanics-fault-codes";
 import EditMaintenanceEventModal from "@/app/mechanics/_components/EditMaintenanceEventModal";
 import CreateMaintenanceEventModal from "@/app/mechanics/[entityType]/[id]/_components/CreateMaintenanceEventModal";
 import MaintenanceEventsSection from "@/app/mechanics/[entityType]/[id]/_components/MaintenanceEventsSection";
@@ -225,7 +226,8 @@ export default function MechanicsDetailPage() {
   const [costCents, setCostCents] = useState("");
   const [laborCostCents, setLaborCostCents] = useState("");
   const [partsCostCents, setPartsCostCents] = useState("");
-  const [faultCode, setFaultCode] = useState("");
+  const [faultCodeDraft, setFaultCodeDraft] = useState("");
+  const [faultCodes, setFaultCodes] = useState<string[]>([]);
   const [faultCodeOptions, setFaultCodeOptions] = useState<FaultCodeLookupRow[]>([]);
   const [faultCodeLoading, setFaultCodeLoading] = useState(false);
   const [faultCodeLookupError, setFaultCodeLookupError] = useState<string | null>(null);
@@ -285,7 +287,8 @@ export default function MechanicsDetailPage() {
       setCostCents("");
       setLaborCostCents("");
       setPartsCostCents("");
-      setFaultCode("");
+      setFaultCodeDraft("");
+      setFaultCodes([]);
       setResolvedAt("");
       setAffectsOperability(false);
       setOperabilityOnOpen("");
@@ -356,7 +359,7 @@ export default function MechanicsDetailPage() {
     let cancelled = false;
 
     async function loadFaultCodes() {
-      const q = faultCode.trim();
+      const q = faultCodeDraft.trim();
 
       if (!q) {
         setFaultCodeOptions([]);
@@ -403,7 +406,7 @@ export default function MechanicsDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [faultCode]);
+  }, [faultCodeDraft]);
 
   const fleetKpis = useMemo(() => {
     if (!data) {
@@ -475,25 +478,25 @@ export default function MechanicsDetailPage() {
     >();
 
     for (const e of data.events) {
-      const code = e.faultCode?.trim();
-      if (!code) continue;
-
-      const current = map.get(code) ?? {
-        code,
-        count: 0,
-        lastSeenAt: null,
-        totalCostCents: 0,
-        totalPartsCostCents: 0,
-      };
-
-      current.count += 1;
-      current.totalCostCents += Number(e.costCents ?? 0);
+      const eventCodes = parseFaultCodes(e.faultCode);
+      if (eventCodes.length === 0) continue;
 
       const partsCostFromUsages = (e.partUsages ?? []).reduce(
         (acc, p) => acc + Number(p.totalCostCents ?? 0),
         0
       );
 
+      for (const code of eventCodes) {
+        const current = map.get(code) ?? {
+          code,
+          count: 0,
+          lastSeenAt: null,
+          totalCostCents: 0,
+          totalPartsCostCents: 0,
+        };
+
+        current.count += 1;
+        current.totalCostCents += Number(e.costCents ?? 0);
         current.totalPartsCostCents += partsCostFromUsages;
 
         if (!current.lastSeenAt || new Date(e.createdAt) > new Date(current.lastSeenAt)) {
@@ -502,12 +505,13 @@ export default function MechanicsDetailPage() {
 
         map.set(code, current);
       }
+    }
 
-      return Array.from(map.values()).sort((a, b) => {
-        if (b.count !== a.count) return b.count - a.count;
-        return b.totalCostCents - a.totalCostCents;
-      });
-    }, [data]);
+    return Array.from(map.values()).sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return b.totalCostCents - a.totalCostCents;
+    });
+  }, [data]);
 
   useEffect(() => {
     let cancelled = false;
@@ -562,7 +566,7 @@ export default function MechanicsDetailPage() {
   }, [recurringFaults]);
 
   const selectedFaultCode = useMemo(() => {
-    const normalized = faultCode.trim().toUpperCase();
+    const normalized = faultCodeDraft.trim().toUpperCase();
     if (!normalized) return null;
 
     return (
@@ -570,9 +574,9 @@ export default function MechanicsDetailPage() {
       faultCodeOptions[0] ??
       null
     );
-  }, [faultCode, faultCodeOptions]);
+  }, [faultCodeDraft, faultCodeOptions]);
 
-  const normalizedFaultCode = faultCode.trim().toUpperCase();
+  const normalizedFaultCode = faultCodeDraft.trim().toUpperCase();
 
   const exactFaultCodeMatch = useMemo(() => {
     if (!normalizedFaultCode) return null;
@@ -688,7 +692,7 @@ export default function MechanicsDetailPage() {
           laborCostCents: laborCostCents.trim() ? Number(laborCostCents) : null,
           partsCostCents: partsCostCents.trim() ? Number(partsCostCents) : null,
           resolvedAt: resolvedAt.trim() ? new Date(resolvedAt).toISOString() : null,
-          faultCode: faultCode.trim() || null,
+          faultCode: formatFaultCodes([...faultCodes, faultCodeDraft]),
           affectsOperability,
           operabilityOnOpen: operabilityOnOpen || null,
           operabilityOnResolved: operabilityOnResolved || null,
@@ -873,8 +877,10 @@ export default function MechanicsDetailPage() {
         setLaborCostCents={setLaborCostCents}
         partsCostCents={partsCostCents}
         setPartsCostCents={setPartsCostCents}
-        faultCode={faultCode}
-        setFaultCode={setFaultCode}
+        faultCode={faultCodeDraft}
+        setFaultCode={setFaultCodeDraft}
+        faultCodes={faultCodes}
+        setFaultCodes={setFaultCodes}
         faultCodeOptions={faultCodeOptions}
         faultCodeLoading={faultCodeLoading}
         faultCodeLookupError={faultCodeLookupError}

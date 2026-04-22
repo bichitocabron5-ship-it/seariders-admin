@@ -114,8 +114,13 @@ export default function EditMaintenanceEventFormSection({
           <input value={partsCostCents} onChange={(e) => onPartsCostCentsChange(e.target.value)} style={inputStyle} />
         </Field>
 
-        <Field label="Código de avería">
-          <input value={faultCode} onChange={(e) => onFaultCodeChange(e.target.value)} style={inputStyle} />
+        <Field label="Códigos de avería">
+          <input
+            value={faultCode}
+            onChange={(e) => onFaultCodeChange(e.target.value)}
+            placeholder="Ej: P0562, P0122, U0129"
+            style={inputStyle}
+          />
         </Field>
       </div>
 
@@ -153,7 +158,7 @@ export default function EditMaintenanceEventFormSection({
           >
             <Field label="Estado al abrir/reabrir">
               <select value={operabilityOnOpen} onChange={(e) => onOperabilityOnOpenChange(e.target.value)} style={inputStyle}>
-                <option value="">— Seleccionar —</option>
+                <option value="">Seleccionar</option>
                 <option value="MAINTENANCE">MAINTENANCE</option>
                 <option value="DAMAGED">DAMAGED</option>
                 <option value="OUT_OF_SERVICE">OUT_OF_SERVICE</option>
@@ -163,7 +168,7 @@ export default function EditMaintenanceEventFormSection({
 
             <Field label="Estado al resolver">
               <select value={operabilityOnResolved} onChange={(e) => onOperabilityOnResolvedChange(e.target.value)} style={inputStyle}>
-                <option value="">— Seleccionar —</option>
+                <option value="">Seleccionar</option>
                 <option value="OPERATIONAL">OPERATIONAL</option>
                 <option value="MAINTENANCE">MAINTENANCE</option>
                 <option value="DAMAGED">DAMAGED</option>
