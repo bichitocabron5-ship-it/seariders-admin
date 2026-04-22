@@ -16,8 +16,20 @@ type Summary = {
     all?: { NET?: number };
     meta?: { windowFrom?: string | null; windowTo?: string | null };
   };
+  pendingStaff?: { count?: number; totalCents?: number };
   isClosed?: boolean;
-  closure?: { id: string; closedAt: string } | null;
+  closure?: {
+    id: string;
+    closedAt: string;
+    cashFundCents?: number | null;
+    cashToKeepCents?: number | null;
+    cashToWithdrawCents?: number | null;
+  } | null;
+  cashFundSuggestion?: {
+    suggestedCents?: number;
+    source?: "CURRENT_CLOSURE" | "PREVIOUS_CLOSURE" | "DEFAULT";
+    previousBusinessDate?: string | null;
+  };
 };
 
 const METHODS: Method[] = ["CASH", "CARD", "BIZUM", "TRANSFER", "VOUCHER"];
@@ -109,6 +121,8 @@ export default function BarCashClosuresPage() {
   const [ssRows, setSsRows] = useState<Array<{ id: string; label: string }>>([]);
   const [selectedSs, setSelectedSs] = useState<string[]>([]);
   const [declService, setDeclService] = useState<Record<Method, string>>(emptyMethodMapInputs());
+  const [cashFundEuros, setCashFundEuros] = useState("");
+  const [cashFundTouched, setCashFundTouched] = useState(false);
   const [note, setNote] = useState("");
   const [closing, setClosing] = useState(false);
 
@@ -146,6 +160,8 @@ export default function BarCashClosuresPage() {
       netService: sumMethodMapCents(service),
     };
   }, [declaredTotals, systemServiceByMethod]);
+  const cashFundCents = useMemo(() => centsFromEuroInput(cashFundEuros), [cashFundEuros]);
+  const cashToWithdrawCents = declaredTotals.total.CASH - cashFundCents;
 
   async function load() {
     setLoading(true);
@@ -180,6 +196,10 @@ export default function BarCashClosuresPage() {
             VOUCHER: m.VOUCHER ?? 0,
           })
         );
+      }
+
+      if (!cashFundTouched) {
+        setCashFundEuros(euroInputFromCents(summaryData?.cashFundSuggestion?.suggestedCents ?? 10_000));
       }
     } catch (e: unknown) {
       setSum(null);
@@ -216,6 +236,7 @@ export default function BarCashClosuresPage() {
           date: today,
           shiftSessionIds: selectedSs,
           declared: declaredTotals,
+          cashFundCents,
           note,
         }),
       });
@@ -310,6 +331,7 @@ export default function BarCashClosuresPage() {
             <Stat label="Sistema neto" value={euros(Number(sum?.computed?.all?.NET ?? 0))} />
             <Stat label="Declarado" value={euros(declaredTotals.netTotal)} />
             <Stat label="Diferencia viva" value={euros(diffLive.netService)} />
+            <Stat label="Staff pendiente" value={euros(Number(sum?.pendingStaff?.totalCents ?? 0))} />
           </div>
         </div>
       </Card>
@@ -332,6 +354,10 @@ export default function BarCashClosuresPage() {
             }
           />
           <Stat label="Usuarios seleccionados" value={selectedSs.length} />
+          <Stat
+            label="Pendiente staff"
+            value={`${euros(Number(sum?.pendingStaff?.totalCents ?? 0))}${Number(sum?.pendingStaff?.count ?? 0) > 0 ? ` · ${Number(sum?.pendingStaff?.count ?? 0)} ventas` : ""}`}
+          />
         </div>
       </Card>
 
@@ -449,6 +475,25 @@ export default function BarCashClosuresPage() {
           <Button onClick={() => setDeclService(mapInputsFromCents(systemServiceByMethod))}>
             Copiar importes del sistema
           </Button>
+        </div>
+      </Card>
+
+      <Card title="Fondo de caja">
+        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", alignItems: "end" }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Importe a dejar en caja (€)</div>
+            <Input
+              value={cashFundEuros}
+              onChange={(e) => {
+                setCashFundTouched(true);
+                setCashFundEuros(e.target.value);
+              }}
+              placeholder="100,00"
+            />
+          </label>
+          <Stat label="Efectivo declarado" value={euros(declaredTotals.total.CASH)} />
+          <Stat label="Efectivo a dejar" value={euros(cashFundCents)} />
+          <Stat label="Efectivo a retirar" value={euros(cashToWithdrawCents)} />
         </div>
       </Card>
 

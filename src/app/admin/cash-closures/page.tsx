@@ -60,6 +60,10 @@ type Row = {
     retainedCount: number;
     partialRetentions: number;
   };
+  pendingStaffSummary?: {
+    totalCents: number;
+    count: number;
+  };
 };
 
 type CommissionsSummary = {
@@ -181,6 +185,8 @@ export default function AdminCashClosuresPage() {
       companyCommissionCents: number;
       channelCommissionCostCents: number;
       netAfterChannelCommissionCents: number;
+      pendingStaffCents: number;
+      pendingStaffCount: number;
     }>();
 
     for (const row of activeRows) {
@@ -193,6 +199,8 @@ export default function AdminCashClosuresPage() {
         companyCommissionCents: 0,
         channelCommissionCostCents: 0,
         netAfterChannelCommissionCents: 0,
+        pendingStaffCents: 0,
+        pendingStaffCount: 0,
       };
       current.closures += 1;
       current.declared = addMethodMaps(current.declared, row.declaredJson?.total);
@@ -201,6 +209,8 @@ export default function AdminCashClosuresPage() {
       current.companyCommissionCents += Number(row.companyCommissionCents ?? 0);
       current.channelCommissionCostCents += Number(row.channelCommissionCostCents ?? 0);
       current.netAfterChannelCommissionCents += netFrom(row.systemJson?.total) - Number(row.channelCommissionCostCents ?? 0);
+      current.pendingStaffCents += Number(row.pendingStaffSummary?.totalCents ?? 0);
+      current.pendingStaffCount += Number(row.pendingStaffSummary?.count ?? 0);
       grouped.set(row.origin, current);
     }
 
@@ -217,8 +227,10 @@ export default function AdminCashClosuresPage() {
           companyCommissionCents: acc.companyCommissionCents + row.companyCommissionCents,
           channelCommissionCostCents: acc.channelCommissionCostCents + row.channelCommissionCostCents,
           netAfterChannelCommissionCents: acc.netAfterChannelCommissionCents + row.netAfterChannelCommissionCents,
+          pendingStaffCents: acc.pendingStaffCents + row.pendingStaffCents,
+          pendingStaffCount: acc.pendingStaffCount + row.pendingStaffCount,
         }),
-        { closures: 0, declared: 0, system: 0, diff: 0, companyCommissionCents: 0, channelCommissionCostCents: 0, netAfterChannelCommissionCents: 0 }
+        { closures: 0, declared: 0, system: 0, diff: 0, companyCommissionCents: 0, channelCommissionCostCents: 0, netAfterChannelCommissionCents: 0, pendingStaffCents: 0, pendingStaffCount: 0 }
       ),
     [dailySummary]
   );
@@ -368,6 +380,7 @@ export default function AdminCashClosuresPage() {
                     <th style={tableHeadRight}>Comisión empresa</th>
                     <th style={tableHeadRight}>Coste canal</th>
                     <th style={tableHeadRight}>Neto tras canal</th>
+                    <th style={tableHeadRight}>Staff pendiente</th>
                     <th style={tableHeadRight}>Diferencia neta</th>
                   </tr>
                 </thead>
@@ -381,6 +394,7 @@ export default function AdminCashClosuresPage() {
                       <td style={tableCellRight}>{euros(row.companyCommissionCents)}</td>
                       <td style={tableCellRight}>{euros(row.channelCommissionCostCents)}</td>
                       <td style={{ ...tableCellRight, fontWeight: 800 }}>{euros(row.netAfterChannelCommissionCents)}</td>
+                      <td style={tableCellRight}>{euros(row.pendingStaffCents)}{row.pendingStaffCount > 0 ? ` (${row.pendingStaffCount})` : ""}</td>
                       <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(netFrom(row.diff))}</td>
                     </tr>
                   ))}
@@ -392,6 +406,7 @@ export default function AdminCashClosuresPage() {
                     <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(dailyGrandTotal.companyCommissionCents)}</td>
                     <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(dailyGrandTotal.channelCommissionCostCents)}</td>
                     <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(dailyGrandTotal.netAfterChannelCommissionCents)}</td>
+                    <td style={{ ...tableCellRight, fontWeight: 900 }}>{euros(dailyGrandTotal.pendingStaffCents)}{dailyGrandTotal.pendingStaffCount > 0 ? ` (${dailyGrandTotal.pendingStaffCount})` : ""}</td>
                     <td style={{ ...tableCellRight, fontWeight: 950 }}>{euros(dailyGrandTotal.diff)}</td>
                   </tr>
                 </tbody>

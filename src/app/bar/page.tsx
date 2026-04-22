@@ -10,6 +10,7 @@ import { BarQuickSellProductCard } from "./_components/BarQuickSellProductCard";
 import { BarRentalIncidentsSection } from "./_components/BarRentalIncidentsSection";
 import {
   createBarPayment,
+  getBarStaffOptions,
   createRentalAssetIncident,
   deliverBarFulfillmentTask,
   getAvailableAssetsForTask,
@@ -17,10 +18,12 @@ import {
   getBarProducts,
   getBarRentalAssets,
   getBarReturnFulfillmentTasks,
+  getPendingBarStaffSales,
   getPendingBarFulfillmentTasks,
   reactivateRentalAsset,
   reportBarFulfillmentIncident,
   returnBarFulfillmentTask,
+  settlePendingBarStaffSale,
   type AvailableAssetsByTaskItem,
   type BarCategoryWithProducts,
   type BarMethod,
@@ -41,6 +44,31 @@ type Summary = {
   };
   isClosed?: boolean;
   closure?: { id: string; closedAt: string } | null;
+  pendingStaff?: { count?: number; totalCents?: number };
+};
+
+type StaffOption = {
+  id: string;
+  fullName: string;
+  code: string | null;
+  kind: string;
+  jobTitle: string | null;
+};
+
+type PendingStaffSale = {
+  id: string;
+  soldAt: string;
+  totalRevenueCents: number;
+  note: string | null;
+  employee: { id: string; fullName: string; code: string | null } | null;
+  employeeName: string;
+  soldByUser: { id: string; fullName: string | null; username: string | null } | null;
+  items: Array<{
+    id: string;
+    productName: string;
+    quantity: number;
+    revenueCents: number;
+  }>;
 };
 
 function businessDateToday() {
@@ -125,6 +153,9 @@ export default function BarPage() {
   const [catalog, setCatalog] = useState<BarCategoryWithProducts[]>([]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [staffMode, setStaffMode] = useState(false);
+  const [staffEmployeeId, setStaffEmployeeId] = useState("");
+  const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
+  const [pendingStaffSales, setPendingStaffSales] = useState<PendingStaffSale[]>([]);
 
   const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
   const [returnTasks, setReturnTasks] = useState<PendingTask[]>([]);
@@ -151,12 +182,14 @@ export default function BarPage() {
     setError(null);
 
     try {
-      const [summaryData, productsData, pendingData, returnsData, assetsData] = await Promise.all([
+      const [summaryData, productsData, pendingData, returnsData, assetsData, staffOptionsData, pendingStaffData] = await Promise.all([
         getBarCashSummary({ date: today, shift }),
         getBarProducts(),
         getPendingBarFulfillmentTasks(),
         getBarReturnFulfillmentTasks(),
         getBarRentalAssets(),
+        getBarStaffOptions(),
+        getPendingBarStaffSales(),
       ]);
 
       setSummary(summaryData);
@@ -164,6 +197,8 @@ export default function BarPage() {
       setPendingTasks(pendingData.rows ?? []);
       setReturnTasks(returnsData.rows ?? []);
       setRentalAssets(assetsData.rows ?? []);
+      setStaffOptions(staffOptionsData.rows ?? []);
+      setPendingStaffSales(pendingStaffData.rows ?? []);
 
       for (const task of pendingData.rows ?? []) {
         if (task.kind === "EXTRA") {
@@ -176,6 +211,8 @@ export default function BarPage() {
       setPendingTasks([]);
       setReturnTasks([]);
       setRentalAssets([]);
+      setStaffOptions([]);
+      setPendingStaffSales([]);
       setError(e instanceof Error ? e.message : "Error cargando BAR");
     } finally {
       setLoading(false);
@@ -207,13 +244,17 @@ export default function BarPage() {
   }
   async function handleQuickSell(
     product: BarCategoryWithProducts["products"][number],
-    method: BarMethod,
-    _cashReceivedEuros?: string
+    method: BarMethod | null,
+    options?: { cashReceivedEuros?: string; deferStaffPayment?: boolean }
   ) {
-    void _cashReceivedEuros;
     try {
       setError(null);
-      setActionBusy(`${product.id}-${method}`);
+      const busyKey = options?.deferStaffPayment ? `${product.id}-STAFF_PENDING` : `${product.id}-${method}`;
+      setActionBusy(busyKey);
+
+      if (staffMode && !staffEmployeeId) {
+        throw new Error("Selecciona el trabajador para la venta STAFF.");
+      }
 
       const quantity = getQuantity(product.id);
       const unitPriceCents =
@@ -238,6 +279,8 @@ export default function BarPage() {
         shift,
         label: product.name,
         staffMode,
+        staffEmployeeId: staffMode ? staffEmployeeId : null,
+        deferStaffPayment: options?.deferStaffPayment ?? false,
         note: `BAR - Venta rápida${staffMode ? " - STAFF" : ""} - ${product.name} - x${quantity}`,
       });
 
@@ -245,6 +288,24 @@ export default function BarPage() {
       await load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "No se pudo registrar la venta");
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleSettlePendingStaffSale(saleId: string, method: BarMethod) {
+    try {
+      setError(null);
+      setActionBusy(`settle-${saleId}-${method}`);
+      await settlePendingBarStaffSale({
+        saleId,
+        method,
+        date: today,
+        shift,
+      });
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "No se pudo cobrar la venta staff pendiente");
     } finally {
       setActionBusy(null);
     }
@@ -394,6 +455,22 @@ export default function BarPage() {
               Modo staff
             </label>
 
+            {staffMode ? (
+              <label style={{ display: "grid", gap: 6, maxWidth: 420 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Trabajador</div>
+                <Select value={staffEmployeeId} onChange={(e) => setStaffEmployeeId(e.target.value)}>
+                  <option value="">Selecciona trabajador</option>
+                  {staffOptions.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.fullName}
+                      {employee.code ? ` · ${employee.code}` : ""}
+                      {employee.jobTitle ? ` · ${employee.jobTitle}` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            ) : null}
+
             {catalog.map((category) => (
               <div key={category.id} style={{ display: "grid", gap: 12, border: "1px solid #e2e8f0", borderRadius: 18, padding: 16, background: "#fff" }}>
                 <div>
@@ -413,6 +490,7 @@ export default function BarPage() {
                           product={product}
                           quantity={quantity}
                           staffMode={staffMode}
+                          allowDeferredStaffPayment={staffMode && product.staffEligible}
                           actionBusy={actionBusy}
                           onDecreaseQuantity={() =>
                             setQuantities((prev) => ({ ...prev, [product.id]: Math.max(1, quantity - 1) }))
@@ -423,8 +501,8 @@ export default function BarPage() {
                           onIncreaseQuantity={() =>
                             setQuantities((prev) => ({ ...prev, [product.id]: quantity + 1 }))
                           }
-                          onQuickSell={(method, cashReceivedEuros) =>
-                            void handleQuickSell(product, method, cashReceivedEuros)
+                          onQuickSell={(method, options) =>
+                            void handleQuickSell(product, method, options)
                           }
                           methodPill={methodPill}
                         />
@@ -432,6 +510,55 @@ export default function BarPage() {
                     })}
                   </div>
                 )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card
+        title="Cobros pendientes staff"
+        right={
+          <div style={{ fontSize: 12, color: "#64748b" }}>
+            Abiertos: {pendingStaffSales.length} · Importe: {euros(pendingStaffSales.reduce((sum, sale) => sum + sale.totalRevenueCents, 0))}
+          </div>
+        }
+      >
+        {pendingStaffSales.length === 0 ? (
+          <Alert kind="info">No hay ventas staff pendientes de cobro.</Alert>
+        ) : (
+          <div style={{ display: "grid", gap: 12 }}>
+            {pendingStaffSales.map((sale) => (
+              <div key={sale.id} style={{ border: "1px solid #e2e8f0", borderRadius: 16, padding: 14, background: "#fff" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <div style={{ fontSize: 16, fontWeight: 900 }}>{sale.employeeName}</div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                      {new Date(sale.soldAt).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      {sale.soldByUser?.fullName || sale.soldByUser?.username ? ` · Vendido por ${sale.soldByUser.fullName ?? sale.soldByUser.username}` : ""}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#475569" }}>
+                      {sale.items.map((item) => `${item.productName} x${item.quantity}`).join(" · ")}
+                    </div>
+                    {sale.note ? <div style={{ fontSize: 12, color: "#64748b" }}>{sale.note}</div> : null}
+                  </div>
+                  <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
+                    <div style={{ fontSize: 18, fontWeight: 950 }}>{euros(sale.totalRevenueCents)}</div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      {(["CASH", "CARD", "BIZUM", "TRANSFER"] as BarMethod[]).map((method) => (
+                        <button
+                          key={method}
+                          type="button"
+                          onClick={() => void handleSettlePendingStaffSale(sale.id, method)}
+                          disabled={actionBusy === `settle-${sale.id}-${method}`}
+                          style={{ padding: "10px 12px", borderRadius: 12, cursor: "pointer", ...methodPill(method) }}
+                        >
+                          {actionBusy === `settle-${sale.id}-${method}` ? "Guardando..." : `Cobrar ${method}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>

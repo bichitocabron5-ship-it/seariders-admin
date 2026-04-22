@@ -106,6 +106,7 @@ model Employee {
   payrollEntries PayrollEntry[]
   expenses       Expense[]
   internalUsageReservations Reservation[]
+  barStaffSales             BarSale[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1865,6 +1866,9 @@ model BarSale {
   soldAt       DateTime @default(now())
   soldByUserId String?
   soldByUser   User?    @relation("BarSaleSoldByUser", fields: [soldByUserId], references: [id], onDelete: SetNull)
+  employeeId   String?
+  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  staffEmployeeNameSnap String?
 
   staffMode Boolean @default(false)
   note      String?
@@ -1881,6 +1885,7 @@ model BarSale {
   @@index([soldAt])
   @@index([staffMode, soldAt])
   @@index([soldByUserId])
+  @@index([employeeId, soldAt])
 }
 
 model BarSaleItem {

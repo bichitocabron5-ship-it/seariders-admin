@@ -46,7 +46,7 @@ export async function GET(req: Request) {
   d1.setHours(23, 59, 59, 999);
 
   const where: Prisma.ShiftSessionWhereInput = {
-    startedAt: { gte: d0, lte: d1 },
+    businessDate,
   };
   if (isOriginSplitByShift(origin)) {
     where.shift = shift;

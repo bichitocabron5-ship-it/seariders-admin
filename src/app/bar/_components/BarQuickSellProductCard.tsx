@@ -14,11 +14,12 @@ type BarQuickSellProductCardProps = {
   product: Product;
   quantity: number;
   staffMode: boolean;
+  allowDeferredStaffPayment: boolean;
   actionBusy: string | null;
   onDecreaseQuantity: () => void;
   onSetQuantity: (value: number) => void;
   onIncreaseQuantity: () => void;
-  onQuickSell: (method: BarMethod, cashReceivedEuros?: string) => void;
+  onQuickSell: (method: BarMethod | null, options?: { cashReceivedEuros?: string; deferStaffPayment?: boolean }) => void;
   methodPill: (method: BarMethod) => React.CSSProperties;
 };
 
@@ -26,6 +27,7 @@ export function BarQuickSellProductCard({
   product,
   quantity,
   staffMode,
+  allowDeferredStaffPayment,
   actionBusy,
   onDecreaseQuantity,
   onSetQuantity,
@@ -161,7 +163,7 @@ export function BarQuickSellProductCard({
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
-              onClick={() => onQuickSell("CASH", cashReceivedEuros)}
+              onClick={() => onQuickSell("CASH", { cashReceivedEuros })}
               disabled={actionBusy === `${product.id}-CASH`}
               style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", ...methodPill("CASH") }}
             >
@@ -186,6 +188,25 @@ export function BarQuickSellProductCard({
             </button>
           </div>
         </div>
+      ) : null}
+
+      {allowDeferredStaffPayment ? (
+        <button
+          type="button"
+          onClick={() => onQuickSell(null, { deferStaffPayment: true })}
+          disabled={actionBusy === `${product.id}-STAFF_PENDING`}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 12,
+            border: "1px solid #fed7aa",
+            background: "#fff7ed",
+            color: "#9a3412",
+            cursor: "pointer",
+            fontWeight: 900,
+          }}
+        >
+          {actionBusy === `${product.id}-STAFF_PENDING` ? "Guardando..." : `Pendiente STAFF - ${(pricing.totalCents / 100).toFixed(2)} EUR`}
+        </button>
       ) : null}
     </div>
   );

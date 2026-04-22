@@ -5,11 +5,13 @@ export async function createBarPayment(args: {
   productId: string;
   quantity: number;
   amountCents: number;
-  method: BarMethod;
+  method?: BarMethod | null;
   date: string;
   shift: "MORNING" | "AFTERNOON";
   label: string;
   staffMode?: boolean;
+  staffEmployeeId?: string | null;
+  deferStaffPayment?: boolean;
   note?: string | null;
 }) {
   const res = await fetch("/api/bar/payments/create", {
@@ -30,6 +32,70 @@ export async function getBarCashSummary(args: {
     `/api/store/cash-closures/summary?origin=BAR&shift=${args.shift}&date=${args.date}`,
     { cache: "no-store" }
   );
+
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
+export async function getBarStaffOptions() {
+  const res = await fetch("/api/bar/staff-options", {
+    cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as {
+    ok: true;
+    rows: Array<{
+      id: string;
+      fullName: string;
+      code: string | null;
+      kind: string;
+      jobTitle: string | null;
+    }>;
+  };
+}
+
+export async function getPendingBarStaffSales() {
+  const res = await fetch("/api/bar/staff-sales/pending", {
+    cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as {
+    ok: true;
+    rows: Array<{
+      id: string;
+      soldAt: string;
+      totalRevenueCents: number;
+      note: string | null;
+      employee: { id: string; fullName: string; code: string | null } | null;
+      employeeName: string;
+      soldByUser: { id: string; fullName: string | null; username: string | null } | null;
+      items: Array<{
+        id: string;
+        productName: string;
+        quantity: number;
+        revenueCents: number;
+      }>;
+    }>;
+  };
+}
+
+export async function settlePendingBarStaffSale(args: {
+  saleId: string;
+  method: BarMethod;
+  date: string;
+  shift: "MORNING" | "AFTERNOON";
+}) {
+  const res = await fetch(`/api/bar/staff-sales/${args.saleId}/settle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      method: args.method,
+      date: args.date,
+      shift: args.shift,
+    }),
+  });
 
   if (!res.ok) throw new Error(await res.text());
   return await res.json();

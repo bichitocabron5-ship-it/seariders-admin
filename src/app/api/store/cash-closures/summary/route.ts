@@ -165,6 +165,19 @@ export async function GET(req: Request) {
       meta: { origin, shift, requestedShift, businessDate, windowFrom: from, windowTo: to },
     };
 
+    const pendingStaffSummary =
+      origin === "BAR"
+        ? await prisma.barSale.aggregate({
+            where: {
+              staffMode: true,
+              paymentId: null,
+              soldAt: { gte: from, lt: to },
+            },
+            _sum: { totalRevenueCents: true },
+            _count: { _all: true },
+          })
+        : null;
+
     // ¿ya está cerrado? (por origin+shift+día)
     const existing = await prisma.cashClosure.findFirst({
       where: {
@@ -203,6 +216,10 @@ export async function GET(req: Request) {
       ok: true,
       computed,
       systemTotals, // ✅ listo para UI y para close
+      pendingStaff: {
+        count: Number(pendingStaffSummary?._count._all ?? 0),
+        totalCents: Number(pendingStaffSummary?._sum.totalRevenueCents ?? 0),
+      },
       isClosed,
       closure: existing
         ? {

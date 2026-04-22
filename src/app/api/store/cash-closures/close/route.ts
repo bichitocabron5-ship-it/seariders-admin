@@ -90,6 +90,7 @@ export async function POST(req: Request) {
           id: true,
           userId: true,
           shift: true,
+          businessDate: true,
           startedAt: true,
           endedAt: true,
           role: { select: { name: true } },
@@ -118,13 +119,7 @@ export async function POST(req: Request) {
         const o = originFromRoleName(s.role.name as RoleName);
         if (o !== origin) throw new Error("ShiftSession no corresponde al origin del cierre.");
 
-        // startedAt debe caer en el día operativo (00:00..23:59)
-        const d0 = new Date(businessDate);
-        d0.setHours(0, 0, 0, 0);
-        const d1 = new Date(businessDate);
-        d1.setHours(23, 59, 59, 999);
-
-        if (s.startedAt < d0 || s.startedAt > d1) {
+        if (s.businessDate.getTime() !== businessDate.getTime()) {
           throw new Error("ShiftSession no pertenece al día operativo indicado.");
         }
       }
@@ -199,6 +194,19 @@ export async function POST(req: Request) {
         select: { id: true },
       });
 
+      const pendingStaffSummary =
+        origin === "BAR"
+          ? await tx.barSale.aggregate({
+              where: {
+                staffMode: true,
+                paymentId: null,
+                soldAt: { gte: from, lt: to },
+              },
+              _sum: { totalRevenueCents: true },
+              _count: { _all: true },
+            })
+          : null;
+
       const computed = {
         system,
         declared: recomputedDeclared,
@@ -214,6 +222,8 @@ export async function POST(req: Request) {
           cashFundCents,
           cashToKeepCents,
           cashToWithdrawCents,
+          pendingStaffSalesCents: Number(pendingStaffSummary?._sum.totalRevenueCents ?? 0),
+          pendingStaffSalesCount: Number(pendingStaffSummary?._count._all ?? 0),
         },
       };
 

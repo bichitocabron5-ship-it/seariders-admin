@@ -111,6 +111,10 @@ export async function GET(req: Request) {
             retainedCount: 0,
             partialRetentions: 0,
           },
+          pendingStaffSummary: {
+            totalCents: 0,
+            count: 0,
+          },
         };
       }
 
@@ -176,6 +180,19 @@ export async function GET(req: Request) {
         };
       });
 
+      const pendingStaffSummary =
+        row.origin === "BAR"
+          ? await prisma.barSale.aggregate({
+              where: {
+                staffMode: true,
+                paymentId: null,
+                soldAt: { gte: row.windowFrom, lt: row.windowTo },
+              },
+              _sum: { totalRevenueCents: true },
+              _count: { _all: true },
+            })
+          : null;
+
       return {
         ...row,
         totalCommissionCents: commSummary.totalCommissionCents,
@@ -186,6 +203,10 @@ export async function GET(req: Request) {
           retainedNetCents: retained.reduce((sum, item) => sum + item.netHeld, 0),
           retainedCount: retained.filter((item) => item.netHeld > 0).length,
           partialRetentions: retained.filter((item) => item.isPartial).length,
+        },
+        pendingStaffSummary: {
+          totalCents: Number(pendingStaffSummary?._sum.totalRevenueCents ?? 0),
+          count: Number(pendingStaffSummary?._count._all ?? 0),
         },
       };
     })
