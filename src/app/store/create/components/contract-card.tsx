@@ -243,7 +243,7 @@ export function ContractCard({
     Boolean(c.renderedPdfKey || c.renderedPdfUrl);
   const contractFieldErrors = React.useMemo(() => {
     const errors: Record<string, string | null> = {
-      driverName: driverName.trim() ? null : "Indica el nombre del conductor.",
+      driverName: driverName.trim() ? null : "Indica el nombre y apellidos del conductor.",
       driverPhone: driverPhone.trim() ? null : "Indica el telefono del conductor.",
       driverAddress: driverAddress.trim() ? null : "Indica la direccion del conductor.",
       driverDocType: driverDocType.trim() ? null : "Selecciona el tipo de documento.",

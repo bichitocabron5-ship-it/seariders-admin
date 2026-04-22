@@ -181,13 +181,14 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
               </label>
 
               <label style={labelStyle}>
-                <span>Apellidos *</span>
+                <span>Apellidos</span>
                 <input
                   value={values.lastName}
                   onChange={(e) => handlers.onLastNameChange(e.target.value)}
-                  required={!flags.isEditMode}
+                  required={false}
                   disabled={flags.isEditMode}
                   style={{ ...withErrorStyle(validation?.showErrors ? validation?.lastName : null), opacity: flags.isEditMode ? 0.7 : 1 }}
+                  placeholder="Opcional en reserva"
                 />
                 {validation?.showErrors && validation?.lastName ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{validation.lastName}</div> : null}
               </label>

@@ -629,7 +629,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
   const customerFieldErrors = {
     firstName: firstName.trim() ? null : "Indica el nombre.",
-    lastName: lastName.trim() ? null : "Indica los apellidos.",
+    lastName: null,
     customerPhone: customerPhone.trim() ? null : "Indica el telefono.",
   };
 
@@ -637,9 +637,9 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     isFormalizeMode && !contractsReadyForFormalize
       ? `Faltan contratos por completar: ${readyCount}/${requiredUnits} listos.`
       : requiredFormalizeMissing
-        ? "Para formalizar faltan datos mínimos (nombre, apellidos y teléfono)."
+        ? "Para formalizar faltan datos mínimos (nombre y teléfono)."
         : requiredCreateMissing
-          ? "Para crear faltan datos mínimos (nombre, apellidos y teléfono)."
+          ? "Para crear faltan datos mínimos (nombre y teléfono)."
           : null;
 
   const hardPrimaryDisabledReason =

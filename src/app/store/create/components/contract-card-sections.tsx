@@ -316,7 +316,9 @@ export function ContractDriverSection({
     <div style={subCardStyle}>
       <div style={{ display: "grid", gap: 4 }}>
         <div style={sectionEyebrowStyle}>Conductor</div>
-        <div style={{ fontSize: 13, color: "#64748b" }}>Completa los datos del conductor real que firmara este contrato.</div>
+        <div style={{ fontSize: 13, color: "#64748b" }}>
+          Completa los datos legales del conductor real que firmara este contrato. Aqui debe ir el nombre completo tal y como aparezca en su documento.
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -331,8 +333,13 @@ export function ContractDriverSection({
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Nombre del conductor *
-          <input value={driverName} onChange={(e) => onDriverNameChange(e.target.value)} style={withErrorStyle(fieldErrors?.driverName)} />
+          Nombre y apellidos del conductor *
+          <input
+            value={driverName}
+            onChange={(e) => onDriverNameChange(e.target.value)}
+            style={withErrorStyle(fieldErrors?.driverName)}
+            placeholder="Nombre completo segun documento"
+          />
           {fieldErrors?.driverName ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverName}</div> : null}
         </label>
         <PhoneWithCountryField
