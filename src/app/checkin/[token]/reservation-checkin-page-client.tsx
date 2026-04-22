@@ -52,6 +52,7 @@ type ContractView = {
   driverBirthDate: string | null;
   minorNeedsAuthorization: boolean;
   minorAuthorizationProvided: boolean;
+  minorAuthorizationFileKey?: string | null;
   minorAuthorizationFileName: string | null;
   licenseSchool: string | null;
   licenseType: string | null;
@@ -85,6 +86,108 @@ type DraftContract = {
   licenseType: string;
   licenseNumber: string;
 };
+
+type ContractFieldErrors = {
+  driverName?: string | null;
+  driverPhone?: string | null;
+  driverAddress?: string | null;
+  driverBirthDate?: string | null;
+  driverDocType?: string | null;
+  driverDocNumber?: string | null;
+  minorAuthorizationProvided?: string | null;
+  minorAuthorizationFile?: string | null;
+  licenseSchool?: string | null;
+  licenseType?: string | null;
+  licenseNumber?: string | null;
+  action?: string | null;
+};
+
+function getCheckinValidationText(language: PublicLanguage) {
+  if (language === "en") {
+    return {
+      driverName: "Enter the driver's full name.",
+      driverPhone: "Enter the driver's phone number.",
+      driverAddress: "Enter the driver's address.",
+      driverBirthDate: "Enter the driver's birth date.",
+      driverDocType: "Select the document type.",
+      driverDocNumber: "Enter the document number.",
+      minorAuthorizationProvided: "You must confirm the parent or guardian authorization.",
+      minorAuthorizationFile: "The authorization document must be validated in store before signing.",
+      licenseSchool: "Enter the license issuer or school.",
+      licenseType: "Enter the license type.",
+      licenseNumber: "Enter the license number.",
+      under16: "A contract cannot be signed for a driver under 16 years old.",
+      completeBeforeSign: "Complete the required fields before signing this contract.",
+    };
+  }
+
+  return {
+    driverName: "Indica el nombre completo del conductor.",
+    driverPhone: "Indica el telefono del conductor.",
+    driverAddress: "Indica la direccion del conductor.",
+    driverBirthDate: "Indica la fecha de nacimiento del conductor.",
+    driverDocType: "Selecciona el tipo de documento.",
+    driverDocNumber: "Indica el numero de documento.",
+    minorAuthorizationProvided: "Debes confirmar la autorizacion del padre, madre o tutor.",
+    minorAuthorizationFile: "La autorizacion debe validarse en tienda antes de poder firmar.",
+    licenseSchool: "Indica la escuela o emisor de la licencia.",
+    licenseType: "Indica el tipo de licencia.",
+    licenseNumber: "Indica el numero de licencia.",
+    under16: "No se puede firmar un contrato para un menor de 16 anos.",
+    completeBeforeSign: "Completa los campos obligatorios antes de firmar este contrato.",
+  };
+}
+
+function getAgeFlagsFromBirthDate(value: string) {
+  if (!value) return { isUnder16: false, needsAuthorization: false };
+  const birthDate = new Date(`${value}T12:00:00.000Z`);
+  if (Number.isNaN(birthDate.getTime())) return { isUnder16: false, needsAuthorization: false };
+  const today = new Date();
+  let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
+  const monthDiff = today.getUTCMonth() - birthDate.getUTCMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getUTCDate() < birthDate.getUTCDate())) age--;
+  return {
+    isUnder16: age < 16,
+    needsAuthorization: age >= 16 && age < 18,
+  };
+}
+
+function getContractFieldErrors({
+  contract,
+  draft,
+  isLicense,
+  language,
+}: {
+  contract: ContractView;
+  draft: DraftContract;
+  isLicense: boolean;
+  language: PublicLanguage;
+}): ContractFieldErrors {
+  const text = getCheckinValidationText(language);
+  const minor = getAgeFlagsFromBirthDate(draft.driverBirthDate);
+  const errors: ContractFieldErrors = {
+    driverName: draft.driverName.trim() ? null : text.driverName,
+    driverPhone: draft.driverPhone.trim() ? null : text.driverPhone,
+    driverAddress: draft.driverAddress.trim() ? null : text.driverAddress,
+    driverBirthDate: draft.driverBirthDate.trim() ? null : text.driverBirthDate,
+    driverDocType: draft.driverDocType.trim() ? null : text.driverDocType,
+    driverDocNumber: draft.driverDocNumber.trim() ? null : text.driverDocNumber,
+    minorAuthorizationProvided:
+      minor.needsAuthorization && !draft.minorAuthorizationProvided ? text.minorAuthorizationProvided : null,
+    minorAuthorizationFile:
+      minor.needsAuthorization && !contract.minorAuthorizationFileKey ? text.minorAuthorizationFile : null,
+    licenseSchool: isLicense && !draft.licenseSchool.trim() ? text.licenseSchool : null,
+    licenseType: isLicense && !draft.licenseType.trim() ? text.licenseType : null,
+    licenseNumber: isLicense && !draft.licenseNumber.trim() ? text.licenseNumber : null,
+    action: minor.isUnder16 ? text.under16 : null,
+  };
+
+  if (!errors.action && Object.entries(errors).some(([key, value]) => key !== "action" && Boolean(value))) {
+    errors.action = text.completeBeforeSign;
+  }
+
+  return errors;
+}
 
 function autosaveTone(state: "idle" | "saving" | "saved" | "error", copy: ReturnType<typeof getPublicCopy>) {
   if (state === "saving") return { label: copy.checkinPage.autosaveSaving, color: "#1d4ed8" };
@@ -124,6 +227,9 @@ export function ReservationCheckinPageClient({
   const [signingId, setSigningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [viewportWidth, setViewportWidth] = useState<number>(typeof window === "undefined" ? 1280 : window.innerWidth);
+  const [attemptedSignContracts, setAttemptedSignContracts] = useState<Record<string, boolean>>({});
+  const [contractActionErrors, setContractActionErrors] = useState<Record<string, string | null>>({});
   const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [reservationDraft, setReservationDraft] = useState({
     customerName: "",
@@ -146,6 +252,14 @@ export function ReservationCheckinPageClient({
   useEffect(() => {
     contractDraftsRef.current = contractDrafts;
   }, [contractDrafts]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const updateViewport = () => setViewportWidth(window.innerWidth);
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
 
   const serializePayload = useCallback((reservation: typeof reservationDraft, drafts: Record<string, DraftContract>) => {
     return JSON.stringify({
@@ -193,6 +307,8 @@ export function ReservationCheckinPageClient({
       };
     }
     setContractDrafts(nextDrafts);
+    setAttemptedSignContracts({});
+    setContractActionErrors({});
     reservationDraftRef.current = nextReservationDraft;
     contractDraftsRef.current = nextDrafts;
     lastSavedPayloadRef.current = serializePayload(nextReservationDraft, nextDrafts);
@@ -276,12 +392,27 @@ export function ReservationCheckinPageClient({
   async function signContract(contractId: string) {
     const signature = sigRefs.current[contractId];
     const draft = contractDrafts[contractId];
+    const contract = snapshot?.contracts.find((item) => item.id === contractId);
     if (!draft) return;
 
     try {
       setSigningId(contractId);
       setError(null);
       setSuccess(null);
+      setAttemptedSignContracts((current) => ({ ...current, [contractId]: true }));
+
+      if (contract) {
+        const fieldErrors = getContractFieldErrors({
+          contract,
+          draft,
+          isLicense: snapshot?.reservation.isLicense ?? false,
+          language,
+        });
+        if (fieldErrors.action) {
+          setContractActionErrors((current) => ({ ...current, [contractId]: fieldErrors.action ?? null }));
+          return;
+        }
+      }
 
       const saved = await persistAll("manual");
       if (!saved) return;
@@ -306,8 +437,13 @@ export function ReservationCheckinPageClient({
       const data = (await refresh.json()) as Snapshot;
       hydrate(data);
       signature.clear();
+      setContractActionErrors((current) => ({ ...current, [contractId]: null }));
       setSuccess(copy.checkinPage.signedBanner(signerName, formatPublicDate(new Date().toISOString(), language)));
     } catch (e: unknown) {
+      setContractActionErrors((current) => ({
+        ...current,
+        [contractId]: e instanceof Error ? e.message : copy.checkinPage.loadFailed,
+      }));
       setError(e instanceof Error ? e.message : copy.checkinPage.loadFailed);
     } finally {
       setSigningId(null);
@@ -315,6 +451,7 @@ export function ReservationCheckinPageClient({
   }
 
   function copyHolderToContract(contractId: string) {
+    setContractActionErrors((current) => ({ ...current, [contractId]: null }));
     setContractDrafts((current) => {
       const draft = current[contractId];
       if (!draft) return current;
@@ -332,6 +469,21 @@ export function ReservationCheckinPageClient({
           driverDocType: reservationDraft.customerDocType,
           driverDocNumber: reservationDraft.customerDocNumber,
           driverBirthDate: reservationDraft.customerBirthDate,
+        },
+      };
+    });
+  }
+
+  function updateContractDraft(contractId: string, patch: Partial<DraftContract>) {
+    setContractActionErrors((current) => ({ ...current, [contractId]: null }));
+    setContractDrafts((current) => {
+      const draft = current[contractId];
+      if (!draft) return current;
+      return {
+        ...current,
+        [contractId]: {
+          ...draft,
+          ...patch,
         },
       };
     });
@@ -366,6 +518,9 @@ export function ReservationCheckinPageClient({
   }
 
   const autosave = autosaveTone(autosaveState, copy);
+  const isMobile = viewportWidth < 640;
+  const signatureCanvasWidth = Math.max(280, Math.min(900, viewportWidth - (isMobile ? 48 : 120)));
+  const signatureCanvasHeight = isMobile ? 220 : 260;
   const holderSummary = [
     snapshot.reservation.customerName,
     snapshot.reservation.customerPhone,
@@ -379,7 +534,7 @@ export function ReservationCheckinPageClient({
       style={{
         minHeight: "100vh",
         background: "linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)",
-        padding: "24px 16px 40px",
+        padding: isMobile ? "16px 12px 32px" : "24px 16px 40px",
       }}
     >
       <section
@@ -405,7 +560,7 @@ export function ReservationCheckinPageClient({
             <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>
               {copy.checkinPage.eyebrow}
             </div>
-            <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.1 }}>{copy.checkinPage.title}</h1>
+            <h1 style={{ margin: 0, fontSize: "clamp(24px, 4vw, 30px)", lineHeight: 1.1 }}>{copy.checkinPage.title}</h1>
             <div style={{ color: "#475569", fontSize: 14 }}>
               {snapshot.reservation.serviceName}
               {snapshot.reservation.durationMinutes ? ` | ${snapshot.reservation.durationMinutes} min` : ""}
@@ -450,6 +605,16 @@ export function ReservationCheckinPageClient({
         {snapshot.contracts.map((contract) => {
           const draft = contractDrafts[contract.id];
           const disabled = contract.status === "SIGNED";
+          const fieldErrors = draft
+            ? getContractFieldErrors({
+                contract,
+                draft,
+                isLicense: snapshot.reservation.isLicense,
+                language,
+              })
+            : {};
+          const showFieldErrors = Boolean(attemptedSignContracts[contract.id]) && !disabled;
+          const actionError = contractActionErrors[contract.id] ?? (showFieldErrors ? fieldErrors.action ?? null : null);
           return (
             <details
               key={contract.id}
@@ -509,54 +674,65 @@ export function ReservationCheckinPageClient({
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-                  <Field label={copy.checkinPage.driverName} value={draft?.driverName ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverName: value } }))} />
+                  <Field label={copy.checkinPage.driverName} value={draft?.driverName ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.driverName : null} onChange={(value) => updateContractDraft(contract.id, { driverName: value })} />
                   <PhoneWithCountryField
                     label={copy.checkinPage.driverPhone}
                     country={draft?.driverCountry ?? ""}
                     phone={draft?.driverPhone ?? ""}
                     disabled={disabled}
-                    onCountryChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverCountry: value } }))}
-                    onPhoneChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPhone: value } }))}
+                    onCountryChange={(value) => updateContractDraft(contract.id, { driverCountry: value })}
+                    onPhoneChange={(value) => updateContractDraft(contract.id, { driverPhone: value })}
                     countryOptions={COUNTRY_OPTIONS}
-                    inputStyle={inputStyle}
+                    inputStyle={showFieldErrors && fieldErrors.driverPhone ? errorInputStyle : inputStyle}
                     phonePlaceholder="Ej: 612345678"
+                    error={showFieldErrors ? fieldErrors.driverPhone : null}
                   />
-                  <Field label={copy.checkinPage.driverEmail} value={draft?.driverEmail ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverEmail: value } }))} />
-                  <Field label={copy.checkinPage.driverAddress} value={draft?.driverAddress ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverAddress: value } }))} />
-                  <Field label={copy.checkinPage.driverPostalCode} value={draft?.driverPostalCode ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverPostalCode: value } }))} />
-                  <BirthDateField label={copy.checkinPage.driverBirthDate} value={draft?.driverBirthDate ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverBirthDate: value } }))} style={inputStyle} />
-                  <SelectField label={`${copy.common.documentTypeLabel} *`} value={draft?.driverDocType ?? ""} disabled={disabled} options={copy.common.documentTypeOptions} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocType: value } }))} />
-                  <Field label={`${copy.common.documentNumberLabel} *`} value={draft?.driverDocNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], driverDocNumber: value } }))} />
+                  <Field label={copy.checkinPage.driverEmail} value={draft?.driverEmail ?? ""} disabled={disabled} onChange={(value) => updateContractDraft(contract.id, { driverEmail: value })} />
+                  <Field label={copy.checkinPage.driverAddress} value={draft?.driverAddress ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.driverAddress : null} onChange={(value) => updateContractDraft(contract.id, { driverAddress: value })} />
+                  <Field label={copy.checkinPage.driverPostalCode} value={draft?.driverPostalCode ?? ""} disabled={disabled} onChange={(value) => updateContractDraft(contract.id, { driverPostalCode: value })} />
+                  <BirthDateField label={copy.checkinPage.driverBirthDate} value={draft?.driverBirthDate ?? ""} disabled={disabled} onChange={(value) => updateContractDraft(contract.id, { driverBirthDate: value })} style={showFieldErrors && fieldErrors.driverBirthDate ? errorInputStyle : inputStyle} error={showFieldErrors ? fieldErrors.driverBirthDate : null} />
+                  <SelectField label={`${copy.common.documentTypeLabel} *`} value={draft?.driverDocType ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.driverDocType : null} options={copy.common.documentTypeOptions} onChange={(value) => updateContractDraft(contract.id, { driverDocType: value })} />
+                  <Field label={`${copy.common.documentNumberLabel} *`} value={draft?.driverDocNumber ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.driverDocNumber : null} onChange={(value) => updateContractDraft(contract.id, { driverDocNumber: value })} />
                   {snapshot.reservation.isLicense ? (
                     <>
-                      <Field label={copy.checkinPage.licenseSchool} value={draft?.licenseSchool ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseSchool: value } }))} />
-                      <Field label={copy.checkinPage.licenseType} value={draft?.licenseType ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseType: value } }))} />
-                      <Field label={copy.checkinPage.licenseNumber} value={draft?.licenseNumber ?? ""} disabled={disabled} onChange={(value) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], licenseNumber: value } }))} />
+                      <Field label={copy.checkinPage.licenseSchool} value={draft?.licenseSchool ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.licenseSchool : null} onChange={(value) => updateContractDraft(contract.id, { licenseSchool: value })} />
+                      <Field label={copy.checkinPage.licenseType} value={draft?.licenseType ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.licenseType : null} onChange={(value) => updateContractDraft(contract.id, { licenseType: value })} />
+                      <Field label={copy.checkinPage.licenseNumber} value={draft?.licenseNumber ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.licenseNumber : null} onChange={(value) => updateContractDraft(contract.id, { licenseNumber: value })} />
                     </>
                   ) : null}
                 </div>
 
                 <label style={checkboxLabelStyle}>
                   <input
-                    type="checkbox"
-                    checked={Boolean(draft?.imageConsentAccepted)}
-                    disabled={disabled}
-                    onChange={(e) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], imageConsentAccepted: e.target.checked } }))}
-                  />
+                      type="checkbox"
+                      checked={Boolean(draft?.imageConsentAccepted)}
+                      disabled={disabled}
+                      onChange={(e) => updateContractDraft(contract.id, { imageConsentAccepted: e.target.checked })}
+                    />
                   <span>{copy.checkinPage.imageConsent}</span>
                 </label>
 
                 {contract.minorNeedsAuthorization || draft?.minorAuthorizationProvided ? (
-                  <label style={checkboxLabelStyle}>
+                  <label
+                    style={{
+                      ...checkboxLabelStyle,
+                      padding: "12px 14px",
+                      borderRadius: 14,
+                      border: showFieldErrors && (fieldErrors.minorAuthorizationProvided || fieldErrors.minorAuthorizationFile) ? "1px solid #ef4444" : "1px solid #fde68a",
+                      background: showFieldErrors && (fieldErrors.minorAuthorizationProvided || fieldErrors.minorAuthorizationFile) ? "#fff5f5" : "#fffbeb",
+                    }}
+                  >
                     <input
                       type="checkbox"
                       checked={Boolean(draft?.minorAuthorizationProvided)}
                       disabled={disabled}
-                      onChange={(e) => setContractDrafts((current) => ({ ...current, [contract.id]: { ...current[contract.id], minorAuthorizationProvided: e.target.checked } }))}
+                      onChange={(e) => updateContractDraft(contract.id, { minorAuthorizationProvided: e.target.checked })}
                     />
                     <span>{copy.checkinPage.tutorAuthorization(contract.minorAuthorizationFileName)}</span>
                   </label>
                 ) : null}
+                {showFieldErrors && fieldErrors.minorAuthorizationProvided ? <div style={inlineErrorStyle}>{fieldErrors.minorAuthorizationProvided}</div> : null}
+                {showFieldErrors && fieldErrors.minorAuthorizationFile ? <div style={inlineErrorStyle}>{fieldErrors.minorAuthorizationFile}</div> : null}
 
                 <div style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
                   <iframe
@@ -564,7 +740,7 @@ export function ReservationCheckinPageClient({
                     srcDoc={contract.renderedHtml}
                     style={{
                       width: "100%",
-                      height: "min(72vh, 980px)",
+                      height: isMobile ? "58vh" : "min(72vh, 980px)",
                       border: 0,
                       display: "block",
                       background: "#fff",
@@ -588,11 +764,11 @@ export function ReservationCheckinPageClient({
                         }}
                         penColor="black"
                         canvasProps={{
-                          width: 900,
-                          height: 260,
+                          width: signatureCanvasWidth,
+                          height: signatureCanvasHeight,
                           style: {
                             width: "100%",
-                            height: 260,
+                            height: signatureCanvasHeight,
                             display: "block",
                             background: "#fff",
                             touchAction: "none",
@@ -618,6 +794,7 @@ export function ReservationCheckinPageClient({
                         {signingId === contract.id ? copy.checkinPage.signing : copy.checkinPage.signContract}
                       </button>
                     </div>
+                    {actionError ? <Banner tone="error" text={actionError} /> : null}
                   </>
                 ) : (
                   <Banner tone="success" text={copy.checkinPage.signedBanner(contract.signatureSignedBy || contract.driverName || "customer", formatPublicDate(contract.signedAt, language))} />
@@ -646,16 +823,19 @@ function Field({
   value,
   onChange,
   disabled,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  error?: string | null;
 }) {
   return (
     <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
       <span>{label}</span>
-      <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={inputStyle} />
+      <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={error ? errorInputStyle : inputStyle} />
+      {error ? <div style={inlineErrorStyle}>{error}</div> : null}
     </label>
   );
 }
@@ -666,23 +846,26 @@ function SelectField({
   onChange,
   options,
   disabled,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   disabled?: boolean;
+  error?: string | null;
 }) {
   return (
     <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
       <span>{label}</span>
-      <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={inputStyle}>
+      <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={error ? errorInputStyle : inputStyle}>
         {options.map((option) => (
           <option key={`${option.value}-${option.label}`} value={option.value}>
             {option.label}
           </option>
         ))}
       </select>
+      {error ? <div style={inlineErrorStyle}>{error}</div> : null}
     </label>
   );
 }
@@ -761,6 +944,18 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid #cbd5e1",
   fontSize: 15,
   background: "#fff",
+};
+
+const errorInputStyle: React.CSSProperties = {
+  ...inputStyle,
+  border: "1px solid #ef4444",
+  background: "#fff5f5",
+};
+
+const inlineErrorStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#b91c1c",
+  fontWeight: 700,
 };
 
 const primaryButtonStyle: React.CSSProperties = {

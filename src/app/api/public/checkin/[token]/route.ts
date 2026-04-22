@@ -232,6 +232,7 @@ async function getReservationSnapshot(reservationId: string, language: ReturnTyp
       driverBirthDate: contract.driverBirthDate?.toISOString() ?? null,
       minorNeedsAuthorization: Boolean(contract.minorNeedsAuthorization),
       minorAuthorizationProvided: Boolean(contract.minorAuthorizationProvided),
+      minorAuthorizationFileKey: contract.minorAuthorizationFileKey,
       minorAuthorizationFileName: contract.minorAuthorizationFileName,
       licenseSchool: contract.licenseSchool,
       licenseType: contract.licenseType,
