@@ -6,6 +6,7 @@
   --surface: rgba(255, 255, 255, 0.92);
   --surface-strong: #ffffff;
   --surface-soft: #eef4fb;
+  --surface-raised: rgba(255, 255, 255, 0.94);
   --border: #d9e2ec;
   --border-strong: #c8d5e4;
   --muted: #5a6c84;
@@ -23,6 +24,7 @@
   --radius-xl: 28px;
   --radius-lg: 22px;
   --radius-md: 16px;
+  --radius-pill: 999px;
   --page-max: 1280px;
 }
 
@@ -120,6 +122,24 @@ textarea {
   align-items: center;
   gap: 12px;
   text-decoration: none;
+}
+
+.admin-brand--panel {
+  padding: 10px 14px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.admin-brand--panel .brand-lockup__mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+}
+
+.admin-brand--panel .brand-lockup__title {
+  font-size: 1.08rem;
 }
 
 .brand-lockup {
