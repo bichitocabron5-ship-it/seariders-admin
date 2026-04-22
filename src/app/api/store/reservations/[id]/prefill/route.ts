@@ -135,19 +135,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!r) return NextResponse.json({ error: "No existe" }, { status: 404 });
 
   const primaryContract = r.contracts[0] ?? null;
-  const boothCompatibilityFallback =
-    r.source === "BOOTH" && !r.formalizedAt ? primaryContract : null;
+  const contractCompatibilityFallback = !r.formalizedAt ? primaryContract : null;
   const reservation = {
     ...r,
-    customerName: fallbackOptionalString(r.customerName, boothCompatibilityFallback?.driverName),
-    customerPhone: fallbackOptionalString(r.customerPhone, boothCompatibilityFallback?.driverPhone),
-    customerEmail: fallbackOptionalString(r.customerEmail, boothCompatibilityFallback?.driverEmail),
-    customerCountry: fallbackOptionalString(r.customerCountry, boothCompatibilityFallback?.driverCountry),
-    customerAddress: fallbackOptionalString(r.customerAddress, boothCompatibilityFallback?.driverAddress),
-    customerPostalCode: fallbackOptionalString(r.customerPostalCode, boothCompatibilityFallback?.driverPostalCode),
-    customerBirthDate: r.customerBirthDate ?? boothCompatibilityFallback?.driverBirthDate ?? null,
-    customerDocType: fallbackOptionalString(r.customerDocType, boothCompatibilityFallback?.driverDocType),
-    customerDocNumber: fallbackOptionalString(r.customerDocNumber, boothCompatibilityFallback?.driverDocNumber),
+    customerName: fallbackOptionalString(r.customerName, contractCompatibilityFallback?.driverName),
+    customerPhone: fallbackOptionalString(r.customerPhone, contractCompatibilityFallback?.driverPhone),
+    customerEmail: fallbackOptionalString(r.customerEmail, contractCompatibilityFallback?.driverEmail),
+    customerCountry: fallbackOptionalString(r.customerCountry, contractCompatibilityFallback?.driverCountry),
+    customerAddress: fallbackOptionalString(r.customerAddress, contractCompatibilityFallback?.driverAddress),
+    customerPostalCode: fallbackOptionalString(r.customerPostalCode, contractCompatibilityFallback?.driverPostalCode),
+    customerBirthDate: r.customerBirthDate ?? contractCompatibilityFallback?.driverBirthDate ?? null,
+    customerDocType: fallbackOptionalString(r.customerDocType, contractCompatibilityFallback?.driverDocType),
+    customerDocNumber: fallbackOptionalString(r.customerDocNumber, contractCompatibilityFallback?.driverDocNumber),
   };
 
   const isPast = r.activityDate < startOfToday();

@@ -287,40 +287,39 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         normalizeOptionalString(current.customerName) ??
         "";
       const primaryContract = current.contracts[0] ?? null;
-      const boothCompatibilityFallback =
-        current.source === "BOOTH" && !current.formalizedAt ? primaryContract : null;
+      const contractCompatibilityFallback = !current.formalizedAt ? primaryContract : null;
       const customerPhone =
         b.customerPhone !== undefined
           ? normalizeOptionalString(b.customerPhone)
-          : fallbackOptionalString(current.customerPhone, boothCompatibilityFallback?.driverPhone);
+          : fallbackOptionalString(current.customerPhone, contractCompatibilityFallback?.driverPhone);
       const customerEmail =
         b.customerEmail !== undefined
           ? normalizeOptionalString(b.customerEmail)
-          : fallbackOptionalString(current.customerEmail, boothCompatibilityFallback?.driverEmail);
+          : fallbackOptionalString(current.customerEmail, contractCompatibilityFallback?.driverEmail);
       const customerCountry =
         b.customerCountry !== undefined
           ? normalizeOptionalString(b.customerCountry)
-          : fallbackOptionalString(current.customerCountry, boothCompatibilityFallback?.driverCountry);
+          : fallbackOptionalString(current.customerCountry, contractCompatibilityFallback?.driverCountry);
       const customerAddress =
         b.customerAddress !== undefined
           ? normalizeOptionalString(b.customerAddress)
-          : fallbackOptionalString(current.customerAddress, boothCompatibilityFallback?.driverAddress);
+          : fallbackOptionalString(current.customerAddress, contractCompatibilityFallback?.driverAddress);
       const customerPostalCode =
         b.customerPostalCode !== undefined
           ? normalizeOptionalString(b.customerPostalCode)
-          : fallbackOptionalString(current.customerPostalCode, boothCompatibilityFallback?.driverPostalCode);
+          : fallbackOptionalString(current.customerPostalCode, contractCompatibilityFallback?.driverPostalCode);
       const customerBirthDate =
         b.customerBirthDate !== undefined
           ? (b.customerBirthDate ? new Date(b.customerBirthDate) : null)
-          : current.customerBirthDate ?? boothCompatibilityFallback?.driverBirthDate ?? null;
+          : current.customerBirthDate ?? contractCompatibilityFallback?.driverBirthDate ?? null;
       const customerDocType =
         b.customerDocType !== undefined
           ? normalizeOptionalString(b.customerDocType)
-          : fallbackOptionalString(current.customerDocType, boothCompatibilityFallback?.driverDocType);
+          : fallbackOptionalString(current.customerDocType, contractCompatibilityFallback?.driverDocType);
       const customerDocNumber =
         b.customerDocNumber !== undefined
           ? normalizeOptionalString(b.customerDocNumber)
-          : fallbackOptionalString(current.customerDocNumber, boothCompatibilityFallback?.driverDocNumber);
+          : fallbackOptionalString(current.customerDocNumber, contractCompatibilityFallback?.driverDocNumber);
       const marketing = normalizeOptionalString(
         b.marketing !== undefined ? b.marketing : current.marketing
       );
