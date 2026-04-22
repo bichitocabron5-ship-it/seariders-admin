@@ -40,6 +40,11 @@ type HistoryRow = {
   arrivalAt: string | null;
   customerName: string | null;
   customerCountry: string | null;
+  primaryDriverName: string | null;
+  driverNamesSummary: string | null;
+  contractsCount: number;
+  readyContractsCount: number;
+  signedContractsCount: number;
   quantity: number | null;
   pax: number | null;
   isLicense: boolean | null;

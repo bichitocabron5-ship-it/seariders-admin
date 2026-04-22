@@ -37,6 +37,11 @@ type HistoryRow = {
   arrivalAt: string | null;
   customerName: string | null;
   customerCountry: string | null;
+  primaryDriverName: string | null;
+  driverNamesSummary: string | null;
+  contractsCount: number;
+  readyContractsCount: number;
+  signedContractsCount: number;
   quantity: number | null;
   pax: number | null;
   isLicense: boolean | null;
@@ -181,6 +186,11 @@ export default function StoreHistoryResultsSection({
                         <div style={{ fontWeight: 900, color: "#0f172a" }}>
                           {row.customerName || "Sin nombre"}
                         </div>
+                        {row.primaryDriverName ? (
+                          <div style={mutedText}>
+                            Firmante principal: <strong style={{ color: "#0f172a" }}>{row.primaryDriverName}</strong>
+                          </div>
+                        ) : null}
                         {row.isManualEntry ? (
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             <Pill bg="#fff7ed" border="#fed7aa">Reserva manual</Pill>
@@ -206,6 +216,14 @@ export default function StoreHistoryResultsSection({
                             <div>
                               <strong>Nota manual</strong>
                               <div>{row.manualEntryNote}</div>
+                            </div>
+                          ) : null}
+                          {row.contractsCount > 0 ? (
+                            <div>
+                              <strong>Contratos</strong>
+                              <div>
+                                {row.driverNamesSummary || "Sin conductor informado"} · Ready {row.readyContractsCount}/{row.contractsCount} · Firmados {row.signedContractsCount}/{row.contractsCount}
+                              </div>
                             </div>
                           ) : null}
                           {manualContractsCount > 0 ? (

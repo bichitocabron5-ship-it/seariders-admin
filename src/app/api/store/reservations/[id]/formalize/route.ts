@@ -55,14 +55,6 @@ function normalizeOptionalString(v: string | null | undefined) {
   return t.length ? t : null;
 }
 
-function firstNonEmpty(...values: Array<string | null | undefined>) {
-  for (const value of values) {
-    const normalized = normalizeOptionalString(value);
-    if (normalized) return normalized;
-  }
-  return null;
-}
-
 function toYmdInTz(d: Date, tz: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
@@ -237,14 +229,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           contracts: {
             orderBy: { unitIndex: "asc" },
             select: {
-              driverName: true,
-              driverPhone: true,
-              driverEmail: true,
-              driverCountry: true,
-              driverAddress: true,
-              driverPostalCode: true,
-              driverDocType: true,
-              driverDocNumber: true,
+              id: true,
             },
           },
         },
@@ -279,57 +264,40 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const activityDate = utcDateFromYmdInTz(tz, activityDateYmd);
       const scheduledTime = utcDateTimeFromYmdHmInTz(tz, activityDateYmd, timeHm ?? null);
 
-      const primaryContract = current.contracts.find((contract) =>
-        Boolean(
-          contract.driverName ||
-            contract.driverPhone ||
-            contract.driverEmail ||
-            contract.driverCountry ||
-            contract.driverAddress ||
-            contract.driverPostalCode ||
-            contract.driverDocType ||
-            contract.driverDocNumber
-        )
-      );
-
-      const customerName = firstNonEmpty(b.customerName, current.customerName, primaryContract?.driverName) ?? "";
-      const customerPhone = firstNonEmpty(
-        b.customerPhone !== undefined ? b.customerPhone : undefined,
-        current.customerPhone,
-        primaryContract?.driverPhone
-      );
-      const customerEmail = firstNonEmpty(
-        b.customerEmail !== undefined ? b.customerEmail : undefined,
-        current.customerEmail,
-        primaryContract?.driverEmail
-      );
-      const customerCountry = firstNonEmpty(
-        b.customerCountry !== undefined ? b.customerCountry : undefined,
-        current.customerCountry,
-        primaryContract?.driverCountry
-      );
-      const customerAddress = firstNonEmpty(
-        b.customerAddress !== undefined ? b.customerAddress : undefined,
-        current.customerAddress,
-        primaryContract?.driverAddress
-      );
-      const customerPostalCode = firstNonEmpty(
-        b.customerPostalCode !== undefined ? b.customerPostalCode : undefined,
-        current.customerPostalCode,
-        primaryContract?.driverPostalCode
-      );
+      const customerName =
+        normalizeOptionalString(b.customerName) ??
+        normalizeOptionalString(current.customerName) ??
+        "";
+      const customerPhone =
+        b.customerPhone !== undefined
+          ? normalizeOptionalString(b.customerPhone)
+          : normalizeOptionalString(current.customerPhone);
+      const customerEmail =
+        b.customerEmail !== undefined
+          ? normalizeOptionalString(b.customerEmail)
+          : normalizeOptionalString(current.customerEmail);
+      const customerCountry =
+        b.customerCountry !== undefined
+          ? normalizeOptionalString(b.customerCountry)
+          : normalizeOptionalString(current.customerCountry);
+      const customerAddress =
+        b.customerAddress !== undefined
+          ? normalizeOptionalString(b.customerAddress)
+          : normalizeOptionalString(current.customerAddress);
+      const customerPostalCode =
+        b.customerPostalCode !== undefined
+          ? normalizeOptionalString(b.customerPostalCode)
+          : normalizeOptionalString(current.customerPostalCode);
       const customerBirthDate =
         b.customerBirthDate !== undefined ? (b.customerBirthDate ? new Date(b.customerBirthDate) : null) : current.customerBirthDate;
-      const customerDocType = firstNonEmpty(
-        b.customerDocType !== undefined ? b.customerDocType : undefined,
-        current.customerDocType,
-        primaryContract?.driverDocType
-      );
-      const customerDocNumber = firstNonEmpty(
-        b.customerDocNumber !== undefined ? b.customerDocNumber : undefined,
-        current.customerDocNumber,
-        primaryContract?.driverDocNumber
-      );
+      const customerDocType =
+        b.customerDocType !== undefined
+          ? normalizeOptionalString(b.customerDocType)
+          : normalizeOptionalString(current.customerDocType);
+      const customerDocNumber =
+        b.customerDocNumber !== undefined
+          ? normalizeOptionalString(b.customerDocNumber)
+          : normalizeOptionalString(current.customerDocNumber);
       const marketing = normalizeOptionalString(
         b.marketing !== undefined ? b.marketing : current.marketing
       );

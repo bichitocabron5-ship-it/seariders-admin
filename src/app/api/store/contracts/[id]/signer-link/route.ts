@@ -4,6 +4,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { sendContractSignerWhatsapp } from "@/lib/contracts/notifications";
+import { resolveContractNotificationRecipient } from "@/lib/reservation-parties";
 
 export const runtime = "nodejs";
 
@@ -42,25 +43,17 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!contract) return new NextResponse("Contrato no encontrado", { status: 404 });
 
   const expiresInMinutes = 45;
-  const recipientName =
-    contract.driverName?.trim() ||
-    contract.reservation.customerName?.trim() ||
-    "cliente";
-  const phone =
-    contract.driverPhone?.trim() ||
-    contract.reservation.customerPhone?.trim() ||
-    null;
-  const country =
-    contract.driverCountry?.trim() ||
-    contract.reservation.customerCountry?.trim() ||
-    "ES";
+  const recipient = resolveContractNotificationRecipient({
+    contract,
+    reservation: contract.reservation,
+  });
 
   const notification = await sendContractSignerWhatsapp({
     contractId: contract.id,
     unitLabel: `Unidad #${contract.logicalUnitIndex ?? contract.unitIndex}`,
-    recipientName,
-    phone,
-    country,
+    recipientName: recipient.recipientName,
+    phone: recipient.phone,
+    country: recipient.country,
     expiresInMinutes,
   }).catch((error: unknown) => ({
     ok: false as const,

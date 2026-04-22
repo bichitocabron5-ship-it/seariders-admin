@@ -220,12 +220,12 @@ function buildJetskiNoLicenseHtml(input: ContractRenderInput) {
       ? "PASAPORTE"
       : "D.N.I / N.I.E / PASSAPORTE";
 
-  const name = esc(contract.driverName || reservation.customerName || "");
+  const name = esc(contract.driverName || "");
   const address = esc(contract.driverAddress || "");
   const docNumber = esc(contract.driverDocNumber || "");
   const birthDate = contract.driverBirthDate ? esc(formatDate(contract.driverBirthDate)) : "";
-  const phone = esc(contract.driverPhone || reservation.customerPhone || "");
-  const email = esc(contract.driverEmail || reservation.customerEmail || "");
+  const phone = esc(contract.driverPhone || "");
+  const email = esc(contract.driverEmail || "");
   const postalCountry =
     `${esc(contract.driverPostalCode || "")}${contract.driverCountry ? ` · ${esc(contract.driverCountry)}` : ""}`.trim();
 
@@ -561,15 +561,15 @@ function buildLicensedHtml(input: ContractRenderInput) {
   const priceText = eurosFromCents(reservation.totalPriceCents);
   const depositText = "500 €";
 
-  const driverName = esc(contract.driverName || reservation.customerName || "");
+  const driverName = esc(contract.driverName || "");
   const driverDocType = esc(contract.driverDocType || "");
   const driverDoc = esc(contract.driverDocNumber || "");
   const driverAddress = esc(contract.driverAddress || "");
   const driverPostalCode = esc(contract.driverPostalCode || "");
-  const driverCountry = esc(contract.driverCountry || reservation.customerCountry || "");
+  const driverCountry = esc(contract.driverCountry || "");
   const driverBirthDate = esc(formatDate(contract.driverBirthDate));
-  const driverPhone = esc(contract.driverPhone || reservation.customerPhone || "");
-  const driverEmail = esc(contract.driverEmail || reservation.customerEmail || "");
+  const driverPhone = esc(contract.driverPhone || "");
+  const driverEmail = esc(contract.driverEmail || "");
   const licenseSchool = esc(contract.licenseSchool || "");
   const licenseType = esc(contract.licenseType || "");
   const licenseNumber = esc(contract.licenseNumber || "");

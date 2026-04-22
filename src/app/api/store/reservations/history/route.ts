@@ -10,6 +10,7 @@ import { type AppSession, sessionOptions } from "@/lib/session";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 import { getPassVoucherPaidCents, getSignedPaymentCents } from "@/lib/pass-vouchers";
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
+import { summarizeReservationContracts } from "@/lib/reservation-parties";
 
 export const runtime = "nodejs";
 
@@ -53,10 +54,25 @@ export async function GET(req: Request) {
   const where: Record<string, unknown> = {};
 
   if (q?.trim()) {
-    where.customerName = {
-      contains: q.trim(),
-      mode: "insensitive",
-    };
+    const query = q.trim();
+    where.OR = [
+      {
+        customerName: {
+          contains: query,
+          mode: "insensitive",
+        },
+      },
+      {
+        contracts: {
+          some: {
+            driverName: {
+              contains: query,
+              mode: "insensitive",
+            },
+          },
+        },
+      },
+    ];
   }
 
   if (status && status !== "ALL") {
@@ -108,6 +124,12 @@ export async function GET(req: Request) {
       source: true,
       formalizedAt: true,
       parentReservationId: true,
+      contracts: {
+        select: {
+          status: true,
+          driverName: true,
+        },
+      },
       channel: { select: { name: true } },
       service: { select: { name: true, category: true } },
       option: { select: { durationMinutes: true } },
@@ -204,6 +226,7 @@ export async function GET(req: Request) {
   }
 
   const rows = rowsDb.map((reservation) => {
+    const contractsSummary = summarizeReservationContracts(reservation.contracts ?? []);
     const attachment = attachmentMap.get(reservation.id);
     const mainItem = reservation.items.find((item) => !item.isExtra) ?? null;
     const shouldUseParentService =
@@ -246,6 +269,11 @@ export async function GET(req: Request) {
       arrivalAt: reservation.arrivalAt,
       customerName: reservation.customerName,
       customerCountry: reservation.customerCountry,
+      primaryDriverName: contractsSummary.primaryDriverName,
+      driverNamesSummary: contractsSummary.driverNamesSummary,
+      contractsCount: contractsSummary.contractsCount,
+      readyContractsCount: contractsSummary.readyContractsCount,
+      signedContractsCount: contractsSummary.signedContractsCount,
       quantity: reservation.quantity,
       pax: reservation.pax,
       isLicense: reservation.isLicense,
