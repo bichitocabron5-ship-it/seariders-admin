@@ -14,7 +14,18 @@ type Summary = {
     meta?: { windowFrom?: string | null; windowTo?: string | null };
   };
   isClosed?: boolean;
-  closure?: { id: string; closedAt: string } | null;
+  closure?: {
+    id: string;
+    closedAt: string;
+    cashFundCents?: number | null;
+    cashToKeepCents?: number | null;
+    cashToWithdrawCents?: number | null;
+  } | null;
+  cashFundSuggestion?: {
+    suggestedCents?: number;
+    source?: "CURRENT_CLOSURE" | "PREVIOUS_CLOSURE" | "DEFAULT";
+    previousBusinessDate?: string | null;
+  };
 };
 
 type Method = "CASH" | "CARD" | "BIZUM" | "TRANSFER" | "VOUCHER";
@@ -113,6 +124,7 @@ export default function BoothCashClosuresPage() {
   const origin = "BOOTH" as const;
 
   const shift = "MORNING" as const;
+  const cashFundCents = 0;
   const [loading, setLoading] = useState(true);
   const [sum, setSum] = useState<Summary | null>(null);
 
@@ -279,6 +291,7 @@ export default function BoothCashClosuresPage() {
         date: today,
         shiftSessionIds: selectedSs,
         declared: declaredTotals,
+        cashFundCents,
         note: note.trim() ? note.trim() : null,
       };
 
