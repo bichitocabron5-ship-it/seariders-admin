@@ -5,6 +5,8 @@ import type React from "react";
 import { useRef, useState } from "react";
 
 import CashChangeHelper from "@/components/cash-change-helper";
+import { ActionButton, AlertBanner, StatusBadge } from "@/components/seariders-ui";
+import { brand } from "@/lib/brand";
 
 import type { ExtraUiMap, PayLine, PayMethod, ReservationRow, Service } from "../types";
 import { centsFromEuros, errorMessage, euros } from "../utils";
@@ -41,6 +43,22 @@ type ReservationOpsPanelProps = {
   removeServicePayLine: (idx: number) => void;
   updateServicePayLine: (idx: number, patch: Partial<PayLine>) => void;
   chargeServiceSplit: (reservationId: string, maxServiceCents: number) => Promise<void>;
+};
+
+const inputBase: React.CSSProperties = {
+  padding: 10,
+  borderRadius: 12,
+  border: `1px solid ${brand.colors.border}`,
+  background: "#fff",
+};
+
+const surfaceCard: React.CSSProperties = {
+  width: "100%",
+  marginTop: 6,
+  padding: 12,
+  border: `1px solid ${brand.colors.border}`,
+  borderRadius: 14,
+  background: brand.colors.surfaceSoft,
 };
 
 export function ReservationOpsPanel({
@@ -147,13 +165,13 @@ export function ReservationOpsPanel({
   }
 
   return (
-    <div style={{ display: "grid", gap: 10 }}>
+    <div style={{ display: "grid", gap: 12 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <select
           value={method}
           onChange={(e) => setMethod(e.target.value as PayMethod)}
           disabled={isBusy}
-          style={{ padding: 6, cursor: isBusy ? "wait" : "pointer" }}
+          style={{ ...inputBase, cursor: isBusy ? "wait" : "pointer", padding: 8 }}
         >
           <option value="CASH">Efectivo</option>
           <option value="CARD">Tarjeta</option>
@@ -161,7 +179,7 @@ export function ReservationOpsPanel({
           <option value="TRANSFER">Transferencia</option>
         </select>
 
-        <button
+        <ActionButton
           type="button"
           disabled={!canRefundDeposit || isBusy}
           onClick={() =>
@@ -176,43 +194,24 @@ export function ReservationOpsPanel({
               });
             })
           }
-          style={{ padding: "6px 10px", cursor: !canRefundDeposit || isBusy ? "not-allowed" : "pointer" }}
+          variant="secondary"
+          style={{ opacity: !canRefundDeposit || isBusy ? 0.6 : 1, cursor: !canRefundDeposit || isBusy ? "not-allowed" : "pointer" }}
         >
           {busyAction === "refund-deposit" ? "Devolviendo..." : "Devolver fianza"}
-        </button>
+        </ActionButton>
       </div>
 
       {depositHeld ? (
-        <div style={{ padding: 10, background: "#f3f4f6", borderRadius: 10 }}>
-          <div style={{ fontWeight: 700 }}>Fianza retenida</div>
-          {depositHoldReason ? (
-            <details style={{ marginTop: 6 }}>
-              <summary style={{ cursor: "pointer" }}>Ver motivo</summary>
-              <div style={{ marginTop: 6, opacity: 0.85 }}>{depositHoldReason}</div>
-            </details>
-          ) : (
-            <div style={{ marginTop: 6, opacity: 0.75 }}>
-              Marcada por plataforma. No se puede devolver desde tienda.
-            </div>
-          )}
-        </div>
+        <AlertBanner tone="warning" title="Fianza retenida">
+          {depositHoldReason || "Marcada por plataforma. No se puede devolver desde tienda."}
+        </AlertBanner>
       ) : null}
 
       {pendingDeposit > 0 ? (
-        <div
-          style={{
-            width: "100%",
-            marginTop: 6,
-            padding: 10,
-            border: "1px solid #e5e7eb",
-            borderRadius: 10,
-          }}
-        >
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>
-            Cobrar fianza (puede ser mixto)
-            {isCashClosed ? (
-              <span style={{ marginLeft: 8, fontWeight: 700, opacity: 0.8 }}>· Caja cerrada</span>
-            ) : null}
+        <div style={surfaceCard}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+            <div style={{ fontWeight: 800 }}>Cobrar fianza (puede ser mixto)</div>
+            {isCashClosed ? <StatusBadge tone="warning">Caja cerrada</StatusBadge> : null}
           </div>
 
           <div style={{ display: "grid", gap: 8 }}>
@@ -230,7 +229,7 @@ export function ReservationOpsPanel({
                   value={line.method}
                   disabled={isCashClosed || isBusy}
                   onChange={(e) => updateDepositPayLine(idx, { method: e.target.value as PayMethod })}
-                  style={{ padding: 10, cursor: isCashClosed || isBusy ? "not-allowed" : "pointer" }}
+                  style={{ ...inputBase, cursor: isCashClosed || isBusy ? "not-allowed" : "pointer" }}
                 >
                   <option value="CASH">Efectivo</option>
                   <option value="CARD">Tarjeta</option>
@@ -244,7 +243,7 @@ export function ReservationOpsPanel({
                   onChange={(e) => updateDepositPayLine(idx, { amountEuros: e.target.value })}
                   placeholder="Importe EUR"
                   style={{
-                    padding: 10,
+                    ...inputBase,
                     textAlign: "right",
                     fontWeight: 700,
                     cursor: isCashClosed || isBusy ? "not-allowed" : "text",
@@ -264,18 +263,15 @@ export function ReservationOpsPanel({
 
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                   {depositPayLines.length > 1 ? (
-                    <button
+                    <ActionButton
                       type="button"
                       disabled={isCashClosed || isBusy}
                       onClick={() => removeDepositPayLine(idx)}
-                      style={{
-                        padding: "8px 12px",
-                        opacity: isCashClosed || isBusy ? 0.6 : 1,
-                        cursor: isCashClosed || isBusy ? "not-allowed" : "pointer",
-                      }}
+                      variant="secondary"
+                      style={{ opacity: isCashClosed || isBusy ? 0.6 : 1, cursor: isCashClosed || isBusy ? "not-allowed" : "pointer" }}
                     >
                       Quitar
-                    </button>
+                    </ActionButton>
                   ) : null}
                 </div>
               </div>
@@ -283,31 +279,24 @@ export function ReservationOpsPanel({
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 10 }}>
-            <button
+            <ActionButton
               type="button"
               disabled={isCashClosed || isBusy}
               onClick={addDepositPayLine}
-              style={{
-                padding: "8px 12px",
-                opacity: isCashClosed || isBusy ? 0.6 : 1,
-                cursor: isCashClosed || isBusy ? "not-allowed" : "pointer",
-              }}
+              variant="secondary"
+              style={{ opacity: isCashClosed || isBusy ? 0.6 : 1, cursor: isCashClosed || isBusy ? "not-allowed" : "pointer" }}
             >
               + Añadir pago
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
               type="button"
               disabled={isCashClosed || isBusy}
               onClick={() => void runBusy("charge-deposit", chargeDepositSplit)}
-              style={{
-                padding: "10px 14px",
-                fontWeight: 800,
-                opacity: isCashClosed || isBusy ? 0.6 : 1,
-                cursor: isCashClosed || isBusy ? "not-allowed" : "pointer",
-              }}
+              variant="primary"
+              style={{ opacity: isCashClosed || isBusy ? 0.6 : 1, cursor: isCashClosed || isBusy ? "not-allowed" : "pointer" }}
             >
               {isCashClosed ? "Caja cerrada" : busyAction === "charge-deposit" ? "Cobrando..." : "Cobrar fianza"}
-            </button>
+            </ActionButton>
           </div>
         </div>
       ) : null}
@@ -315,36 +304,16 @@ export function ReservationOpsPanel({
       <div>
         <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 4 }}>Extras</div>
         {r.source === "BOOTH" ? (
-          <div
-            style={{
-              marginBottom: 8,
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #bae6fd",
-              background: "#f0f9ff",
-              color: "#0c4a6e",
-              fontSize: 12,
-              lineHeight: 1.45,
-            }}
-          >
+          <AlertBanner tone="info" title="Reserva Booth">
             En reservas de Booth, añadir extras o actividades nuevas no amplía el descuento heredado. Solo escala si se aumenta la misma actividad base con la que llegó la reserva.
-          </div>
+          </AlertBanner>
         ) : null}
         {r.extras && r.extras.length > 0 ? (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, marginBottom: 6 }}>
             {r.extras.map((ex) => (
-              <span
-                key={ex.id}
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 999,
-                  border: "1px solid #e5e7eb",
-                  fontSize: 12,
-                  background: "#fafafa",
-                }}
-              >
+              <StatusBadge key={ex.id} tone="neutral">
                 {ex.serviceName} × {ex.quantity} ({euros(ex.totalPriceCents)})
-              </span>
+              </StatusBadge>
             ))}
           </div>
         ) : (
@@ -354,10 +323,10 @@ export function ReservationOpsPanel({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 70px 100px",
+            gridTemplateColumns: "1fr 70px 120px",
             gap: 6,
             alignItems: "center",
-            marginTop: 4,
+            marginTop: 8,
           }}
         >
           <select
@@ -371,7 +340,7 @@ export function ReservationOpsPanel({
                 },
               }))
             }
-            style={{ padding: 6, fontSize: 13 }}
+            style={{ ...inputBase, padding: 8, fontSize: 13 }}
           >
             {servicesExtra.map((s) => (
               <option key={s.id} value={s.id}>
@@ -394,17 +363,18 @@ export function ReservationOpsPanel({
                 },
               }))
             }
-            style={{ padding: 6, fontSize: 13 }}
+            style={{ ...inputBase, padding: 8, fontSize: 13 }}
           />
 
-          <button
+          <ActionButton
             type="button"
             disabled={isBusy}
             onClick={() => void runBusy("add-extra", async () => addExtraToReservation(r.id))}
-            style={{ padding: "6px 10px", fontSize: 13, cursor: isBusy ? "not-allowed" : "pointer" }}
+            variant="secondary"
+            style={{ fontSize: 13, cursor: isBusy ? "not-allowed" : "pointer", opacity: isBusy ? 0.6 : 1 }}
           >
             Añadir
-          </button>
+          </ActionButton>
         </div>
       </div>
 
@@ -419,20 +389,10 @@ export function ReservationOpsPanel({
         }}
       >
         {pendingService > 0 ? (
-          <div
-            style={{
-              width: "100%",
-              marginTop: 6,
-              padding: 10,
-              border: "1px solid #e5e7eb",
-              borderRadius: 10,
-            }}
-          >
-            <div style={{ fontWeight: 800, marginBottom: 8 }}>
-              Cobrar servicio (puede ser mixto)
-              {isCashClosed ? (
-                <span style={{ marginLeft: 8, fontWeight: 700, opacity: 0.8 }}>· Caja cerrada</span>
-              ) : null}
+          <div style={surfaceCard}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 800 }}>Cobrar servicio (puede ser mixto)</div>
+              {isCashClosed ? <StatusBadge tone="warning">Caja cerrada</StatusBadge> : null}
             </div>
 
             <div style={{ display: "grid", gap: 8 }}>
@@ -449,10 +409,8 @@ export function ReservationOpsPanel({
                   <select
                     value={line.method}
                     disabled={isCashClosed || isBusy}
-                    onChange={(e) =>
-                      updateServicePayLine(idx, { method: e.target.value as PayMethod })
-                    }
-                    style={{ padding: 10, cursor: isCashClosed || isBusy ? "not-allowed" : "pointer" }}
+                    onChange={(e) => updateServicePayLine(idx, { method: e.target.value as PayMethod })}
+                    style={{ ...inputBase, cursor: isCashClosed || isBusy ? "not-allowed" : "pointer" }}
                   >
                     <option value="CASH">Efectivo</option>
                     <option value="CARD">Tarjeta</option>
@@ -466,7 +424,7 @@ export function ReservationOpsPanel({
                     onChange={(e) => updateServicePayLine(idx, { amountEuros: e.target.value })}
                     placeholder="Importe EUR"
                     style={{
-                      padding: 10,
+                      ...inputBase,
                       textAlign: "right",
                       fontWeight: 700,
                       cursor: isCashClosed || isBusy ? "not-allowed" : "text",
@@ -478,9 +436,7 @@ export function ReservationOpsPanel({
                     <CashChangeHelper
                       amountEuros={line.amountEuros}
                       receivedEuros={line.receivedEuros ?? ""}
-                      onReceivedEurosChange={(value) =>
-                        updateServicePayLine(idx, { receivedEuros: value })
-                      }
+                      onReceivedEurosChange={(value) => updateServicePayLine(idx, { receivedEuros: value })}
                     />
                   ) : (
                     <div />
@@ -488,18 +444,15 @@ export function ReservationOpsPanel({
 
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                     {servicePayLines.length > 1 ? (
-                      <button
+                      <ActionButton
                         type="button"
                         disabled={isCashClosed || isBusy}
                         onClick={() => removeServicePayLine(idx)}
-                        style={{
-                          padding: "8px 12px",
-                          opacity: isCashClosed || isBusy ? 0.6 : 1,
-                          cursor: isCashClosed || isBusy ? "not-allowed" : "pointer",
-                        }}
+                        variant="secondary"
+                        style={{ opacity: isCashClosed || isBusy ? 0.6 : 1, cursor: isCashClosed || isBusy ? "not-allowed" : "pointer" }}
                       >
                         Quitar
-                      </button>
+                      </ActionButton>
                     ) : null}
                   </div>
                 </div>
@@ -507,36 +460,29 @@ export function ReservationOpsPanel({
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 10 }}>
-              <button
+              <ActionButton
                 type="button"
                 disabled={isCashClosed || isBusy}
                 onClick={addServicePayLine}
-                style={{
-                  padding: "8px 12px",
-                  opacity: isCashClosed || isBusy ? 0.6 : 1,
-                  cursor: isCashClosed || isBusy ? "not-allowed" : "pointer",
-                }}
+                variant="secondary"
+                style={{ opacity: isCashClosed || isBusy ? 0.6 : 1, cursor: isCashClosed || isBusy ? "not-allowed" : "pointer" }}
               >
                 + Añadir pago
-              </button>
-              <button
+              </ActionButton>
+              <ActionButton
                 type="button"
                 disabled={isCashClosed || isBusy}
                 onClick={() => void runBusy("charge-service", async () => chargeServiceSplit(r.id, pendingService))}
-                style={{
-                  padding: "10px 14px",
-                  fontWeight: 800,
-                  opacity: isCashClosed || isBusy ? 0.6 : 1,
-                  cursor: isCashClosed || isBusy ? "not-allowed" : "pointer",
-                }}
+                variant="primary"
+                style={{ opacity: isCashClosed || isBusy ? 0.6 : 1, cursor: isCashClosed || isBusy ? "not-allowed" : "pointer" }}
               >
                 {isCashClosed ? "Caja cerrada" : busyAction === "charge-service" ? "Cobrando..." : "Cobrar servicio"}
-              </button>
+              </ActionButton>
             </div>
           </div>
         ) : null}
 
-        <button
+        <ActionButton
           type="button"
           disabled={isCashClosed || isBusy || (pendingService <= 0 && pendingDeposit <= 0)}
           onClick={() =>
@@ -573,17 +519,17 @@ export function ReservationOpsPanel({
               }
             })
           }
+          variant="primary"
           style={{
-            padding: "6px 10px",
             opacity: isCashClosed || isBusy || (pendingService <= 0 && pendingDeposit <= 0) ? 0.5 : 1,
             cursor: isCashClosed || isBusy ? "not-allowed" : "pointer",
           }}
         >
           {isCashClosed ? "Caja cerrada" : busyAction === "charge-all" ? "Cobrando..." : "Cobrar todo"}
-        </button>
+        </ActionButton>
 
         {!isCashClosed && method === "CASH" && pendingService + pendingDeposit > 0 ? (
-          <div style={{ width: "100%", maxWidth: 240 }}>
+          <div style={{ width: "100%", maxWidth: 320 }}>
             <CashChangeHelper
               amountEuros={((pendingService + pendingDeposit) / 100).toFixed(2)}
               receivedEuros={fullCashReceivedEuros}

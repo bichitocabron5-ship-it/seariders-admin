@@ -1,5 +1,6 @@
 "use client";
 
+import { StatusBadge } from "@/components/seariders-ui";
 import type { ReservationPayment } from "../types";
 import { euros } from "../utils";
 
@@ -21,10 +22,6 @@ export function StoreReservationPaymentsHistory({ payments }: StoreReservationPa
           const label = payment.isDeposit ? "Fianza" : "Servicio";
           const time = new Date(payment.createdAt ?? "").toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 
-          const Chip = ({ text, bg }: { text: string; bg: string }) => (
-            <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: bg, whiteSpace: "nowrap" }}>{text}</span>
-          );
-
           return (
             <div
               key={index}
@@ -34,9 +31,9 @@ export function StoreReservationPaymentsHistory({ payments }: StoreReservationPa
                 {sign} {euros(payment.amountCents)}
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <Chip text={label} bg={payment.isDeposit ? "#fff7cc" : "#eaf2ff"} />
-                <Chip text={payment.method ?? "-"} bg="#f3f4f6" />
-                <Chip text={payment.origin ?? "-"} bg="#f3f4f6" />
+                <StatusBadge tone={payment.isDeposit ? "warning" : "info"}>{label}</StatusBadge>
+                <StatusBadge tone="neutral">{payment.method ?? "-"}</StatusBadge>
+                <StatusBadge tone="neutral">{payment.origin ?? "-"}</StatusBadge>
               </div>
               <div style={{ fontSize: 12, opacity: 0.7, textAlign: "right" }}>{time}</div>
             </div>

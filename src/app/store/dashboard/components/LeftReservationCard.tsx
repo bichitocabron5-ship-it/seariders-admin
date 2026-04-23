@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import type React from "react";
 
+import { AlertBanner, StatusBadge } from "@/components/seariders-ui";
+import { brand } from "@/lib/brand";
 import { ReservationOpsPanel } from "./ReservationOpsPanel";
 import { StoreReservationCardSummary } from "./StoreReservationCardSummary";
 import { StoreReservationPaymentsHistory } from "./StoreReservationPaymentsHistory";
@@ -110,7 +112,7 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
   const contractsState = !showContracts ? null : readyCount >= requiredUnits ? "OK" : readyCount > 0 ? "PARTIAL" : "MISSING";
 
   return (
-    <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
+    <div style={{ padding: 14, border: `1px solid ${brand.colors.border}`, borderRadius: 16, background: "#fff", boxShadow: brand.shadow.sm }}>
       <StoreReservationCardSummary
         reservation={r}
         btnSecondary={btnSecondary}
@@ -152,7 +154,7 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
       />
 
       <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #ddd" }}>
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
           <div>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Cobrado</div>
             <div style={{ fontWeight: 700 }}>{euros(paid)}</div>
@@ -161,65 +163,44 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
             <div style={{ fontSize: 12, opacity: 0.8 }}>Pendiente</div>
             <div style={{ fontWeight: 700 }}>{euros(pendingTotal)}</div>
           </div>
-          {isFullyPaid ? <div style={{ alignSelf: "center", fontWeight: 700 }}>Pagado</div> : null}
+          {isFullyPaid ? <StatusBadge tone="success">Pagado</StatusBadge> : null}
         </div>
 
         {r.source === "BOOTH" ? (
-          <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "#eef2ff" }}>Carpa</span>
-            {r.boothCode ? <span style={{ fontWeight: 800 }}>{r.boothCode}</span> : null}
-            <span
-              style={{
-                fontSize: 12,
-                padding: "2px 8px",
-                borderRadius: 999,
-                background: r.arrivedStoreAt ? "#dcfce7" : "#fef9c3",
-              }}
-            >
+          <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <StatusBadge tone="info">Carpa</StatusBadge>
+            {r.boothCode ? <StatusBadge tone="neutral">{r.boothCode}</StatusBadge> : null}
+            <StatusBadge tone={r.arrivedStoreAt ? "success" : "warning"}>
               {r.arrivedStoreAt ? "Recibido" : "En camino"}
-            </span>
+            </StatusBadge>
           </div>
         ) : null}
 
         {r.boothNote ? (
-          <div
-            style={{
-              marginTop: 10,
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid #dbeafe",
-              background: "#f8fbff",
-              color: "#1e293b",
-              fontSize: 13,
-              lineHeight: 1.45,
-            }}
-          >
-            <strong style={{ color: "#0f172a" }}>Nota Booth:</strong> {r.boothNote}
+          <div style={{ marginTop: 10 }}>
+            <AlertBanner tone="info" title="Nota Booth">
+              {r.boothNote}
+            </AlertBanner>
           </div>
         ) : null}
 
         {r.source === "BOOTH" ? (
-          <div
-            style={{
-              marginTop: 10,
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid #a5f3fc",
-              background: "#ecfeff",
-              color: "#155e75",
-              fontSize: 13,
-              lineHeight: 1.45,
-            }}
-          >
-            El descuento heredado de carpa solo se conserva al ampliar la misma actividad original. Si añades otra actividad distinta o extras, esas líneas no reciben descuento de Booth.
+          <div style={{ marginTop: 10 }}>
+            <AlertBanner tone="info" title="Reserva migrada desde Booth">
+              El descuento heredado de carpa solo se conserva al ampliar la misma actividad original. Si añades otra actividad distinta o extras, esas líneas no reciben descuento de Booth.
+            </AlertBanner>
           </div>
         ) : null}
 
         {r.taxiboatTrip ? (
-          <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "#e0e7ff" }}>
-            Taxi boat {r.taxiboatTrip.boat}
-            {r.taxiboatTrip.departedAt ? ` · salió ${new Date(r.taxiboatTrip.departedAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}` : " · preparando"}
-          </span>
+          <div style={{ marginTop: 8 }}>
+            <StatusBadge tone="info">
+              Taxi boat {r.taxiboatTrip.boat}
+              {r.taxiboatTrip.departedAt
+                ? ` · salió ${new Date(r.taxiboatTrip.departedAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`
+                : " · preparando"}
+            </StatusBadge>
+          </div>
         ) : null}
 
         <StoreReservationPaymentsHistory payments={r.payments ?? []} />
