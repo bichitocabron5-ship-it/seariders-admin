@@ -2,6 +2,7 @@
 
 import type React from "react";
 
+import { ActionButton, AlertBanner, StatusBadge } from "@/components/seariders-ui";
 import type { ReservationRow } from "../types";
 import { euros, hhmm, statusColor } from "../utils";
 
@@ -36,43 +37,21 @@ type StoreReservationCardSummaryProps = {
   onPassToReady: () => Promise<void>;
 };
 
-function Badge({ label, color }: { label: string; color: string }) {
-  return (
-    <span
-      style={{
-        padding: "2px 8px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 600,
-        background: color,
-        color: "#111",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function contractTone(contractsState: ContractsState) {
-  if (contractsState === "OK") {
-    return { border: "#bbf7d0", background: "#ecfdf5", color: "#065f46" };
-  }
-  if (contractsState === "PARTIAL") {
-    return { border: "#fde68a", background: "#fffbeb", color: "#92400e" };
-  }
-  return { border: "#fecaca", background: "#fff1f2", color: "#991b1b" };
+function toneFromContracts(contractsState: ContractsState) {
+  if (contractsState === "OK") return "success";
+  if (contractsState === "PARTIAL") return "warning";
+  return "danger";
 }
 
 function precheckinTone(readyCount: number, requiredUnits: number) {
   if (requiredUnits <= 0) return null;
   if (readyCount >= requiredUnits) {
-    return { border: "#bbf7d0", background: "#dcfce7", color: "#166534", label: "Pre-checkin completo" };
+    return { tone: "success" as const, label: "Pre-checkin completo" };
   }
   if (readyCount > 0) {
-    return { border: "#fcd34d", background: "#fef3c7", color: "#92400e", label: "Pre-checkin en curso" };
+    return { tone: "warning" as const, label: "Pre-checkin en curso" };
   }
-  return { border: "#fecaca", background: "#fff1f2", color: "#991b1b", label: "Pendiente de firma" };
+  return { tone: "danger" as const, label: "Pendiente de firma" };
 }
 
 function depositLabel(depositStatus: DepositStatus) {
@@ -82,11 +61,11 @@ function depositLabel(depositStatus: DepositStatus) {
   return "Fianza retenida";
 }
 
-function depositColor(depositStatus: DepositStatus) {
-  if (depositStatus === "PENDIENTE") return "#fee2e2";
-  if (depositStatus === "LIBERABLE") return "#fef9c3";
-  if (depositStatus === "DEVUELTA") return "#dcfce7";
-  return "#fecaca";
+function depositTone(depositStatus: DepositStatus) {
+  if (depositStatus === "PENDIENTE") return "danger" as const;
+  if (depositStatus === "LIBERABLE") return "warning" as const;
+  if (depositStatus === "DEVUELTA") return "success" as const;
+  return "danger" as const;
 }
 
 function flowStageLabel(reservation: ReservationRow) {
@@ -95,10 +74,21 @@ function flowStageLabel(reservation: ReservationRow) {
   return reservation.status;
 }
 
-function flowStageColor(reservation: ReservationRow) {
-  if (reservation.storeFlowStage === "RETURN_PENDING_CLOSE") return "#fde68a";
-  if (reservation.storeFlowStage === "QUEUE") return "#e5e7eb";
-  return statusColor(reservation.status);
+function flowStageTone(reservation: ReservationRow) {
+  if (reservation.storeFlowStage === "RETURN_PENDING_CLOSE") return "warning" as const;
+  if (reservation.storeFlowStage === "QUEUE") return "neutral" as const;
+  const color = statusColor(reservation.status);
+  if (color === "#dcfce7") return "success" as const;
+  if (color === "#fee2e2" || color === "#fecaca") return "danger" as const;
+  if (color === "#fef9c3" || color === "#fde68a") return "warning" as const;
+  return "info" as const;
+}
+
+function waitTone(bg: string) {
+  if (bg === "#dcfce7") return "success" as const;
+  if (bg === "#fee2e2" || bg === "#fff1f2") return "danger" as const;
+  if (bg === "#fef3c7" || bg === "#fde68a") return "warning" as const;
+  return "info" as const;
 }
 
 export function StoreReservationCardSummary({
@@ -129,116 +119,82 @@ export function StoreReservationCardSummary({
   onPassToReady,
 }: StoreReservationCardSummaryProps) {
   const timeLabel = hhmm(reservation.scheduledTime) || "sin hora";
-  const contractsTone = contractTone(contractsState);
   const precheckin = precheckinTone(readyCount, requiredUnits);
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-          <strong>{reservation.customerName || "Sin nombre"}</strong>
-          <span style={{ fontSize: 12, opacity: 0.7 }}>{timeLabel}</span>
-          <Badge label={flowStageLabel(reservation)} color={flowStageColor(reservation)} />
+      <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+            <strong>{reservation.customerName || "Sin nombre"}</strong>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>{timeLabel}</span>
+            <StatusBadge tone={flowStageTone(reservation)}>{flowStageLabel(reservation)}</StatusBadge>
 
-          {showContracts ? (
-            <>
-              <div
-                title={`Contratos listos: ${readyCount}/${requiredUnits}`}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  border: `1px solid ${contractsTone.border}`,
-                  background: contractsTone.background,
-                  color: contractsTone.color,
-                  fontWeight: 900,
-                  fontSize: 12,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Contratos {readyCount}/{requiredUnits}
-              </div>
-              {precheckin ? (
-                <div
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    border: `1px solid ${precheckin.border}`,
-                    background: precheckin.background,
-                    color: precheckin.color,
-                    fontWeight: 900,
-                    fontSize: 12,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {precheckin.label}
-                </div>
-              ) : null}
-            </>
-          ) : null}
-        </div>
+            {showContracts ? (
+              <>
+                <StatusBadge tone={toneFromContracts(contractsState)}>
+                  Contratos {readyCount}/{requiredUnits}
+                </StatusBadge>
+                {precheckin ? <StatusBadge tone={precheckin.tone}>{precheckin.label}</StatusBadge> : null}
+              </>
+            ) : null}
+          </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" onClick={onEdit} style={btnSecondary}>
-            Reagendar
-          </button>
-          <button
-            type="button"
-            onClick={() => void onCancel()}
-            style={{ ...btnSecondary, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b" }}
-          >
-            Cancelar
-          </button>
-          {needsContracts ? (
-            <button type="button" onClick={onCompleteContracts} style={btnSecondary}>
-              Completar contratos
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" onClick={onEdit} style={btnSecondary}>
+              Reagendar
             </button>
-          ) : null}
-          {isFullyPaid ? (
             <button
               type="button"
-              onClick={() => void onPassToReady()}
-              disabled={needsContracts}
-              title={needsContracts ? "Faltan contratos por completar" : ""}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: "1px solid #111",
-                background: "#111",
-                color: "#fff",
-                fontWeight: 900,
-                opacity: needsContracts ? 0.6 : 1,
-                cursor: needsContracts ? "not-allowed" : "pointer",
-              }}
+              onClick={() => void onCancel()}
+              style={{ ...btnSecondary, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b" }}
             >
-              Pasar a Ready
+              Cancelar
             </button>
-          ) : null}
+            {needsContracts ? (
+              <button type="button" onClick={onCompleteContracts} style={btnSecondary}>
+                Completar contratos
+              </button>
+            ) : null}
+            {isFullyPaid ? (
+              <ActionButton
+                type="button"
+                onClick={() => void onPassToReady()}
+                disabled={needsContracts}
+                title={needsContracts ? "Faltan contratos por completar" : ""}
+                variant="primary"
+                style={{ opacity: needsContracts ? 0.6 : 1, cursor: needsContracts ? "not-allowed" : "pointer" }}
+              >
+                Pasar a Ready
+              </ActionButton>
+            ) : null}
+          </div>
+
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontWeight: 900 }}>{euros(finalTotal)}</div>
+            {autoDisc > 0 || manualDisc > 0 ? (
+              <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
+                <span style={{ textDecoration: "line-through", opacity: 0.7 }}>{euros(pvpTotal)}</span>
+                {autoDisc > 0 ? <span style={{ marginLeft: 8 }}>Auto: -{euros(autoDisc)}</span> : null}
+                {manualDisc > 0 ? <span style={{ marginLeft: 8 }}>Manual: -{euros(manualDisc)}</span> : null}
+                {reservation.manualDiscountReason ? <div style={{ marginTop: 2, opacity: 0.75 }}>Motivo: {reservation.manualDiscountReason}</div> : null}
+              </div>
+            ) : null}
+          </div>
         </div>
 
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontWeight: 900 }}>{euros(finalTotal)}</div>
-          {autoDisc > 0 || manualDisc > 0 ? (
-            <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
-              <span style={{ textDecoration: "line-through", opacity: 0.7 }}>{euros(pvpTotal)}</span>
-              {autoDisc > 0 ? <span style={{ marginLeft: 8 }}>Auto: -{euros(autoDisc)}</span> : null}
-              {manualDisc > 0 ? <span style={{ marginLeft: 8 }}>Manual: -{euros(manualDisc)}</span> : null}
-              {reservation.manualDiscountReason ? <div style={{ marginTop: 2, opacity: 0.75 }}>Motivo: {reservation.manualDiscountReason}</div> : null}
-            </div>
-          ) : null}
+        <div style={{ fontSize: 13, opacity: 0.8 }}>
+          {reservation.serviceName ? reservation.serviceName : "Servicio"}
+          {reservation.durationMinutes ? ` · ${reservation.durationMinutes} min` : ""}
         </div>
-      </div>
-
-      <div style={{ fontSize: 13, opacity: 0.8, marginTop: 2 }}>
-        {reservation.serviceName ? reservation.serviceName : "Servicio"}
-        {reservation.durationMinutes ? ` · ${reservation.durationMinutes} min` : ""}
       </div>
 
       <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
-        <Badge label={`Servicio ${euros(servicePaid)}`} color="#e0f2fe" />
-        <Badge label={`Fianza ${euros(depositPaid)}`} color="#fef9c3" />
-        <Badge label={depositLabel(depositStatus)} color={depositColor(depositStatus)} />
-        {pendingCents > 0 ? <Badge label={`Pendiente ${euros(pendingCents)}`} color="#fee2e2" /> : <Badge label="Todo cobrado" color="#dcfce7" />}
-        {waitMeta ? <Badge label={waitMeta.label} color={waitMeta.bg} /> : null}
+        <StatusBadge tone="info">Servicio {euros(servicePaid)}</StatusBadge>
+        <StatusBadge tone="warning">Fianza {euros(depositPaid)}</StatusBadge>
+        <StatusBadge tone={depositTone(depositStatus)}>{depositLabel(depositStatus)}</StatusBadge>
+        {pendingCents > 0 ? <StatusBadge tone="danger">Pendiente {euros(pendingCents)}</StatusBadge> : <StatusBadge tone="success">Todo cobrado</StatusBadge>}
+        {waitMeta ? <StatusBadge tone={waitTone(waitMeta.bg)}>{waitMeta.label}</StatusBadge> : null}
       </div>
 
       <div style={{ opacity: 0.85, marginTop: 6 }}>
@@ -253,21 +209,10 @@ export function StoreReservationCardSummary({
       </div>
 
       {reservation.depositHeld ? (
-        <div
-          style={{
-            marginTop: 8,
-            padding: 10,
-            borderRadius: 10,
-            border: "1px solid #fecaca",
-            background: "#fff1f2",
-            color: "#991b1b",
-            display: "grid",
-            gap: 4,
-            fontSize: 13,
-          }}
-        >
-          <div style={{ fontWeight: 800 }}>Incidencia registrada</div>
-          <div>{reservation.depositHoldReason || "Fianza retenida por incidencia de plataforma."}</div>
+        <div style={{ marginTop: 8 }}>
+          <AlertBanner tone="danger" title="Incidencia registrada">
+            {reservation.depositHoldReason || "Fianza retenida por incidencia de plataforma."}
+          </AlertBanner>
         </div>
       ) : null}
     </>

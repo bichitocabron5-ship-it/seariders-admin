@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type React from "react";
 
+import { ActionButton, AlertBanner, StatusBadge } from "@/components/seariders-ui";
 import type {
   CompleteReturnInput,
   ExtraUiMap,
@@ -55,22 +56,27 @@ type ReadyReservationCardProps = {
   cancelReservation: (reservationId: string, opts: { refund: boolean; method: PayMethod }) => Promise<void>;
 };
 
-function Badge({ label, color }: { label: string; color: string }) {
-  return (
-    <span
-      style={{
-        padding: "2px 8px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 600,
-        background: color,
-        color: "#111",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label}
-    </span>
-  );
+function toneFromStatus(r: ReservationRow) {
+  if (r.storeFlowStage === "RETURN_PENDING_CLOSE") return "warning" as const;
+  const color = statusColor(r.status);
+  if (color === "#dcfce7") return "success" as const;
+  if (color === "#fee2e2" || color === "#fecaca") return "danger" as const;
+  if (color === "#fef9c3" || color === "#fde68a") return "warning" as const;
+  return "info" as const;
+}
+
+function depositLabel(depositStatus: "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA") {
+  if (depositStatus === "PENDIENTE") return "Fianza pendiente";
+  if (depositStatus === "LIBERABLE") return "Fianza liberable";
+  if (depositStatus === "DEVUELTA") return "Fianza devuelta";
+  return "Fianza retenida";
+}
+
+function depositTone(depositStatus: "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA") {
+  if (depositStatus === "PENDIENTE") return "danger" as const;
+  if (depositStatus === "LIBERABLE") return "warning" as const;
+  if (depositStatus === "DEVUELTA") return "success" as const;
+  return "neutral" as const;
 }
 
 export function ReadyReservationCard(props: ReadyReservationCardProps) {
@@ -183,78 +189,61 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
   }
 
   return (
-    <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-          <strong>{r.customerName || "Sin nombre"}</strong>
-          <span style={{ fontSize: 12, opacity: 0.7 }}>{hhmm(r.scheduledTime) || "sin hora"}</span>
-          <Badge
-            label={r.storeFlowStage === "RETURN_PENDING_CLOSE" ? "Devuelta" : r.status}
-            color={r.storeFlowStage === "RETURN_PENDING_CLOSE" ? "#fde68a" : statusColor(r.status)}
-          />
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button type="button" onClick={() => router.push(`/store/create?editFrom=${r.id}`)} style={btnSecondary}>
-            Reagendar
-          </button>
-          <button
-            type="button"
-            onClick={async () => {
-              if (!hasRefundableAmount) {
-                if (!window.confirm("¿Cancelar esta reserva?")) return;
-                await cancelReservation(r.id, { refund: false, method });
-                return;
-              }
+    <div style={{ padding: 12, border: "1px solid #d9e2ec", borderRadius: 16, background: "#fff" }}>
+      <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+            <strong>{r.customerName || "Sin nombre"}</strong>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>{hhmm(r.scheduledTime) || "sin hora"}</span>
+            <StatusBadge tone={toneFromStatus(r)}>{r.storeFlowStage === "RETURN_PENDING_CLOSE" ? "Devuelta" : r.status}</StatusBadge>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" onClick={() => router.push(`/store/create?editFrom=${r.id}`)} style={btnSecondary}>
+              Reagendar
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!hasRefundableAmount) {
+                  if (!window.confirm("¿Cancelar esta reserva?")) return;
+                  await cancelReservation(r.id, { refund: false, method });
+                  return;
+                }
 
-              const refund = window.confirm(
-                `La reserva tiene cobros registrados. Aceptar = cancelar y devolver usando ${method}. Cancelar = seguir sin devolución.`,
-              );
-              if (!refund && !window.confirm("¿Confirmas cancelar sin devolución?")) return;
-              await cancelReservation(r.id, { refund, method });
-            }}
-            style={{ ...btnSecondary, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b" }}
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={onToggleOpen}
-            style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid #e5e7eb", fontWeight: 900, background: "#fff", cursor: "pointer" }}
-          >
-            {isOpen ? "Cerrar" : "Abrir"}
-          </button>
+                const refund = window.confirm(
+                  `La reserva tiene cobros registrados. Aceptar = cancelar y devolver usando ${method}. Cancelar = seguir sin devolución.`,
+                );
+                if (!refund && !window.confirm("¿Confirmas cancelar sin devolución?")) return;
+                await cancelReservation(r.id, { refund, method });
+              }}
+              style={{ ...btnSecondary, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b" }}
+            >
+              Cancelar
+            </button>
+            <ActionButton type="button" onClick={onToggleOpen} variant="secondary">
+              {isOpen ? "Cerrar" : "Abrir"}
+            </ActionButton>
+          </div>
         </div>
-      </div>
 
-      {showReturnedBanner && r.arrivalAt ? (
-        <div
-          style={{
-            marginTop: 8,
-            padding: "6px 10px",
-            borderRadius: 10,
-            border: "1px solid #fde68a",
-            background: "#fffbeb",
-            color: "#92400e",
-            fontSize: 12,
-            fontWeight: 900,
-          }}
-        >
-          Devuelta ·{" "}
-          {new Date(r.arrivalAt).toLocaleTimeString("es-ES", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+        {showReturnedBanner && r.arrivalAt ? (
+          <AlertBanner tone="warning" title="Devuelta">
+            {new Date(r.arrivalAt).toLocaleTimeString("es-ES", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </AlertBanner>
+        ) : null}
+
+        <div style={{ fontSize: 13, opacity: 0.8 }}>
+          {r.serviceName ?? "Servicio"}
+          {r.durationMinutes ? ` · ${r.durationMinutes} min` : ""}
         </div>
-      ) : null}
-
-      <div style={{ fontSize: 13, opacity: 0.8, marginTop: 2 }}>
-        {r.serviceName ?? "Servicio"}
-        {r.durationMinutes ? ` · ${r.durationMinutes} min` : ""}
       </div>
 
       {r.platformExtrasPendingCount ? (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
-          <Badge label={`Extras plataforma: ${r.platformExtrasPendingCount}`} color="#93c5fd" />
+          <StatusBadge tone="info">Extras plataforma: {r.platformExtrasPendingCount}</StatusBadge>
           <button type="button" onClick={() => void applyPlatformExtras(r.id)} style={btnSecondary}>
             Aplicar extras
           </button>
@@ -262,28 +251,9 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
       ) : null}
 
       <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-        <Badge label={`Fianza ${euros(Math.min(paidDepositCents, deposit))}`} color="#fef9c3" />
-        <Badge
-          label={
-            depositStatus === "PENDIENTE"
-              ? "Fianza pendiente"
-              : depositStatus === "LIBERABLE"
-                ? "Fianza liberable"
-                : depositStatus === "DEVUELTA"
-                  ? "Fianza devuelta"
-                  : "Fianza retenida"
-          }
-          color={
-            depositStatus === "PENDIENTE"
-              ? "#fee2e2"
-              : depositStatus === "LIBERABLE"
-                ? "#fef9c3"
-                : depositStatus === "DEVUELTA"
-                  ? "#dcfce7"
-                  : "#e5e7eb"
-          }
-        />
-        {pendingTotal > 0 ? <Badge label={`Pendiente ${euros(pendingTotal)}`} color="#fee2e2" /> : <Badge label="Todo cobrado" color="#dcfce7" />}
+        <StatusBadge tone="warning">Fianza {euros(Math.min(paidDepositCents, deposit))}</StatusBadge>
+        <StatusBadge tone={depositTone(depositStatus)}>{depositLabel(depositStatus)}</StatusBadge>
+        {pendingTotal > 0 ? <StatusBadge tone="danger">Pendiente {euros(pendingTotal)}</StatusBadge> : <StatusBadge tone="success">Todo cobrado</StatusBadge>}
       </div>
 
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed #ddd" }}>
@@ -296,26 +266,15 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
             <div style={{ fontSize: 12, opacity: 0.8 }}>Pendiente</div>
             <div style={{ fontWeight: 800 }}>{euros(pendingTotal)}</div>
           </div>
-          {isFullyPaid ? <div style={{ fontWeight: 800 }}>Pagado</div> : null}
+          {isFullyPaid ? <StatusBadge tone="success">Pagado</StatusBadge> : null}
         </div>
       </div>
 
       {r.depositHeld ? (
-        <div
-          style={{
-            marginTop: 8,
-            padding: 10,
-            borderRadius: 10,
-            border: "1px solid #fecaca",
-            background: "#fff1f2",
-            color: "#991b1b",
-            display: "grid",
-            gap: 4,
-            fontSize: 13,
-          }}
-        >
-          <div style={{ fontWeight: 800 }}>Incidencia con fianza retenida</div>
-          <div>{r.depositHoldReason || "Retenida por incidencia registrada desde plataforma."}</div>
+        <div style={{ marginTop: 8 }}>
+          <AlertBanner tone="danger" title="Incidencia con fianza retenida">
+            {r.depositHoldReason || "Retenida por incidencia registrada desde plataforma."}
+          </AlertBanner>
         </div>
       ) : null}
 
@@ -331,44 +290,28 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
         >
           {canAutoCloseReturned ? (
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-              <button
+              <ActionButton
                 type="button"
                 onClick={() => void completeReturn({ reservationId: r.id, settlementMode: "AUTO" })}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid #111",
-                  background: "#111",
-                  color: "#fff",
-                  fontWeight: 900,
-                  cursor: "pointer",
-                }}
+                variant="primary"
               >
                 Cerrar devolución
-              </button>
+              </ActionButton>
             </div>
           ) : (
             <>
               {!settlementOpen ? (
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <button
+                  <ActionButton
                     type="button"
                     onClick={() => {
                       setSettlementOpen(true);
                       setError(null);
                     }}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 12,
-                      border: "1px solid #111",
-                      background: "#111",
-                      color: "#fff",
-                      fontWeight: 900,
-                      cursor: "pointer",
-                    }}
+                    variant="primary"
                   >
                     Resolver fianza y cerrar
-                  </button>
+                  </ActionButton>
                 </div>
               ) : null}
 
@@ -451,21 +394,9 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
                     >
                       Cancelar
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => void submitReturnSettlement()}
-                      style={{
-                        padding: "10px 14px",
-                        borderRadius: 12,
-                        border: "1px solid #111",
-                        background: "#111",
-                        color: "#fff",
-                        fontWeight: 900,
-                        cursor: "pointer",
-                      }}
-                    >
+                    <ActionButton type="button" onClick={() => void submitReturnSettlement()} variant="primary">
                       Resolver y cerrar
-                    </button>
+                    </ActionButton>
                   </div>
                 </div>
               ) : null}

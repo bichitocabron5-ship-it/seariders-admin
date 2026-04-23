@@ -1,5 +1,9 @@
 "use client";
 
+import type React from "react";
+import { AlertBanner } from "@/components/seariders-ui";
+import { brand } from "@/lib/brand";
+
 type Props = {
   amountEuros: string;
   receivedEuros: string;
@@ -37,6 +41,13 @@ export default function CashChangeHelper({
   inputStyle,
 }: Props) {
   const summary = getCashChangeSummary(amountEuros, receivedEuros);
+  const tone = summary.change > 0 ? "success" : summary.missing > 0 ? "warning" : "info";
+  const message =
+    summary.change > 0
+      ? `Cambio a devolver: ${formatEuros(summary.change)}`
+      : summary.missing > 0
+        ? `Faltan por cobrar: ${formatEuros(summary.missing)}`
+        : "Importe exacto";
 
   return (
     <div style={{ display: "grid", gap: 6 }}>
@@ -47,26 +58,16 @@ export default function CashChangeHelper({
         style={
           inputStyle ?? {
             padding: 10,
-            borderRadius: 10,
-            border: "1px solid #cbd5e1",
-            background: "#fff",
+            borderRadius: 12,
+            border: `1px solid ${brand.colors.border}`,
+            background: brand.colors.surface,
           }
         }
       />
       {summary.hasReceived ? (
-        <div
-          style={{
-            fontSize: 12,
-            fontWeight: 800,
-            color: summary.change > 0 ? "#166534" : summary.missing > 0 ? "#b45309" : "#334155",
-          }}
-        >
-          {summary.change > 0
-            ? `Cambio a devolver: ${formatEuros(summary.change)}`
-            : summary.missing > 0
-              ? `Faltan por cobrar: ${formatEuros(summary.missing)}`
-              : "Importe exacto"}
-        </div>
+        <AlertBanner tone={tone} title="Resumen de efectivo">
+          {message}
+        </AlertBanner>
       ) : null}
     </div>
   );
