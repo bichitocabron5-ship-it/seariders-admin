@@ -5,6 +5,7 @@ import {
   MonitorRunStatus,
   PaymentMethod,
   PaymentOrigin,
+  ReservationSource,
   ReservationStatus,
   ReservationUnitStatus,
   RoleName,
@@ -55,7 +56,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         where: { id },
         select: {
           id: true,
+          source: true,
           status: true,
+          arrivedStoreAt: true,
           depositHeld: true,
           depositHoldReason: true,
           payments: {
@@ -88,6 +91,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (reservation.status === ReservationStatus.IN_SEA) {
         throw Object.assign(
           new Error("Una reserva en el mar no se puede cancelar ni devolver desde tienda"),
+          { status: 409 }
+        );
+      }
+
+      if (reservation.source === ReservationSource.BOOTH && !reservation.arrivedStoreAt) {
+        throw Object.assign(
+          new Error("La reserva sigue en carpa. Cancélala desde BOOTH para no afectar la caja de STORE."),
           { status: 409 }
         );
       }
@@ -203,6 +213,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         where: { id },
         data: {
           status: ReservationStatus.CANCELED,
+          taxiboatTripId: null,
+          taxiboatAssignedAt: null,
           readyForPlatformAt: null,
         },
       });
