@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { PublicBrandHeader } from "@/components/brand";
+import { ActionButton, AlertBanner, SectionCard, StatusBadge } from "@/components/seariders-ui";
 import { brand } from "@/lib/brand";
 import { getPublicCopy, type PublicLanguage } from "@/lib/public-links/i18n";
 
@@ -126,61 +127,38 @@ export function SignContractPageClient({
           subtitle="Firma remota de contrato con identidad visual alineada a SeaRiders."
         />
 
-        <div
-          style={{
-            background: "#fff",
-            borderRadius: 20,
-            border: "1px solid #dbe4ea",
-            boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
-            padding: 18,
-            display: "grid",
-            gap: 14,
-          }}
+        <SectionCard
+          eyebrow="Firma digital"
+          title={copy.signPage.title(contract.unitIndex)}
+          action={<StatusBadge tone={done ? "success" : "info"}>{done ? copy.signPage.done : copy.signPage.eyebrow}</StatusBadge>}
         >
           <div style={{ display: "grid", gap: 6 }}>
-            <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>{copy.signPage.title(contract.unitIndex)}</h1>
             <div style={{ fontSize: 14, color: "#475569" }}>
               {contract.serviceName}
               {contract.durationMinutes ? ` | ${contract.durationMinutes} min` : ""}
               {contract.customerName ? ` | ${contract.customerName}` : ""}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <span style={metaPillStyle}>{contract.serviceName}</span>
-              {contract.durationMinutes ? <span style={metaPillStyle}>{contract.durationMinutes} min</span> : null}
-              {contract.customerName ? <span style={metaPillStyle}>{contract.customerName}</span> : null}
+              <StatusBadge tone="neutral">{contract.serviceName}</StatusBadge>
+              {contract.durationMinutes ? <StatusBadge tone="neutral">{contract.durationMinutes} min</StatusBadge> : null}
+              {contract.customerName ? <StatusBadge tone="neutral">{contract.customerName}</StatusBadge> : null}
             </div>
           </div>
 
           {done ? (
-            <div style={{ padding: 14, borderRadius: 14, border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#166534", fontWeight: 900 }}>
-              {copy.signPage.done}
-            </div>
+            <AlertBanner tone="success">{copy.signPage.done}</AlertBanner>
           ) : (
-            <div style={{ padding: 14, borderRadius: 14, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8", fontWeight: 700 }}>
-              {copy.signPage.intro}
-            </div>
+            <AlertBanner tone="info">{copy.signPage.intro}</AlertBanner>
           )}
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <a
+            <ActionButton
               href={`/api/sign/contracts/${encodeURIComponent(token)}/pdf?lang=${encodeURIComponent(language)}`}
               target="_blank"
               rel="noreferrer"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "12px 14px",
-                borderRadius: 12,
-                border: `1px solid ${brand.colors.primary}`,
-                background: brand.colors.primary,
-                color: "#fff",
-                fontWeight: 900,
-                textDecoration: "none",
-              }}
             >
               {copy.signPage.download}
-            </a>
+            </ActionButton>
           </div>
 
           <div style={{ fontSize: 12, color: "#64748b" }}>
@@ -250,51 +228,27 @@ export function SignContractPageClient({
         </div>
 
         {error ? (
-          <div style={{ padding: 12, borderRadius: 12, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b", fontWeight: 700 }}>
-            {error}
-          </div>
+          <AlertBanner tone="danger">{error}</AlertBanner>
         ) : null}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
-          <button
-            type="button"
+          <ActionButton
             onClick={() => sigRef.current?.clear()}
             disabled={busy || done}
-            style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 900 }}
+            variant="secondary"
           >
             {copy.signPage.clear}
-          </button>
-          <button
-            type="button"
+          </ActionButton>
+          <ActionButton
             onClick={() => void handleSave()}
             disabled={busy || done || !confirmedRead}
-            style={{
-              padding: "14px 16px",
-              borderRadius: 12,
-              border: `1px solid ${brand.colors.primary}`,
-              background: brand.colors.primary,
-              color: "#fff",
-              fontWeight: 900,
-              opacity: busy || done || !confirmedRead ? 0.7 : 1,
-            }}
+            style={busy || done || !confirmedRead ? { opacity: 0.7 } : undefined}
           >
             {busy ? copy.signPage.saving : done ? copy.signPage.signed : copy.signPage.sign}
-          </button>
+          </ActionButton>
         </div>
-        </div>
+        </SectionCard>
       </section>
     </main>
   );
 }
-
-const metaPillStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "7px 11px",
-  borderRadius: 999,
-  border: "1px solid #dbe4ea",
-  background: "#f8fafc",
-  color: "#31455f",
-  fontSize: 12,
-  fontWeight: 800,
-};

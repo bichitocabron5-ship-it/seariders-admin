@@ -47,16 +47,18 @@ export function PublicBrandHeader({
   eyebrow,
   title,
   subtitle,
+  logoHref,
 }: {
   eyebrow: string;
   title: string;
   subtitle: string;
+  logoHref?: string;
 }) {
   return (
     <header className="public-brand-card">
       <div className="public-brand-card__top">
         <SeaRidersLogo
-          href="/"
+          href={logoHref}
           subtitle="SeaRiders ecosystem"
           compact
         />

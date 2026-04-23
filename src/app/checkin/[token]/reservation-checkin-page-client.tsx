@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { PublicBrandHeader } from "@/components/brand";
 import { BirthDateField, PhoneWithCountryField } from "@/components/customer-inputs";
+import { ActionButton, AlertBanner, SectionCard, StatusBadge as BrandStatusBadge } from "@/components/seariders-ui";
 import { brand } from "@/lib/brand";
 import { getCountryOptionsEs } from "@/lib/countries";
 import {
@@ -196,6 +197,25 @@ function autosaveTone(state: "idle" | "saving" | "saved" | "error", copy: Return
   if (state === "saved") return { label: copy.checkinPage.autosaveSaved, color: "#166534" };
   if (state === "error") return { label: copy.checkinPage.autosaveError, color: "#991b1b" };
   return { label: copy.checkinPage.autosaveIdle, color: "#475569" };
+}
+
+function autosaveBadgeTone(state: "idle" | "saving" | "saved" | "error") {
+  if (state === "saving") return "info" as const;
+  if (state === "saved") return "success" as const;
+  if (state === "error") return "danger" as const;
+  return "neutral" as const;
+}
+
+function getContractStatusBadge(status: string, language: PublicLanguage) {
+  if (language === "en") {
+    if (status === "SIGNED") return { tone: "success" as const, label: "Signed" };
+    if (status === "READY") return { tone: "info" as const, label: "Ready" };
+    return { tone: "warning" as const, label: "Pending" };
+  }
+
+  if (status === "SIGNED") return { tone: "success" as const, label: "Firmado" };
+  if (status === "READY") return { tone: "info" as const, label: "Listo" };
+  return { tone: "warning" as const, label: "Pendiente" };
 }
 
 export function ReservationCheckinPageClient({
@@ -552,31 +572,21 @@ export function ReservationCheckinPageClient({
           title={copy.checkinPage.title}
           subtitle="Revision de datos, pre-checkin y firma de contratos dentro del ecosistema SeaRiders."
         />
-        <div
-          style={{
-            background: "#fff",
-            borderRadius: 24,
-            border: "1px solid #dbe4ea",
-            padding: 20,
-            boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
-            display: "grid",
-            gap: 14,
-          }}
+        <SectionCard
+          eyebrow="Pre-checkin"
+          title={copy.checkinPage.title}
+          action={<BrandStatusBadge tone={autosaveBadgeTone(autosaveState)}>{autosave.label}</BrandStatusBadge>}
         >
           <div style={{ display: "grid", gap: 6 }}>
-            <h1 style={{ margin: 0, fontSize: "clamp(24px, 4vw, 30px)", lineHeight: 1.1 }}>{copy.checkinPage.title}</h1>
             <div style={{ color: "#475569", fontSize: 14 }}>
               {snapshot.reservation.serviceName}
               {snapshot.reservation.durationMinutes ? ` | ${snapshot.reservation.durationMinutes} min` : ""}
               {` | ${formatPublicDate(snapshot.reservation.activityDate, language)} | ${formatPublicTime(snapshot.reservation.scheduledTime, language)}`}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <span style={metaPillStyle}>{snapshot.reservation.serviceName}</span>
-              {snapshot.reservation.durationMinutes ? <span style={metaPillStyle}>{snapshot.reservation.durationMinutes} min</span> : null}
-              <span style={metaPillStyle}>{formatPublicDate(snapshot.reservation.activityDate, language)}</span>
-            </div>
-            <div style={{ fontSize: 12, color: autosave.color, fontWeight: 800 }}>
-              {autosave.label}
+              <BrandStatusBadge tone="neutral">{snapshot.reservation.serviceName}</BrandStatusBadge>
+              {snapshot.reservation.durationMinutes ? <BrandStatusBadge tone="neutral">{snapshot.reservation.durationMinutes} min</BrandStatusBadge> : null}
+              <BrandStatusBadge tone="neutral">{formatPublicDate(snapshot.reservation.activityDate, language)}</BrandStatusBadge>
             </div>
           </div>
 
@@ -586,12 +596,10 @@ export function ReservationCheckinPageClient({
             <MetricCard label={copy.checkinPage.metrics.holder} value={snapshot.reservation.customerName || copy.checkinPage.metrics.pending} description={copy.checkinPage.metrics.holder} />
           </div>
 
-          <div style={{ padding: 14, borderRadius: 16, border: "1px solid #bfdbfe", background: "#eff6ff", color: "#1d4ed8", fontSize: 14 }}>
-            {copy.checkinPage.intro}
-          </div>
+          <AlertBanner tone="info">{copy.checkinPage.intro}</AlertBanner>
 
-          {error ? <Banner tone="error" text={error} /> : null}
-          {success ? <Banner tone="success" text={success} /> : null}
+          {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+          {success ? <AlertBanner tone="success">{success}</AlertBanner> : null}
 
           <section style={{ display: "grid", gap: 12 }}>
             <h2 style={{ margin: 0, fontSize: 20 }}>{copy.checkinPage.holderTitle}</h2>
@@ -604,16 +612,17 @@ export function ReservationCheckinPageClient({
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
-              <button type="button" onClick={() => void saveAll()} disabled={saving} style={primaryButtonStyle}>
+              <ActionButton onClick={() => void saveAll()} disabled={saving} style={saving ? { opacity: 0.7 } : undefined}>
                 {saving ? copy.checkinPage.saving : copy.checkinPage.save}
-              </button>
+              </ActionButton>
             </div>
           </section>
-        </div>
+        </SectionCard>
 
         {snapshot.contracts.map((contract) => {
           const draft = contractDrafts[contract.id];
           const disabled = contract.status === "SIGNED";
+          const statusBadge = getContractStatusBadge(contract.status, language);
           const fieldErrors = draft
             ? getContractFieldErrors({
                 contract,
@@ -655,22 +664,22 @@ export function ReservationCheckinPageClient({
                     {contract.signedAt ? ` | ${copy.checkinPage.signedOn(formatPublicDate(contract.signedAt, language))}` : ""}
                   </div>
                 </div>
-                <StatusBadge status={contract.status} language={language} />
+                <BrandStatusBadge tone={statusBadge.tone}>{statusBadge.label}</BrandStatusBadge>
               </summary>
 
               <div style={{ display: "grid", gap: 16, padding: "0 18px 18px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <button type="button" onClick={() => copyHolderToContract(contract.id)} disabled={disabled} style={secondaryButtonStyle}>
+                  <ActionButton onClick={() => copyHolderToContract(contract.id)} disabled={disabled} variant="secondary">
                     {copy.checkinPage.useHolder}
-                  </button>
-                  <a
+                  </ActionButton>
+                  <ActionButton
                     href={`/api/public/checkin/${encodeURIComponent(token)}/contracts/${contract.id}/pdf?lang=${encodeURIComponent(language)}`}
                     target="_blank"
                     rel="noreferrer"
-                    style={secondaryLinkStyle}
+                    variant="secondary"
                   >
                     {copy.checkinPage.printable}
-                  </a>
+                  </ActionButton>
                 </div>
 
                 <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
@@ -788,26 +797,26 @@ export function ReservationCheckinPageClient({
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-                      <button
-                        type="button"
+                      <ActionButton
                         onClick={() => sigRefs.current[contract.id]?.clear()}
-                        style={secondaryButtonStyle}
+                        variant="secondary"
                       >
                         {copy.checkinPage.clearSignature}
-                      </button>
-                      <button
-                        type="button"
+                      </ActionButton>
+                      <ActionButton
                         onClick={() => void signContract(contract.id)}
                         disabled={signingId === contract.id}
-                        style={primaryButtonStyle}
+                        style={signingId === contract.id ? { opacity: 0.7 } : undefined}
                       >
                         {signingId === contract.id ? copy.checkinPage.signing : copy.checkinPage.signContract}
-                      </button>
+                      </ActionButton>
                     </div>
-                    {actionError ? <Banner tone="error" text={actionError} /> : null}
+                    {actionError ? <AlertBanner tone="danger">{actionError}</AlertBanner> : null}
                   </>
                 ) : (
-                  <Banner tone="success" text={copy.checkinPage.signedBanner(contract.signatureSignedBy || contract.driverName || "customer", formatPublicDate(contract.signedAt, language))} />
+                  <AlertBanner tone="success">
+                    {copy.checkinPage.signedBanner(contract.signatureSignedBy || contract.driverName || "customer", formatPublicDate(contract.signedAt, language))}
+                  </AlertBanner>
                 )}
               </div>
             </details>
@@ -900,53 +909,6 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StatusBadge({ status, language }: { status: string; language: PublicLanguage }) {
-  const labels =
-    language === "en"
-      ? { signed: "Signed", ready: "Ready", pending: "Pending" }
-      : { signed: "Firmado", ready: "Listo", pending: "Pendiente" };
-
-  const tone =
-    status === "SIGNED"
-      ? { bg: "#dcfce7", color: "#166534", border: "#86efac", label: labels.signed }
-      : status === "READY"
-        ? { bg: "#dbeafe", color: "#1d4ed8", border: "#93c5fd", label: labels.ready }
-        : { bg: "#fff7ed", color: "#9a3412", border: "#fdba74", label: labels.pending };
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "8px 12px",
-        borderRadius: 999,
-        fontSize: 13,
-        fontWeight: 900,
-        border: `1px solid ${tone.border}`,
-        background: tone.bg,
-        color: tone.color,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {tone.label}
-    </span>
-  );
-}
-
-function Banner({ tone, text }: { tone: "success" | "error"; text: string }) {
-  const styles =
-    tone === "success"
-      ? { border: "#bbf7d0", background: "#f0fdf4", color: "#166534" }
-      : { border: "#fecaca", background: "#fff1f2", color: "#991b1b" };
-
-  return (
-    <div style={{ padding: 14, borderRadius: 16, border: `1px solid ${styles.border}`, background: styles.background, color: styles.color, fontWeight: 700 }}>
-      {text}
-    </div>
-  );
-}
-
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "12px 14px",
@@ -968,54 +930,10 @@ const inlineErrorStyle: React.CSSProperties = {
   fontWeight: 700,
 };
 
-const primaryButtonStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: `1px solid ${brand.colors.primary}`,
-  background: brand.colors.primary,
-  color: "#fff",
-  fontWeight: 900,
-  cursor: "pointer",
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-  fontWeight: 900,
-  cursor: "pointer",
-};
-
-const secondaryLinkStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: `1px solid ${brand.colors.primary}`,
-  background: "#fff",
-  color: brand.colors.primary,
-  fontWeight: 900,
-  textDecoration: "none",
-};
-
 const checkboxLabelStyle: React.CSSProperties = {
   display: "flex",
   gap: 10,
   alignItems: "flex-start",
   fontSize: 14,
   color: "#0f172a",
-};
-
-const metaPillStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "7px 11px",
-  borderRadius: 999,
-  border: "1px solid #dbe4ea",
-  background: "#f8fafc",
-  color: "#31455f",
-  fontSize: 12,
-  fontWeight: 800,
 };

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PublicBrandHeader } from "@/components/brand";
+import { AlertBanner, SectionCard, StatusBadge } from "@/components/seariders-ui";
 import { brand } from "@/lib/brand";
 import { verifyPassPortalToken } from "@/lib/passes/public-pass-link";
 import { prisma } from "@/lib/prisma";
@@ -84,33 +85,23 @@ export default async function PassPortalPage({
           subtitle="Consulta de saldo y consumos dentro del portal publico de SeaRiders."
         />
 
-        <section
-          style={{
-            background: "#ffffffee",
-            border: "1px solid #cbd5e1",
-            borderRadius: 24,
-            padding: 24,
-            boxShadow: "0 20px 60px rgba(15, 23, 42, 0.08)",
-            display: "grid",
-            gap: 12,
-          }}
+        <SectionCard
+          eyebrow="Portal de bonos"
+          title={voucher.product?.name ?? "Bolsa de horas"}
+          action={<StatusBadge tone="success">Bono activo</StatusBadge>}
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div>
-              <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.05 }}>{voucher.product?.name ?? "Bolsa de horas"}</h1>
               <div style={{ marginTop: 8, color: "#475569" }}>
                 Codigo {voucher.code} | Servicio {voucher.product?.service?.name ?? "-"}
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                <span style={metaPillStyle}>Codigo {voucher.code}</span>
-                <span style={metaPillStyle}>Servicio {voucher.product?.service?.name ?? "-"}</span>
+                <StatusBadge tone="neutral">Codigo {voucher.code}</StatusBadge>
+                <StatusBadge tone="neutral">Servicio {voucher.product?.service?.name ?? "-"}</StatusBadge>
               </div>
             </div>
-            <div style={{ padding: "10px 14px", borderRadius: 999, background: "#dcfce7", color: "#166534", fontWeight: 900 }}>
-              Bono activo
-            </div>
           </div>
-        </section>
+        </SectionCard>
 
         <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
           {[
@@ -136,18 +127,8 @@ export default async function PassPortalPage({
           ))}
         </section>
 
-        <section
-          style={{
-            background: "#fff",
-            border: "1px solid #e2e8f0",
-            borderRadius: 24,
-            padding: 24,
-            display: "grid",
-            gap: 16,
-          }}
-        >
+        <SectionCard eyebrow="Identificacion" title="Datos basicos">
           <div>
-            <h2 style={{ margin: 0, fontSize: 22 }}>Datos basicos</h2>
             <div style={{ marginTop: 6, color: "#64748b" }}>Mostramos solo la informacion necesaria para identificar tu bono y seguir su consumo.</div>
           </div>
 
@@ -157,20 +138,10 @@ export default async function PassPortalPage({
             <InfoCard label="Email" value={voucher.buyerEmail || "-"} />
             <InfoCard label="Fecha de compra" value={formatDateTime(voucher.soldAt)} />
           </div>
-        </section>
+        </SectionCard>
 
-        <section
-          style={{
-            background: "#fff",
-            border: "1px solid #e2e8f0",
-            borderRadius: 24,
-            padding: 24,
-            display: "grid",
-            gap: 16,
-          }}
-        >
+        <SectionCard eyebrow="Actividad" title="Historial de consumos">
           <div>
-            <h2 style={{ margin: 0, fontSize: 22 }}>Historial de consumos</h2>
             <div style={{ marginTop: 6, color: "#64748b" }}>Ultimos movimientos registrados sobre esta bolsa de horas.</div>
           </div>
 
@@ -196,14 +167,14 @@ export default async function PassPortalPage({
                       Actividad {formatDateTime(consume.reservation?.scheduledTime ?? consume.reservation?.activityDate ?? null)}
                     </div>
                   </div>
-                  <div style={{ fontWeight: 900, fontSize: 20, color: "#b91c1c" }}>-{consume.minutesUsed} min</div>
+                  <StatusBadge tone="danger">-{consume.minutesUsed} min</StatusBadge>
                 </article>
               ))}
             </div>
           ) : (
-            <div style={{ color: "#64748b" }}>Todavia no hay consumos registrados.</div>
+            <AlertBanner tone="info">Todavia no hay consumos registrados.</AlertBanner>
           )}
-        </section>
+        </SectionCard>
       </div>
     </main>
   );
@@ -217,15 +188,3 @@ function InfoCard({ label, value }: { label: string; value: string }) {
     </article>
   );
 }
-
-const metaPillStyle: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "7px 11px",
-  borderRadius: 999,
-  border: "1px solid #dbe4ea",
-  background: "#f8fafc",
-  color: "#31455f",
-  fontSize: 12,
-  fontWeight: 800,
-};
