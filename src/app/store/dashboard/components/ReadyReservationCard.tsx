@@ -49,7 +49,6 @@ type ReadyReservationCardProps = {
   removeServicePayLine: (idx: number) => void;
   updateServicePayLine: (idx: number, patch: Partial<PayLine>) => void;
   chargeServiceSplit: (reservationId: string, maxServiceCents: number) => Promise<void>;
-  btnSecondary: React.CSSProperties;
   showReturnedBanner?: boolean;
   showReturnedActions?: boolean;
   completeReturn: (input: CompleteReturnInput) => Promise<void>;
@@ -102,7 +101,6 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
     removeServicePayLine,
     updateServicePayLine,
     chargeServiceSplit,
-    btnSecondary,
     showReturnedBanner = false,
     showReturnedActions = false,
     completeReturn,
@@ -199,10 +197,10 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
             <StatusBadge tone={toneFromStatus(r)}>{r.storeFlowStage === "RETURN_PENDING_CLOSE" ? "Devuelta" : r.status}</StatusBadge>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <button type="button" onClick={() => router.push(`/store/create?editFrom=${r.id}`)} style={btnSecondary}>
+            <ActionButton type="button" onClick={() => router.push(`/store/create?editFrom=${r.id}`)} variant="secondary">
               Reagendar
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
               type="button"
               onClick={async () => {
                 if (!hasRefundableAmount) {
@@ -217,10 +215,11 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
                 if (!refund && !window.confirm("¿Confirmas cancelar sin devolución?")) return;
                 await cancelReservation(r.id, { refund, method });
               }}
-              style={{ ...btnSecondary, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b" }}
+              variant="secondary"
+              style={{ borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b" }}
             >
               Cancelar
-            </button>
+            </ActionButton>
             <ActionButton type="button" onClick={onToggleOpen} variant="secondary">
               {isOpen ? "Cerrar" : "Abrir"}
             </ActionButton>
@@ -245,9 +244,9 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
       {r.platformExtrasPendingCount ? (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
           <StatusBadge tone="info">Extras plataforma: {r.platformExtrasPendingCount}</StatusBadge>
-          <button type="button" onClick={() => void applyPlatformExtras(r.id)} style={btnSecondary}>
+          <ActionButton type="button" onClick={() => void applyPlatformExtras(r.id)} variant="secondary">
             Aplicar extras
-          </button>
+          </ActionButton>
         </div>
       ) : null}
 
@@ -391,7 +390,15 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
                         setSettlementOpen(false);
                         setError(null);
                       }}
-                      style={btnSecondary}
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 12,
+                        border: "1px solid #d9e2ec",
+                        background: "#fff",
+                        color: "#0b2239",
+                        fontWeight: 900,
+                        cursor: "pointer",
+                      }}
                     >
                       Cancelar
                     </button>

@@ -40,7 +40,6 @@ type LeftReservationCardProps = {
   removeServicePayLine: (idx: number) => void;
   updateServicePayLine: (idx: number, patch: Partial<PayLine>) => void;
   chargeServiceSplit: (reservationId: string, maxServiceCents: number) => Promise<void>;
-  btnSecondary: React.CSSProperties;
   nowMs: number;
   cancelReservation: (reservationId: string, opts: { refund: boolean; method: PayMethod }) => Promise<void>;
 };
@@ -65,7 +64,6 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
     removeServicePayLine,
     updateServicePayLine,
     chargeServiceSplit,
-    btnSecondary,
     nowMs,
     cancelReservation,
   } = props;
@@ -115,7 +113,6 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
     <div style={{ padding: 14, border: `1px solid ${brand.colors.border}`, borderRadius: 16, background: "#fff", boxShadow: brand.shadow.sm }}>
       <StoreReservationCardSummary
         reservation={r}
-        btnSecondary={btnSecondary}
         finalTotal={finalTotal}
         pvpTotal={pvpTotal}
         autoDisc={autoDisc}

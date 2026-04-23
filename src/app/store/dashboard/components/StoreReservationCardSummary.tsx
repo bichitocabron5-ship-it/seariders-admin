@@ -11,7 +11,6 @@ type DepositStatus = "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA";
 
 type StoreReservationCardSummaryProps = {
   reservation: ReservationRow;
-  btnSecondary: React.CSSProperties;
   finalTotal: number;
   pvpTotal: number;
   autoDisc: number;
@@ -94,7 +93,6 @@ function waitTone(bg: string) {
 
 export function StoreReservationCardSummary({
   reservation,
-  btnSecondary,
   finalTotal,
   pvpTotal,
   autoDisc,
@@ -142,20 +140,21 @@ export function StoreReservationCardSummary({
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" onClick={onEdit} style={btnSecondary}>
+            <ActionButton type="button" onClick={onEdit} variant="secondary">
               Reagendar
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
               type="button"
               onClick={() => void onCancel()}
-              style={{ ...btnSecondary, border: "1px solid #fecaca", background: "#fff1f2", color: "#991b1b" }}
+              variant="secondary"
+              style={{ borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b" }}
             >
               Cancelar
-            </button>
+            </ActionButton>
             {needsContracts ? (
-              <button type="button" onClick={onCompleteContracts} style={btnSecondary}>
+              <ActionButton type="button" onClick={onCompleteContracts} variant="secondary">
                 Completar contratos
-              </button>
+              </ActionButton>
             ) : null}
             {isFullyPaid ? (
               <ActionButton

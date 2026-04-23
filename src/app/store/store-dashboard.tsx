@@ -49,13 +49,6 @@ export default function StoreDashboard() {
   const [extraUi, setExtraUi] = useState<ExtraUiMap>({});
   const [nowMs, setNowMs] = useState(() => Date.now());
 
-  const btnSecondary: CSSProperties = {
-    ...storeStyles.secondaryButton,
-    fontWeight: 900,
-    cursor: "pointer",
-    textDecoration: "none",
-  };
-
   const handleActionError = useCallback((context: string, e: unknown, fallback: string) => {
     const message = errorMessage(e, fallback);
     console.error(`[store/dashboard] ${context} failed`, e);
@@ -578,7 +571,6 @@ export default function StoreDashboard() {
                       removeServicePayLine={(idx) => removeServicePayLine(r.id, idx)}
                       updateServicePayLine={(idx, patch) => updateServicePayLine(r.id, idx, patch)}
                       chargeServiceSplit={chargeServiceSplit}
-                      btnSecondary={btnSecondary}
                       nowMs={nowMs}
                       cancelReservation={cancelReservation}
                     />
@@ -621,7 +613,6 @@ export default function StoreDashboard() {
                   removeServicePayLine={(idx) => removeServicePayLine(r.id, idx)}
                   updateServicePayLine={(idx, patch) => updateServicePayLine(r.id, idx, patch)}
                   chargeServiceSplit={chargeServiceSplit}
-                  btnSecondary={btnSecondary}
                   completeReturn={completeReturn}
                   cancelReservation={cancelReservation}
                 />
@@ -667,7 +658,6 @@ export default function StoreDashboard() {
                   removeServicePayLine={(idx) => removeServicePayLine(r.id, idx)}
                   updateServicePayLine={(idx, patch) => updateServicePayLine(r.id, idx, patch)}
                   chargeServiceSplit={chargeServiceSplit}
-                  btnSecondary={btnSecondary}
                   showReturnedBanner
                   showReturnedActions
                   completeReturn={completeReturn}
