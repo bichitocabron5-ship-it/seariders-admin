@@ -609,7 +609,14 @@ async function unassignReservationFromTrip(reservationId: string) {
 }
 
 async function cancelReservation(reservationId: string) {
-  if (!window.confirm("Se cancelará la reserva. Esta acción no se puede deshacer.")) {
+  const reservation = rows.find((row) => row.id === reservationId);
+  const boothPaidCents = Math.max(0, Number(reservation?.paidCents ?? 0));
+  const confirmMessage =
+    boothPaidCents > 0
+      ? `Se cancelará la reserva y se devolverán ${euros(boothPaidCents)} en caja de carpa. Esta acción no se puede deshacer.`
+      : "Se cancelará la reserva. Esta acción no se puede deshacer.";
+
+  if (!window.confirm(confirmMessage)) {
     return;
   }
 
@@ -620,7 +627,15 @@ async function cancelReservation(reservationId: string) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     });
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) {
+      const raw = await r.text();
+      let message = raw;
+      try {
+        const parsed = JSON.parse(raw) as { error?: string };
+        if (parsed?.error) message = parsed.error;
+      } catch {}
+      throw new Error(message || "Error cancelando reserva");
+    }
     await load();
   } catch (e: unknown) {
     setError(e instanceof Error ? e.message : "Error cancelando reserva");

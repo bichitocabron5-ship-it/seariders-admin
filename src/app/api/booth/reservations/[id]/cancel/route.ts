@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
-import { ReservationStatus } from "@prisma/client";
+import {
+  PaymentDirection,
+  PaymentMethod,
+  PaymentOrigin,
+  ReservationStatus,
+  ReservationUnitStatus,
+  RoleName,
+} from "@prisma/client";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 
+import { assertCashOpenForUser } from "@/lib/cashClosureLock";
+import { findCurrentShiftSession } from "@/lib/shiftSessions";
 import { prisma } from "@/lib/prisma";
 import { AppSession, sessionOptions } from "@/lib/session";
 
@@ -23,6 +32,12 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
   const { id } = await Promise.resolve(ctx.params);
 
   try {
+    const shiftSession = await findCurrentShiftSession({
+      userId: session.userId as string,
+      role: RoleName.BOOTH,
+      shiftSessionId: session.shiftSessionId,
+    });
+
     const result = await prisma.$transaction(async (tx) => {
       const reservation = await tx.reservation.findUnique({
         where: { id },
@@ -33,9 +48,12 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
           arrivedStoreAt: true,
           payments: {
             select: {
+              id: true,
               amountCents: true,
               isDeposit: true,
               direction: true,
+              method: true,
+              origin: true,
             },
           },
           taxiboatTrip: {
@@ -70,19 +88,52 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
         throw Object.assign(new Error("La reserva ya salió. No se puede cancelar desde carpa"), { status: 409 });
       }
 
-      const paidServiceCents = reservation.payments
-        .filter((payment) => !payment.isDeposit)
-        .reduce((sum, payment) => {
-          const sign = payment.direction === "OUT" ? -1 : 1;
-          return sum + sign * Number(payment.amountCents ?? 0);
-        }, 0);
+      const boothServicePaidByMethod = reservation.payments.reduce<Record<string, number>>((acc, payment) => {
+        if (payment.origin !== PaymentOrigin.BOOTH || payment.isDeposit) return acc;
+        const sign = payment.direction === PaymentDirection.OUT ? -1 : 1;
+        acc[payment.method] = (acc[payment.method] ?? 0) + sign * Number(payment.amountCents ?? 0);
+        return acc;
+      }, {});
 
-      if (paidServiceCents > 0) {
-        throw Object.assign(
-          new Error("La reserva tiene cobros registrados. Gestiona la devolución antes de cancelarla."),
-          { status: 409 }
+      const refundableServiceEntries = Object.entries(boothServicePaidByMethod)
+        .map(([method, amountCents]) => ({
+          method,
+          amountCents: Math.max(0, Number(amountCents ?? 0)),
+        }))
+        .filter((entry) => entry.amountCents > 0);
+
+      const refundableServiceCents = refundableServiceEntries.reduce((sum, entry) => sum + entry.amountCents, 0);
+
+      if (refundableServiceCents > 0) {
+        await assertCashOpenForUser(
+          session.userId as string,
+          RoleName.BOOTH,
+          session.shiftSessionId
         );
+
+        await tx.payment.createMany({
+          data: refundableServiceEntries.map((entry) => ({
+            reservationId: id,
+            origin: PaymentOrigin.BOOTH,
+            method: entry.method as PaymentMethod,
+            amountCents: entry.amountCents,
+            isDeposit: false,
+            direction: PaymentDirection.OUT,
+            createdByUserId: session.userId as string,
+            shiftSessionId: shiftSession?.id ?? null,
+            notes: `CANCELACION BOOTH ${id}`,
+          })),
+        });
       }
+
+      await tx.reservationUnit.updateMany({
+        where: { reservationId: id },
+        data: {
+          status: ReservationUnitStatus.CANCELED,
+          jetskiId: null,
+          readyForPlatformAt: null,
+        },
+      });
 
       await tx.reservation.update({
         where: { id },
@@ -94,7 +145,11 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
         },
       });
 
-      return { ok: true as const, alreadyCanceled: false };
+      return {
+        ok: true as const,
+        alreadyCanceled: false,
+        refundedServiceCents: refundableServiceCents,
+      };
     });
 
     return NextResponse.json(result);
