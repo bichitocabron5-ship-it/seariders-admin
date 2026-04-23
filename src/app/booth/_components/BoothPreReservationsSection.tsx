@@ -1,6 +1,9 @@
 "use client";
 
+import type React from "react";
 import CashChangeHelper from "@/components/cash-change-helper";
+import { ActionButton, AlertBanner, SectionCard, StatusBadge } from "@/components/seariders-ui";
+import { brand } from "@/lib/brand";
 
 type PayMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 
@@ -58,9 +61,6 @@ type Props = {
 };
 
 export default function BoothPreReservationsSection({
-  cardStyle,
-  darkBtn,
-  ghostBtn,
   fieldStyle,
   preReservationRows,
   activeTripId,
@@ -79,14 +79,7 @@ export default function BoothPreReservationsSection({
   getWaitMeta,
 }: Props) {
   return (
-    <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
-      <div>
-        <h2 style={{ margin: 0, fontSize: 22 }}>Pre-reservas de hoy</h2>
-        <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-          Pendientes de asignación a viaje y cobro parcial antes de salir.
-        </div>
-      </div>
-
+    <SectionCard eyebrow="Booth" title="Pre-reservas de hoy">
       <div style={{ display: "grid", gap: 10 }}>
         {preReservationRows.map((reservation) => {
           const received = !!reservation.arrivedStoreAt;
@@ -96,22 +89,21 @@ export default function BoothPreReservationsSection({
           const enCamino = assigned && departed && !received;
           const waitMeta = getWaitMeta(reservation);
           const label = received ? "RECIBIDO" : enCamino ? "EN CAMINO" : preparing ? "PREPARANDO" : "";
-          const bg = received ? "#dcfce7" : enCamino ? "#fef9c3" : preparing ? "#e0f2fe" : "transparent";
 
           return (
             <div
               key={reservation.id}
               style={{
                 padding: 16,
-                border: "1px solid #e5e7eb",
+                border: `1px solid ${brand.colors.border}`,
                 borderRadius: 18,
-                background: "#fff",
-                boxShadow: "0 10px 24px rgba(15, 23, 42, 0.04)",
+                background: brand.colors.surface,
+                boxShadow: brand.shadow.sm,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <strong>{reservation.customerName}</strong>
-                <span style={{ fontWeight: 800 }}>{reservation.boothCode}</span>
+                <StatusBadge tone="neutral">{reservation.boothCode}</StatusBadge>
               </div>
 
               <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>
@@ -119,18 +111,10 @@ export default function BoothPreReservationsSection({
               </div>
 
               {reservation.boothNote ? (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: "10px 12px",
-                    borderRadius: 14,
-                    border: "1px solid #dbeafe",
-                    background: "#f8fbff",
-                    fontSize: 13,
-                    color: "#334155",
-                  }}
-                >
-                  <strong style={{ color: "#0f172a" }}>Nota:</strong> {reservation.boothNote}
+                <div style={{ marginTop: 10 }}>
+                  <AlertBanner tone="info" title="Nota de Booth">
+                    {reservation.boothNote}
+                  </AlertBanner>
                 </div>
               ) : null}
 
@@ -147,69 +131,62 @@ export default function BoothPreReservationsSection({
               </div>
 
               {waitMeta ? (
-                <div
-                  style={{
-                    marginTop: 8,
-                    display: "inline-flex",
-                    gap: 8,
-                    alignItems: "center",
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    border: `1px solid ${waitMeta.bd}`,
-                    background: waitMeta.bg,
-                    color: waitMeta.fg,
-                    fontSize: 12,
-                    fontWeight: 900,
-                  }}
-                >
-                  {waitMeta.label}
+                <div style={{ marginTop: 8 }}>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      gap: 8,
+                      alignItems: "center",
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      border: `1px solid ${waitMeta.bd}`,
+                      background: waitMeta.bg,
+                      color: waitMeta.fg,
+                      fontSize: 12,
+                      fontWeight: 900,
+                    }}
+                  >
+                    {waitMeta.label}
+                  </span>
                 </div>
               ) : null}
 
               {!received ? (
                 <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
                   {!assigned ? (
-                    <button
+                    <ActionButton
                       type="button"
                       onClick={() => void assignToActiveTrip(reservation.id)}
                       disabled={!activeTripId}
-                      style={{
-                        ...darkBtn,
-                        width: "100%",
-                        opacity: activeTripId ? 1 : 0.5,
-                        cursor: activeTripId ? "pointer" : "not-allowed",
-                      }}
+                      variant="primary"
+                      style={{ width: "100%", opacity: activeTripId ? 1 : 0.5, cursor: activeTripId ? "pointer" : "not-allowed" }}
                     >
                       {activeTripId ? "Añadir al viaje" : "Selecciona un viaje OPEN"}
-                    </button>
+                    </ActionButton>
                   ) : (
                     <div style={{ display: "grid", gap: 8 }}>
-                      <span style={{ padding: "4px 8px", borderRadius: 999, background: "#e0f2fe", width: "fit-content" }}>
-                        Asignado a viaje
+                      <span style={{ width: "fit-content" }}>
+                        <StatusBadge tone="info">Asignado a viaje</StatusBadge>
                       </span>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button
+                        <ActionButton
                           type="button"
                           onClick={() => void unassignReservationFromTrip(reservation.id)}
                           disabled={reservationActionId === `unassign:${reservation.id}`}
-                          style={{ ...ghostBtn, opacity: reservationActionId === `unassign:${reservation.id}` ? 0.6 : 1 }}
+                          variant="secondary"
+                          style={{ opacity: reservationActionId === `unassign:${reservation.id}` ? 0.6 : 1 }}
                         >
                           {reservationActionId === `unassign:${reservation.id}` ? "Desasignando..." : "Desasignar viaje"}
-                        </button>
-                        <button
+                        </ActionButton>
+                        <ActionButton
                           type="button"
                           onClick={() => void cancelReservation(reservation.id)}
                           disabled={reservationActionId === `cancel:${reservation.id}`}
-                          style={{
-                            ...ghostBtn,
-                            borderColor: "#fecaca",
-                            background: "#fff1f2",
-                            color: "#991b1b",
-                            opacity: reservationActionId === `cancel:${reservation.id}` ? 0.6 : 1,
-                          }}
+                          variant="secondary"
+                          style={{ borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b", opacity: reservationActionId === `cancel:${reservation.id}` ? 0.6 : 1 }}
                         >
                           {reservationActionId === `cancel:${reservation.id}` ? "Cancelando..." : "Cancelar reserva"}
-                        </button>
+                        </ActionButton>
                       </div>
                     </div>
                   )}
@@ -221,20 +198,15 @@ export default function BoothPreReservationsSection({
 
               {!received && !assigned ? (
                 <div style={{ marginTop: 10 }}>
-                  <button
+                  <ActionButton
                     type="button"
                     onClick={() => void cancelReservation(reservation.id)}
                     disabled={reservationActionId === `cancel:${reservation.id}`}
-                    style={{
-                      ...ghostBtn,
-                      borderColor: "#fecaca",
-                      background: "#fff1f2",
-                      color: "#991b1b",
-                      opacity: reservationActionId === `cancel:${reservation.id}` ? 0.6 : 1,
-                    }}
+                    variant="secondary"
+                    style={{ borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b", opacity: reservationActionId === `cancel:${reservation.id}` ? 0.6 : 1 }}
                   >
                     {reservationActionId === `cancel:${reservation.id}` ? "Cancelando..." : "Cancelar reserva"}
-                  </button>
+                  </ActionButton>
                 </div>
               ) : null}
 
@@ -246,8 +218,8 @@ export default function BoothPreReservationsSection({
                     gap: 10,
                     padding: 12,
                     borderRadius: 14,
-                    border: "1px solid #e2e8f0",
-                    background: "#f8fafc",
+                    border: `1px solid ${brand.colors.border}`,
+                    background: brand.colors.surfaceSoft,
                   }}
                 >
                   <div style={{ fontWeight: 900, fontSize: 13, color: "#0f172a" }}>
@@ -302,18 +274,14 @@ export default function BoothPreReservationsSection({
                     );
                   })}
 
-                  <button
+                  <ActionButton
                     onClick={() => paySplitNow(reservation.id, reservation.pendingCents ?? 0)}
                     disabled={payingId === reservation.id || isCashClosed}
-                    style={{
-                      ...darkBtn,
-                      width: "100%",
-                      opacity: payingId === reservation.id || isCashClosed ? 0.5 : 1,
-                      cursor: isCashClosed ? "not-allowed" : "pointer",
-                    }}
+                    variant="primary"
+                    style={{ width: "100%", opacity: payingId === reservation.id || isCashClosed ? 0.5 : 1, cursor: isCashClosed ? "not-allowed" : "pointer" }}
                   >
                     {isCashClosed ? "Caja cerrada" : payingId === reservation.id ? "Cobrando..." : "Cobrar (split)"}
-                  </button>
+                  </ActionButton>
 
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
                     Pendiente: <strong>{euros(reservation.pendingCents ?? 0)}</strong> · Se pueden usar 1 o 2 líneas.
@@ -322,16 +290,24 @@ export default function BoothPreReservationsSection({
               ) : null}
 
               <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                {label ? <span style={{ padding: "4px 8px", borderRadius: 999, background: bg, fontSize: 12 }}>{label}</span> : <span />}
+                {label ? (
+                  <StatusBadge tone={received ? "success" : enCamino ? "warning" : preparing ? "info" : "neutral"}>
+                    {label}
+                  </StatusBadge>
+                ) : (
+                  <span />
+                )}
               </div>
             </div>
           );
         })}
 
         {preReservationRows.length === 0 ? (
-          <div style={{ opacity: 0.7 }}>No hay pre-reservas pendientes de asignación.</div>
+          <AlertBanner tone="info" title="Sin pre-reservas pendientes">
+            No hay pre-reservas pendientes de asignación.
+          </AlertBanner>
         ) : null}
       </div>
-    </section>
+    </SectionCard>
   );
 }
