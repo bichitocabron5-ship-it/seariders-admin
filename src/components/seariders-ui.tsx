@@ -5,7 +5,7 @@ type ActionButtonProps = (
   | ({ href: string } & React.AnchorHTMLAttributes<HTMLAnchorElement>)
   | ({ href?: undefined } & React.ButtonHTMLAttributes<HTMLButtonElement>)
 ) & {
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "danger";
 };
 
 type SectionCardProps = {
@@ -54,6 +54,12 @@ export function ActionButton(props: ActionButtonProps) {
           color: "#fff",
           boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
         }
+      : variant === "danger"
+        ? {
+            border: `1px solid ${brand.tones.danger.border}`,
+            background: brand.tones.danger.background,
+            color: brand.tones.danger.text,
+          }
       : {
           border: `1px solid ${brand.colors.border}`,
           background: brand.colors.surface,

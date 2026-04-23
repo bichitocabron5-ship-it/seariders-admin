@@ -146,8 +146,7 @@ export function StoreReservationCardSummary({
             <ActionButton
               type="button"
               onClick={() => void onCancel()}
-              variant="secondary"
-              style={{ borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b" }}
+              variant="danger"
             >
               Cancelar
             </ActionButton>

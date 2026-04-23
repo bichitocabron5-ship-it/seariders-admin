@@ -215,8 +215,7 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
                 if (!refund && !window.confirm("¿Confirmas cancelar sin devolución?")) return;
                 await cancelReservation(r.id, { refund, method });
               }}
-              variant="secondary"
-              style={{ borderColor: "#fecaca", background: "#fff1f2", color: "#991b1b" }}
+              variant="danger"
             >
               Cancelar
             </ActionButton>
