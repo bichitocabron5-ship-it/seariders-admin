@@ -79,8 +79,9 @@ function flowStageTone(reservation: ReservationRow) {
   if (reservation.storeFlowStage === "QUEUE") return "neutral" as const;
   const color = statusColor(reservation.status);
   if (color === "#dcfce7") return "success" as const;
-  if (color === "#fee2e2" || color === "#fecaca") return "danger" as const;
-  if (color === "#fef9c3" || color === "#fde68a") return "warning" as const;
+  if (color === "#fee2e2") return "danger" as const;
+  if (color === "#ffedd5") return "warning" as const;
+  if (color === "#e5e7eb") return "neutral" as const;
   return "info" as const;
 }
 
