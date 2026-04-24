@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ReactNode } from "react";
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getIronSession } from "iron-session";
@@ -11,6 +12,32 @@ export const metadata: Metadata = buildAdminMetadata({
   title: "Admin",
   description: "Configuracion comercial, operativa, flota y estructura interna de SeaRiders.",
 });
+
+const navItems = [
+  { href: "/admin/catalog", label: "Catalogo" },
+  { href: "/admin/pricing", label: "Precios" },
+  { href: "/admin/pricing/history", label: "Historico" },
+  { href: "/admin/channels", label: "Canales y comisiones" },
+  { href: "/admin/discounts", label: "Descuentos" },
+  { href: "/admin/packs", label: "Packs" },
+  { href: "/admin/gifts", label: "Regalos" },
+  { href: "/admin/passes", label: "Bonos" },
+  { href: "/admin/cash-closures", label: "Cierres de caja" },
+  { href: "/admin/slots", label: "Slots" },
+  { href: "/admin/assets", label: "Nautica" },
+  { href: "/admin/jetskis", label: "JetSkis" },
+  { href: "/admin/hr", label: "Recursos humanos" },
+  { href: "/admin/users", label: "Usuarios" },
+  { href: "/admin/expenses", label: "Gastos" },
+  { href: "/admin/bar", label: "Bar" },
+  { href: "/admin/design-system", label: "Design system" },
+] as const;
+
+const quickLinks = [
+  { href: "/operations", label: "Centro operativo" },
+  { href: "/executive", label: "Ejecutivo" },
+  { href: "/admin/operations", label: "Salidas internas" },
+] as const;
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const cookieStore = await cookies();
@@ -29,73 +56,30 @@ export default async function AdminLayout({ children }: { children: ReactNode })
               <SeaRidersLogo href="/admin" subtitle="Configuracion comercial, operativa y de flota" />
             </div>
 
+            <div className="admin-topbar__actions" aria-label="Accesos rapidos administrativos">
+              {quickLinks.map((item) => (
+                <Link key={item.href} href={item.href} className="admin-topbar__action">
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+
             <div className="admin-user-badge">
               <span>SeaRiders System</span>
               <strong>{session.username ?? session.userId}</strong>
             </div>
           </div>
 
+          <div className="admin-nav__meta">
+            <span className="admin-nav__eyebrow">Mapa administrativo</span>
+            <span className="admin-nav__caption">Configuracion, control operativo y estructura interna en un solo punto.</span>
+          </div>
           <nav className="admin-nav" aria-label="Navegacion de administracion">
-            <a href="/admin/catalog" className="admin-nav__link">
-              Catalogo
-            </a>
-            <a href="/admin/pricing" className="admin-nav__link">
-              Precios
-            </a>
-            <a href="/admin/pricing/history" className="admin-nav__link">
-              Historico
-            </a>
-            <a href="/admin/channels" className="admin-nav__link">
-              Canales y comisiones
-            </a>
-            <a href="/admin/discounts" className="admin-nav__link">
-              Descuentos
-            </a>
-            <a href="/admin/packs" className="admin-nav__link">
-              Packs
-            </a>
-            <a href="/admin/cash-closures" className="admin-nav__link">
-              Cierres de caja
-            </a>
-            <a href="/admin/gifts" className="admin-nav__link">
-              Regalos
-            </a>
-            <a href="/admin/design-system" className="admin-nav__link">
-              Design system
-            </a>
-            <a href="/admin/slots" className="admin-nav__link">
-              Slots
-            </a>
-            <a href="/admin/passes" className="admin-nav__link">
-              Bonos
-            </a>
-            <a href="/admin/assets" className="admin-nav__link">
-              Nautica
-            </a>
-            <a href="/admin/jetskis" className="admin-nav__link">
-              JetSkis
-            </a>
-            <a href="/admin/hr" className="admin-nav__link">
-              Recursos humanos
-            </a>
-            <a href="/admin/users" className="admin-nav__link">
-              Usuarios
-            </a>
-            <a href="/operations" className="admin-nav__link">
-              Centro operativo
-            </a>
-            <a href="/admin/operations" className="admin-nav__link">
-              Salidas internas
-            </a>
-            <a href="/executive" className="admin-nav__link">
-              Ejecutivo
-            </a>
-            <a href="/admin/expenses" className="admin-nav__link">
-              Gastos
-            </a>
-            <a href="/admin/bar" className="admin-nav__link">
-              Bar
-            </a>
+            {navItems.map((item) => (
+              <Link key={item.href} href={item.href} className="admin-nav__link">
+                {item.label}
+              </Link>
+            ))}
           </nav>
         </div>
       </div>
