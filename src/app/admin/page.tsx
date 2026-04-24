@@ -1,4 +1,11 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+import { buildAdminMetadata } from "@/lib/admin-metadata";
+
+export const metadata: Metadata = buildAdminMetadata({
+  title: "Panel Admin",
+  description: "Entrada centralizada al panel de administracion de SeaRiders.",
+});
 
 type AdminSection = "Comercial" | "Operativa" | "Flota" | "Personal";
 

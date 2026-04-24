@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { brand } from "@/lib/brand";
 import { resolveMetadataBase } from "@/lib/metadata";
@@ -39,10 +39,6 @@ export const metadata: Metadata = {
     description: brand.description,
     images: ["/logo-seariders.png"],
   },
-};
-
-export const viewport: Viewport = {
-  themeColor: brand.colors.primary,
 };
 
 export default function RootLayout({
