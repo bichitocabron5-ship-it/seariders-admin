@@ -1,12 +1,21 @@
 import crypto from "node:crypto";
 
+export const DEFAULT_PASS_PORTAL_LINK_TTL_MINUTES = 60 * 24 * 7;
+
 type PassPortalPayload = {
   voucherId: string;
   exp: number;
 };
 
 function getSecret() {
-  return process.env.PASS_PORTAL_LINK_SECRET || process.env.RESERVATION_CHECKIN_LINK_SECRET || process.env.CONTRACT_SIGNATURE_LINK_SECRET || process.env.SESSION_PASSWORD || "";
+  return process.env.PASS_PORTAL_LINK_SECRET || "";
+}
+
+function getDefaultTtlMinutes() {
+  const raw = Number(process.env.PASS_PORTAL_LINK_TTL_MINUTES ?? "");
+  return Number.isFinite(raw) && raw > 0
+    ? Math.floor(raw)
+    : DEFAULT_PASS_PORTAL_LINK_TTL_MINUTES;
 }
 
 function toBase64Url(input: string | Buffer) {
@@ -32,7 +41,7 @@ function signSegment(segment: string) {
 export function createPassPortalToken(args: { voucherId: string; expiresInMinutes?: number }) {
   const payload: PassPortalPayload = {
     voucherId: args.voucherId,
-    exp: Date.now() + (args.expiresInMinutes ?? 60 * 24 * 30) * 60_000,
+    exp: Date.now() + (args.expiresInMinutes ?? getDefaultTtlMinutes()) * 60_000,
   };
   const encodedPayload = toBase64Url(JSON.stringify(payload));
   const signature = signSegment(encodedPayload);

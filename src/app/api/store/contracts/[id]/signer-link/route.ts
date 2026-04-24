@@ -5,6 +5,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { sendContractSignerWhatsapp } from "@/lib/contracts/notifications";
 import { resolveContractNotificationRecipient } from "@/lib/reservation-parties";
+import { DEFAULT_CONTRACT_SIGNATURE_LINK_TTL_MINUTES } from "@/lib/contracts/signature-link";
 
 export const runtime = "nodejs";
 
@@ -42,7 +43,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   if (!contract) return new NextResponse("Contrato no encontrado", { status: 404 });
 
-  const expiresInMinutes = 45;
+  const expiresInMinutes = DEFAULT_CONTRACT_SIGNATURE_LINK_TTL_MINUTES;
   const recipient = resolveContractNotificationRecipient({
     contract,
     reservation: contract.reservation,

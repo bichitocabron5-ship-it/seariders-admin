@@ -5,7 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { sessionOptions, type AppSession } from "@/lib/session";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { listMissingLogicalUnits } from "@/lib/contracts/active-contracts";
-import { createReservationCheckinToken } from "@/lib/reservations/public-checkin-link";
+import {
+  createReservationCheckinToken,
+  DEFAULT_RESERVATION_CHECKIN_LINK_TTL_MINUTES,
+} from "@/lib/reservations/public-checkin-link";
 
 export const runtime = "nodejs";
 
@@ -123,7 +126,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       return NextResponse.json({ error: "Esta reserva no requiere contratos." }, { status: 400 });
     }
 
-    const expiresInMinutes = 60 * 24 * 30;
+    const expiresInMinutes = DEFAULT_RESERVATION_CHECKIN_LINK_TTL_MINUTES;
     const token = createReservationCheckinToken({
       reservationId: reservation.id,
       expiresInMinutes,

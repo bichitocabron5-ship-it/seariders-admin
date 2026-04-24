@@ -1,12 +1,21 @@
 import crypto from "node:crypto";
 
+export const DEFAULT_CONTRACT_SIGNATURE_LINK_TTL_MINUTES = 45;
+
 type SignatureLinkPayload = {
   contractId: string;
   exp: number;
 };
 
 function getSecret() {
-  return process.env.CONTRACT_SIGNATURE_LINK_SECRET || process.env.SESSION_PASSWORD || "";
+  return process.env.CONTRACT_SIGNATURE_LINK_SECRET || "";
+}
+
+function getDefaultTtlMinutes() {
+  const raw = Number(process.env.CONTRACT_SIGNATURE_LINK_TTL_MINUTES ?? "");
+  return Number.isFinite(raw) && raw > 0
+    ? Math.floor(raw)
+    : DEFAULT_CONTRACT_SIGNATURE_LINK_TTL_MINUTES;
 }
 
 function toBase64Url(input: string | Buffer) {
@@ -32,7 +41,7 @@ function signSegment(segment: string) {
 export function createContractSignatureToken(args: { contractId: string; expiresInMinutes?: number }) {
   const payload: SignatureLinkPayload = {
     contractId: args.contractId,
-    exp: Date.now() + (args.expiresInMinutes ?? 30) * 60_000,
+    exp: Date.now() + (args.expiresInMinutes ?? getDefaultTtlMinutes()) * 60_000,
   };
   const encodedPayload = toBase64Url(JSON.stringify(payload));
   const signature = signSegment(encodedPayload);

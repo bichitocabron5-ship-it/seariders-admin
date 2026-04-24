@@ -35,10 +35,12 @@ export async function saveContractSignature(args: {
     select: {
       id: true,
       reservationId: true,
+      signedAt: true,
     },
   });
 
   if (!contract) throw new Error("Contrato no encontrado");
+  if (contract.signedAt) throw new Error("Este contrato ya esta firmado");
 
   const buffer = dataUrlToBuffer(args.imageDataUrl);
   const bucket = requireEnv("S3_BUCKET");

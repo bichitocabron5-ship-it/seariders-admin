@@ -1,12 +1,21 @@
 import crypto from "node:crypto";
 
+export const DEFAULT_RESERVATION_CHECKIN_LINK_TTL_MINUTES = 60 * 24 * 3;
+
 type ReservationCheckinPayload = {
   reservationId: string;
   exp: number;
 };
 
 function getSecret() {
-  return process.env.RESERVATION_CHECKIN_LINK_SECRET || process.env.CONTRACT_SIGNATURE_LINK_SECRET || process.env.SESSION_PASSWORD || "";
+  return process.env.RESERVATION_CHECKIN_LINK_SECRET || "";
+}
+
+function getDefaultTtlMinutes() {
+  const raw = Number(process.env.RESERVATION_CHECKIN_LINK_TTL_MINUTES ?? "");
+  return Number.isFinite(raw) && raw > 0
+    ? Math.floor(raw)
+    : DEFAULT_RESERVATION_CHECKIN_LINK_TTL_MINUTES;
 }
 
 function toBase64Url(input: string | Buffer) {
@@ -32,7 +41,7 @@ function signSegment(segment: string) {
 export function createReservationCheckinToken(args: { reservationId: string; expiresInMinutes?: number }) {
   const payload: ReservationCheckinPayload = {
     reservationId: args.reservationId,
-    exp: Date.now() + (args.expiresInMinutes ?? 60 * 24 * 30) * 60_000,
+    exp: Date.now() + (args.expiresInMinutes ?? getDefaultTtlMinutes()) * 60_000,
   };
   const encodedPayload = toBase64Url(JSON.stringify(payload));
   const signature = signSegment(encodedPayload);
