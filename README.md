@@ -63,6 +63,9 @@ npm run dev
 - `npm run start`
 - `npm run lint`
 - `npm run prisma:seed`
+- `npm run seed:admin`
+- `npm run seed:faults`
+- `npm run db:reset-production` (solo emergencias, destructivo)
 
 ## Producción
 
@@ -76,22 +79,25 @@ Checklist mínima para subirla bien:
 npx prisma migrate deploy
 ```
 
-4. Si necesitas datos base:
+4. Si necesitas datos base minima:
 
 ```bash
-npm run prisma:seed
+npm run seed:admin
+npm run seed:faults
 ```
 
-5. Generar y arrancar build:
+5. No ejecutes `npm run prisma:seed` en producción salvo que lo hayas validado expresamente para ese entorno.
+
+6. Generar y arrancar build:
 
 ```bash
 npm run build
 npm run start
 ```
 
-6. Servir la app detrás de HTTPS.
-7. Tener copias de seguridad de la base de datos.
-8. Revisar que exista al menos un usuario admin activo.
+7. Servir la app detrás de HTTPS.
+8. Tener copias de seguridad de la base de datos.
+9. Revisar que exista al menos un usuario admin activo.
 
 ## Nota operativa
 
