@@ -4,11 +4,17 @@ import { ReservationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { clampCommissionPct, commissionFromBase, resolveCommissionRate } from "@/lib/commission";
 import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
+    const session = await requireApiRole(["STORE", "ADMIN"]);
+    if (!session) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
     const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
 
     // 1) Reservas del dia de negocio con canal

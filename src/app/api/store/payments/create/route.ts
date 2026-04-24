@@ -13,6 +13,7 @@ import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { ensureReservationPlatformUnitsTx } from "@/lib/reservation-platform";
+import { originFromRoleName } from "@/lib/cashClosures";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "amountCents inválido" }, { status: 400 });
     if (!method) return NextResponse.json({ error: "method requerido" }, { status: 400 });
     if (!origin) return NextResponse.json({ error: "origin requerido" }, { status: 400 });
+    if (!["STORE", "ADMIN"].includes(String(session.role))) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+    if (origin !== PaymentOrigin.STORE) {
+      return NextResponse.json({ error: "Origen inválido para este endpoint" }, { status: 400 });
+    }
+    if (
+      String(session.role) !== "ADMIN" &&
+      originFromRoleName(session.role as RoleName) !== PaymentOrigin.STORE
+    ) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
 
     // ✅ BLOQUEO: si hay cierre activo en la ventana actual -> no cobrar
     await assertCashOpenForUser(session.userId, session.role as RoleName);

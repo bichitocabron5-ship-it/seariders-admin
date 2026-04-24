@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { BUSINESS_TZ, tzDayRangeUtc, utcDateFromYmdInTz, todayYmdInTz } from "@/lib/tz-business";
 import { PaymentOrigin } from "@prisma/client";
 import { z } from "zod";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,11 @@ function dayRangeFromYmd(ymd: string) {
 
 export async function GET(req: Request) {
   try {
+    const session = await requireApiRole(["STORE", "ADMIN"]);
+    if (!session) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
     const url = new URL(req.url);
     const parsed = Query.safeParse({
       origin: url.searchParams.get("origin") ?? undefined,

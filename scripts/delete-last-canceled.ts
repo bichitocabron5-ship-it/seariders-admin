@@ -1,9 +1,46 @@
 // scripts/delete-last-canceled.ts
 import "dotenv/config";
-import { ReservationSource, ReservationStatus } from "@prisma/client";
+import { Prisma, ReservationSource, ReservationStatus } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
 
 const TARGET_SOURCES = [ReservationSource.STORE, ReservationSource.BOOTH] as const;
+
+type UpdateManyDelegate<Args> = {
+  updateMany(args: Args): Promise<unknown>;
+};
+
+type DeleteManyDelegate<Args> = {
+  deleteMany(args: Args): Promise<unknown>;
+};
+
+function hasUpdateMany<Args>(value: unknown): value is UpdateManyDelegate<Args> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "updateMany" in value &&
+    typeof value.updateMany === "function"
+  );
+}
+
+function hasDeleteMany<Args>(value: unknown): value is DeleteManyDelegate<Args> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "deleteMany" in value &&
+    typeof value.deleteMany === "function"
+  );
+}
+
+type LegacyTx = Prisma.TransactionClient & {
+  giftVoucher?: unknown;
+  passConsume?: unknown;
+  reservationItem?: unknown;
+  payment?: unknown;
+  reservationContract?: unknown;
+  contract?: unknown;
+  fulfillmentTask?: unknown;
+  reservationUnit?: unknown;
+};
 
 async function main() {
   const reservations = await prisma.reservation.findMany({
@@ -31,44 +68,103 @@ async function main() {
   console.log("Reservas a borrar:", reservations);
 
   await prisma.$transaction(async (tx) => {
-    await (tx as any).giftVoucher?.updateMany?.({
-      where: { redeemedReservationId: { in: ids } },
-      data: { redeemedReservationId: null },
-    });
+    const legacyTx = tx as LegacyTx;
 
-    await (tx as any).passConsume?.updateMany?.({
-      where: { reservationId: { in: ids } },
-      data: { reservationId: null },
-    });
+    if (
+      hasUpdateMany<{
+        where: { redeemedReservationId: { in: string[] } };
+        data: { redeemedReservationId: null };
+      }>(legacyTx.giftVoucher)
+    ) {
+      await legacyTx.giftVoucher.updateMany({
+        where: { redeemedReservationId: { in: ids } },
+        data: { redeemedReservationId: null },
+      });
+    }
 
-    await (tx as any).reservationItem?.updateMany?.({
-      where: { splitReservationId: { in: ids } },
-      data: { splitReservationId: null },
-    });
+    if (
+      hasUpdateMany<{
+        where: { reservationId: { in: string[] } };
+        data: { reservationId: null };
+      }>(legacyTx.passConsume)
+    ) {
+      await legacyTx.passConsume.updateMany({
+        where: { reservationId: { in: ids } },
+        data: { reservationId: null },
+      });
+    }
 
-    await (tx as any).reservationItem?.deleteMany?.({
-      where: { reservationId: { in: ids } },
-    });
+    if (
+      hasUpdateMany<{
+        where: { splitReservationId: { in: string[] } };
+        data: { splitReservationId: null };
+      }>(legacyTx.reservationItem)
+    ) {
+      await legacyTx.reservationItem.updateMany({
+        where: { splitReservationId: { in: ids } },
+        data: { splitReservationId: null },
+      });
+    }
 
-    await (tx as any).payment?.deleteMany?.({
-      where: { reservationId: { in: ids } },
-    });
+    if (
+      hasDeleteMany<{
+        where: { reservationId: { in: string[] } };
+      }>(legacyTx.reservationItem)
+    ) {
+      await legacyTx.reservationItem.deleteMany({
+        where: { reservationId: { in: ids } },
+      });
+    }
 
-    await (tx as any).reservationContract?.deleteMany?.({
-      where: { reservationId: { in: ids } },
-    });
+    if (
+      hasDeleteMany<{
+        where: { reservationId: { in: string[] } };
+      }>(legacyTx.payment)
+    ) {
+      await legacyTx.payment.deleteMany({
+        where: { reservationId: { in: ids } },
+      });
+    }
 
-    await (tx as any).contract?.deleteMany?.({
-      where: { reservationId: { in: ids } },
-    });
+    if (
+      hasDeleteMany<{
+        where: { reservationId: { in: string[] } };
+      }>(legacyTx.reservationContract)
+    ) {
+      await legacyTx.reservationContract.deleteMany({
+        where: { reservationId: { in: ids } },
+      });
+    }
 
-    await (tx as any).fulfillmentTask?.deleteMany?.({
-      where: { reservationId: { in: ids } },
-    });
+    if (
+      hasDeleteMany<{
+        where: { reservationId: { in: string[] } };
+      }>(legacyTx.contract)
+    ) {
+      await legacyTx.contract.deleteMany({
+        where: { reservationId: { in: ids } },
+      });
+    }
 
-    await (tx as any).reservationUnit?.deleteMany?.({
-      where: { reservationId: { in: ids } },
-    });
+    if (
+      hasDeleteMany<{
+        where: { reservationId: { in: string[] } };
+      }>(legacyTx.fulfillmentTask)
+    ) {
+      await legacyTx.fulfillmentTask.deleteMany({
+        where: { reservationId: { in: ids } },
+      });
+    }
+
+    if (
+      hasDeleteMany<{
+        where: { reservationId: { in: string[] } };
+      }>(legacyTx.reservationUnit)
+    ) {
+      await legacyTx.reservationUnit.deleteMany({
+        where: { reservationId: { in: ids } },
+      });
+    }
 
     await tx.reservation.deleteMany({
       where: { id: { in: ids } },

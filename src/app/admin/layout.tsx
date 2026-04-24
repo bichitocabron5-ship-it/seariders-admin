@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
 import { ReactNode } from "react";
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import { getIronSession } from "iron-session";
 import { SeaRidersLogo } from "@/components/brand";
 import { buildAdminMetadata } from "@/lib/admin-metadata";
-import { sessionOptions, AppSession } from "@/lib/session";
+import { requirePageRole } from "@/lib/auth";
 
 export const metadata: Metadata = buildAdminMetadata({
   title: "Admin",
@@ -40,12 +37,7 @@ const quickLinks = [
 ] as const;
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-  const cookieStore = await cookies();
-  const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
-
-  if (!session?.userId || session.role !== "ADMIN") {
-    redirect("/login");
-  }
+  const session = await requirePageRole(["ADMIN"]);
 
   return (
     <div>
