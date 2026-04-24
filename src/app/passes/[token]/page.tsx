@@ -3,14 +3,24 @@ import { notFound } from "next/navigation";
 import { PublicBrandHeader } from "@/components/brand";
 import { AlertBanner, SectionCard, StatusBadge } from "@/components/seariders-ui";
 import { brand } from "@/lib/brand";
+import { buildPublicPageMetadata } from "@/lib/metadata";
 import { verifyPassPortalToken } from "@/lib/passes/public-pass-link";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
-export const metadata: Metadata = {
-  title: "Bono SeaRiders",
-  description: "Portal publico de bonos y bolsas de horas de SeaRiders.",
-};
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}): Promise<Metadata> {
+  const { token } = await params;
+  return buildPublicPageMetadata({
+    title: "Bono SeaRiders",
+    description: "Portal publico para consultar saldo y movimientos de bonos SeaRiders.",
+    path: `/passes/${encodeURIComponent(token)}`,
+  });
+}
 
 function formatDateTime(value: Date | null | undefined) {
   if (!value) return "-";

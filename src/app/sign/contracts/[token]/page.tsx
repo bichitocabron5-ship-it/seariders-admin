@@ -7,14 +7,24 @@ import {
   loadLogoSrc,
   templateCodeForContract,
 } from "@/lib/contracts/render-contract";
+import { buildPublicPageMetadata } from "@/lib/metadata";
 import { normalizePublicLanguage } from "@/lib/public-links/i18n";
 import { SignContractPageClient } from "./sign-contract-page-client";
 
 export const runtime = "nodejs";
-export const metadata: Metadata = {
-  title: "Firma de contrato",
-  description: "Firma publica de contratos SeaRiders.",
-};
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}): Promise<Metadata> {
+  const { token } = await params;
+  return buildPublicPageMetadata({
+    title: "Firma de contrato SeaRiders",
+    description: "Firma publica y segura de contratos dentro del ecosistema SeaRiders.",
+    path: `/sign/contracts/${encodeURIComponent(token)}`,
+  });
+}
 
 export default async function SignContractPage({
   params,

@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { brand } from "@/lib/brand";
+import { resolveMetadataBase } from "@/lib/metadata";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,6 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: resolveMetadataBase(),
   applicationName: brand.adminName,
   title: {
     default: brand.adminName,
@@ -25,7 +27,6 @@ export const metadata: Metadata = {
     shortcut: ["/icon.svg"],
     apple: [{ url: "/logo-seariders.png", type: "image/png" }],
   },
-  themeColor: "#0b2239",
   openGraph: {
     title: brand.adminName,
     description: brand.description,
@@ -38,6 +39,10 @@ export const metadata: Metadata = {
     description: brand.description,
     images: ["/logo-seariders.png"],
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: brand.colors.primary,
 };
 
 export default function RootLayout({
