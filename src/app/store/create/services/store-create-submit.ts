@@ -99,6 +99,8 @@ export function buildFormalizeBody(args: {
   customerEmail: string;
   customerCountry: string;
   customerAddress: string;
+  customerPostalCode: string;
+  customerBirthDate: string;
   customerDocType: string;
   customerDocNumber: string;
   marketingSource: string;
@@ -111,13 +113,23 @@ export function buildFormalizeBody(args: {
   companions: number;
   dateStr: string;
   timeStr: string;
+  isLicense?: boolean;
+  jetskiLicenseMode?: "NONE" | "GREEN_LIMITED" | "YELLOW_UNLIMITED";
+  pricingTier?: "STANDARD" | "RESIDENT";
+  licenseSchool?: string;
+  licenseType?: string;
+  licenseNumber?: string;
+  cartItems?: SubmitCartItem[];
+  promoCode?: string | null;
 }) {
-  return {
+  const body: Record<string, unknown> = {
     customerName: args.customerName.trim(),
     customerPhone: args.customerPhone.trim(),
     customerEmail: args.customerEmail.trim(),
     customerCountry: (args.customerCountry || "").trim().toUpperCase() || null,
     customerAddress: args.customerAddress.trim() || null,
+    customerPostalCode: args.customerPostalCode.trim() || null,
+    customerBirthDate: args.customerBirthDate ? `${args.customerBirthDate}T12:00:00.000Z` : null,
     customerDocType: args.customerDocType.trim() || null,
     customerDocNumber: args.customerDocNumber.trim() || null,
     marketing: args.marketingSource.trim() || null,
@@ -130,6 +142,42 @@ export function buildFormalizeBody(args: {
     activityDate: args.dateStr,
     time: args.timeStr?.trim() ? args.timeStr : null,
   };
+
+  if (args.isLicense !== undefined) body.isLicense = Boolean(args.isLicense);
+  if (args.jetskiLicenseMode !== undefined) body.jetskiLicenseMode = args.jetskiLicenseMode;
+  if (args.pricingTier !== undefined) body.pricingTier = args.pricingTier;
+
+  if (args.isLicense) {
+    body.licenseSchool = args.licenseSchool?.trim() || null;
+    body.licenseType = args.licenseType?.trim() || null;
+    body.licenseNumber = args.licenseNumber?.trim() || null;
+  } else if (args.isLicense !== undefined) {
+    body.licenseSchool = null;
+    body.licenseType = null;
+    body.licenseNumber = null;
+  }
+
+  if (!args.isVoucherFormalizeFlow) {
+    body.items = (args.cartItems && args.cartItems.length > 0
+      ? args.cartItems
+      : [
+          {
+            serviceId: args.serviceId,
+            optionId: args.optionId,
+            quantity: Number(args.quantity),
+            pax: Number(args.pax),
+            promoCode: args.promoCode ?? null,
+          },
+        ]).map((ci) => ({
+      serviceId: ci.serviceId,
+      optionId: ci.optionId,
+      quantity: Number(ci.quantity),
+      pax: Number(ci.pax),
+      promoCode: ci.promoCode ?? null,
+    }));
+  }
+
+  return body;
 }
 
 export function buildItemsToSend(args: {

@@ -1,17 +1,20 @@
-﻿// src/app/api/store/reservations/[id]/formalize/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { ReservationStatus } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import { JetskiLicenseMode, PricingTier, ReservationStatus, type Prisma } from "@prisma/client";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { validateReusableAssetsAvailability } from "@/lib/store-rental-assets";
-import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
 import { countReadyVisibleContracts, listMissingLogicalUnits } from "@/lib/contracts/active-contracts";
+import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
+import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
+import { findActiveServicePrice } from "@/lib/service-pricing";
+import { resolveDiscountPolicy } from "@/lib/commission";
+import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 
 export const runtime = "nodejs";
 
@@ -21,6 +24,21 @@ async function requireStore() {
   if (!session?.userId || !["STORE", "ADMIN"].includes(session.role as string)) return null;
   return session;
 }
+
+const ItemBody = z.object({
+  serviceId: z.string().min(1),
+  optionId: z.string().min(1),
+  quantity: z.number().int().min(1).max(99),
+  pax: z.number().int().min(1).max(50),
+  promoCode: z.preprocess(
+    (v) => {
+      if (v == null) return null;
+      const t = String(v).trim().toUpperCase();
+      return t.length ? t : null;
+    },
+    z.string().min(1).max(50).nullable().optional()
+  ),
+});
 
 const Body = z.object({
   customerName: z.string().min(1).optional(),
@@ -39,17 +57,20 @@ const Body = z.object({
   quantity: z.number().int().min(1).max(20).optional(),
   pax: z.number().int().min(1).max(20).optional(),
   isLicense: z.boolean().optional(),
+  jetskiLicenseMode: z.nativeEnum(JetskiLicenseMode).optional(),
+  pricingTier: z.nativeEnum(PricingTier).optional(),
   licenseSchool: z.string().optional().nullable(),
   licenseType: z.string().optional().nullable(),
   licenseNumber: z.string().optional().nullable(),
   activityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   time: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
   companionsCount: z.number().int().min(0).max(20).optional(),
+  items: z.array(ItemBody).optional(),
 });
 
 function normalizeOptionalString(v: string | null | undefined) {
-  if (v === undefined) return undefined; // no tocar
-  if (v === null) return null; // borrar
+  if (v === undefined) return undefined;
+  if (v === null) return null;
   const t = String(v).trim();
   if (t === "-") return null;
   return t.length ? t : null;
@@ -95,6 +116,30 @@ function firstIssueMessage(err: z.ZodError) {
   return `Datos inválidos (${path}${issue.message})`;
 }
 
+function deriveCommercialReservationState(args: {
+  serviceCategory?: string | null;
+  jetskiLicenseMode?: JetskiLicenseMode | null;
+  isLicense?: boolean | null;
+  pricingTier?: PricingTier | null;
+}) {
+  const serviceCategory = String(args.serviceCategory ?? "").trim().toUpperCase();
+  const jetskiLicenseMode = resolveJetskiLicenseMode({
+    category: serviceCategory,
+    jetskiLicenseMode: args.jetskiLicenseMode,
+    isLicense: args.isLicense,
+  });
+  const isLicense =
+    serviceCategory === "JETSKI"
+      ? jetskiLicenseMode !== JetskiLicenseMode.NONE
+      : Boolean(args.isLicense);
+  const pricingTier =
+    serviceCategory === "JETSKI"
+      ? resolvePricingTierForJetskiMode(jetskiLicenseMode)
+      : (args.pricingTier ?? PricingTier.STANDARD);
+
+  return { jetskiLicenseMode, isLicense, pricingTier };
+}
+
 async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: string) {
   const res = await tx.reservation.findUnique({
     where: { id: reservationId },
@@ -110,7 +155,9 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
           service: { select: { category: true } },
         },
       },
-      contracts: { select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true } }, // requiere relation Reservation.contracts
+      contracts: {
+        select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+      },
     },
   });
   if (!res) throw new Error("Reserva no existe");
@@ -122,14 +169,11 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
     items: res.items ?? [],
   });
 
-  if (requiredUnits <= 0) {
-    return { requiredUnits: 0, readyCount: 0 };
-  }
+  if (requiredUnits <= 0) return { requiredUnits: 0, readyCount: 0 };
 
   const existingContracts = res.contracts ?? [];
   const hasUnitOne = existingContracts.some((c) => Number(c.unitIndex) === 1);
 
-  // Compat legacy: reutiliza el contrato principal antiguo (#0) como contrato #1.
   if (!hasUnitOne) {
     const legacyPrimary = existingContracts
       .filter((c) => Number(c.unitIndex) <= 0)
@@ -149,7 +193,7 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
   });
   const missingSlots = listMissingLogicalUnits(existingRows, requiredUnits);
   const maxUnitIndex = Math.max(0, ...existingRows.map((c) => Number(c.unitIndex ?? 0)));
-  const toCreate: Array<{ reservationId: string; unitIndex: number; logicalUnitIndex: number }> = missingSlots.map((slot, idx) => ({
+  const toCreate = missingSlots.map((slot, idx) => ({
     reservationId,
     unitIndex: maxUnitIndex + idx + 1,
     logicalUnitIndex: slot,
@@ -173,8 +217,6 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
   return { requiredUnits, readyCount };
 }
 
-// ===== ROUTE =====
-
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await requireStore();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -197,7 +239,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           status: true,
           formalizedAt: true,
           giftVoucherId: true,
-          passVoucherId: true,
           customerName: true,
           customerPhone: true,
           customerEmail: true,
@@ -215,17 +256,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: true,
           pax: true,
           isLicense: true,
+          jetskiLicenseMode: true,
+          pricingTier: true,
           depositCents: true,
           companionsCount: true,
           licenseSchool: true,
           licenseType: true,
           licenseNumber: true,
+          manualDiscountCents: true,
+          discountResponsibility: true,
+          promoterDiscountShareBps: true,
           activityDate: true,
           scheduledTime: true,
           items: {
             select: {
+              serviceId: true,
+              optionId: true,
               quantity: true,
+              pax: true,
               isExtra: true,
+              totalPriceCents: true,
               service: {
                 select: {
                   category: true,
@@ -255,7 +305,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       if (!current) throw new Error("Reserva no existe");
 
-      // Si viene de gift draft, marca redeem (idempotente)
       if (current.giftVoucherId) {
         await tx.giftVoucher.updateMany({
           where: { id: current.giftVoucherId, redeemedAt: null },
@@ -267,7 +316,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         });
       }
 
-      // históricos
       if (current.status === ReservationStatus.COMPLETED || current.status === ReservationStatus.CANCELED) {
         return { ok: false as const, id, isHistorical: true };
       }
@@ -281,6 +329,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       const activityDate = utcDateFromYmdInTz(tz, activityDateYmd);
       const scheduledTime = utcDateTimeFromYmdHmInTz(tz, activityDateYmd, timeHm ?? null);
+      const pricingWhen = scheduledTime ?? activityDate;
 
       const customerName =
         normalizeOptionalString(b.customerName) ??
@@ -324,127 +373,287 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         b.marketing !== undefined ? b.marketing : current.marketing
       );
 
-      const isLicense = b.isLicense ?? Boolean(current.isLicense);
-      const licenseSchool = normalizeOptionalString(
-        b.licenseSchool !== undefined ? b.licenseSchool : current.licenseSchool
-      );
-      const licenseType = normalizeOptionalString(
-        b.licenseType !== undefined ? b.licenseType : current.licenseType
-      );
-      const licenseNumber = normalizeOptionalString(
-        b.licenseNumber !== undefined ? b.licenseNumber : current.licenseNumber
-      );
-
-      const serviceId = b.serviceId ?? current.serviceId;
-      const optionId = b.optionId ?? current.optionId;
-      const quantity = Number(b.quantity ?? current.quantity ?? 1);
-      const pax = Number(b.pax ?? current.pax ?? 1);
       const companionsCount = Number(b.companionsCount ?? current.companionsCount ?? 0);
-      let serviceCategory = String(current.service?.category ?? "").toUpperCase();
-      if (b.serviceId && b.serviceId !== current.serviceId) {
-        const svc = await tx.service.findUnique({
-          where: { id: b.serviceId },
-          select: { category: true },
+
+      const candidateItems =
+        Array.isArray(b.items) && b.items.length > 0
+          ? b.items
+          : (current.items ?? []).filter((item) => !item.isExtra).map((item) => ({
+              serviceId: item.serviceId,
+              optionId: item.optionId ?? current.optionId,
+              quantity: Number(item.quantity ?? 1),
+              pax: Number(item.pax ?? current.pax ?? 1),
+              promoCode: null,
+            }));
+
+      if (!candidateItems.length) {
+        candidateItems.push({
+          serviceId: b.serviceId ?? current.serviceId,
+          optionId: b.optionId ?? current.optionId,
+          quantity: Number(b.quantity ?? current.quantity ?? 1),
+          pax: Number(b.pax ?? current.pax ?? 1),
+          promoCode: null,
         });
-        serviceCategory = String(svc?.category ?? "").toUpperCase();
       }
 
-      // ===== VALIDACIÓN INVENTARIO REAL (GOPRO / NEOPRENO) =====
+      if (!customerName) throw new Error("Nombre requerido.");
+      if (!customerCountry || customerCountry.trim().length < 2) throw new Error("Pais requerido para formalizar.");
+      if (customerEmail && !z.string().email().safeParse(customerEmail).success) {
+        throw new Error("Email invalido para formalizar.");
+      }
+      if (!Number.isFinite(companionsCount) || companionsCount < 0 || companionsCount > 20) {
+        throw new Error("Acompanantes invalido.");
+      }
 
-      const finalServiceId = b.serviceId ?? current.serviceId;
-      const finalQuantity = Number(b.quantity ?? current.quantity ?? 1);
+      const serviceIds = Array.from(new Set(candidateItems.map((item) => item.serviceId)));
+      const optionIds = Array.from(new Set(candidateItems.map((item) => item.optionId)));
+      const [services, options] = await Promise.all([
+        tx.service.findMany({
+          where: { id: { in: serviceIds } },
+          select: { id: true, name: true, code: true, category: true },
+        }),
+        tx.serviceOption.findMany({
+          where: { id: { in: optionIds } },
+          select: { id: true, serviceId: true, durationMinutes: true },
+        }),
+      ]);
 
-      let itemsToValidate: Array<{
+      const svcById = new Map(services.map((service) => [service.id, service]));
+      const optById = new Map(options.map((option) => [option.id, option]));
+
+      const lineCreates: Array<{
+        serviceId: string;
+        optionId: string;
         quantity: number;
-        service: { name?: string | null; code?: string | null; category?: string | null } | null;
+        pax: number;
+        promoCode: string | null;
+        servicePriceId: string;
+        unitPriceCents: number;
+        totalPriceCents: number;
+        category: string;
+        serviceName: string | null;
+        serviceCode: string | null;
       }> = [];
 
-      if (current.items && current.items.length > 0) {
-        itemsToValidate = current.items.map((it) => ({
-          quantity: Number(it.quantity ?? 0),
-          service: {
-            category: it.service?.category ?? null,
-            name: it.service?.name ?? null,
-            code: it.service?.code ?? null,
-          },
-        }));
-      } else if (finalServiceId) {
-        const svc = await tx.service.findUnique({
-          where: { id: finalServiceId },
-          select: { name: true, code: true, category: true },
+      for (const item of candidateItems) {
+        const qty = Number(item.quantity ?? 0);
+        const pax = Number(item.pax ?? 0);
+        if (!Number.isFinite(qty) || qty < 1 || qty > 99) throw new Error("Cantidad invalida.");
+        if (!Number.isFinite(pax) || pax < 1 || pax > 50) throw new Error("PAX invalido.");
+
+        const service = svcById.get(item.serviceId);
+        if (!service) throw new Error("Servicio no existe.");
+
+        const option = optById.get(item.optionId);
+        if (!option) throw new Error("Opción no existe.");
+        if (option.serviceId !== service.id) throw new Error("La opción no pertenece al servicio.");
+
+        const lineState = deriveCommercialReservationState({
+          serviceCategory: service.category ?? null,
+          jetskiLicenseMode: b.jetskiLicenseMode ?? current.jetskiLicenseMode,
+          isLicense: b.isLicense ?? current.isLicense,
+          pricingTier: b.pricingTier ?? current.pricingTier,
         });
 
-        itemsToValidate = [
-          {
-            quantity: finalQuantity,
-            service: svc,
-          },
-        ];
+        const price = await findActiveServicePrice(tx, {
+          serviceId: service.id,
+          optionId: option.id,
+          durationMinutes: Number(option.durationMinutes ?? 30),
+          now: pricingWhen,
+          pricingTier:
+            String(service.category ?? "").toUpperCase() === "JETSKI"
+              ? lineState.pricingTier
+              : PricingTier.STANDARD,
+        });
+
+        if (!price) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
+
+        const unitPriceCents = Number(price.basePriceCents) || 0;
+        lineCreates.push({
+          serviceId: service.id,
+          optionId: option.id,
+          quantity: qty,
+          pax,
+          promoCode: item.promoCode ?? null,
+          servicePriceId: price.id,
+          unitPriceCents,
+          totalPriceCents: unitPriceCents * qty,
+          category: String(service.category ?? "").toUpperCase(),
+          serviceName: service.name ?? null,
+          serviceCode: service.code ?? null,
+        });
       }
 
       await validateReusableAssetsAvailability({
         tx,
-        items: itemsToValidate,
+        items: lineCreates.map((line) => ({
+          quantity: line.quantity,
+          service: {
+            name: line.serviceName,
+            code: line.serviceCode,
+            category: line.category,
+          },
+        })),
       });
 
-      if (!customerName) throw new Error("Nombre requerido.");
-      if (!customerCountry || customerCountry.trim().length < 2) {
-        throw new Error("Pais requerido para formalizar.");
-      }
-      if (customerEmail && !z.string().email().safeParse(customerEmail).success) {
-        throw new Error("Email invalido para formalizar.");
-      }
-      if (!serviceId || !optionId) throw new Error("Servicio y duracion requeridos.");
-      if (!Number.isFinite(quantity) || quantity < 1 || quantity > 20) throw new Error("Cantidad invalida.");
-      if (!Number.isFinite(pax) || pax < 1 || pax > 20) throw new Error("PAX invalido.");
-      if (!Number.isFinite(companionsCount) || companionsCount < 0 || companionsCount > 20) {
-        throw new Error("Acompanantes invalido.");
-      }
-      const depositCents = computeReservationDepositCents({
-        storedDepositCents: current.depositCents,
-        quantity,
-        isLicense: Boolean(isLicense),
-        serviceCategory,
-        items: current.items ?? [],
+      const serviceSubtotal = lineCreates.reduce((sum, line) => sum + line.totalPriceCents, 0);
+      const extrasTotal = (current.items ?? [])
+        .filter((item) => item.isExtra)
+        .reduce((sum, item) => sum + Number(item.totalPriceCents ?? 0), 0);
+      const totalBeforeDiscounts = serviceSubtotal + extrasTotal;
+
+      const effectiveChannelId = b.channelId !== undefined ? b.channelId ?? null : current.channelId ?? null;
+      const channel = effectiveChannelId
+        ? await tx.channel.findUnique({
+            where: { id: effectiveChannelId },
+            select: {
+              allowsPromotions: true,
+              discountResponsibility: true,
+              promoterDiscountShareBps: true,
+            },
+          })
+        : null;
+      const promotionsEnabled = current.source === "BOOTH" ? false : (channel ? Boolean(channel.allowsPromotions) : true);
+      const discountPolicy = resolveDiscountPolicy({
+        responsibility: current.discountResponsibility,
+        promoterDiscountShareBps: current.promoterDiscountShareBps,
+        channel,
       });
 
-      const data: Prisma.ReservationUncheckedUpdateInput = {
-        customerName,
-        customerPhone: customerPhone ?? null,
-        customerEmail: customerEmail ?? null,
-        customerCountry: customerCountry ? customerCountry.toUpperCase() : "ES",
-        customerAddress: customerAddress ?? null,
-        customerPostalCode: customerPostalCode ?? null,
-        customerBirthDate: customerBirthDate ?? null,
-        customerDocType: customerDocType ?? null,
-        customerDocNumber: customerDocNumber ?? null,
-        marketing: marketing ?? null,
-        serviceId,
-        optionId,
-        channelId: b.channelId !== undefined ? b.channelId ?? null : current.channelId ?? null,
-        quantity,
-        pax,
-        companionsCount,
-        depositCents,
-        isLicense,
-        licenseSchool: isLicense ? licenseSchool ?? null : null,
-        licenseType: isLicense ? licenseType ?? null : null,
-        licenseNumber: isLicense ? licenseNumber ?? null : null,
+      const boothUnitDiscountCents = getBoothUnitDiscountCents({
+        source: current.source,
+        matchingQuantity: current.quantity,
+        manualDiscountCents: current.manualDiscountCents,
+      });
+      const originalLineKey = `${current.serviceId}::${current.optionId}`;
+      const matchingBoothLineQty = lineCreates.reduce(
+        (sum, line) =>
+          `${line.serviceId}::${line.optionId}` === originalLineKey
+            ? sum + Number(line.quantity ?? 0)
+            : sum,
+        0
+      );
+      const incomingManualDiscountCents =
+        current.source === "BOOTH"
+          ? getScaledBoothDiscountCents({
+              boothUnitDiscountCents,
+              nextMatchingQuantity: matchingBoothLineQty,
+            })
+          : Number(current.manualDiscountCents ?? 0);
 
-        activityDate,
-        scheduledTime,
+      const commercial = await computeReservationCommercialBreakdown({
+        when: pricingWhen,
+        discountLines: lineCreates.map((line) => ({
+          serviceId: line.serviceId,
+          optionId: line.optionId,
+          category: line.category,
+          quantity: line.quantity,
+          lineBaseCents: line.totalPriceCents,
+          promoCode: promotionsEnabled ? line.promoCode : null,
+        })),
+        customerCountry: customerCountry.toUpperCase(),
+        promotionsEnabled,
+        totalBeforeDiscountsCents: totalBeforeDiscounts,
+        manualDiscountCents: incomingManualDiscountCents,
+        discountResponsibility: discountPolicy.discountResponsibility,
+        promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
+      });
 
-        formalizedAt: new Date(),
-        formalizedByUserId: session.userId,
-      };
-      const updated = await tx.reservation.update({
+      const mainLine = lineCreates[0];
+      if (!mainLine) throw new Error("Servicio y duracion requeridos.");
+
+      const reservationState = deriveCommercialReservationState({
+        serviceCategory: mainLine.category,
+        jetskiLicenseMode: b.jetskiLicenseMode ?? current.jetskiLicenseMode,
+        isLicense: b.isLicense ?? current.isLicense,
+        pricingTier: b.pricingTier ?? current.pricingTier,
+      });
+
+      const finalLicenseSchool = normalizeOptionalString(
+        b.licenseSchool !== undefined ? b.licenseSchool : current.licenseSchool
+      );
+      const finalLicenseType = normalizeOptionalString(
+        b.licenseType !== undefined ? b.licenseType : current.licenseType
+      );
+      const finalLicenseNumber = normalizeOptionalString(
+        b.licenseNumber !== undefined ? b.licenseNumber : current.licenseNumber
+      );
+      if (reservationState.isLicense && (!finalLicenseSchool || !finalLicenseType || !finalLicenseNumber)) {
+        throw new Error("Faltan datos de licencia (escuela, tipo y número).");
+      }
+
+      const totalMainQuantity = lineCreates.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0);
+      const depositCents = computeDepositFromResolvedItems({
+        isLicense: reservationState.isLicense,
+        resolvedItems: lineCreates.map((line) => ({
+          category: line.category,
+          quantity: line.quantity,
+        })),
+      });
+
+      await tx.reservation.update({
         where: { id },
-        data,
+        data: {
+          customerName,
+          customerPhone: customerPhone ?? null,
+          customerEmail: customerEmail ?? null,
+          customerCountry: customerCountry.toUpperCase(),
+          customerAddress: customerAddress ?? null,
+          customerPostalCode: customerPostalCode ?? null,
+          customerBirthDate: customerBirthDate ?? null,
+          customerDocType: customerDocType ?? null,
+          customerDocNumber: customerDocNumber ?? null,
+          marketing: marketing ?? null,
+          serviceId: mainLine.serviceId,
+          optionId: mainLine.optionId,
+          channelId: effectiveChannelId,
+          quantity: totalMainQuantity,
+          pax: Number(b.pax ?? current.pax ?? mainLine.pax),
+          companionsCount,
+          depositCents,
+          isLicense: reservationState.isLicense,
+          jetskiLicenseMode: reservationState.jetskiLicenseMode,
+          pricingTier: reservationState.pricingTier,
+          licenseSchool: reservationState.isLicense ? finalLicenseSchool ?? null : null,
+          licenseType: reservationState.isLicense ? finalLicenseType ?? null : null,
+          licenseNumber: reservationState.isLicense ? finalLicenseNumber ?? null : null,
+          activityDate,
+          scheduledTime,
+          basePriceCents: serviceSubtotal,
+          commissionBaseCents: commercial.commissionBaseCents,
+          autoDiscountCents: commercial.autoDiscountCents,
+          manualDiscountCents: commercial.manualDiscountCents,
+          discountResponsibility: commercial.discountResponsibility,
+          promoterDiscountShareBps: commercial.promoterDiscountShareBps,
+          promoterDiscountCents: commercial.promoterDiscountCents,
+          companyDiscountCents: commercial.companyDiscountCents,
+          promoCode: commercial.promoCode,
+          totalPriceCents: commercial.finalTotalCents,
+          formalizedAt: new Date(),
+          formalizedByUserId: session.userId,
+        },
         select: { id: true },
       });
 
-      // Paso 3: Ensure contracts aquí­ (idempotente)
-      const contracts = await ensureContractsTx(tx, updated.id);
+      await tx.reservationItem.deleteMany({
+        where: { reservationId: id, isExtra: false },
+      });
+
+      await tx.reservationItem.createMany({
+        data: lineCreates.map((line) => ({
+          reservationId: id,
+          serviceId: line.serviceId,
+          optionId: line.optionId,
+          servicePriceId: line.servicePriceId,
+          quantity: line.quantity,
+          pax: line.pax,
+          unitPriceCents: line.unitPriceCents,
+          totalPriceCents: line.totalPriceCents,
+          isExtra: false,
+        })),
+      });
+
+      const contracts = await ensureContractsTx(tx, id);
 
       if (contracts.requiredUnits > 0 && contracts.readyCount < contracts.requiredUnits) {
         throw new Error(
@@ -452,7 +661,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         );
       }
 
-      return { ok: true as const, id: updated.id, ...contracts };
+      return { ok: true as const, id, ...contracts };
     });
 
     if (!result.ok && result.isHistorical) {
@@ -464,5 +673,3 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return new NextResponse(e instanceof Error ? e.message : "Error", { status: 400 });
   }
 }
-
-

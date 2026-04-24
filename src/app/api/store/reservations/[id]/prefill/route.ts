@@ -97,7 +97,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       passVoucherId: true,
       items: {
         select: {
+          serviceId: true,
+          optionId: true,
           quantity: true,
+          pax: true,
           isExtra: true,
           service: { select: { category: true } },
         },
@@ -148,6 +151,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const contractCompatibilityFallback = !r.formalizedAt ? primaryContract : null;
   const reservation = {
     ...r,
+    items: (r.items ?? [])
+      .filter((item) => !item.isExtra)
+      .map((item) => ({
+        serviceId: item.serviceId,
+        optionId: item.optionId,
+        quantity: item.quantity,
+        pax: item.pax,
+      })),
     customerName: fallbackOptionalString(r.customerName, contractCompatibilityFallback?.driverName),
     customerPhone: fallbackOptionalString(r.customerPhone, contractCompatibilityFallback?.driverPhone),
     customerEmail: fallbackOptionalString(r.customerEmail, contractCompatibilityFallback?.driverEmail),

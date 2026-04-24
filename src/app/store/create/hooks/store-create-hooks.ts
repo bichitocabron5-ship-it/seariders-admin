@@ -282,6 +282,13 @@ export function useReservationPrefill(args: {
         commissionEnabled?: boolean | null;
         commissionBps?: number | null;
       } | null;
+      items?: Array<{
+        serviceId: string;
+        optionId: string;
+        quantity?: number | null;
+        pax?: number | null;
+        promoCode?: string | null;
+      }> | null;
       totalServiceCents?: number | null;
       paidServiceCents?: number | null;
       pendingServiceCents?: number | null;

@@ -111,15 +111,25 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
 
 export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
   migrateReservationId: string;
+  cartItems: SubmitCartItem[];
   customerPhone: string;
   customerEmail: string;
   customerCountry: string;
   customerAddress: string;
+  customerPostalCode: string;
+  customerBirthDate: string;
   customerDocType: string;
   customerDocNumber: string;
   marketingSource: string;
   companions: number;
   timeStr: string;
+  isLicense?: boolean;
+  jetskiLicenseMode?: "NONE" | "GREEN_LIMITED" | "YELLOW_UNLIMITED";
+  pricingTier?: "STANDARD" | "RESIDENT";
+  licenseSchool?: string;
+  licenseType?: string;
+  licenseNumber?: string;
+  promoCode?: string | null;
   router: AppRouterInstance;
 }) {
   validateBeforeSubmit({
@@ -149,6 +159,8 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
     customerEmail: args.customerEmail,
     customerCountry: args.customerCountry,
     customerAddress: args.customerAddress,
+    customerPostalCode: args.customerPostalCode,
+    customerBirthDate: args.customerBirthDate,
     customerDocType: args.customerDocType,
     customerDocNumber: args.customerDocNumber,
     marketingSource: args.marketingSource,
@@ -161,6 +173,14 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
     companions: args.companions,
     dateStr: args.dateStr,
     timeStr: args.timeStr,
+    isLicense: args.isLicense,
+    jetskiLicenseMode: args.jetskiLicenseMode,
+    pricingTier: args.pricingTier,
+    licenseSchool: args.licenseSchool,
+    licenseType: args.licenseType,
+    licenseNumber: args.licenseNumber,
+    cartItems: args.cartItems,
+    promoCode: args.promoCode ?? null,
   });
 
   const res = await fetch(`/api/store/reservations/${args.migrateReservationId}/formalize`, {

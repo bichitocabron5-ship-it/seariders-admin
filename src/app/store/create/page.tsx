@@ -171,6 +171,13 @@ function StoreCreatePageInner() {
       formalizedAt?: string | null;
       status?: string | null;
       source?: string | null;
+      items?: Array<{
+        serviceId: string;
+        optionId: string;
+        quantity?: number | null;
+        pax?: number | null;
+        promoCode?: string | null;
+      }> | null;
       service?: ServiceMain | null;
       option?: Option | null;
       channel?: Channel | null;
@@ -224,6 +231,18 @@ function StoreCreatePageInner() {
       setPrefillSource(res.source ?? null);
       setPrefillFormalizedAt(res.formalizedAt ?? null);
       setPrefillStatus(res.status ?? null);
+      setCartItems(
+        (res.items ?? []).map((item) => ({
+          id: crypto.randomUUID(),
+          serviceId: item.serviceId,
+          optionId: item.optionId,
+          quantity: Number(item.quantity ?? 1),
+          pax: Number(item.pax ?? res.pax ?? 1),
+          applyPromo: Boolean(item.promoCode),
+          promoCode: item.promoCode ?? null,
+          availablePromos: [],
+        }))
+      );
     },
     []
   );
@@ -1007,15 +1026,25 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           uiMode,
           dateStr,
           todayYmd: todayMadridYMD(),
+          cartItems,
           customerPhone,
           customerEmail,
           customerCountry,
           customerAddress,
+          customerPostalCode,
+          customerBirthDate,
           customerDocType,
           customerDocNumber,
           marketingSource,
           companions,
           timeStr,
+          isLicense: Boolean(isLicense),
+          jetskiLicenseMode,
+          pricingTier,
+          licenseSchool,
+          licenseType,
+          licenseNumber,
+          promoCode: applyPromo ? selectedPromoCode || null : null,
           router,
         });
         return;
@@ -1088,15 +1117,25 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           uiMode,
           dateStr,
           todayYmd: todayMadridYMD(),
+          cartItems,
           customerPhone,
           customerEmail,
           customerCountry,
           customerAddress,
+          customerPostalCode,
+          customerBirthDate,
           customerDocType,
           customerDocNumber,
           marketingSource,
           companions,
           timeStr,
+          isLicense: Boolean(isLicense),
+          jetskiLicenseMode,
+          pricingTier,
+          licenseSchool,
+          licenseType,
+          licenseNumber,
+          promoCode: applyPromo ? selectedPromoCode || null : null,
           router,
         });
         return;
