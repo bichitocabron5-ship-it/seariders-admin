@@ -178,9 +178,6 @@ export async function POST(req: Request) {
       role: RoleName.BOOTH,
       shiftSessionId: session.shiftSessionId,
     });
-    if (!shiftSession && String(session.role) !== "ADMIN") {
-      return NextResponse.json({ error: "No hay shift session de carpa válida para este cobro." }, { status: 400 });
-    }
 
     const commissionRate = resolveCommissionRate({
       channel,

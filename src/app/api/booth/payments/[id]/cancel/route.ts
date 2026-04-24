@@ -85,9 +85,6 @@ export async function POST(_req: Request, { params }: Ctx) {
     role: RoleName.BOOTH,
     shiftSessionId: session.shiftSessionId,
   });
-  if (!shiftSession && String(session.role) !== "ADMIN") {
-    return NextResponse.json({ error: "No hay shift session de carpa válida para esta anulación." }, { status: 400 });
-  }
 
   const reversal = await prisma.payment.create({
     data: {
