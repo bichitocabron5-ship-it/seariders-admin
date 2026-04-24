@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { PublicBrandHeader } from "@/components/brand";
@@ -142,6 +143,7 @@ export function SignContractPageClient({
               <StatusBadge tone="neutral">{contract.serviceName}</StatusBadge>
               {contract.durationMinutes ? <StatusBadge tone="neutral">{contract.durationMinutes} min</StatusBadge> : null}
               {contract.customerName ? <StatusBadge tone="neutral">{contract.customerName}</StatusBadge> : null}
+              <StatusBadge tone="neutral">{contract.activityDate.slice(0, 10)}</StatusBadge>
             </div>
           </div>
 
@@ -161,94 +163,169 @@ export function SignContractPageClient({
             </ActionButton>
           </div>
 
-          <div style={{ fontSize: 12, color: "#64748b" }}>
+          <div style={helperTextStyle}>
             {copy.signPage.pdfHint}
           </div>
 
-        <div style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
-          <iframe
-            title={`Contract ${contract.unitIndex}`}
-            srcDoc={contract.renderedHtml}
-            style={{
-              width: "100%",
-              height: "min(70vh, 980px)",
-              border: 0,
-              display: "block",
-              background: "#fff",
-            }}
-          />
-        </div>
-
-        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
-          <input
-            type="checkbox"
-            checked={confirmedRead}
-            onChange={(e) => setConfirmedRead(e.target.checked)}
-            disabled={done}
-            style={{ marginTop: 2 }}
-          />
-          <span>{copy.signPage.readConfirm}</span>
-        </label>
-
-        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
-          <input
-            type="checkbox"
-            checked={imageConsentAccepted}
-            onChange={(e) => setImageConsentAccepted(e.target.checked)}
-            disabled={done}
-            style={{ marginTop: 2 }}
-          />
-          <span>{copy.signPage.imageConsent}</span>
-        </label>
-
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
-          {copy.signPage.signerName}
-          <input
-            value={signerName}
-            onChange={(e) => setSignerName(e.target.value)}
-            disabled={done}
-            style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1", fontSize: 16 }}
-          />
-        </label>
-
-        <div ref={sigContainerRef} style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
-          <SignatureCanvas
-            ref={sigRef}
-            penColor="black"
-            canvasProps={{
-              style: {
+          <div style={documentFrameStyle}>
+            <iframe
+              title={`Contract ${contract.unitIndex}`}
+              srcDoc={contract.renderedHtml}
+              style={{
                 width: "100%",
-                height: 280,
+                height: "min(70vh, 980px)",
+                border: 0,
                 display: "block",
                 background: "#fff",
-                touchAction: "none",
-              },
-            }}
-          />
-        </div>
+              }}
+            />
+          </div>
 
-        {error ? (
-          <AlertBanner tone="danger">{error}</AlertBanner>
-        ) : null}
+          <div style={{ display: "grid", gap: 10 }}>
+            <CheckboxRow checked={confirmedRead} disabled={done} onChange={setConfirmedRead}>
+              {copy.signPage.readConfirm}
+            </CheckboxRow>
+            <CheckboxRow checked={imageConsentAccepted} disabled={done} onChange={setImageConsentAccepted}>
+              {copy.signPage.imageConsent}
+            </CheckboxRow>
+          </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
-          <ActionButton
-            onClick={() => sigRef.current?.clear()}
-            disabled={busy || done}
-            variant="secondary"
-          >
-            {copy.signPage.clear}
-          </ActionButton>
-          <ActionButton
-            onClick={() => void handleSave()}
-            disabled={busy || done || !confirmedRead}
-            style={busy || done || !confirmedRead ? { opacity: 0.7 } : undefined}
-          >
-            {busy ? copy.signPage.saving : done ? copy.signPage.signed : copy.signPage.sign}
-          </ActionButton>
-        </div>
+          <label style={fieldLabelStyle}>
+            <span>{copy.signPage.signerName}</span>
+            <input
+              value={signerName}
+              onChange={(e) => setSignerName(e.target.value)}
+              disabled={done}
+              style={textInputStyle}
+            />
+          </label>
+
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={signatureTitleStyle}>Zona de firma</div>
+            <div style={helperTextStyle}>Revisa el contrato, confirma la lectura y firma dentro del recuadro.</div>
+          </div>
+
+          <div ref={sigContainerRef} style={signatureFrameStyle}>
+            <SignatureCanvas
+              ref={sigRef}
+              penColor="black"
+              canvasProps={{
+                style: {
+                  width: "100%",
+                  height: 280,
+                  display: "block",
+                  background: "#fff",
+                  touchAction: "none",
+                },
+              }}
+            />
+          </div>
+
+          {error ? (
+            <AlertBanner tone="danger">{error}</AlertBanner>
+          ) : null}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+            <ActionButton
+              onClick={() => sigRef.current?.clear()}
+              disabled={busy || done}
+              variant="secondary"
+            >
+              {copy.signPage.clear}
+            </ActionButton>
+            <ActionButton
+              onClick={() => void handleSave()}
+              disabled={busy || done || !confirmedRead}
+              style={busy || done || !confirmedRead ? { opacity: 0.7 } : undefined}
+            >
+              {busy ? copy.signPage.saving : done ? copy.signPage.signed : copy.signPage.sign}
+            </ActionButton>
+          </div>
         </SectionCard>
       </section>
     </main>
   );
 }
+
+function CheckboxRow({
+  checked,
+  disabled,
+  onChange,
+  children,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label style={checkboxLabelStyle}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        disabled={disabled}
+        style={{ marginTop: 2 }}
+      />
+      <span>{children}</span>
+    </label>
+  );
+}
+
+const helperTextStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#64748b",
+  lineHeight: 1.5,
+};
+
+const fieldLabelStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  fontSize: 13,
+  fontWeight: 800,
+  color: brand.colors.primary,
+};
+
+const textInputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: `1px solid ${brand.colors.border}`,
+  fontSize: 16,
+  background: "#fff",
+};
+
+const checkboxLabelStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  alignItems: "flex-start",
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: `1px solid ${brand.colors.border}`,
+  background: "#f8fbfd",
+  fontSize: 14,
+  fontWeight: 700,
+  color: brand.colors.primary,
+};
+
+const documentFrameStyle: React.CSSProperties = {
+  border: `1px solid ${brand.colors.border}`,
+  borderRadius: 18,
+  overflow: "hidden",
+  background: "#fff",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+};
+
+const signatureFrameStyle: React.CSSProperties = {
+  border: `1px solid ${brand.colors.border}`,
+  borderRadius: 18,
+  overflow: "hidden",
+  background: "#fff",
+  boxShadow: "0 10px 24px rgba(15, 23, 42, 0.06)",
+};
+
+const signatureTitleStyle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 16,
+  color: brand.colors.primary,
+};

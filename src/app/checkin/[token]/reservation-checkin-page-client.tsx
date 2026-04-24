@@ -723,11 +723,12 @@ export function ReservationCheckinPageClient({
 
                 <label style={checkboxLabelStyle}>
                   <input
-                      type="checkbox"
-                      checked={Boolean(draft?.imageConsentAccepted)}
-                      disabled={disabled}
-                      onChange={(e) => updateContractDraft(contract.id, { imageConsentAccepted: e.target.checked })}
-                    />
+                    type="checkbox"
+                    checked={Boolean(draft?.imageConsentAccepted)}
+                    disabled={disabled}
+                    onChange={(e) => updateContractDraft(contract.id, { imageConsentAccepted: e.target.checked })}
+                    style={{ marginTop: 2 }}
+                  />
                   <span>{copy.checkinPage.imageConsent}</span>
                 </label>
 
@@ -735,8 +736,6 @@ export function ReservationCheckinPageClient({
                   <label
                     style={{
                       ...checkboxLabelStyle,
-                      padding: "12px 14px",
-                      borderRadius: 14,
                       border: showFieldErrors && (fieldErrors.minorAuthorizationProvided || fieldErrors.minorAuthorizationFile) ? "1px solid #ef4444" : "1px solid #fde68a",
                       background: showFieldErrors && (fieldErrors.minorAuthorizationProvided || fieldErrors.minorAuthorizationFile) ? "#fff5f5" : "#fffbeb",
                     }}
@@ -746,6 +745,7 @@ export function ReservationCheckinPageClient({
                       checked={Boolean(draft?.minorAuthorizationProvided)}
                       disabled={disabled}
                       onChange={(e) => updateContractDraft(contract.id, { minorAuthorizationProvided: e.target.checked })}
+                      style={{ marginTop: 2 }}
                     />
                     <span>{copy.checkinPage.tutorAuthorization(contract.minorAuthorizationFileName)}</span>
                   </label>
@@ -753,7 +753,7 @@ export function ReservationCheckinPageClient({
                 {showFieldErrors && fieldErrors.minorAuthorizationProvided ? <div style={inlineErrorStyle}>{fieldErrors.minorAuthorizationProvided}</div> : null}
                 {showFieldErrors && fieldErrors.minorAuthorizationFile ? <div style={inlineErrorStyle}>{fieldErrors.minorAuthorizationFile}</div> : null}
 
-                <div style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
+                <div style={documentFrameStyle}>
                   <iframe
                     title={`Contract ${contract.unitIndex}`}
                     srcDoc={contract.renderedHtml}
@@ -770,13 +770,13 @@ export function ReservationCheckinPageClient({
                 {!disabled ? (
                   <>
                     <div style={{ display: "grid", gap: 8 }}>
-                      <div style={{ fontWeight: 900 }}>{copy.checkinPage.signatureTitle}</div>
-                      <div style={{ fontSize: 13, color: "#475569" }}>
+                      <div style={signatureTitleStyle}>{copy.checkinPage.signatureTitle}</div>
+                      <div style={signatureHelpStyle}>
                         {copy.checkinPage.signatureHelp}
                       </div>
                     </div>
 
-                    <div style={{ border: "1px solid #cbd5e1", borderRadius: 16, overflow: "hidden", background: "#fff" }}>
+                    <div style={signatureFrameStyle}>
                       <SignatureCanvas
                         ref={(instance) => {
                           sigRefs.current[contract.id] = instance;
@@ -829,10 +829,10 @@ export function ReservationCheckinPageClient({
 
 function MetricCard({ label, value, description }: { label: string; value: string; description: string }) {
   return (
-    <div style={{ padding: 14, borderRadius: 16, border: "1px solid #e2e8f0", background: "#f8fafc", display: "grid", gap: 4 }}>
-      <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#64748b" }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a" }}>{value}</div>
-      <div style={{ fontSize: 12, color: "#475569" }}>{description}</div>
+    <div style={metricCardStyle}>
+      <div style={metricLabelStyle}>{label}</div>
+      <div style={metricValueStyle}>{value}</div>
+      <div style={metricDescriptionStyle}>{description}</div>
     </div>
   );
 }
@@ -851,7 +851,7 @@ function Field({
   error?: string | null;
 }) {
   return (
-    <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
+    <label style={fieldLabelStyle}>
       <span>{label}</span>
       <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={error ? errorInputStyle : inputStyle} />
       {error ? <div style={inlineErrorStyle}>{error}</div> : null}
@@ -875,7 +875,7 @@ function SelectField({
   error?: string | null;
 }) {
   return (
-    <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
+    <label style={fieldLabelStyle}>
       <span>{label}</span>
       <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={error ? errorInputStyle : inputStyle}>
         {options.map((option) => (
@@ -891,7 +891,7 @@ function SelectField({
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
-    <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
+    <label style={fieldLabelStyle}>
       <span>{label}</span>
       <div
         style={{
@@ -913,7 +913,7 @@ const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "12px 14px",
   borderRadius: 12,
-  border: "1px solid #cbd5e1",
+  border: `1px solid ${brand.colors.border}`,
   fontSize: 15,
   background: "#fff",
 };
@@ -934,6 +934,76 @@ const checkboxLabelStyle: React.CSSProperties = {
   display: "flex",
   gap: 10,
   alignItems: "flex-start",
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: `1px solid ${brand.colors.border}`,
+  background: "#f8fbfd",
   fontSize: 14,
   color: "#0f172a",
+};
+
+const fieldLabelStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  fontSize: 13,
+  fontWeight: 800,
+  color: brand.colors.primary,
+};
+
+const metricCardStyle: React.CSSProperties = {
+  padding: 16,
+  borderRadius: 18,
+  border: `1px solid ${brand.colors.border}`,
+  background: "linear-gradient(180deg, #fbfdff 0%, #f4f8fb 100%)",
+  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.04)",
+  display: "grid",
+  gap: 4,
+};
+
+const metricLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: 1,
+  textTransform: "uppercase",
+  color: "#64748b",
+};
+
+const metricValueStyle: React.CSSProperties = {
+  fontSize: 22,
+  fontWeight: 900,
+  color: brand.colors.primary,
+};
+
+const metricDescriptionStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#475569",
+  lineHeight: 1.45,
+};
+
+const documentFrameStyle: React.CSSProperties = {
+  border: `1px solid ${brand.colors.border}`,
+  borderRadius: 18,
+  overflow: "hidden",
+  background: "#fff",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+};
+
+const signatureFrameStyle: React.CSSProperties = {
+  border: `1px solid ${brand.colors.border}`,
+  borderRadius: 18,
+  overflow: "hidden",
+  background: "#fff",
+  boxShadow: "0 10px 24px rgba(15, 23, 42, 0.06)",
+};
+
+const signatureTitleStyle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 16,
+  color: brand.colors.primary,
+};
+
+const signatureHelpStyle: React.CSSProperties = {
+  fontSize: 13,
+  color: "#475569",
+  lineHeight: 1.5,
 };
