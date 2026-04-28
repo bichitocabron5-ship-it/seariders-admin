@@ -24,6 +24,14 @@ async function requireStoreOrAdmin() {
   return null;
 }
 
+function fallbackOptionalString(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const normalized = String(value ?? "").trim();
+    if (normalized && normalized !== "-") return normalized;
+  }
+  return null;
+}
+
 export async function GET(req: Request) {
   const session = await requireStoreOrAdmin();
   if (!session) {
@@ -64,7 +72,6 @@ export async function GET(req: Request) {
       },
       contracts: {
         where: {
-          supersededAt: null,
           status: { not: "VOID" },
         },
         orderBy: [{ signedAt: "desc" }, { updatedAt: "desc" }, { createdAt: "desc" }],
@@ -98,18 +105,18 @@ export async function GET(req: Request) {
   return NextResponse.json({
     ok: true,
     profile: {
-      customerName: r.customerName,
-      email: r.customerEmail,
-      phone: r.customerPhone,
-      customerDocType: r.customerDocType,
-      customerDocNumber: r.customerDocNumber,
-      country: r.customerCountry,
-      birthDate: r.customerBirthDate,
-      address: r.customerAddress,
-      postalCode: r.customerPostalCode,
-      licenseSchool: r.licenseSchool,
-      licenseType: r.licenseType,
-      licenseNumber: r.licenseNumber,
+      customerName: fallbackOptionalString(r.customerName, latestContract?.driverName),
+      email: fallbackOptionalString(r.customerEmail, latestContract?.driverEmail),
+      phone: fallbackOptionalString(r.customerPhone, latestContract?.driverPhone),
+      customerDocType: fallbackOptionalString(r.customerDocType, latestContract?.driverDocType),
+      customerDocNumber: fallbackOptionalString(r.customerDocNumber, latestContract?.driverDocNumber),
+      country: fallbackOptionalString(r.customerCountry, latestContract?.driverCountry),
+      birthDate: r.customerBirthDate ?? latestContract?.driverBirthDate ?? null,
+      address: fallbackOptionalString(r.customerAddress, latestContract?.driverAddress),
+      postalCode: fallbackOptionalString(r.customerPostalCode, latestContract?.driverPostalCode),
+      licenseSchool: fallbackOptionalString(r.licenseSchool, latestContract?.licenseSchool),
+      licenseType: fallbackOptionalString(r.licenseType, latestContract?.licenseType),
+      licenseNumber: fallbackOptionalString(r.licenseNumber, latestContract?.licenseNumber),
       contractProfile: latestContract
         ? {
             sourceReservationId: r.id,
