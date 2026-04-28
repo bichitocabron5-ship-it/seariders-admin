@@ -79,9 +79,9 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
   const total = Number(r.soldTotalCents ?? 0);
   const deposit = Number(r.depositCents ?? 0);
   const totalToChargeCents = total + deposit;
-  const pvpTotal = Number(r.soldTotalCents ?? total);
   const autoDisc = Number(r.autoDiscountCents ?? 0);
   const manualDisc = Number(r.manualDiscountCents ?? 0);
+  const pvpTotal = Number(r.pvpTotalCents ?? (total + autoDisc + manualDisc));
   const finalTotal = Number(r.finalTotalCents ?? r.totalPriceCents ?? Math.max(0, pvpTotal - autoDisc - manualDisc));
   const paid = Number(r.paidCents ?? 0);
   const paidDepositCents = Number(r.paidDepositCents ?? 0);

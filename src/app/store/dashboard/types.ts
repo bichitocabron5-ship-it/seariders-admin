@@ -32,6 +32,7 @@ export type ReservationRow = {
   quantity: number;
   totalPriceCents: number;
   soldTotalCents: number;
+  pvpTotalCents?: number;
   isLicense: boolean;
   paidCents: number;
   paidDepositCents?: number;
