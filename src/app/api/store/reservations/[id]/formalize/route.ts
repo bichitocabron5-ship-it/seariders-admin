@@ -239,6 +239,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           status: true,
           formalizedAt: true,
           giftVoucherId: true,
+          passVoucherId: true,
           customerName: true,
           customerPhone: true,
           customerEmail: true,
@@ -427,7 +428,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         quantity: number;
         pax: number;
         promoCode: string | null;
-        servicePriceId: string;
+        servicePriceId: string | null;
         unitPriceCents: number;
         totalPriceCents: number;
         category: string;
@@ -454,6 +455,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           isLicense: b.isLicense ?? current.isLicense,
           pricingTier: b.pricingTier ?? current.pricingTier,
         });
+        const isVoucherIncludedBaseLine =
+          Boolean(current.giftVoucherId || current.passVoucherId) &&
+          item.serviceId === current.serviceId &&
+          item.optionId === current.optionId;
+        if (isVoucherIncludedBaseLine) {
+          lineCreates.push({
+            serviceId: service.id,
+            optionId: option.id,
+            quantity: qty,
+            pax,
+            promoCode: item.promoCode ?? null,
+            servicePriceId: null,
+            unitPriceCents: 0,
+            totalPriceCents: 0,
+            category: String(service.category ?? "").toUpperCase(),
+            serviceName: service.name ?? null,
+            serviceCode: service.code ?? null,
+          });
+          continue;
+        }
 
         const price = await findActiveServicePrice(tx, {
           serviceId: service.id,

@@ -377,6 +377,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       companyDiscountCents: true,
       isPackParent: true,
       source: true,
+      giftVoucherId: true,
+      passVoucherId: true,
       items: {
         select: {
           serviceId: true,
@@ -531,7 +533,7 @@ if (hasProItems) {
       quantity: number;
       pax: number;
       promoCode: string | null;
-      servicePriceId: string;
+      servicePriceId: string | null;
       unitPriceCents: number;
       totalPriceCents: number;
       category: string;
@@ -547,6 +549,25 @@ if (hasProItems) {
         isLicense: b.isLicense,
         pricingTier: b.pricingTier ?? existing.pricingTier,
       });
+      const isVoucherIncludedBaseLine =
+        Boolean(existing.giftVoucherId || existing.passVoucherId) &&
+        it.serviceId === existing.serviceId &&
+        it.optionId === existing.optionId;
+      if (isVoucherIncludedBaseLine) {
+        const qty = Math.max(1, Number(it.quantity || 1));
+        lineCreates.push({
+          serviceId: it.serviceId,
+          optionId: it.optionId,
+          quantity: qty,
+          pax: Math.max(1, Number(it.pax || b.pax)),
+          promoCode: existingPack.source === "BOOTH" ? null : (String(it.promoCode ?? "").trim().toUpperCase() || null),
+          servicePriceId: null,
+          unitPriceCents: 0,
+          totalPriceCents: 0,
+          category: String(svc.category ?? "UNKNOWN").toUpperCase(),
+        });
+        continue;
+      }
 
       const price = await findActiveServicePrice(tx, {
         serviceId: it.serviceId,
