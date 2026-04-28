@@ -86,6 +86,24 @@ const signedSummaryStyle: React.CSSProperties = {
   display: "grid",
   gap: 6,
 };
+const readonlyGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 10,
+};
+const readonlyFieldStyle: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  display: "grid",
+  gap: 4,
+};
+
+function displayValue(value: string | null | undefined) {
+  const text = String(value ?? "").trim();
+  return text.length ? text : "-";
+}
 
 function contractStatusStyle(status: ContractDto["status"]): React.CSSProperties {
   if (status === "SIGNED") {
@@ -506,6 +524,97 @@ export function ContractCard({
             {c.signedAt ? `Fecha de firma: ${new Date(c.signedAt).toLocaleString("es-ES")}` : "La firma ya esta registrada en el sistema."}
           </div>
         </div>
+
+        <div style={{ ...subCardStyle, gap: 10 }}>
+          <div style={sectionEyebrowStyle}>Datos del conductor</div>
+          <div style={readonlyGridStyle}>
+            <div style={readonlyFieldStyle}>
+              <div style={sectionEyebrowStyle}>Nombre</div>
+              <div>{displayValue(c.driverName)}</div>
+            </div>
+            <div style={readonlyFieldStyle}>
+              <div style={sectionEyebrowStyle}>Telefono</div>
+              <div>{displayValue(c.driverPhone)}</div>
+            </div>
+            <div style={readonlyFieldStyle}>
+              <div style={sectionEyebrowStyle}>Email</div>
+              <div>{displayValue(c.driverEmail)}</div>
+            </div>
+            <div style={readonlyFieldStyle}>
+              <div style={sectionEyebrowStyle}>Pais</div>
+              <div>{displayValue(c.driverCountry)}</div>
+            </div>
+            <div style={readonlyFieldStyle}>
+              <div style={sectionEyebrowStyle}>Direccion</div>
+              <div>{displayValue(c.driverAddress)}</div>
+            </div>
+            <div style={readonlyFieldStyle}>
+              <div style={sectionEyebrowStyle}>Codigo postal</div>
+              <div>{displayValue(c.driverPostalCode)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ ...subCardStyle, gap: 10 }}>
+          <div style={sectionEyebrowStyle}>Datos legales</div>
+          <div style={readonlyGridStyle}>
+            <div style={readonlyFieldStyle}>
+              <div style={sectionEyebrowStyle}>Documento</div>
+              <div>{displayValue(c.driverDocType)}</div>
+            </div>
+            <div style={readonlyFieldStyle}>
+              <div style={sectionEyebrowStyle}>Numero</div>
+              <div>{displayValue(c.driverDocNumber)}</div>
+            </div>
+            <div style={readonlyFieldStyle}>
+              <div style={sectionEyebrowStyle}>Nacimiento</div>
+              <div>{c.driverBirthDate ? new Date(c.driverBirthDate).toLocaleDateString("es-ES") : "-"}</div>
+            </div>
+            <div style={readonlyFieldStyle}>
+              <div style={sectionEyebrowStyle}>Autorizacion tutor</div>
+              <div>{c.minorAuthorizationProvided ? "Si" : "No"}</div>
+            </div>
+            <div style={readonlyFieldStyle}>
+              <div style={sectionEyebrowStyle}>Consentimiento imagen</div>
+              <div>{c.imageConsentAccepted ? "Si" : "No"}</div>
+            </div>
+          </div>
+        </div>
+
+        {(isLicense ||
+          c.licenseSchool ||
+          c.licenseType ||
+          c.licenseNumber ||
+          c.preparedJetski ||
+          c.preparedAsset) ? (
+          <div style={{ ...subCardStyle, gap: 10 }}>
+            <div style={sectionEyebrowStyle}>Licencia y recurso</div>
+            <div style={readonlyGridStyle}>
+              <div style={readonlyFieldStyle}>
+                <div style={sectionEyebrowStyle}>Escuela</div>
+                <div>{displayValue(c.licenseSchool)}</div>
+              </div>
+              <div style={readonlyFieldStyle}>
+                <div style={sectionEyebrowStyle}>Tipo licencia</div>
+                <div>{displayValue(c.licenseType)}</div>
+              </div>
+              <div style={readonlyFieldStyle}>
+                <div style={sectionEyebrowStyle}>Numero licencia</div>
+                <div>{displayValue(c.licenseNumber)}</div>
+              </div>
+              <div style={readonlyFieldStyle}>
+                <div style={sectionEyebrowStyle}>Recurso preparado</div>
+                <div>
+                  {c.preparedJetski
+                    ? `Moto ${c.preparedJetski.number ?? "?"} · ${c.preparedJetski.model ?? "Sin modelo"}${c.preparedJetski.plate ? ` · ${c.preparedJetski.plate}` : ""}`
+                    : c.preparedAsset
+                      ? `${c.preparedAsset.name ?? "Sin nombre"}${c.preparedAsset.type ? ` · ${c.preparedAsset.type}` : ""}${c.preparedAsset.plate ? ` · ${c.preparedAsset.plate}` : ""}`
+                      : "-"}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div style={{ ...subCardStyle, gap: 10 }}>
           <div style={sectionEyebrowStyle}>Acciones finales</div>

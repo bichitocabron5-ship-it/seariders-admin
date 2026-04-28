@@ -60,6 +60,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           logicalUnitIndex: true,
           status: true,
           supersededAt: true,
+          templateCode: true,
+          templateVersion: true,
 
           driverName: true,
           driverPhone: true,
@@ -79,9 +81,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           licenseNumber: true,
 
           signedAt: true,
+          renderedHtml: true,
           signatureImageUrl: true,
           signatureImageKey: true,
           signatureSignedBy: true,
+          signatureRequestId: true,
+          signatureStatusRaw: true,
+          signaturePayloadJson: true,
+          signatureSignedPdfUrl: true,
+          signatureAuditJson: true,
           updatedAt: true,
           createdAt: true,
           renderedPdfKey: true,
@@ -159,6 +167,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   return NextResponse.json({
     ok: true,
+    reservationId: res.id,
     reservation: {
       id: res.id,
       isLicense: res.isLicense,
