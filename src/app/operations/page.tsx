@@ -1,8 +1,9 @@
 ﻿// src/app/operations/page.tsx
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useMemo, useState, type CSSProperties } from "react";
 import { opsStyles } from "@/components/ops-ui";
+import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import OperationsAlertsSection from "./_components/OperationsAlertsSection";
 import OperationsBoardSection from "./_components/OperationsBoardSection";
 import WaitTimesSection from "./_components/WaitTimesSection";
@@ -393,9 +394,7 @@ export default function OperationsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useLiveRefresh(load, { intervalMs: 45_000 });
 
   const activeWaitRows = useMemo(
     () =>

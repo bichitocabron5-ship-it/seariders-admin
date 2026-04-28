@@ -1,6 +1,6 @@
 ﻿// src/app/store/create/page.tsx
 "use client";
-import React, { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getCountryOptionsEs } from "@/lib/countries";
 import { BUSINESS_TZ, shouldAutoFormalize } from "@/lib/tz-business";
@@ -15,7 +15,7 @@ import { StoreCreateCustomerProfileSection, StoreCreateSummaryStrip } from "./co
 import { useAvailability, useContractsState, useCustomerProfileSearch, useDiscountPreview, useReservationPrefill, useStoreCreateCatalog, useStoreCreateSelection } from "./hooks/store-create-hooks";
 import { submitStoreCreateCreateFlow, submitStoreCreateEditFlow, submitStoreCreateMigrateFlow } from "./services/store-create-submit-flow";
 import { errorMessage } from "./utils/errors";
-import type { CartItem, Channel, JetskiLicenseMode, Option, RecoveredContractProfile, ServiceMain, UIMode } from "./types";
+import type { CartItem, Channel, JetskiLicenseMode, Option, RecoveredContractProfile, ServiceMain, StoreCreateDraft, UIMode } from "./types";
 import type { AssetAvailability } from "../services/assets";
 
 function todayMadridYMD() {
@@ -40,6 +40,8 @@ function clampPct(value: number) {
 }
 
 const RECOVERED_CONTRACT_PROFILE_STORAGE_KEY = "store-create-recovered-contract-profile";
+const STORE_CREATE_DRAFT_STORAGE_KEY = "store-create-draft";
+const STORE_CREATE_DRAFT_TTL_MS = 6 * 60 * 60 * 1000;
 
 function StoreCreatePageInner() {
   const router = useRouter();
@@ -131,6 +133,8 @@ function StoreCreatePageInner() {
     paidServiceCents: 0,
     pendingServiceCents: 0,
   });
+  const [draftRecoveredAt, setDraftRecoveredAt] = useState<number | null>(null);
+  const skipNextTimeResetRef = useRef(false);
 
   const applyPrefillReservation = useCallback(
     (res: {
@@ -360,6 +364,10 @@ function StoreCreatePageInner() {
 
   // Cuando cambia el "contexto" (servicio/categoría/pack), limpiamos la hora seleccionada
   useEffect(() => {
+    if (skipNextTimeResetRef.current) {
+      skipNextTimeResetRef.current = false;
+      return;
+    }
     setTimeStr("");
   }, [serviceId, category, optionId]);
 
@@ -387,6 +395,14 @@ function StoreCreatePageInner() {
     setOptionId(initialDefaults.optionId);
     setChannelId(initialDefaults.channelId);
   }, [initialDefaults]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isEditMode && !isMigrateMode) return;
+
+    window.localStorage.removeItem(STORE_CREATE_DRAFT_STORAGE_KEY);
+    setDraftRecoveredAt(null);
+  }, [isEditMode, isMigrateMode]);
 
   useEffect(() => {
     if (!catalogError) return;
@@ -439,6 +455,63 @@ function StoreCreatePageInner() {
   const isLicense = isJetskiSelection
     ? jetskiLicenseMode !== "NONE"
     : Boolean(selectedService?.isLicense);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (loadingCatalog || isEditMode || isMigrateMode || draftRecoveredAt) return;
+
+    const raw = window.localStorage.getItem(STORE_CREATE_DRAFT_STORAGE_KEY);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as { savedAt?: number; draft?: StoreCreateDraft | null };
+      const savedAt = Number(parsed?.savedAt ?? 0);
+      const draft = parsed?.draft;
+      if (!draft || !savedAt || Date.now() - savedAt > STORE_CREATE_DRAFT_TTL_MS) {
+        window.localStorage.removeItem(STORE_CREATE_DRAFT_STORAGE_KEY);
+        return;
+      }
+
+      skipNextTimeResetRef.current = true;
+      setDateStr(draft.dateStr || defaultDate);
+      setTimeStr(draft.timeStr || "");
+      setCategory(draft.category || "");
+      setServiceId(draft.serviceId || "");
+      setOptionId(draft.optionId || "");
+      setChannelId(draft.channelId || "");
+      setCustomerName(draft.customerName || "");
+      setFirstName(draft.firstName || "");
+      setLastName(draft.lastName || "");
+      setCustomerPhone(draft.customerPhone || "");
+      setCustomerEmail(draft.customerEmail || "");
+      setCustomerCountry(draft.customerCountry || "ES");
+      setCustomerAddress(draft.customerAddress || "");
+      setCustomerPostalCode(draft.customerPostalCode || "");
+      setCustomerBirthDate(draft.customerBirthDate || "");
+      setCustomerDocType(draft.customerDocType || "");
+      setCustomerDocNumber(draft.customerDocNumber || "");
+      setMarketingSource(draft.marketingSource || "");
+      setBoothNote(draft.boothNote || "");
+      setQuantity(Math.max(1, Number(draft.quantity || 1)));
+      setPax(Math.max(1, Number(draft.pax || 1)));
+      setCompanions(Math.max(0, Number(draft.companions || 0)));
+      setJetskiLicenseMode(draft.jetskiLicenseMode || "NONE");
+      setLicenseSchool(draft.licenseSchool || "");
+      setLicenseType(draft.licenseType || "");
+      setLicenseNumber(draft.licenseNumber || "");
+      setManualDiscountEuros(draft.manualDiscountEuros || "");
+      setManualDiscountReason(draft.manualDiscountReason || "");
+      setDiscountResponsibility(draft.discountResponsibility || "COMPANY");
+      setPromoterDiscountSharePct(draft.promoterDiscountSharePct || "50");
+      setApplyPromo(Boolean(draft.applyPromo));
+      setSelectedPromoCode(draft.selectedPromoCode || "");
+      setCartItems(Array.isArray(draft.cartItems) ? draft.cartItems : []);
+      setDraftRecoveredAt(savedAt);
+      setSubmitSuccess("Borrador recuperado. Puedes continuar donde lo dejaste.");
+    } catch {
+      window.localStorage.removeItem(STORE_CREATE_DRAFT_STORAGE_KEY);
+    }
+  }, [defaultDate, draftRecoveredAt, isEditMode, isMigrateMode, loadingCatalog]);
 
   useEffect(() => {
     if (!isLicense) {
@@ -763,6 +836,115 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   const canEditReservationForm = !isReadOnlyReservation;
   const isBoothReservation = showBoothBadge || prefillSource === "BOOTH";
   const showFuturePaymentsSection = isEditMode && !migrateFlags?.isHistorical && !isReadOnlyReservation;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isCreateMode || isEditMode || isMigrateMode) return;
+
+    const hasDraftContent = Boolean(
+      customerName.trim() ||
+      firstName.trim() ||
+      lastName.trim() ||
+      customerPhone.trim() ||
+      customerEmail.trim() ||
+      customerDocNumber.trim() ||
+      boothNote.trim() ||
+      marketingSource.trim() ||
+      serviceId ||
+      optionId ||
+      channelId ||
+      cartItems.length > 0 ||
+      manualDiscountEuros.trim() ||
+      manualDiscountReason.trim() ||
+      selectedPromoCode.trim()
+    );
+
+    if (!hasDraftContent) {
+      window.localStorage.removeItem(STORE_CREATE_DRAFT_STORAGE_KEY);
+      return;
+    }
+
+    const draft: StoreCreateDraft = {
+      dateStr,
+      timeStr,
+      category,
+      serviceId,
+      optionId,
+      channelId,
+      customerName,
+      firstName,
+      lastName,
+      customerPhone,
+      customerEmail,
+      customerCountry,
+      customerAddress,
+      customerPostalCode,
+      customerBirthDate,
+      customerDocType,
+      customerDocNumber,
+      marketingSource,
+      boothNote,
+      quantity,
+      pax,
+      companions,
+      jetskiLicenseMode,
+      licenseSchool,
+      licenseType,
+      licenseNumber,
+      manualDiscountEuros,
+      manualDiscountReason,
+      discountResponsibility,
+      promoterDiscountSharePct,
+      applyPromo,
+      selectedPromoCode,
+      cartItems,
+    };
+
+    window.localStorage.setItem(
+      STORE_CREATE_DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        savedAt: Date.now(),
+        draft,
+      })
+    );
+  }, [
+    applyPromo,
+    boothNote,
+    cartItems,
+    category,
+    channelId,
+    companions,
+    customerAddress,
+    customerBirthDate,
+    customerCountry,
+    customerDocNumber,
+    customerDocType,
+    customerEmail,
+    customerName,
+    customerPhone,
+    customerPostalCode,
+    dateStr,
+    discountResponsibility,
+    firstName,
+    isCreateMode,
+    isEditMode,
+    isMigrateMode,
+    jetskiLicenseMode,
+    lastName,
+    licenseNumber,
+    licenseSchool,
+    licenseType,
+    manualDiscountEuros,
+    manualDiscountReason,
+    marketingSource,
+    optionId,
+    pax,
+    promoterDiscountSharePct,
+    quantity,
+    selectedPromoCode,
+    serviceId,
+    timeStr,
+  ]);
   const boothPricingNote = isBoothReservation
     ? "Reservas de Booth: el descuento heredado solo se conserva al ampliar la misma actividad original. Si añades otra actividad distinta o extras, esas líneas no reciben descuento de carpa."
     : null;
@@ -1376,6 +1558,10 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     {
       label: "Canal",
       value: channels.find((ch) => ch.id === channelId)?.name ?? "Sin canal",
+    },
+    {
+      label: "Borrador",
+      value: isCreateMode ? (draftRecoveredAt ? "Recuperado" : "Activo") : "No aplica",
     },
   ];
 

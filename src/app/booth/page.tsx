@@ -1,11 +1,12 @@
 ﻿// src/app/booth/page.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertBanner } from "@/components/seariders-ui";
 import { getCountryOptionsEs } from "@/lib/countries";
 import { opsStyles } from "@/components/ops-ui";
 import { computeCommissionableBase, resolveDiscountPolicy } from "@/lib/commission";
+import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import BoothOverviewSection from "./_components/BoothOverviewSection";
 import BoothPreReservationFormSection from "./_components/BoothPreReservationFormSection";
 import BoothPreReservationsSection from "./_components/BoothPreReservationsSection";
@@ -366,18 +367,26 @@ const commissionCents = useMemo(
 );
 const netAfterCommissionCents = useMemo(() => Math.max(0, finalTotalCents - commissionCents), [finalTotalCents, commissionCents]);
 
-async function load() {
+const load = useCallback(async () => {
   setError(null);
+  const [catalogRes, summaryRes, reservationsRes, tripsRes, opsRes] =
+    await Promise.allSettled([
+      fetch("/api/pos/catalog?origin=BOOTH", { cache: "no-store" }),
+      fetch("/api/store/cash-closures/summary?origin=BOOTH", { cache: "no-store" }),
+      fetch("/api/booth/reservations/today", { cache: "no-store" }),
+      fetch("/api/booth/taxiboat-trips/today", { cache: "no-store" }),
+      fetch("/api/platform/taxiboat-operations", { cache: "no-store" }),
+    ]);
 
-  const c = await fetch("/api/pos/catalog?origin=BOOTH", { cache: "no-store" });
-  if (c.ok) {
-    const data = await c.json();
+  const errors: string[] = [];
+
+  if (catalogRes.status === "fulfilled" && catalogRes.value.ok) {
+    const data = await catalogRes.value.json();
 
     setServices(data.services ?? []);
     setOptions(data.options ?? []);
     setChannels(data.channels ?? []);
 
-    // defaults seguros dentro del if y usando data
     const firstCategory = (data.services ?? [])[0]?.category ?? "";
     setCategory((prev) => prev || firstCategory);
 
@@ -387,35 +396,63 @@ async function load() {
       : initialServices;
 
     const s0 = initialFiltered[0] ?? initialServices[0];
-    setServiceId(s0?.id ?? "");
+    setServiceId((prev) => prev || s0?.id || "");
 
-    const firstOpt = (data.options ?? []).find((o: Option) => o.serviceId === (s0?.id ?? ""));
-    setOptionId(firstOpt?.id ?? "");
+    const firstOpt = (data.options ?? []).find(
+      (o: Option) => o.serviceId === (s0?.id ?? "")
+    );
+    setOptionId((prev) => prev || firstOpt?.id || "");
+  } else if (catalogRes.status === "rejected") {
+    errors.push("No se pudo cargar el catálogo de Booth.");
   }
 
-  const sum = await fetch("/api/store/cash-closures/summary?origin=BOOTH", { cache: "no-store" });
-
-  if (sum.ok) setCashClosureSummary(await sum.json());
-  else setCashClosureSummary({ ok: false, error: await sum.text() });
-
-  const r = await fetch("/api/booth/reservations/today", { cache: "no-store" });
-  if (r.ok) {
-    const j = await r.json();
-    setRows(j.rows ?? []);
+  if (summaryRes.status === "fulfilled") {
+    if (summaryRes.value.ok) {
+      setCashClosureSummary(await summaryRes.value.json());
+    } else {
+      setCashClosureSummary({ ok: false, error: await summaryRes.value.text() });
+    }
+  } else {
+    errors.push("No se pudo cargar el estado de caja.");
   }
 
-  const t = await fetch("/api/booth/taxiboat-trips/today", { cache: "no-store" });
-  if (t.ok) {
-    const j = await t.json();
-    setTrips(j.trips ?? []);
+  if (reservationsRes.status === "fulfilled") {
+    if (reservationsRes.value.ok) {
+      const data = await reservationsRes.value.json();
+      setRows(data.rows ?? []);
+    } else {
+      errors.push("No se pudieron cargar las reservas de Booth.");
+    }
+  } else {
+    errors.push("No se pudieron cargar las reservas de Booth.");
   }
 
-  const ops = await fetch("/api/platform/taxiboat-operations", { cache: "no-store" });
-  if (ops.ok) {
-    const j = await ops.json();
-    setTaxiboatOps(j.rows ?? []);
+  if (tripsRes.status === "fulfilled") {
+    if (tripsRes.value.ok) {
+      const data = await tripsRes.value.json();
+      setTrips(data.trips ?? []);
+    } else {
+      errors.push("No se pudieron cargar los viajes de taxiboat.");
+    }
+  } else {
+    errors.push("No se pudieron cargar los viajes de taxiboat.");
   }
-}
+
+  if (opsRes.status === "fulfilled") {
+    if (opsRes.value.ok) {
+      const data = await opsRes.value.json();
+      setTaxiboatOps(data.rows ?? []);
+    } else {
+      errors.push("No se pudo cargar el estado de taxiboat.");
+    }
+  } else {
+    errors.push("No se pudo cargar el estado de taxiboat.");
+  }
+
+  if (errors.length > 0) {
+    setError(errors[0]);
+  }
+}, []);
 
 const activeTrip = trips.find((t) => t.id === activeTripId);
 const openTripOptions = useMemo(() => trips.filter((t) => t.status === "OPEN"), [trips]);
@@ -470,7 +507,12 @@ function boatLabel(boat?: string | null) {
   return boat; // fallback
 }
 
-  useEffect(() => { load(); }, []);
+  useLiveRefresh(load, {
+    intervalMs: 45_000,
+    refreshOnFocus: true,
+    refreshOnVisible: true,
+  });
+
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);

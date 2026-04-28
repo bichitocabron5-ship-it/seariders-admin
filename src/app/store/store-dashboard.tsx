@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { ActionButton, AlertBanner, StatusBadge } from "@/components/seariders-ui";
 import { StoreHero, StoreMetricCard, StoreMetricGrid, storeStyles } from "@/components/store-ui";
+import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import { StoreOpsSummarySection } from "./dashboard/components/StoreOpsSummarySection";
 import { StorePendingColumnSection } from "./dashboard/components/StorePendingColumnSection";
 import { StoreReservationColumnSection } from "./dashboard/components/StoreReservationColumnSection";
@@ -70,11 +71,7 @@ export default function StoreDashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    loadPending();
-    const t = setInterval(loadPending, 30_000);
-    return () => clearInterval(t);
-  }, [loadPending]);
+  useLiveRefresh(loadPending, { intervalMs: 30_000 });
 
   useEffect(() => {
     const t = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -128,7 +125,7 @@ export default function StoreDashboard() {
     })();
   }, [handleActionError]);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -157,29 +154,9 @@ export default function StoreDashboard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [handleActionError]);
 
-  useEffect(() => {
-    load();
-    const intervalId = window.setInterval(() => {
-      void load();
-    }, 30_000);
-
-    const handleVisibilityOrFocus = () => {
-      if (document.visibilityState === "hidden") return;
-      void load();
-    };
-
-    window.addEventListener("focus", handleVisibilityOrFocus);
-    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", handleVisibilityOrFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useLiveRefresh(load, { intervalMs: 45_000 });
 
   async function chargeServiceSplit(reservationId: string, maxServiceCents: number) {
     setError(null);

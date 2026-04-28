@@ -83,6 +83,42 @@ export type RecoveredContractProfile = {
   licenseNumber?: string | null;
 };
 
+export type StoreCreateDraft = {
+  dateStr: string;
+  timeStr: string;
+  category: string;
+  serviceId: string;
+  optionId: string;
+  channelId: string;
+  customerName: string;
+  firstName: string;
+  lastName: string;
+  customerPhone: string;
+  customerEmail: string;
+  customerCountry: string;
+  customerAddress: string;
+  customerPostalCode: string;
+  customerBirthDate: string;
+  customerDocType: string;
+  customerDocNumber: string;
+  marketingSource: string;
+  boothNote: string;
+  quantity: number;
+  pax: number;
+  companions: number;
+  jetskiLicenseMode: JetskiLicenseMode;
+  licenseSchool: string;
+  licenseType: string;
+  licenseNumber: string;
+  manualDiscountEuros: string;
+  manualDiscountReason: string;
+  discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
+  promoterDiscountSharePct: string;
+  applyPromo: boolean;
+  selectedPromoCode: string;
+  cartItems: CartItem[];
+};
+
 export type UIMode = "CREATE" | "FORMALIZE" | "EDIT";
 
 export type ContractDto = {
