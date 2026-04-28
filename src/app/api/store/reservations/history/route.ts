@@ -130,6 +130,8 @@ export async function GET(req: Request) {
       pax: true,
       isLicense: true,
       totalPriceCents: true,
+      commissionBaseCents: true,
+      appliedCommissionPct: true,
       depositCents: true,
       depositHeld: true,
       depositHoldReason: true,
@@ -299,6 +301,18 @@ export async function GET(req: Request) {
       arrivalAt: reservation.arrivalAt,
       createdAt: reservation.createdAt,
     });
+    const appliedCommissionPct =
+      reservation.appliedCommissionPct != null
+        ? Number(reservation.appliedCommissionPct)
+        : null;
+    const appliedCommissionBaseCents =
+      Number(reservation.commissionBaseCents ?? 0) > 0
+        ? Number(reservation.commissionBaseCents ?? 0)
+        : Number(reservation.totalPriceCents ?? 0);
+    const commissionAmountCents =
+      appliedCommissionPct != null && appliedCommissionBaseCents > 0
+        ? Math.round(appliedCommissionBaseCents * (appliedCommissionPct / 100))
+        : null;
 
     return {
       id: reservation.id,
@@ -318,6 +332,9 @@ export async function GET(req: Request) {
       pax: reservation.pax,
       isLicense: reservation.isLicense,
       totalPriceCents: reservation.totalPriceCents,
+      commissionBaseCents: appliedCommissionBaseCents,
+      appliedCommissionPct,
+      commissionAmountCents,
       depositCents: depositPlannedCents,
       depositHeld: reservation.depositHeld,
       depositHoldReason: reservation.depositHoldReason,
@@ -358,6 +375,9 @@ export async function GET(req: Request) {
         pax: reservation.pax,
         isLicense: reservation.isLicense,
         totalPriceCents: reservation.totalPriceCents,
+        commissionBaseCents: appliedCommissionBaseCents,
+        appliedCommissionPct,
+        commissionAmountCents,
         servicePaidCents,
         servicePendingCents,
         depositCents: depositPlannedCents,

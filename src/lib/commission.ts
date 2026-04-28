@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+
 export type DiscountResponsibility = "COMPANY" | "PROMOTER" | "SHARED";
 
 export type CommissionRuleLike = {
@@ -45,6 +47,10 @@ export function commissionFromBase(baseCents: number, rate: number) {
   return roundCents(Number(baseCents ?? 0) * Number(rate ?? 0));
 }
 
+export function rateToPct(rate: number) {
+  return Number((Math.max(0, Math.min(1, Number(rate ?? 0))) * 100).toFixed(2));
+}
+
 export function commissionRateForSeariders(rate: number, kind?: CommissionChannelLike["kind"]) {
   const normalized = Math.max(0, Math.min(1, Number(rate ?? 0)));
   if (kind === "EXTERNAL_ACTIVITY") {
@@ -72,6 +78,45 @@ export function resolveCommissionRate(args: {
   if (byBps > 0) return commissionRateForSeariders(byBps, channel.kind);
 
   return commissionRateForSeariders(pctToRate(channel.commissionPct), channel.kind);
+}
+
+export function resolveAppliedCommissionPct(args: {
+  channel?: CommissionChannelLike | null;
+  serviceId: string;
+  rulePct?: number | null;
+}) {
+  const { channel } = args;
+  if (!channel || !channel.commissionEnabled) return null;
+  return rateToPct(resolveCommissionRate(args));
+}
+
+export async function getAppliedCommissionPctTx(
+  tx: Prisma.TransactionClient,
+  args: { channelId?: string | null; serviceId?: string | null }
+) {
+  if (!args.channelId || !args.serviceId) return null;
+
+  const channel = await tx.channel.findUnique({
+    where: { id: args.channelId },
+    select: {
+      kind: true,
+      commissionEnabled: true,
+      commissionBps: true,
+      commissionPct: true,
+      commissionRules: {
+        where: {
+          isActive: true,
+          serviceId: args.serviceId,
+        },
+        select: { serviceId: true, commissionPct: true },
+      },
+    },
+  });
+
+  return resolveAppliedCommissionPct({
+    channel,
+    serviceId: args.serviceId,
+  });
 }
 
 export function normalizeDiscountResponsibility(value?: string | null): DiscountResponsibility {

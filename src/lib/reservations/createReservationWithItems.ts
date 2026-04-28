@@ -6,7 +6,7 @@ import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
-import { resolveDiscountPolicy } from "@/lib/commission";
+import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 
 type CreateItemInput = {
@@ -360,6 +360,10 @@ export async function createReservationWithItems(params: {
         packMeta
           ? packQty
           : (resolvedItems[0]?.quantity ?? 1);
+      const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+        channelId: ch.id,
+        serviceId: main.serviceId,
+      });
 
       const reservation = await tx.reservation.create({
         data: {
@@ -389,6 +393,7 @@ export async function createReservationWithItems(params: {
           // Totales
           basePriceCents,
           commissionBaseCents: commercial.commissionBaseCents,
+          appliedCommissionPct,
           autoDiscountCents: commercial.autoDiscountCents,
           manualDiscountCents: commercial.manualDiscountCents,
           discountResponsibility: commercial.discountResponsibility,

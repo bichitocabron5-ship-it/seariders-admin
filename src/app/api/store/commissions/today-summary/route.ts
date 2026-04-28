@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { ReservationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { clampCommissionPct, commissionFromBase, resolveCommissionRate } from "@/lib/commission";
+import { clampCommissionPct, commissionFromBase, resolveAppliedCommissionPct } from "@/lib/commission";
 import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 import { requireApiRole } from "@/lib/auth";
 
@@ -33,6 +33,7 @@ export async function GET() {
         channelId: true,
         serviceId: true,
         commissionBaseCents: true,
+        appliedCommissionPct: true,
         totalPriceCents: true,
         channel: {
           select: {
@@ -71,6 +72,7 @@ export async function GET() {
       select: {
         amountCents: true,
         commissionBaseCents: true,
+        appliedCommissionPct: true,
         direction: true,
         isExternalCommissionOnly: true,
         externalGrossAmountCents: true,
@@ -154,22 +156,23 @@ export async function GET() {
 
       const key = `${ch.id}:${r.serviceId}`;
       const rulePct = ruleMap.get(key); // 0..100
-      const rate = resolveCommissionRate({
-        channel: ch,
-        serviceId: r.serviceId,
-        rulePct: rulePct ?? null,
-      });
-      if (!rate) continue;
+      const appliedPct =
+        r.appliedCommissionPct != null
+          ? Number(r.appliedCommissionPct)
+          : resolveAppliedCommissionPct({
+              channel: ch,
+              serviceId: r.serviceId,
+              rulePct: rulePct ?? null,
+            });
+      if (appliedPct == null) continue;
 
-      const commission = commissionFromBase(base, rate);
-
-      // Si por redondeo sale 0, no la contamos
+      const commission = commissionFromBase(base, appliedPct / 100);
       if (commission <= 0) continue;
 
       count++;
       addCommission("STORE", ch.name, commission);
 
-      // debug.push({ reservationId: r.id, channel: ch.name, base, rate, commission, hasRule: rulePct != null });
+      // debug.push({ reservationId: r.id, channel: ch.name, base, appliedPct, commission, hasRule: rulePct != null });
     }
 
     for (const payment of externalPayments) {
@@ -197,14 +200,17 @@ export async function GET() {
 
       const key = `${ch.id}:${payment.serviceId}`;
       const rulePct = ruleMap.get(key);
-      const rate = resolveCommissionRate({
-        channel: ch,
-        serviceId: payment.serviceId,
-        rulePct: rulePct ?? null,
-      });
-      if (!rate) continue;
+      const appliedPct =
+        payment.appliedCommissionPct != null
+          ? Number(payment.appliedCommissionPct)
+          : resolveAppliedCommissionPct({
+              channel: ch,
+              serviceId: payment.serviceId,
+              rulePct: rulePct ?? null,
+            });
+      if (appliedPct == null) continue;
 
-      const commission = commissionFromBase(base, rate);
+      const commission = commissionFromBase(base, appliedPct / 100);
       if (commission <= 0) continue;
 
       count++;

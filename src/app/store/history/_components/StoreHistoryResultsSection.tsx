@@ -46,6 +46,9 @@ type CommercialSnapshot = {
   pax: number | null;
   isLicense: boolean | null;
   totalPriceCents: number | null;
+  commissionBaseCents: number | null;
+  appliedCommissionPct: number | null;
+  commissionAmountCents: number | null;
   servicePaidCents: number;
   servicePendingCents: number;
   depositCents: number | null;
@@ -90,6 +93,9 @@ type HistoryRow = {
   pax: number | null;
   isLicense: boolean | null;
   totalPriceCents: number | null;
+  commissionBaseCents: number | null;
+  appliedCommissionPct: number | null;
+  commissionAmountCents: number | null;
   depositCents: number | null;
   depositHeld: boolean;
   depositHoldReason: string | null;
@@ -445,6 +451,18 @@ export default function StoreHistoryResultsSection({
                     <td style={cell}>
                       <div style={{ display: "grid", gap: 6 }}>
                         <div style={{ fontWeight: 800 }}>{row.channelName || "-"}</div>
+                        {row.commercial?.appliedCommissionPct != null ? (
+                          <>
+                            <div style={mutedText}>
+                              Comisión final · {row.commercial.appliedCommissionPct.toFixed(2)}%
+                            </div>
+                            <div style={mutedText}>
+                              Base {euros(row.commercial.commissionBaseCents)} · Comisión {euros(row.commercial.commissionAmountCents)}
+                            </div>
+                          </>
+                        ) : (
+                          <div style={mutedText}>Sin snapshot de comisión</div>
+                        )}
                       </div>
                     </td>
 

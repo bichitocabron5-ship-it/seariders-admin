@@ -16,6 +16,7 @@ import { cookies } from "next/headers";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import {
   commissionFromBase,
+  getAppliedCommissionPctTx,
   resolveCommissionRate,
   resolveDiscountPolicy,
 } from "@/lib/commission";
@@ -192,6 +193,7 @@ export async function POST(req: Request) {
         method: parsed.data.paymentMethod,
         amountCents: commissionCents,
         commissionBaseCents: commercial.commissionBaseCents,
+        appliedCommissionPct: commissionPct,
         externalDiscountCents: commercial.totalDiscountCents,
         discountResponsibility: commercial.discountResponsibility,
         promoterDiscountShareBps: commercial.promoterDiscountShareBps,
@@ -245,6 +247,10 @@ export async function POST(req: Request) {
       pax: parsed.data.pax,
       basePriceCents,
       commissionBaseCents: commercial.commissionBaseCents,
+      appliedCommissionPct: await getAppliedCommissionPctTx(prisma, {
+        channelId: parsed.data.channelId ?? null,
+        serviceId: parsed.data.serviceId,
+      }),
       autoDiscountCents: commercial.autoDiscountCents,
       manualDiscountCents: commercial.manualDiscountCents,
       discountResponsibility: commercial.discountResponsibility,

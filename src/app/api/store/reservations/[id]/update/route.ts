@@ -12,7 +12,7 @@ import type { Prisma } from "@prisma/client";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
-import { resolveDiscountPolicy } from "@/lib/commission";
+import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import {
   contractLogicalUnitIndex,
@@ -690,6 +690,10 @@ if (hasProItems) {
 
     // Compat main: primer item
     const totalMainQuantity = lineCreates.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0);
+    const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+      channelId: b.channelId ?? null,
+      serviceId: main.serviceId,
+    });
 
     const data: Prisma.ReservationUncheckedUpdateInput = {
       pax: b.pax,
@@ -708,6 +712,7 @@ if (hasProItems) {
 
       basePriceCents: serviceSubtotal,
       commissionBaseCents: commercial.commissionBaseCents,
+      appliedCommissionPct,
       autoDiscountCents: commercial.autoDiscountCents,
       manualDiscountCents: commercial.manualDiscountCents,
       discountResponsibility: commercial.discountResponsibility,
@@ -1057,12 +1062,17 @@ if (hasProItems) {
       discountResponsibility: discountPolicy.discountResponsibility,
       promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
     });
+    const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+      channelId: b.channelId ?? existing.channelId ?? null,
+      serviceId: svc.id,
+    });
 
     await tx.reservation.update({
       where: { id },
       data: {
         basePriceCents: serviceSubtotal,
         commissionBaseCents: commercial.commissionBaseCents,
+        appliedCommissionPct,
         autoDiscountCents: commercial.autoDiscountCents,
         manualDiscountCents: commercial.manualDiscountCents,
         discountResponsibility: commercial.discountResponsibility,

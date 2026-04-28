@@ -5,7 +5,7 @@ import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { resolveDiscountPolicy } from "@/lib/commission";
+import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 
@@ -213,12 +213,17 @@ export async function POST(req: Request) {
         discountResponsibility: discountPolicy.discountResponsibility,
         promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
       });
+      const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+        channelId: reservationPricing.channelId,
+        serviceId: reservationPricing.serviceId,
+      });
 
       await tx.reservation.update({
         where: { id: reservationId },
         data: {
           basePriceCents: serviceSubtotal,
           commissionBaseCents: commercial.commissionBaseCents,
+          appliedCommissionPct,
           autoDiscountCents: commercial.autoDiscountCents,
           manualDiscountCents: commercial.manualDiscountCents,
           discountResponsibility: commercial.discountResponsibility,

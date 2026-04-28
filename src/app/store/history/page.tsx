@@ -49,6 +49,9 @@ type CommercialSnapshot = {
   pax: number | null;
   isLicense: boolean | null;
   totalPriceCents: number | null;
+  commissionBaseCents: number | null;
+  appliedCommissionPct: number | null;
+  commissionAmountCents: number | null;
   servicePaidCents: number;
   servicePendingCents: number;
   depositCents: number | null;
@@ -93,6 +96,9 @@ type HistoryRow = {
   pax: number | null;
   isLicense: boolean | null;
   totalPriceCents: number | null;
+  commissionBaseCents: number | null;
+  appliedCommissionPct: number | null;
+  commissionAmountCents: number | null;
   depositCents: number | null;
   depositHeld: boolean;
   depositHoldReason: string | null;

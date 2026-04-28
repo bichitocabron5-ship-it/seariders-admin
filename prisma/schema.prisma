@@ -322,6 +322,7 @@ model Reservation {
   companionsCount      Int                   @default(0)
   basePriceCents       Int
   commissionBaseCents  Int                   @default(0)
+  appliedCommissionPct Float?
   manualDiscountCents  Int                   @default(0)
   autoDiscountCents    Int                   @default(0) // ✅ NUEVO (promo automática o por código)
   discountResponsibility DiscountResponsibility @default(COMPANY)
@@ -1000,6 +1001,7 @@ model Payment {
   method          PaymentMethod
   amountCents     Int
   commissionBaseCents Int          @default(0)
+  appliedCommissionPct Float?
   externalDiscountCents Int        @default(0)
   discountResponsibility DiscountResponsibility @default(COMPANY)
   promoterDiscountShareBps Int     @default(0)

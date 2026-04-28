@@ -13,7 +13,7 @@ import { countReadyVisibleContracts, listMissingLogicalUnits } from "@/lib/contr
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
-import { resolveDiscountPolicy } from "@/lib/commission";
+import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 
 export const runtime = "nodejs";
@@ -611,6 +611,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: line.quantity,
         })),
       });
+      const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+        channelId: effectiveChannelId,
+        serviceId: mainLine.serviceId,
+      });
 
       await tx.reservation.update({
         where: { id },
@@ -642,6 +646,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           scheduledTime,
           basePriceCents: serviceSubtotal,
           commissionBaseCents: commercial.commissionBaseCents,
+          appliedCommissionPct,
           autoDiscountCents: commercial.autoDiscountCents,
           manualDiscountCents: commercial.manualDiscountCents,
           discountResponsibility: commercial.discountResponsibility,

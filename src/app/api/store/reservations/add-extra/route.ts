@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
-import { resolveDiscountPolicy } from "@/lib/commission";
+import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 
 export const runtime = "nodejs";
@@ -142,6 +142,7 @@ export async function POST(req: Request) {
         where: { id: reservationId },
         select: {
           source: true,
+          serviceId: true,
           manualDiscountCents: true,
           promoCode: true,
           customerCountry: true,
@@ -199,12 +200,17 @@ export async function POST(req: Request) {
         discountResponsibility: discountPolicy.discountResponsibility,
         promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
       });
+      const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+        channelId: reservation.channelId,
+        serviceId: reservation.serviceId,
+      });
 
       await tx.reservation.update({
         where: { id: reservationId },
         data: {
           basePriceCents: serviceSubtotal,
           commissionBaseCents: commercial.commissionBaseCents,
+          appliedCommissionPct,
           autoDiscountCents: commercial.autoDiscountCents,
           manualDiscountCents: commercial.manualDiscountCents,
           discountResponsibility: commercial.discountResponsibility,
