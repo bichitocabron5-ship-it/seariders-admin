@@ -146,7 +146,7 @@ export async function GET(req: Request) {
   }
 
   const servicesMain = servicesVisible.filter((s) => !isExtra(s));
-  let servicesExtra = servicesVisible.filter((s) => isExtra(s));
+  const servicesExtra = servicesVisible.filter((s) => isExtra(s));
 
   let channels = channelsAll.slice();
   if (origin === "BOOTH") channels = channels.filter((c) => c.visibleInBooth);
