@@ -173,6 +173,7 @@ export default function BarPage() {
   const [cashReceivedEuros, setCashReceivedEuros] = useState("");
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [pendingStaffSales, setPendingStaffSales] = useState<PendingStaffSale[]>([]);
+  const [expandedPendingStaffSaleId, setExpandedPendingStaffSaleId] = useState<string | null>(null);
 
   const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
   const [returnTasks, setReturnTasks] = useState<PendingTask[]>([]);
@@ -909,7 +910,25 @@ export default function BarPage() {
           <div style={{ display: "grid", gap: 12 }}>
             {pendingStaffSales.map((sale) => (
               <div key={sale.id} style={{ border: "1px solid #e2e8f0", borderRadius: 16, padding: 14, background: "#fff" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedPendingStaffSaleId((current) => (current === sale.id ? null : sale.id))
+                  }
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    border: "none",
+                    background: "transparent",
+                    padding: 0,
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
                   <div style={{ display: "grid", gap: 4 }}>
                     <div style={{ fontSize: 16, fontWeight: 900 }}>{sale.employeeName}</div>
                     <div style={{ fontSize: 12, color: "#64748b" }}>
@@ -919,10 +938,18 @@ export default function BarPage() {
                     <div style={{ fontSize: 12, color: "#475569" }}>
                       {sale.items.map((item) => `${item.productName} x${item.quantity}`).join(" · ")}
                     </div>
-                    {sale.note ? <div style={{ fontSize: 12, color: "#64748b" }}>{sale.note}</div> : null}
                   </div>
                   <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
                     <div style={{ fontSize: 18, fontWeight: 950 }}>{euros(sale.totalRevenueCents)}</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#0f766e" }}>
+                      {expandedPendingStaffSaleId === sale.id ? "Ocultar detalle" : "Ver detalle y cobrar"}
+                    </div>
+                  </div>
+                </button>
+
+                {expandedPendingStaffSaleId === sale.id ? (
+                  <div style={{ display: "grid", gap: 10, marginTop: 12, paddingTop: 12, borderTop: "1px solid #e2e8f0" }}>
+                    {sale.note ? <div style={{ fontSize: 12, color: "#64748b" }}>{sale.note}</div> : null}
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                       {(["CASH", "CARD", "BIZUM", "TRANSFER"] as BarMethod[]).map((method) => (
                         <button
@@ -937,7 +964,7 @@ export default function BarPage() {
                       ))}
                     </div>
                   </div>
-                </div>
+                ) : null}
               </div>
             ))}
           </div>
