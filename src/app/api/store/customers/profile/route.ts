@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -35,6 +36,67 @@ function fallbackOptionalString(...values: Array<string | null | undefined>) {
 function normalizeMatchValue(value: string | null | undefined) {
   const normalized = String(value ?? "").trim();
   return normalized.length ? normalized : null;
+}
+
+function hasText(value: string | null | undefined) {
+  return String(value ?? "").trim().length > 0;
+}
+
+type ReservationProfileRow = {
+  id: string;
+  customerName: string | null;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  customerDocType: string | null;
+  customerDocNumber: string | null;
+  customerCountry: string | null;
+  customerBirthDate: Date | null;
+  customerAddress: string | null;
+  customerPostalCode: string | null;
+  licenseSchool: string | null;
+  licenseType: string | null;
+  licenseNumber: string | null;
+  service: { name: string | null } | null;
+  contracts: Array<{
+    driverName: string | null;
+    driverPhone: string | null;
+    driverEmail: string | null;
+    driverCountry: string | null;
+    driverAddress: string | null;
+    driverPostalCode: string | null;
+    driverDocType: string | null;
+    driverDocNumber: string | null;
+    driverBirthDate: Date | null;
+    minorAuthorizationProvided: boolean | null;
+    imageConsentAccepted: boolean | null;
+    licenseSchool: string | null;
+    licenseType: string | null;
+    licenseNumber: string | null;
+  }>;
+};
+
+function contractMandatoryScore(row: ReservationProfileRow) {
+  const contract = row.contracts[0] ?? null;
+  if (!contract) return 0;
+
+  let score = 0;
+  if (hasText(contract.driverName)) score += 1;
+  if (hasText(contract.driverPhone)) score += 1;
+  if (hasText(contract.driverCountry)) score += 1;
+  if (hasText(contract.driverAddress)) score += 1;
+  if (hasText(contract.driverDocType)) score += 1;
+  if (hasText(contract.driverDocNumber)) score += 1;
+  if (contract.driverBirthDate) score += 1;
+
+  const hasAnyLicenseData =
+    hasText(contract.licenseSchool) || hasText(contract.licenseType) || hasText(contract.licenseNumber);
+  if (hasAnyLicenseData) {
+    if (hasText(contract.licenseSchool)) score += 1;
+    if (hasText(contract.licenseType)) score += 1;
+    if (hasText(contract.licenseNumber)) score += 1;
+  }
+
+  return score;
 }
 
 export async function GET(req: Request) {
@@ -113,7 +175,7 @@ export async function GET(req: Request) {
   const matchEmail = normalizeMatchValue(reservation.customerEmail ?? latestContract?.driverEmail);
   const matchName = normalizeMatchValue(reservation.customerName ?? latestContract?.driverName);
 
-  const relatedFilters = [
+  const relatedFilters: Prisma.ReservationWhereInput[] = [
     matchDocNumber
       ? {
           OR: [
@@ -146,7 +208,7 @@ export async function GET(req: Request) {
           ],
         }
       : null,
-  ].filter(Boolean);
+  ].filter((value): value is Prisma.ReservationWhereInput => Boolean(value));
 
   const relatedReservations =
     relatedFilters.length > 0
@@ -161,27 +223,8 @@ export async function GET(req: Request) {
         })
       : [];
 
-  const richestReservation =
-    relatedReservations.find((row) => {
-      const contract = row.contracts[0] ?? null;
-      return Boolean(
-        contract &&
-          [
-            contract.driverName,
-            contract.driverPhone,
-            contract.driverEmail,
-            contract.driverCountry,
-            contract.driverAddress,
-            contract.driverPostalCode,
-            contract.driverDocType,
-            contract.driverDocNumber,
-            contract.driverBirthDate,
-            contract.licenseSchool,
-            contract.licenseType,
-            contract.licenseNumber,
-          ].some((value) => String(value ?? "").trim().length > 0)
-      );
-    }) ?? reservation;
+  const richestReservation = [...relatedReservations, reservation]
+    .sort((left, right) => contractMandatoryScore(right) - contractMandatoryScore(left))[0] ?? reservation;
 
   const richestContract = richestReservation.contracts[0] ?? null;
 
