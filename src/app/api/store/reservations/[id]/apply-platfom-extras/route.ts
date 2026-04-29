@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
-import { resolveDiscountPolicy } from "@/lib/commission";
+import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 
 // Si tu enum se llama distinto, ajusta aquí:
@@ -214,12 +214,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           discountResponsibility: discountPolicy.discountResponsibility,
           promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
         });
+        const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+          channelId: res.channelId,
+          serviceId: items.find((item) => !item.isExtra)?.serviceId ?? null,
+        });
 
         await tx.reservation.update({
           where: { id: reservationId },
           data: {
             basePriceCents: serviceSubtotal,
             commissionBaseCents: commercial.commissionBaseCents,
+            appliedCommissionPct,
             autoDiscountCents: commercial.autoDiscountCents,
             manualDiscountCents: commercial.manualDiscountCents,
             discountResponsibility: commercial.discountResponsibility,
