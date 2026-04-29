@@ -248,52 +248,44 @@ export default function BoothPreReservationFormSection({
             </label>
           </div>
 
-          {!isExternalCharge ? (
-            <button type="button" onClick={onAddActivity} style={{ ...fieldStyle, cursor: "pointer", fontWeight: 800 }}>
-              Añadir actividad al carrito
-            </button>
-          ) : (
-            <div style={{ fontSize: 12, color: "#64748b" }}>
-              El cobro externo se registra como una sola línea, sin carrito.
-            </div>
-          )}
+          <button type="button" onClick={onAddActivity} style={{ ...fieldStyle, cursor: "pointer", fontWeight: 800 }}>
+            Añadir actividad al carrito
+          </button>
         </div>
 
-        {!isExternalCharge ? (
-          <div style={{ display: "grid", gap: 10, padding: 12, border: "1px solid #cbd5e1", borderRadius: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#0f766e", letterSpacing: 0.6, textTransform: "uppercase" }}>
-              Extras
-            </div>
-
-            <label>
-              Extra
-              <select value={extraServiceId} onChange={(e) => setExtraServiceId(e.target.value)} style={fieldStyle}>
-                <option value="">Selecciona un extra</option>
-                {servicesExtra.map((service) => (
-                  <option key={service.id} value={service.id}>
-                    {service.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              Cantidad extra
-              <input
-                type="number"
-                min={1}
-                max={99}
-                value={extraQuantity}
-                onChange={(e) => setExtraQuantity(Number(e.target.value))}
-                style={fieldStyle}
-              />
-            </label>
-
-            <button type="button" onClick={onAddExtra} style={{ ...fieldStyle, cursor: "pointer", fontWeight: 800 }}>
-              Añadir extra al carrito
-            </button>
+        <div style={{ display: "grid", gap: 10, padding: 12, border: "1px solid #cbd5e1", borderRadius: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#0f766e", letterSpacing: 0.6, textTransform: "uppercase" }}>
+            Extras
           </div>
-        ) : null}
+
+          <label>
+            Extra
+            <select value={extraServiceId} onChange={(e) => setExtraServiceId(e.target.value)} style={fieldStyle}>
+              <option value="">Selecciona un extra</option>
+              {servicesExtra.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Cantidad extra
+            <input
+              type="number"
+              min={1}
+              max={99}
+              value={extraQuantity}
+              onChange={(e) => setExtraQuantity(Number(e.target.value))}
+              style={fieldStyle}
+            />
+          </label>
+
+          <button type="button" onClick={onAddExtra} style={{ ...fieldStyle, cursor: "pointer", fontWeight: 800 }}>
+            Añadir extra al carrito
+          </button>
+        </div>
 
         {hasCart ? (
           <div style={{ display: "grid", gap: 8, padding: 12, border: "1px solid #cbd5e1", borderRadius: 14 }}>

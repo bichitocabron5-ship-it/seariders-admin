@@ -539,7 +539,6 @@ const taxiboatOpsByBoat = useMemo(
 );
 
 function addActivityToCart() {
-  if (isExternalCharge) throw new Error("Las actividades externas no usan carrito.");
   if (!serviceId) throw new Error("Servicio requerido");
   if (!optionId) throw new Error("Duración requerida");
   if (Number(quantity) < 1) throw new Error("Cantidad inválida");
@@ -666,11 +665,6 @@ useEffect(() => {
       setError("Nombre requerido");
       return;
     }
-    if (isExternalCharge && cartItems.length > 0) {
-      setError("Los cobros externos no admiten carrito ni extras.");
-      return;
-    }
-
     const itemsToSend =
       cartItems.length > 0
         ? cartItems.map((item) => ({

@@ -296,13 +296,6 @@ export async function POST(req: Request) {
     if (!parsed.data.paymentMethod) {
       return NextResponse.json({ error: "Método de pago requerido para actividad externa." }, { status: 400 });
     }
-    if (pricedItems.length !== 1 || pricedItems[0]?.isExtra) {
-      return NextResponse.json(
-        { error: "Los cobros externos en Booth solo permiten una actividad principal." },
-        { status: 400 }
-      );
-    }
-
     await assertCashOpenForUser(session.userId, session.role as RoleName, session.shiftSessionId);
 
     const shiftSession = await findCurrentShiftSession({
