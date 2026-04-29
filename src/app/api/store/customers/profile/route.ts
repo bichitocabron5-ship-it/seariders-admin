@@ -175,40 +175,43 @@ export async function GET(req: Request) {
   const matchEmail = normalizeMatchValue(reservation.customerEmail ?? latestContract?.driverEmail);
   const matchName = normalizeMatchValue(reservation.customerName ?? latestContract?.driverName);
 
-  const relatedFilters: Prisma.ReservationWhereInput[] = [
-    matchDocNumber
-      ? {
-          OR: [
-            { customerDocNumber: { equals: matchDocNumber, mode: "insensitive" as const } },
-            { contracts: { some: { driverDocNumber: { equals: matchDocNumber, mode: "insensitive" as const } } } },
-          ],
-        }
-      : null,
-    matchPhone
-      ? {
-          OR: [
-            { customerPhone: { equals: matchPhone, mode: "insensitive" as const } },
-            { contracts: { some: { driverPhone: { equals: matchPhone, mode: "insensitive" as const } } } },
-          ],
-        }
-      : null,
-    matchEmail
-      ? {
-          OR: [
-            { customerEmail: { equals: matchEmail, mode: "insensitive" as const } },
-            { contracts: { some: { driverEmail: { equals: matchEmail, mode: "insensitive" as const } } } },
-          ],
-        }
-      : null,
-    matchName
-      ? {
-          OR: [
-            { customerName: { equals: matchName, mode: "insensitive" as const } },
-            { contracts: { some: { driverName: { equals: matchName, mode: "insensitive" as const } } } },
-          ],
-        }
-      : null,
-  ].filter((value): value is Prisma.ReservationWhereInput => Boolean(value));
+  const relatedFilters: Prisma.ReservationWhereInput[] = [];
+
+  if (matchDocNumber) {
+    relatedFilters.push({
+      OR: [
+        { customerDocNumber: { equals: matchDocNumber, mode: "insensitive" } },
+        { contracts: { some: { driverDocNumber: { equals: matchDocNumber, mode: "insensitive" } } } },
+      ],
+    });
+  }
+
+  if (matchPhone) {
+    relatedFilters.push({
+      OR: [
+        { customerPhone: { equals: matchPhone, mode: "insensitive" } },
+        { contracts: { some: { driverPhone: { equals: matchPhone, mode: "insensitive" } } } },
+      ],
+    });
+  }
+
+  if (matchEmail) {
+    relatedFilters.push({
+      OR: [
+        { customerEmail: { equals: matchEmail, mode: "insensitive" } },
+        { contracts: { some: { driverEmail: { equals: matchEmail, mode: "insensitive" } } } },
+      ],
+    });
+  }
+
+  if (matchName) {
+    relatedFilters.push({
+      OR: [
+        { customerName: { equals: matchName, mode: "insensitive" } },
+        { contracts: { some: { driverName: { equals: matchName, mode: "insensitive" } } } },
+      ],
+    });
+  }
 
   const relatedReservations =
     relatedFilters.length > 0
