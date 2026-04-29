@@ -2,8 +2,10 @@
 export type BarMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 
 export async function createBarPayment(args: {
-  productId: string;
-  quantity: number;
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
   amountCents: number;
   method?: BarMethod | null;
   date: string;
@@ -13,6 +15,8 @@ export async function createBarPayment(args: {
   staffEmployeeId?: string | null;
   deferStaffPayment?: boolean;
   note?: string | null;
+  manualDiscountCents?: number;
+  manualDiscountReason?: string | null;
 }) {
   const res = await fetch("/api/bar/payments/create", {
     method: "POST",

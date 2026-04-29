@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
+import CashChangeHelper from "@/components/cash-change-helper";
 import { Alert, Button, Card, Page, Select, styles } from "@/components/ui";
 import { BarOverviewSection } from "./_components/BarOverviewSection";
 import { BarPendingDeliveriesSection } from "./_components/BarPendingDeliveriesSection";
@@ -71,6 +72,11 @@ type PendingStaffSale = {
   }>;
 };
 
+type CartItem = {
+  productId: string;
+  quantity: number;
+};
+
 function businessDateToday() {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
@@ -79,6 +85,12 @@ function businessDateToday() {
 
 function euros(cents: number) {
   return `${(Number(cents ?? 0) / 100).toFixed(2)} EUR`;
+}
+
+function centsFromEuroInput(value: string) {
+  const parsed = Number((value ?? "").replace(",", "."));
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed * 100);
 }
 
 function hhmm(d?: string | Date | null) {
@@ -152,8 +164,13 @@ export default function BarPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [catalog, setCatalog] = useState<BarCategoryWithProducts[]>([]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [staffMode, setStaffMode] = useState(false);
   const [staffEmployeeId, setStaffEmployeeId] = useState("");
+  const [manualDiscountEuros, setManualDiscountEuros] = useState("");
+  const [manualDiscountReason, setManualDiscountReason] = useState("");
+  const [showCashHelper, setShowCashHelper] = useState(false);
+  const [cashReceivedEuros, setCashReceivedEuros] = useState("");
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [pendingStaffSales, setPendingStaffSales] = useState<PendingStaffSale[]>([]);
 
@@ -238,53 +255,148 @@ export default function BarPage() {
   const systemNet = useMemo(() => sumMethodMapCents(serviceByMethod), [serviceByMethod]);
   const cateringCount = pendingTasks.filter((task) => task.kind === "CATERING").length;
   const extrasCount = pendingTasks.filter((task) => task.kind === "EXTRA").length;
+  const productsById = useMemo(() => {
+    const map = new Map<string, BarCategoryWithProducts["products"][number]>();
+    for (const category of catalog) {
+      for (const product of category.products) map.set(product.id, product);
+    }
+    return map;
+  }, [catalog]);
+
+  const cartLines = useMemo(() => {
+    return cart
+      .map((item) => {
+        const product = productsById.get(item.productId);
+        if (!product) return null;
+
+        const unitPriceCents =
+          staffMode && product.staffEligible && product.staffPriceCents != null
+            ? Number(product.staffPriceCents)
+            : Number(product.salePriceCents);
+
+        const pricing = calculateBarLineTotal({
+          unitPriceCents,
+          quantity: item.quantity,
+          promotions: product.promotions,
+          staffMode,
+          staffPriceCents: product.staffPriceCents,
+        });
+
+        return {
+          ...item,
+          product,
+          pricing,
+        };
+      })
+      .filter(Boolean) as Array<{
+      productId: string;
+      quantity: number;
+      product: BarCategoryWithProducts["products"][number];
+      pricing: ReturnType<typeof calculateBarLineTotal>;
+    }>;
+  }, [cart, productsById, staffMode]);
+
+  const cartSubtotalBeforeManualCents = useMemo(
+    () => cartLines.reduce((sum, line) => sum + line.pricing.subtotalBeforeManualCents, 0),
+    [cartLines]
+  );
+  const cartBaseTotalCents = useMemo(
+    () => cartLines.reduce((sum, line) => sum + line.pricing.baseTotalCents, 0),
+    [cartLines]
+  );
+  const cartAutoDiscountCents = useMemo(
+    () => cartLines.reduce((sum, line) => sum + line.pricing.autoDiscountCents, 0),
+    [cartLines]
+  );
+  const canApplyManualDiscount =
+    !staffMode && cartLines.length > 0 && cartLines.every((line) => line.product.type === "DRINK");
+  const requestedManualDiscountCents = centsFromEuroInput(manualDiscountEuros);
+  const appliedManualDiscountCents = canApplyManualDiscount
+    ? Math.min(
+        Math.max(0, requestedManualDiscountCents),
+        Math.max(0, cartSubtotalBeforeManualCents - 1)
+      )
+    : 0;
+  const cartTotalCents = Math.max(0, cartSubtotalBeforeManualCents - appliedManualDiscountCents);
 
   function getQuantity(productId: string) {
     return Math.max(1, Number(quantities[productId] ?? 1));
   }
-  async function handleQuickSell(
-    product: BarCategoryWithProducts["products"][number],
+
+  function handleAddToCart(product: BarCategoryWithProducts["products"][number]) {
+    const quantity = getQuantity(product.id);
+    setCart((prev) => {
+      const existing = prev.find((item) => item.productId === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.productId === product.id
+            ? { ...item, quantity: item.quantity + quantity }
+            : item
+        );
+      }
+      return [...prev, { productId: product.id, quantity }];
+    });
+    setQuantities((prev) => ({ ...prev, [product.id]: 1 }));
+  }
+
+  function updateCartItemQuantity(productId: string, quantity: number) {
+    setCart((prev) =>
+      prev
+        .map((item) => (item.productId === productId ? { ...item, quantity: Math.max(1, quantity) } : item))
+        .filter((item) => item.quantity > 0)
+    );
+  }
+
+  function removeFromCart(productId: string) {
+    setCart((prev) => prev.filter((item) => item.productId !== productId));
+  }
+
+  async function handleCartCheckout(
     method: BarMethod | null,
-    options?: { cashReceivedEuros?: string; deferStaffPayment?: boolean }
+    options?: { deferStaffPayment?: boolean }
   ) {
     try {
       setError(null);
-      const busyKey = options?.deferStaffPayment ? `${product.id}-STAFF_PENDING` : `${product.id}-${method}`;
+      const busyKey = options?.deferStaffPayment ? "cart-STAFF_PENDING" : `cart-${method}`;
       setActionBusy(busyKey);
+
+      if (cartLines.length === 0) {
+        throw new Error("Añade productos al carrito antes de cobrar.");
+      }
 
       if (staffMode && !staffEmployeeId) {
         throw new Error("Selecciona el trabajador para la venta STAFF.");
       }
 
-      const quantity = getQuantity(product.id);
-      const unitPriceCents =
-        staffMode && product.staffEligible && product.staffPriceCents != null
-          ? Number(product.staffPriceCents)
-          : Number(product.salePriceCents);
-
-      const pricing = calculateBarLineTotal({
-        unitPriceCents,
-        quantity,
-        promotions: product.promotions,
-        staffMode,
-        staffPriceCents: product.staffPriceCents,
-      });
+      if (appliedManualDiscountCents > 0 && !manualDiscountReason.trim()) {
+        throw new Error("Indica el motivo del descuento manual.");
+      }
 
       await createBarPayment({
-        productId: product.id,
-        quantity,
-        amountCents: pricing.totalCents,
+        items: cartLines.map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+        })),
+        amountCents: cartTotalCents,
         method,
         date: today,
         shift,
-        label: product.name,
+        label: `Venta conjunta BAR (${cartLines.length} líneas)`,
         staffMode,
         staffEmployeeId: staffMode ? staffEmployeeId : null,
         deferStaffPayment: options?.deferStaffPayment ?? false,
-        note: `BAR - Venta rápida${staffMode ? " - STAFF" : ""} - ${product.name} - x${quantity}`,
+        note: `BAR - Venta conjunta${staffMode ? " - STAFF" : ""} - ${cartLines
+          .map((line) => `${line.product.name} x${line.quantity}`)
+          .join(" · ")}`,
+        manualDiscountCents: appliedManualDiscountCents,
+        manualDiscountReason: appliedManualDiscountCents > 0 ? manualDiscountReason.trim() : null,
       });
 
-      setQuantities((prev) => ({ ...prev, [product.id]: 1 }));
+      setCart([]);
+      setManualDiscountEuros("");
+      setManualDiscountReason("");
+      setShowCashHelper(false);
+      setCashReceivedEuros("");
       await load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "No se pudo registrar la venta");
@@ -438,7 +550,7 @@ export default function BarPage() {
       />
       <Card
         title="TPV rápido"
-        right={<div style={{ fontSize: 12, color: "#64748b" }}>Cada venta entra en BAR y en el cierre común.</div>}
+        right={<div style={{ fontSize: 12, color: "#64748b" }}>Venta conjunta con cobro único y cuadre directo en caja.</div>}
       >
         {loading ? (
           <Alert kind="info">Cargando resumen y catálogo del turno...</Alert>
@@ -447,7 +559,18 @@ export default function BarPage() {
         ) : (
           <div style={{ display: "grid", gap: 18 }}>
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800, color: "#334155" }}>
-              <input type="checkbox" checked={staffMode} onChange={(e) => setStaffMode(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={staffMode}
+                onChange={(e) => {
+                  setStaffMode(e.target.checked);
+                  setCart([]);
+                  setManualDiscountEuros("");
+                  setManualDiscountReason("");
+                  setShowCashHelper(false);
+                  setCashReceivedEuros("");
+                }}
+              />
               Modo staff
             </label>
 
@@ -466,6 +589,270 @@ export default function BarPage() {
                 </Select>
               </label>
             ) : null}
+
+            <div
+              style={{
+                display: "grid",
+                gap: 14,
+                border: "1px solid #cbd5e1",
+                borderRadius: 18,
+                padding: 16,
+                background: "#f8fafc",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <div style={{ fontSize: 18, fontWeight: 950 }}>Carrito actual</div>
+                  <div style={{ fontSize: 13, color: "#64748b" }}>
+                    {cartLines.length === 0
+                      ? "Sin productos añadidos."
+                      : `${cartLines.length} líneas · ${cartLines.reduce((sum, line) => sum + line.quantity, 0)} uds`}
+                  </div>
+                </div>
+                {cartLines.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCart([]);
+                      setManualDiscountEuros("");
+                      setManualDiscountReason("");
+                      setShowCashHelper(false);
+                      setCashReceivedEuros("");
+                    }}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      border: "1px solid #cbd5e1",
+                      background: "#fff",
+                      cursor: "pointer",
+                      fontWeight: 800,
+                    }}
+                  >
+                    Vaciar carrito
+                  </button>
+                ) : null}
+              </div>
+
+              {cartLines.length === 0 ? (
+                <Alert kind="info">Añade varias bebidas o productos y cobra la venta como una sola operación.</Alert>
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {cartLines.map((line) => (
+                    <div
+                      key={line.productId}
+                      style={{
+                        display: "grid",
+                        gap: 8,
+                        gridTemplateColumns: "minmax(220px, 1.4fr) minmax(120px, 0.8fr) minmax(140px, 0.8fr) auto",
+                        alignItems: "center",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 14,
+                        padding: 12,
+                        background: "#fff",
+                      }}
+                    >
+                      <div style={{ display: "grid", gap: 2 }}>
+                        <div style={{ fontSize: 15, fontWeight: 900 }}>{line.product.name}</div>
+                        <div style={{ fontSize: 12, color: "#64748b" }}>
+                          {(line.pricing.unitPriceCents / 100).toFixed(2)} EUR/u
+                          {line.pricing.autoDiscountCents > 0 ? ` · ${line.pricing.label}` : ""}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button
+                          type="button"
+                          onClick={() => updateCartItemQuantity(line.productId, line.quantity - 1)}
+                          style={{ width: 30, height: 30, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 900 }}
+                        >
+                          -
+                        </button>
+                        <input
+                          value={String(line.quantity)}
+                          onChange={(e) => {
+                            const next = Number(e.target.value);
+                            updateCartItemQuantity(line.productId, Number.isFinite(next) && next > 0 ? Math.floor(next) : 1);
+                          }}
+                          style={{ width: 62, padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 800, textAlign: "center" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateCartItemQuantity(line.productId, line.quantity + 1)}
+                          style={{ width: 30, height: 30, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 900 }}
+                        >
+                          +
+                        </button>
+                      </div>
+                      <div style={{ display: "grid", gap: 2, justifyItems: "end" }}>
+                        {line.pricing.baseTotalCents > line.pricing.subtotalBeforeManualCents ? (
+                          <div style={{ fontSize: 12, color: "#94a3b8", textDecoration: "line-through", fontWeight: 700 }}>
+                            {euros(line.pricing.baseTotalCents)}
+                          </div>
+                        ) : null}
+                        <div style={{ fontSize: 14, fontWeight: 900 }}>{euros(line.pricing.subtotalBeforeManualCents)}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeFromCart(line.productId)}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 10,
+                          border: "1px solid #fecaca",
+                          background: "#fff1f2",
+                          color: "#9f1239",
+                          cursor: "pointer",
+                          fontWeight: 800,
+                        }}
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Base antes de promos</div>
+                  <div style={{ fontSize: 18, fontWeight: 950 }}>{euros(cartBaseTotalCents)}</div>
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Descuento por promos</div>
+                  <div style={{ fontSize: 18, fontWeight: 950, color: cartAutoDiscountCents > 0 ? "#166534" : "#0f172a" }}>
+                    {euros(cartAutoDiscountCents)}
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Subtotal</div>
+                  <div style={{ fontSize: 18, fontWeight: 950 }}>{euros(cartSubtotalBeforeManualCents)}</div>
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Descuento manual</div>
+                  <div style={{ fontSize: 18, fontWeight: 950, color: appliedManualDiscountCents > 0 ? "#166534" : "#0f172a" }}>
+                    {euros(appliedManualDiscountCents)}
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Total a cobrar</div>
+                  <div style={{ fontSize: 24, fontWeight: 950 }}>{euros(cartTotalCents)}</div>
+                </div>
+              </div>
+
+              {!staffMode ? (
+                <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+                  <label style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Descuento manual total (EUR)</div>
+                    <input
+                      value={manualDiscountEuros}
+                      onChange={(e) => setManualDiscountEuros(e.target.value)}
+                      placeholder={canApplyManualDiscount ? "0,00" : "Solo ventas de bebidas"}
+                      disabled={!canApplyManualDiscount}
+                      style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #cbd5e1", background: canApplyManualDiscount ? "#fff" : "#f1f5f9" }}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Motivo del descuento</div>
+                    <input
+                      value={manualDiscountReason}
+                      onChange={(e) => setManualDiscountReason(e.target.value)}
+                      placeholder={canApplyManualDiscount ? "Ej: pack manual por varias latas" : "Disponible solo en bebidas"}
+                      disabled={!canApplyManualDiscount}
+                      style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #cbd5e1", background: canApplyManualDiscount ? "#fff" : "#f1f5f9" }}
+                    />
+                  </label>
+                </div>
+              ) : null}
+
+              {!staffMode && cartLines.length > 0 && !canApplyManualDiscount ? (
+                <Alert kind="info">El descuento manual solo se habilita cuando toda la venta está compuesta por bebidas.</Alert>
+              ) : null}
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(["CASH", "CARD", "BIZUM", "TRANSFER"] as BarMethod[]).map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => {
+                      if (method === "CASH") {
+                        setShowCashHelper((prev) => !prev);
+                        return;
+                      }
+                      void handleCartCheckout(method);
+                    }}
+                    disabled={cartLines.length === 0 || actionBusy === `cart-${method}`}
+                    style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", ...methodPill(method) }}
+                  >
+                    {actionBusy === `cart-${method}` ? "Guardando..." : `${method} · ${euros(cartTotalCents)}`}
+                  </button>
+                ))}
+                {staffMode ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleCartCheckout(null, { deferStaffPayment: true })}
+                    disabled={cartLines.length === 0 || actionBusy === "cart-STAFF_PENDING"}
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: 12,
+                      border: "1px solid #fed7aa",
+                      background: "#fff7ed",
+                      color: "#9a3412",
+                      cursor: "pointer",
+                      fontWeight: 900,
+                    }}
+                  >
+                    {actionBusy === "cart-STAFF_PENDING" ? "Guardando..." : `Pendiente STAFF · ${euros(cartTotalCents)}`}
+                  </button>
+                ) : null}
+              </div>
+
+              {showCashHelper ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                    padding: 12,
+                    borderRadius: 14,
+                    border: "1px solid #dbe4ea",
+                    background: "#fff",
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 900, color: "#475569" }}>
+                    Cobro en efectivo · total {euros(cartTotalCents)}
+                  </div>
+                  <CashChangeHelper
+                    amountEuros={(cartTotalCents / 100).toFixed(2)}
+                    receivedEuros={cashReceivedEuros}
+                    onReceivedEurosChange={setCashReceivedEuros}
+                  />
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => void handleCartCheckout("CASH")}
+                      disabled={cartLines.length === 0 || actionBusy === "cart-CASH"}
+                      style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", ...methodPill("CASH") }}
+                    >
+                      {actionBusy === "cart-CASH" ? "Guardando..." : "Confirmar efectivo"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCashHelper(false);
+                        setCashReceivedEuros("");
+                      }}
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 12,
+                        border: "1px solid #cbd5e1",
+                        background: "#fff",
+                        cursor: "pointer",
+                        fontWeight: 800,
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
 
             {catalog.map((category) => (
               <div key={category.id} style={{ display: "grid", gap: 12, border: "1px solid #e2e8f0", borderRadius: 18, padding: 16, background: "#fff" }}>
@@ -486,8 +873,6 @@ export default function BarPage() {
                           product={product}
                           quantity={quantity}
                           staffMode={staffMode}
-                          allowDeferredStaffPayment={staffMode && product.staffEligible}
-                          actionBusy={actionBusy}
                           onDecreaseQuantity={() =>
                             setQuantities((prev) => ({ ...prev, [product.id]: Math.max(1, quantity - 1) }))
                           }
@@ -497,10 +882,8 @@ export default function BarPage() {
                           onIncreaseQuantity={() =>
                             setQuantities((prev) => ({ ...prev, [product.id]: quantity + 1 }))
                           }
-                          onQuickSell={(method, options) =>
-                            void handleQuickSell(product, method, options)
-                          }
-                          methodPill={methodPill}
+                          onAddToCart={() => handleAddToCart(product)}
+                          addingToCart={false}
                         />
                       );
                     })}

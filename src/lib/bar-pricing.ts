@@ -17,6 +17,7 @@ type Input = {
   promotions: Promotion[];
   staffMode?: boolean;
   staffPriceCents?: number | null;
+  manualDiscountCents?: number;
 };
 
 export function calculateBarLineTotal(input: Input) {
@@ -26,13 +27,21 @@ export function calculateBarLineTotal(input: Input) {
     promotions,
     staffMode,
     staffPriceCents,
+    manualDiscountCents,
   } = input;
 
-  // 🔒 STAFF MODE PRIORITY
+  const requestedManualDiscountCents = Math.max(0, Math.round(manualDiscountCents ?? 0));
+
   if (staffMode && staffPriceCents != null) {
+    const baseTotalCents = staffPriceCents * quantity;
+
     return {
       unitPriceCents: staffPriceCents,
-      totalCents: staffPriceCents * quantity,
+      baseTotalCents,
+      autoDiscountCents: 0,
+      subtotalBeforeManualCents: baseTotalCents,
+      manualDiscountCents: 0,
+      totalCents: baseTotalCents,
       appliedPromotion: null,
       label: "Precio staff",
     };
@@ -42,68 +51,58 @@ export function calculateBarLineTotal(input: Input) {
 
   const activePromos = promotions.filter((p) => {
     if (!p.isActive) return false;
-
     if (p.startsAt && new Date(p.startsAt) > now) return false;
     if (p.endsAt && new Date(p.endsAt) < now) return false;
-
     return true;
   });
 
-  let bestTotal = unitPriceCents * quantity;
+  const baseTotalCents = unitPriceCents * quantity;
+  let bestSubtotalCents = baseTotalCents;
   let bestPromo: Promotion | null = null;
 
   for (const promo of activePromos) {
-    let total = unitPriceCents * quantity;
+    let subtotalCents = baseTotalCents;
 
-    // =========================
-    // FIXED_TOTAL_FOR_QTY
-    // =========================
-    if (
-      promo.type === "FIXED_TOTAL_FOR_QTY" &&
-      promo.exactQty &&
-      promo.fixedTotalCents != null
-    ) {
+    if (promo.type === "FIXED_TOTAL_FOR_QTY" && promo.exactQty && promo.fixedTotalCents != null) {
       const packSize = promo.exactQty;
 
       if (quantity >= packSize) {
         const packs = Math.floor(quantity / packSize);
         const remainder = quantity % packSize;
 
-        total =
-          packs * promo.fixedTotalCents +
-          remainder * unitPriceCents;
+        subtotalCents = packs * promo.fixedTotalCents + remainder * unitPriceCents;
       }
     }
 
-    // =========================
-    // BUY_X_PAY_Y
-    // =========================
-    if (
-      promo.type === "BUY_X_PAY_Y" &&
-      promo.buyQty &&
-      promo.payQty
-    ) {
+    if (promo.type === "BUY_X_PAY_Y" && promo.buyQty && promo.payQty) {
       const groupSize = promo.buyQty;
 
       if (quantity >= groupSize) {
         const groups = Math.floor(quantity / groupSize);
         const remainder = quantity % groupSize;
 
-        total =
-          groups * (promo.payQty * unitPriceCents) +
-          remainder * unitPriceCents;
+        subtotalCents = groups * (promo.payQty * unitPriceCents) + remainder * unitPriceCents;
       }
     }
 
-    if (total < bestTotal) {
-      bestTotal = total;
+    if (subtotalCents < bestSubtotalCents) {
+      bestSubtotalCents = subtotalCents;
       bestPromo = promo;
     }
   }
 
+  const appliedManualDiscountCents = Math.min(
+    requestedManualDiscountCents,
+    Math.max(0, bestSubtotalCents - 1)
+  );
+
   return {
     unitPriceCents,
-    totalCents: bestTotal,
+    baseTotalCents,
+    autoDiscountCents: Math.max(0, baseTotalCents - bestSubtotalCents),
+    subtotalBeforeManualCents: bestSubtotalCents,
+    manualDiscountCents: appliedManualDiscountCents,
+    totalCents: bestSubtotalCents - appliedManualDiscountCents,
     appliedPromotion: bestPromo,
     label: bestPromo
       ? bestPromo.type === "BUY_X_PAY_Y"
@@ -113,17 +112,19 @@ export function calculateBarLineTotal(input: Input) {
   };
 }
 
-export function getBarPromotionBadge(promotions: Array<{
-  id: string;
-  type: "FIXED_TOTAL_FOR_QTY" | "BUY_X_PAY_Y";
-  exactQty?: number | null;
-  fixedTotalCents?: number | null;
-  buyQty?: number | null;
-  payQty?: number | null;
-  isActive: boolean;
-  startsAt?: string | Date | null;
-  endsAt?: string | Date | null;
-}>) {
+export function getBarPromotionBadge(
+  promotions: Array<{
+    id: string;
+    type: "FIXED_TOTAL_FOR_QTY" | "BUY_X_PAY_Y";
+    exactQty?: number | null;
+    fixedTotalCents?: number | null;
+    buyQty?: number | null;
+    payQty?: number | null;
+    isActive: boolean;
+    startsAt?: string | Date | null;
+    endsAt?: string | Date | null;
+  }>
+) {
   const now = new Date();
 
   const active = promotions.filter((p) => {
@@ -141,11 +142,7 @@ export function getBarPromotionBadge(promotions: Array<{
     return `${promo.buyQty}x${promo.payQty}`;
   }
 
-  if (
-    promo.type === "FIXED_TOTAL_FOR_QTY" &&
-    promo.exactQty &&
-    promo.fixedTotalCents != null
-  ) {
+  if (promo.type === "FIXED_TOTAL_FOR_QTY" && promo.exactQty && promo.fixedTotalCents != null) {
     return `${promo.exactQty} por ${(promo.fixedTotalCents / 100).toFixed(2)}€`;
   }
 

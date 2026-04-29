@@ -1875,6 +1875,10 @@ model BarSale {
   staffMode Boolean @default(false)
   note      String?
 
+  totalBaseRevenueCents Int @default(0)
+  autoDiscountCents     Int @default(0)
+  manualDiscountCents   Int @default(0)
+  manualDiscountReason  String? @db.VarChar(200)
   totalRevenueCents Int @default(0)
   totalCostCents    Int @default(0)
   totalMarginCents  Int @default(0)
@@ -1901,7 +1905,11 @@ model BarSaleItem {
 
   quantity Decimal @db.Decimal(12, 3)
 
+  baseUnitPriceCents Int?
   unitPriceCents Int
+  baseRevenueCents   Int @default(0)
+  autoDiscountCents  Int @default(0)
+  manualDiscountCents Int @default(0)
   revenueCents   Int
 
   unitCostCents Int?

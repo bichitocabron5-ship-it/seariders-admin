@@ -1,12 +1,8 @@
 "use client";
 
-import type React from "react";
-import { useState } from "react";
-
-import CashChangeHelper from "@/components/cash-change-helper";
 import { styles } from "@/components/ui";
 import { calculateBarLineTotal, getBarPromotionBadge } from "@/lib/bar-pricing";
-import type { BarCategoryWithProducts, BarMethod } from "../services/bar";
+import type { BarCategoryWithProducts } from "../services/bar";
 
 type Product = BarCategoryWithProducts["products"][number];
 
@@ -14,29 +10,23 @@ type BarQuickSellProductCardProps = {
   product: Product;
   quantity: number;
   staffMode: boolean;
-  allowDeferredStaffPayment: boolean;
-  actionBusy: string | null;
   onDecreaseQuantity: () => void;
   onSetQuantity: (value: number) => void;
   onIncreaseQuantity: () => void;
-  onQuickSell: (method: BarMethod | null, options?: { cashReceivedEuros?: string; deferStaffPayment?: boolean }) => void;
-  methodPill: (method: BarMethod) => React.CSSProperties;
+  onAddToCart: () => void;
+  addingToCart: boolean;
 };
 
 export function BarQuickSellProductCard({
   product,
   quantity,
   staffMode,
-  allowDeferredStaffPayment,
-  actionBusy,
   onDecreaseQuantity,
   onSetQuantity,
   onIncreaseQuantity,
-  onQuickSell,
-  methodPill,
+  onAddToCart,
+  addingToCart,
 }: BarQuickSellProductCardProps) {
-  const [showCashHelper, setShowCashHelper] = useState(false);
-  const [cashReceivedEuros, setCashReceivedEuros] = useState("");
   const stockValue = Number(product.currentStock ?? 0);
   const minStockValue = Number(product.minStock ?? 0);
   const lowStock = product.controlsStock && stockValue <= minStockValue;
@@ -67,7 +57,15 @@ export function BarQuickSellProductCard({
       <div style={{ display: "grid", gap: 4 }}>
         {promoBadge ? (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ ...styles.pill, background: "#ecfdf5", border: "1px solid #bbf7d0", color: "#166534", fontWeight: 900 }}>
+            <span
+              style={{
+                ...styles.pill,
+                background: "#ecfdf5",
+                border: "1px solid #bbf7d0",
+                color: "#166534",
+                fontWeight: 900,
+              }}
+            >
               {promoBadge}
             </span>
           </div>
@@ -81,7 +79,13 @@ export function BarQuickSellProductCard({
           <div style={{ fontSize: 12, fontWeight: 900, color: "#166534" }}>{pricing.label}</div>
         ) : null}
         {product.controlsStock ? (
-          <div style={{ fontSize: 12, color: lowStock ? "#c2410c" : "#475569", fontWeight: lowStock ? 800 : 500 }}>
+          <div
+            style={{
+              fontSize: 12,
+              color: lowStock ? "#c2410c" : "#475569",
+              fontWeight: lowStock ? 800 : 500,
+            }}
+          >
             Stock: {String(product.currentStock)} {product.unitLabel ?? "ud"}
             {lowStock ? " - stock bajo" : ""}
           </div>
@@ -92,7 +96,19 @@ export function BarQuickSellProductCard({
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Cantidad</div>
-        <button type="button" onClick={onDecreaseQuantity} style={{ width: 32, height: 32, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 900 }}>
+        <button
+          type="button"
+          onClick={onDecreaseQuantity}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 10,
+            border: "1px solid #cbd5e1",
+            background: "#fff",
+            cursor: "pointer",
+            fontWeight: 900,
+          }}
+        >
           -
         </button>
         <input
@@ -101,113 +117,66 @@ export function BarQuickSellProductCard({
             const raw = Number(e.target.value);
             onSetQuantity(Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 1);
           }}
-          style={{ width: 70, padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 800, textAlign: "center" }}
-        />
-        <button type="button" onClick={onIncreaseQuantity} style={{ width: 32, height: 32, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", fontWeight: 900 }}>
-          +
-        </button>
-        <div style={{ display: "grid", gap: 2 }}>
-          {!staffMode && pricing.appliedPromotion ? (
-            <div style={{ fontSize: 12, color: "#94a3b8", textDecoration: "line-through", fontWeight: 700 }}>
-              Normal: {((unitPriceCents * quantity) / 100).toFixed(2)} EUR
-            </div>
-          ) : null}
-          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
-            Total: {(pricing.totalCents / 100).toFixed(2)} EUR
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {(["CASH", "CARD", "BIZUM", "TRANSFER"] as BarMethod[]).map((method) => {
-          const busy = actionBusy === `${product.id}-${method}`;
-          return (
-            <button
-              key={method}
-              type="button"
-              onClick={() => {
-                if (method === "CASH") {
-                  setShowCashHelper((prev) => !prev);
-                  return;
-                }
-                onQuickSell(method);
-              }}
-              disabled={busy}
-              style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", ...methodPill(method) }}
-            >
-              {busy ? "Guardando..." : `${method} - ${(pricing.totalCents / 100).toFixed(2)} EUR`}
-            </button>
-          );
-        })}
-      </div>
-
-      {showCashHelper ? (
-        <div
           style={{
-            display: "grid",
-            gap: 10,
-            padding: 12,
-            borderRadius: 14,
-            border: "1px solid #dbe4ea",
+            width: 70,
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid #cbd5e1",
             background: "#fff",
+            fontWeight: 800,
+            textAlign: "center",
           }}
-        >
-          <div style={{ fontSize: 12, fontWeight: 900, color: "#475569" }}>
-            Cobro en efectivo · total {(pricing.totalCents / 100).toFixed(2)} EUR
-          </div>
-          <CashChangeHelper
-            amountEuros={(pricing.totalCents / 100).toFixed(2)}
-            receivedEuros={cashReceivedEuros}
-            onReceivedEurosChange={setCashReceivedEuros}
-          />
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              onClick={() => onQuickSell("CASH", { cashReceivedEuros })}
-              disabled={actionBusy === `${product.id}-CASH`}
-              style={{ padding: "10px 14px", borderRadius: 12, cursor: "pointer", ...methodPill("CASH") }}
-            >
-              {actionBusy === `${product.id}-CASH` ? "Guardando..." : "Confirmar efectivo"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowCashHelper(false);
-                setCashReceivedEuros("");
-              }}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid #cbd5e1",
-                background: "#fff",
-                cursor: "pointer",
-                fontWeight: 800,
-              }}
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {allowDeferredStaffPayment ? (
+        />
         <button
           type="button"
-          onClick={() => onQuickSell(null, { deferStaffPayment: true })}
-          disabled={actionBusy === `${product.id}-STAFF_PENDING`}
+          onClick={onIncreaseQuantity}
           style={{
-            padding: "10px 14px",
-            borderRadius: 12,
-            border: "1px solid #fed7aa",
-            background: "#fff7ed",
-            color: "#9a3412",
+            width: 32,
+            height: 32,
+            borderRadius: 10,
+            border: "1px solid #cbd5e1",
+            background: "#fff",
             cursor: "pointer",
             fontWeight: 900,
           }}
         >
-          {actionBusy === `${product.id}-STAFF_PENDING` ? "Guardando..." : `Pendiente STAFF - ${(pricing.totalCents / 100).toFixed(2)} EUR`}
+          +
         </button>
-      ) : null}
+        <div style={{ display: "grid", gap: 2 }}>
+          {!staffMode && pricing.appliedPromotion ? (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#94a3b8",
+                textDecoration: "line-through",
+                fontWeight: 700,
+              }}
+            >
+              Normal: {((unitPriceCents * quantity) / 100).toFixed(2)} EUR
+            </div>
+          ) : null}
+          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
+            Total línea: {(pricing.totalCents / 100).toFixed(2)} EUR
+          </div>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onAddToCart}
+        disabled={addingToCart}
+        style={{
+          padding: "12px 14px",
+          borderRadius: 12,
+          border: "1px solid #0f766e",
+          background: "#0f766e",
+          color: "#fff",
+          cursor: "pointer",
+          fontWeight: 900,
+        }}
+      >
+        {addingToCart ? "Añadiendo..." : `Añadir al carrito · ${(pricing.totalCents / 100).toFixed(2)} EUR`}
+      </button>
     </div>
   );
 }
