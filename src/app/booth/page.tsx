@@ -314,7 +314,7 @@ useEffect(() => {
   setPromoterDiscountSharePct((policy.promoterDiscountShareBps / 100).toFixed(2));
 }, [selectedChannel]);
 
-const isExternalCharge = selectedChannel?.kind === "EXTERNAL_ACTIVITY" || selectedService?.isExternalActivity === true;
+const isExternalCharge = selectedChannel?.kind === "EXTERNAL_ACTIVITY";
 
 const countryOptions = useMemo(() => getCountryOptionsEs(), []);
 const selectedCountryOpt = useMemo(() => {

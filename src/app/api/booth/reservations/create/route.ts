@@ -284,7 +284,7 @@ export async function POST(req: Request) {
   });
 
   const mainService = servicesById.get(mainItem.serviceId)!;
-  const isExternalCharge = channel?.kind === "EXTERNAL_ACTIVITY" || mainService.isExternalActivity;
+  const isExternalCharge = channel?.kind === "EXTERNAL_ACTIVITY";
 
   if (isExternalCharge) {
     if (!channel || channel.kind !== "EXTERNAL_ACTIVITY") {
