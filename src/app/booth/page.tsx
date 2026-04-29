@@ -14,6 +14,7 @@ import BoothTripsSection from "./_components/BoothTripsSection";
 
 type Service = { id: string; name: string; category: string; code?: string | null; isExternalActivity?: boolean | null };
 type Option = { id: string; serviceId: string; durationMinutes: number; paxMax: number; basePriceCents: number };
+type CartItem = { id: string; serviceId: string; optionId: string | null; quantity: number; pax: number; isExtra: boolean };
 type ChannelRule = { serviceId: string; commissionPct: number };
 type Channel = {
   id: string;
@@ -221,7 +222,9 @@ function formatReservationLine(r: ReservationLike, opts?: { showCountry?: boolea
 
 export default function Booth() {
   const [services, setServices] = useState<Service[]>([]);
+  const [servicesExtra, setServicesExtra] = useState<Service[]>([]);
   const [options, setOptions] = useState<Option[]>([]);
+  const [extraPriceByServiceId, setExtraPriceByServiceId] = useState<Record<string, number | null>>({});
   const [channels, setChannels] = useState<Channel[]>([]);
   const [rows, setRows] = useState<ReservationLike[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -239,6 +242,7 @@ export default function Booth() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [reservationActionId, setReservationActionId] = useState<string | null>(null);
   const [tripActionId, setTripActionId] = useState<string | null>(null);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   // form
   const [firstName, setFirstName] = useState("");
@@ -247,6 +251,8 @@ export default function Booth() {
   const [optionId, setOptionId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [pax, setPax] = useState(2);
+  const [extraServiceId, setExtraServiceId] = useState("");
+  const [extraQuantity, setExtraQuantity] = useState(1);
   const [channelId, setChannelId] = useState<string>(""); // opcional
   const [paymentMethod, setPaymentMethod] = useState<PayMethod>("CARD");
   const [category, setCategory] = useState<string>("");
@@ -316,17 +322,61 @@ const selectedCountryOpt = useMemo(() => {
   return countryOptions.find((c) => c.value === v) ?? null;
 }, [customerCountry, countryOptions]);
 
-const isJetski = useMemo(() => {
-  const key = normalize(selectedService?.code ?? selectedService?.name ?? "");
-  // Ajusta los hints a tus códigos/nombres reales
-  return key.includes("jetski") || key.includes("jet") || key.includes("moto");
-}, [selectedService]);
+const getServiceById = useCallback(
+  (id: string) => services.find((service) => service.id === id) ?? servicesExtra.find((service) => service.id === id) ?? null,
+  [services, servicesExtra]
+);
 
-const baseTotalCents = useMemo(() => {
-  const unit = Number(selectedOption?.basePriceCents ?? 0) || 0;
-  const qty = isJetski ? Number(quantity || 1) : 1;
-  return unit * Math.max(1, qty);
-}, [selectedOption, isJetski, quantity]);
+const getOptionById = useCallback(
+  (id: string | null) => (id ? options.find((option) => option.id === id) ?? null : null),
+  [options]
+);
+
+const getCartItemUnitPriceCents = useCallback(
+  (item: CartItem) => {
+    if (item.isExtra) return Number(extraPriceByServiceId[item.serviceId] ?? 0) || 0;
+    return Number(getOptionById(item.optionId)?.basePriceCents ?? 0) || 0;
+  },
+  [extraPriceByServiceId, getOptionById]
+);
+
+const getCartItemLabel = useCallback(
+  (item: CartItem) => {
+    const service = getServiceById(item.serviceId);
+    if (item.isExtra) return `${service?.name ?? "Extra"} · extra`;
+    const option = getOptionById(item.optionId);
+    return `${service?.name ?? "Servicio"}${option?.durationMinutes ? ` · ${option.durationMinutes} min` : ""}`;
+  },
+  [getOptionById, getServiceById]
+);
+
+const effectiveItems = useMemo<CartItem[]>(
+  () =>
+    cartItems.length > 0
+      ? cartItems
+      : serviceId && optionId
+        ? [
+            {
+              id: "current",
+              serviceId,
+              optionId,
+              quantity: Math.max(1, Number(quantity || 1)),
+              pax: Math.max(1, Number(pax || 1)),
+              isExtra: false,
+            },
+          ]
+        : [],
+  [cartItems, optionId, pax, quantity, serviceId]
+);
+
+const baseTotalCents = useMemo(
+  () =>
+    effectiveItems.reduce(
+      (sum, item) => sum + getCartItemUnitPriceCents(item) * Math.max(1, Number(item.quantity || 1)),
+      0
+    ),
+  [effectiveItems, getCartItemUnitPriceCents]
+);
 
 const maxManualDiscountCents = useMemo(() => Math.floor(baseTotalCents * 0.3), [baseTotalCents]);
 const discountCentsRaw = useMemo(() => toCentsFromEuroInput(discountEuros), [discountEuros]);
@@ -339,16 +389,21 @@ const finalTotalCents = useMemo(
   [baseTotalCents, discountCentsClamped]
 );
 
-const commissionPct = useMemo(() => {
-  if (!selectedChannel?.commissionEnabled || !selectedService?.id) return 0;
+const commissionServiceId = useMemo(
+  () => effectiveItems.find((item) => !item.isExtra)?.serviceId ?? selectedService?.id ?? null,
+  [effectiveItems, selectedService]
+);
 
-  const specificRule = selectedChannel.commissionRules?.find((rule) => rule.serviceId === selectedService.id);
+const commissionPct = useMemo(() => {
+  if (!selectedChannel?.commissionEnabled || !commissionServiceId) return 0;
+
+  const specificRule = selectedChannel.commissionRules?.find((rule) => rule.serviceId === commissionServiceId);
   if (specificRule) {
     return searidersPctFromChannelPct(Number(specificRule.commissionPct ?? 0), selectedChannel.kind);
   }
 
   return searidersPctFromChannelPct(Number(selectedChannel.commissionBps ?? 0) / 100, selectedChannel.kind);
-}, [selectedChannel, selectedService]);
+}, [commissionServiceId, selectedChannel]);
 
 const commissionBreakdown = useMemo(
   () =>
@@ -384,7 +439,9 @@ const load = useCallback(async () => {
     const data = await catalogRes.value.json();
 
     setServices(data.services ?? []);
+    setServicesExtra(data.servicesExtra ?? []);
     setOptions(data.options ?? []);
+    setExtraPriceByServiceId(data.extraPriceByServiceId ?? {});
     setChannels(data.channels ?? []);
 
     const firstCategory = (data.services ?? [])[0]?.category ?? "";
@@ -402,6 +459,7 @@ const load = useCallback(async () => {
       (o: Option) => o.serviceId === (s0?.id ?? "")
     );
     setOptionId((prev) => prev || firstOpt?.id || "");
+    setExtraServiceId((prev) => prev || data.servicesExtra?.[0]?.id || "");
   } else if (catalogRes.status === "rejected") {
     errors.push("No se pudo cargar el catálogo de Booth.");
   }
@@ -480,6 +538,65 @@ const taxiboatOpsByBoat = useMemo(
   [taxiboatOps]
 );
 
+function addActivityToCart() {
+  if (isExternalCharge) throw new Error("Las actividades externas no usan carrito.");
+  if (!serviceId) throw new Error("Servicio requerido");
+  if (!optionId) throw new Error("Duración requerida");
+  if (Number(quantity) < 1) throw new Error("Cantidad inválida");
+  if (Number(pax) < 1) throw new Error("PAX inválido");
+
+  setCartItems((prev) => {
+    const idx = prev.findIndex((item) => !item.isExtra && item.serviceId === serviceId && item.optionId === optionId);
+    if (idx >= 0) {
+      const next = prev.slice();
+      next[idx] = { ...next[idx], quantity: next[idx].quantity + Math.max(1, Number(quantity || 1)) };
+      return next;
+    }
+
+    return [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        serviceId,
+        optionId,
+        quantity: Math.max(1, Number(quantity || 1)),
+        pax: Math.max(1, Number(pax || 1)),
+        isExtra: false,
+      },
+    ];
+  });
+}
+
+function addExtraToCart() {
+  if (!extraServiceId) throw new Error("Selecciona un extra.");
+  if (Number(extraQuantity) < 1) throw new Error("Cantidad inválida.");
+
+  setCartItems((prev) => {
+    const idx = prev.findIndex((item) => item.isExtra && item.serviceId === extraServiceId);
+    if (idx >= 0) {
+      const next = prev.slice();
+      next[idx] = { ...next[idx], quantity: next[idx].quantity + Math.max(1, Number(extraQuantity || 1)) };
+      return next;
+    }
+
+    return [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        serviceId: extraServiceId,
+        optionId: null,
+        quantity: Math.max(1, Number(extraQuantity || 1)),
+        pax: 1,
+        isExtra: true,
+      },
+    ];
+  });
+}
+
+function removeCartItem(id: string) {
+  setCartItems((prev) => prev.filter((item) => item.id !== id));
+}
+
 function getSplit(id: string): [SplitLine, SplitLine] {
   return (
     splitById[id] ?? [
@@ -535,11 +652,6 @@ function boatLabel(boat?: string | null) {
     }
   }, [serviceId, options]);
 
-// si no es jetski, quantity siempre 1
-useEffect(() => {
-  if (!isJetski) setQuantity(1);
-}, [isJetski]);
-
 useEffect(() => {
   if (!channelId) return;
   if (filteredChannels.some((channel) => channel.id === channelId)) return;
@@ -554,6 +666,29 @@ useEffect(() => {
       setError("Nombre requerido");
       return;
     }
+    if (isExternalCharge && cartItems.length > 0) {
+      setError("Los cobros externos no admiten carrito ni extras.");
+      return;
+    }
+
+    const itemsToSend =
+      cartItems.length > 0
+        ? cartItems.map((item) => ({
+            serviceId: item.serviceId,
+            optionId: item.optionId,
+            quantity: item.quantity,
+            pax: item.pax,
+            isExtra: item.isExtra,
+          }))
+        : [
+            {
+              serviceId,
+              optionId,
+              quantity: Math.max(1, Number(quantity || 1)),
+              pax: Math.max(1, Number(pax || 1)),
+              isExtra: false,
+            },
+          ];
 
     const r = await fetch("/api/booth/reservations/create", {
       method: "POST",
@@ -571,6 +706,7 @@ useEffect(() => {
         promoterDiscountSharePct,
         boothNote: boothNote.trim() || null,
         paymentMethod: isExternalCharge ? paymentMethod : null,
+        items: itemsToSend,
       }),
     });
 
@@ -591,10 +727,12 @@ useEffect(() => {
     setFirstName("");
     setQuantity(1);
     setPax(2);
+    setCartItems([]);
     setDiscountEuros("");
     setPromoterDiscountSharePct("50");
     setBoothNote("");
     setPaymentMethod("CARD");
+    setExtraQuantity(1);
 
     await load();
   }
@@ -837,7 +975,6 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 18, alignItems: "start" }}>
         <div style={{ display: "grid", gap: 16 }}>
           <BoothPreReservationFormSection
-            cardStyle={cardStyle}
             fieldStyle={fieldStyle}
             firstName={firstName}
             customerCountry={customerCountry}
@@ -851,6 +988,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             categories={categories}
             services={services}
             servicesFiltered={servicesFiltered}
+            servicesExtra={servicesExtra}
             options={options}
             optionsForService={optionsForService}
             channels={filteredChannels}
@@ -859,7 +997,6 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             isExternalCharge={isExternalCharge}
             selectedCountryOpt={selectedCountryOpt}
             countryOptions={countryOptions}
-            isJetski={isJetski}
             discountEuros={discountEuros}
             boothNote={boothNote}
             maxManualDiscountCents={maxManualDiscountCents}
@@ -870,14 +1007,21 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             commissionPct={commissionPct}
             commissionCents={commissionCents}
             netAfterCommissionCents={netAfterCommissionCents}
-            showDiscountPolicy={false}
             discountResponsibility={discountResponsibility}
             promoterDiscountSharePct={promoterDiscountSharePct}
             promoterDiscountCents={commissionBreakdown.promoterDiscountCents}
             companyDiscountCents={commissionBreakdown.companyDiscountCents}
             commissionBaseCents={commissionBreakdown.commissionBaseCents}
+            cartItems={cartItems}
+            extraServiceId={extraServiceId}
+            extraQuantity={extraQuantity}
             euros={euros}
+            getCartItemLabel={getCartItemLabel}
+            getCartItemUnitPriceCents={getCartItemUnitPriceCents}
             onSubmit={createPre}
+            onAddActivity={addActivityToCart}
+            onAddExtra={addExtraToCart}
+            onRemoveCartItem={removeCartItem}
             setFirstName={setFirstName}
             setCustomerCountry={setCustomerCountry}
             setServiceId={setServiceId}
@@ -891,6 +1035,8 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             setDiscountResponsibility={setDiscountResponsibility}
             setPromoterDiscountSharePct={setPromoterDiscountSharePct}
             setBoothNote={setBoothNote}
+            setExtraServiceId={setExtraServiceId}
+            setExtraQuantity={setExtraQuantity}
           />
 
           <BoothPreReservationsSection

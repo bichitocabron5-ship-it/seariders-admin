@@ -7,6 +7,7 @@ import type { CountryOption } from "@/lib/countries";
 
 type Service = { id: string; name: string; category: string; code?: string | null; isExternalActivity?: boolean | null };
 type Option = { id: string; serviceId: string; durationMinutes: number; paxMax: number; basePriceCents: number };
+type CartItem = { id: string; serviceId: string; optionId: string | null; quantity: number; pax: number; isExtra: boolean };
 type PayMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 type Channel = {
   id: string;
@@ -19,7 +20,6 @@ type Channel = {
 };
 
 type Props = {
-  cardStyle: React.CSSProperties;
   fieldStyle: React.CSSProperties;
   firstName: string;
   customerCountry: string;
@@ -33,6 +33,7 @@ type Props = {
   categories: string[];
   services: Service[];
   servicesFiltered: Service[];
+  servicesExtra: Service[];
   options: Option[];
   optionsForService: Option[];
   channels: Channel[];
@@ -41,7 +42,6 @@ type Props = {
   isExternalCharge: boolean;
   selectedCountryOpt: CountryOption | null;
   countryOptions: CountryOption[];
-  isJetski: boolean;
   discountEuros: string;
   boothNote: string;
   maxManualDiscountCents: number;
@@ -52,14 +52,21 @@ type Props = {
   commissionPct: number;
   commissionCents: number;
   netAfterCommissionCents: number;
-  showDiscountPolicy: boolean;
   discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
   promoterDiscountSharePct: string;
   promoterDiscountCents: number;
   companyDiscountCents: number;
   commissionBaseCents: number;
+  cartItems: CartItem[];
+  extraServiceId: string;
+  extraQuantity: number;
   euros: (cents: number) => string;
+  getCartItemLabel: (item: CartItem) => string;
+  getCartItemUnitPriceCents: (item: CartItem) => number;
   onSubmit: (e: React.FormEvent) => void | Promise<void>;
+  onAddActivity: () => void;
+  onAddExtra: () => void;
+  onRemoveCartItem: (id: string) => void;
   setFirstName: (value: string) => void;
   setCustomerCountry: (value: string) => void;
   setServiceId: (value: string) => void;
@@ -73,6 +80,8 @@ type Props = {
   setDiscountResponsibility: (value: "COMPANY" | "PROMOTER" | "SHARED") => void;
   setPromoterDiscountSharePct: (value: string) => void;
   setBoothNote: (value: string) => void;
+  setExtraServiceId: (value: string) => void;
+  setExtraQuantity: (value: number) => void;
 };
 
 export default function BoothPreReservationFormSection({
@@ -89,6 +98,7 @@ export default function BoothPreReservationFormSection({
   categories,
   services,
   servicesFiltered,
+  servicesExtra,
   options,
   optionsForService,
   channels,
@@ -97,7 +107,6 @@ export default function BoothPreReservationFormSection({
   isExternalCharge,
   selectedCountryOpt,
   countryOptions,
-  isJetski,
   discountEuros,
   boothNote,
   maxManualDiscountCents,
@@ -108,14 +117,21 @@ export default function BoothPreReservationFormSection({
   commissionPct,
   commissionCents,
   netAfterCommissionCents,
-  showDiscountPolicy,
   discountResponsibility,
   promoterDiscountSharePct,
   promoterDiscountCents,
   companyDiscountCents,
   commissionBaseCents,
+  cartItems,
+  extraServiceId,
+  extraQuantity,
   euros,
+  getCartItemLabel,
+  getCartItemUnitPriceCents,
   onSubmit,
+  onAddActivity,
+  onAddExtra,
+  onRemoveCartItem,
   setFirstName,
   setCustomerCountry,
   setServiceId,
@@ -129,7 +145,11 @@ export default function BoothPreReservationFormSection({
   setDiscountResponsibility,
   setPromoterDiscountSharePct,
   setBoothNote,
+  setExtraServiceId,
+  setExtraQuantity,
 }: Props) {
+  const hasCart = cartItems.length > 0;
+
   return (
     <SectionCard eyebrow="Booth" title={isExternalCharge ? "Cobro externo" : "Pre-reserva"}>
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
@@ -176,53 +196,136 @@ export default function BoothPreReservationFormSection({
           </select>
         </label>
 
-        <label>
-          Servicio
-          <select value={serviceId} onChange={(e) => setServiceId(e.target.value)} style={fieldStyle}>
-            {servicesFiltered.map((service) => (
-              <option key={service.id} value={service.id}>
-                {service.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div style={{ display: "grid", gap: 10, padding: 12, border: "1px solid #cbd5e1", borderRadius: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#0f766e", letterSpacing: 0.6, textTransform: "uppercase" }}>
+            Actividad
+          </div>
 
-        <label>
-          Duración
-          <select value={optionId} onChange={(e) => setOptionId(e.target.value)} style={fieldStyle}>
-            {optionsForService.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.durationMinutes} min · max {option.paxMax} pax · {euros(option.basePriceCents)}
-              </option>
-            ))}
-          </select>
-        </label>
+          <label>
+            Servicio
+            <select value={serviceId} onChange={(e) => setServiceId(e.target.value)} style={fieldStyle}>
+              {servicesFiltered.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
           <label>
-            Cantidad (motos)
-            <input
-              type="number"
-              min={1}
-              max={4}
-              value={quantity}
-              disabled={!isJetski}
-              onChange={(e) => setQuantity(Number(e.target.value))}
-              style={fieldStyle}
-            />
+            Duración
+            <select value={optionId} onChange={(e) => setOptionId(e.target.value)} style={fieldStyle}>
+              {optionsForService.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.durationMinutes} min · max {option.paxMax} pax · {euros(option.basePriceCents)}
+                </option>
+              ))}
+            </select>
           </label>
-          <label>
-            PAX
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={pax}
-              onChange={(e) => setPax(Number(e.target.value))}
-              style={fieldStyle}
-            />
-          </label>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+            <label>
+              Cantidad
+              <input
+                type="number"
+                min={1}
+                max={99}
+                value={quantity}
+                onChange={(e) => setQuantity(Number(e.target.value))}
+                style={fieldStyle}
+              />
+            </label>
+            <label>
+              PAX
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={pax}
+                onChange={(e) => setPax(Number(e.target.value))}
+                style={fieldStyle}
+              />
+            </label>
+          </div>
+
+          {!isExternalCharge ? (
+            <button type="button" onClick={onAddActivity} style={{ ...fieldStyle, cursor: "pointer", fontWeight: 800 }}>
+              Añadir actividad al carrito
+            </button>
+          ) : (
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              El cobro externo se registra como una sola línea, sin carrito.
+            </div>
+          )}
         </div>
+
+        {!isExternalCharge ? (
+          <div style={{ display: "grid", gap: 10, padding: 12, border: "1px solid #cbd5e1", borderRadius: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#0f766e", letterSpacing: 0.6, textTransform: "uppercase" }}>
+              Extras
+            </div>
+
+            <label>
+              Extra
+              <select value={extraServiceId} onChange={(e) => setExtraServiceId(e.target.value)} style={fieldStyle}>
+                <option value="">Selecciona un extra</option>
+                {servicesExtra.map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Cantidad extra
+              <input
+                type="number"
+                min={1}
+                max={99}
+                value={extraQuantity}
+                onChange={(e) => setExtraQuantity(Number(e.target.value))}
+                style={fieldStyle}
+              />
+            </label>
+
+            <button type="button" onClick={onAddExtra} style={{ ...fieldStyle, cursor: "pointer", fontWeight: 800 }}>
+              Añadir extra al carrito
+            </button>
+          </div>
+        ) : null}
+
+        {hasCart ? (
+          <div style={{ display: "grid", gap: 8, padding: 12, border: "1px solid #cbd5e1", borderRadius: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#0f766e", letterSpacing: 0.6, textTransform: "uppercase" }}>
+              Carrito
+            </div>
+            {cartItems.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  alignItems: "center",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 12,
+                  padding: "10px 12px",
+                }}
+              >
+                <div style={{ display: "grid", gap: 4 }}>
+                  <div style={{ fontWeight: 700 }}>{getCartItemLabel(item)}</div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>
+                    {item.quantity} uds · {item.pax} pax · {euros(getCartItemUnitPriceCents(item) * item.quantity)}
+                  </div>
+                </div>
+                <button type="button" onClick={() => onRemoveCartItem(item.id)} style={{ ...fieldStyle, width: "auto", cursor: "pointer" }}>
+                  Quitar
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <label>
           Descuento opcional (EUR)
@@ -234,38 +337,6 @@ export default function BoothPreReservationFormSection({
             style={fieldStyle}
           />
         </label>
-
-        {selectedChannel && showDiscountPolicy ? (
-          <>
-            <label>
-              Quién asume el descuento
-              <select
-                value={discountResponsibility}
-                onChange={(e) => setDiscountResponsibility(e.target.value as "COMPANY" | "PROMOTER" | "SHARED")}
-                style={fieldStyle}
-              >
-                <option value="COMPANY">Empresa</option>
-                <option value="PROMOTER">Promotor</option>
-                <option value="SHARED">Compartido</option>
-              </select>
-            </label>
-
-            {discountResponsibility === "SHARED" ? (
-              <label>
-                Parte del promotor (%)
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={0.01}
-                  value={promoterDiscountSharePct}
-                  onChange={(e) => setPromoterDiscountSharePct(e.target.value)}
-                  style={fieldStyle}
-                />
-              </label>
-            ) : null}
-          </>
-        ) : null}
 
         <div style={{ fontSize: 12, opacity: 0.85 }}>
           Max descuento manual: <b>{euros(maxManualDiscountCents)}</b> (30% sobre {euros(baseTotalCents)})
@@ -295,12 +366,10 @@ export default function BoothPreReservationFormSection({
                   <div style={{ fontSize: 13, color: "#334155" }}>
                     Base comisionable: <strong>{euros(commissionBaseCents)}</strong>
                   </div>
-                  {showDiscountPolicy ? (
-                    <div style={{ fontSize: 12, color: "#475569" }}>
-                      Descuento asumido por promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa:{" "}
-                      <strong>{euros(companyDiscountCents)}</strong>
-                    </div>
-                  ) : null}
+                  <div style={{ fontSize: 12, color: "#475569" }}>
+                    Descuento asumido por promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa:{" "}
+                    <strong>{euros(companyDiscountCents)}</strong>
+                  </div>
                   <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 800 }}>
                     Neto estimado a liquidar al partner: {euros(netAfterCommissionCents)}
                   </div>
@@ -310,11 +379,6 @@ export default function BoothPreReservationFormSection({
                   El canal seleccionado no tiene comisión configurada para esta actividad.
                 </div>
               )
-            ) : null}
-            {isJetski && quantity > 1 ? (
-              <div style={{ fontSize: 13, color: "#334155" }}>
-                Precio final por moto: <strong>{euros(Math.round(finalTotalCents / quantity))}</strong>
-              </div>
             ) : null}
             {discountCentsRaw > maxManualDiscountCents ? (
               <AlertBanner tone="warning" title="Descuento limitado">
@@ -341,11 +405,6 @@ export default function BoothPreReservationFormSection({
             ))}
           </select>
         </label>
-        {selectedService?.isExternalActivity ? (
-          <div style={{ fontSize: 12, color: "#64748b" }}>
-            Solo se muestran partners externos habilitados para liquidar comisión en Booth.
-          </div>
-        ) : null}
 
         {isExternalCharge ? (
           <label>

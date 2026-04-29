@@ -154,6 +154,18 @@ export async function POST(req: Request) {
       });
       if (!reservationPricing) throw new Error("Reserva no existe");
 
+      const allItems = await tx.reservationItem.findMany({
+        where: { reservationId },
+        select: {
+          serviceId: true,
+          optionId: true,
+          quantity: true,
+          totalPriceCents: true,
+          isExtra: true,
+          service: { select: { category: true } },
+        },
+      });
+
       const isBoothReservation = reservationPricing.source === "BOOTH";
       const channel = reservationPricing.channelId
         ? await tx.channel.findUnique({
@@ -198,7 +210,7 @@ export async function POST(req: Request) {
         : Number(reservationPricing.manualDiscountCents ?? 0);
       const commercial = await computeReservationCommercialBreakdown({
         when: new Date(),
-        discountLines: (reservationPricing.items ?? []).map((item) => ({
+        discountLines: allItems.map((item) => ({
           serviceId: item.serviceId,
           optionId: item.optionId,
           category: item.service?.category ?? null,

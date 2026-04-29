@@ -183,16 +183,14 @@ export async function POST(req: Request) {
       });
       const commercial = await computeReservationCommercialBreakdown({
         when: new Date(),
-        discountLines: items
-          .filter((item) => !item.isExtra)
-          .map((item) => ({
-            serviceId: item.serviceId,
-            optionId: item.optionId,
-            category: item.service?.category ?? null,
-            quantity: Number(item.quantity ?? 0),
-            lineBaseCents: Number(item.totalPriceCents ?? 0),
-            promoCode: promotionsEnabled ? (reservation.promoCode ?? null) : null,
-          })),
+        discountLines: items.map((item) => ({
+          serviceId: item.serviceId,
+          optionId: item.optionId,
+          category: item.service?.category ?? null,
+          quantity: Number(item.quantity ?? 0),
+          lineBaseCents: Number(item.totalPriceCents ?? 0),
+          promoCode: promotionsEnabled ? (reservation.promoCode ?? null) : null,
+        })),
         customerCountry: reservation.customerCountry ?? null,
         promotionsEnabled,
         totalBeforeDiscountsCents: newTotal,
