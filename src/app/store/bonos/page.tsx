@@ -49,6 +49,45 @@ function hhmmNowRounded(step = 5) {
   return d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 }
 
+function normalizePhoneForManualWhatsapp(phone: string | null | undefined, country?: string | null) {
+  const raw = String(phone ?? "").trim();
+  if (!raw) return null;
+
+  const dialCodes: Record<string, string> = {
+    ES: "34",
+    FR: "33",
+    DE: "49",
+    IT: "39",
+    PT: "351",
+    GB: "44",
+    IE: "353",
+    NL: "31",
+    BE: "32",
+    CH: "41",
+    AT: "43",
+  };
+
+  if (raw.startsWith("+")) {
+    const normalized = raw.slice(1).replace(/\D/g, "");
+    return normalized.length >= 8 ? normalized : null;
+  }
+
+  let digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+
+  if (digits.startsWith("00")) {
+    digits = digits.slice(2);
+    return digits.length >= 8 ? digits : null;
+  }
+
+  const dialCode = dialCodes[String(country ?? "").trim().toUpperCase()];
+  if (!dialCode) return digits.length >= 8 ? digits : null;
+
+  const localDigits = digits.startsWith("0") ? digits.slice(1) : digits;
+  const normalized = `${dialCode}${localDigits}`;
+  return normalized.length >= 8 ? normalized : null;
+}
+
 function parseMinutesOption(v: string): MinutesOption {
   const n = Number(v);
   if (n === 20 || n === 30 || n === 60 || n === 120 || n === 180) return n;
@@ -200,6 +239,118 @@ function SummaryCard({
   );
 }
 
+function ManualPassShareModal({
+  recipientPhone,
+  country,
+  portalUrl,
+  message,
+  onClose,
+}: {
+  recipientPhone: string | null;
+  country?: string | null;
+  portalUrl: string;
+  message: string;
+  onClose: () => void;
+}) {
+  const whatsappPhone = normalizePhoneForManualWhatsapp(recipientPhone, country);
+  const whatsappUrl = whatsappPhone
+    ? `https://wa.me/${encodeURIComponent(whatsappPhone)}?text=${encodeURIComponent(message)}`
+    : null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.35)",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        zIndex: 1000,
+        padding: 20,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: "min(640px, 96vw)",
+          background: "#fff",
+          borderRadius: 18,
+          padding: 18,
+          display: "grid",
+          gap: 14,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0f766e" }}>
+            Resumen manual
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>Compartir saldo del bono</div>
+          <div style={{ fontSize: 13, color: "#64748b" }}>
+            Genera el mensaje manual con el portal público del bono sin depender del proveedor de WhatsApp configurado.
+          </div>
+        </div>
+
+        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
+          Enlace público
+          <input readOnly value={portalUrl} style={inputStyle} />
+        </label>
+
+        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 800 }}>
+          Mensaje
+          <textarea readOnly value={message} style={{ ...inputStyle, minHeight: 150, resize: "vertical" }} />
+        </label>
+
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: 14,
+            border: whatsappUrl ? "1px solid #bbf7d0" : "1px solid #fde68a",
+            background: whatsappUrl ? "#f0fdf4" : "#fffbeb",
+            color: whatsappUrl ? "#166534" : "#92400e",
+            fontSize: 13,
+          }}
+        >
+          {whatsappUrl ? `WhatsApp listo para ${recipientPhone}.` : "No hay un teléfono válido para abrir WhatsApp automáticamente."}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+          <button type="button" onClick={() => void navigator.clipboard.writeText(portalUrl)} style={secondaryButtonStyle}>
+            Copiar enlace
+          </button>
+          <button type="button" onClick={() => void navigator.clipboard.writeText(message)} style={secondaryButtonStyle}>
+            Copiar mensaje
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (whatsappUrl) window.location.href = whatsappUrl;
+            }}
+            disabled={!whatsappUrl}
+            style={{
+              ...primaryButtonStyle,
+              background: whatsappUrl ? "#16a34a" : "#dcfce7",
+              borderColor: whatsappUrl ? "#16a34a" : "#dcfce7",
+              color: whatsappUrl ? "#fff" : "#166534",
+              opacity: whatsappUrl ? 1 : 0.65,
+            }}
+          >
+            Abrir WhatsApp
+          </button>
+          <button type="button" onClick={() => window.open(portalUrl, "_blank", "noopener,noreferrer")} style={primaryButtonStyle}>
+            Abrir portal
+          </button>
+        </div>
+
+        <button type="button" onClick={onClose} style={secondaryButtonStyle}>
+          Cerrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function StoreBonosPage() {
   const router = useRouter();
 
@@ -251,6 +402,13 @@ export default function StoreBonosPage() {
   const [voidRefundMethod, setVoidRefundMethod] = useState<PassMethod>("CARD");
   const [voiding, setVoiding] = useState(false);
   const [retryingNotification, setRetryingNotification] = useState(false);
+  const [manualShareBusy, setManualShareBusy] = useState(false);
+  const [manualShare, setManualShare] = useState<{
+    recipientPhone: string | null;
+    country: string | null;
+    portalUrl: string;
+    message: string;
+  } | null>(null);
 
   const countryOptions = useMemo(() => getCountryOptionsEs(), []);
   const selectedSellCountryOpt = useMemo(() => {
@@ -547,6 +705,26 @@ export default function StoreBonosPage() {
     }
   }
 
+  async function openManualPassShare() {
+    if (!voucher) return;
+    setErr(null);
+    setManualShareBusy(true);
+    try {
+      const r = await fetch("/api/store/passes/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: voucher.code }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const j = await r.json();
+      setManualShare(j.share ?? null);
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Error preparando el envío manual del bono");
+    } finally {
+      setManualShareBusy(false);
+    }
+  }
+
   async function loadSummary() {
     setErr(null);
     setSummaryLoading(true);
@@ -832,14 +1010,24 @@ export default function StoreBonosPage() {
             ) : (
               <div style={{ fontSize: 13, color: "#64748b" }}>Sin notificaciones registradas.</div>
             )}
-            <button
-              type="button"
-              onClick={retryPassNotification}
-              disabled={retryingNotification || !(voucher.consumes ?? []).length}
-              style={{ ...secondaryButtonStyle, width: "fit-content" }}
-            >
-              {retryingNotification ? "Reenviando..." : "Reintentar WhatsApp"}
-            </button>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={openManualPassShare}
+                disabled={manualShareBusy || !(voucher.consumes ?? []).length}
+                style={{ ...primaryButtonStyle, width: "fit-content", opacity: manualShareBusy ? 0.7 : 1 }}
+              >
+                {manualShareBusy ? "Preparando..." : "Enviar manual"}
+              </button>
+              <button
+                type="button"
+                onClick={retryPassNotification}
+                disabled={retryingNotification || !(voucher.consumes ?? []).length}
+                style={{ ...secondaryButtonStyle, width: "fit-content" }}
+              >
+                {retryingNotification ? "Reenviando..." : "Reintentar WhatsApp"}
+              </button>
+            </div>
           </div>
 
           <div style={{ ...panelStyle, display: "grid", gap: 12 }}>
@@ -942,6 +1130,16 @@ export default function StoreBonosPage() {
             {consuming ? "Consumiendo..." : `Consumir ${minutesToUse} min y formalizar`}
           </button>
         </section>
+      ) : null}
+
+      {manualShare ? (
+        <ManualPassShareModal
+          recipientPhone={manualShare.recipientPhone}
+          country={manualShare.country}
+          portalUrl={manualShare.portalUrl}
+          message={manualShare.message}
+          onClose={() => setManualShare(null)}
+        />
       ) : null}
 
       {voucher && !voucher.isVoided ? (

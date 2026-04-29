@@ -9,6 +9,11 @@ import { countReadyVisibleContracts, listMissingLogicalUnits, pickVisibleContrac
 
 export const runtime = "nodejs";
 
+function normalizeOptionalString(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim();
+  return normalized.length ? normalized : null;
+}
+
 async function requireStoreOrAdmin() {
   const cookieStore = await cookies();
   const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
@@ -52,7 +57,26 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
             },
           },
           contracts: {
-            select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+            select: {
+              id: true,
+              unitIndex: true,
+              logicalUnitIndex: true,
+              status: true,
+              supersededAt: true,
+              createdAt: true,
+              driverName: true,
+              driverPhone: true,
+              driverEmail: true,
+              driverCountry: true,
+              driverAddress: true,
+              driverPostalCode: true,
+              driverDocType: true,
+              driverDocNumber: true,
+              driverBirthDate: true,
+              licenseSchool: true,
+              licenseType: true,
+              licenseNumber: true,
+            },
           },
         },
       });
@@ -143,6 +167,57 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
           skipDuplicates: true, // idempotente
         });
       }
+
+      const visibleDraftContracts = (res.contracts ?? []).filter((contract) => {
+        const slot = Number(contract.logicalUnitIndex ?? contract.unitIndex ?? 0);
+        return !contract.supersededAt && contract.status === "DRAFT" && slot >= 1 && slot <= requiredUnits;
+      });
+
+      await Promise.all(
+        visibleDraftContracts.map(async (contract) => {
+          const patch = {
+            driverName: normalizeOptionalString(contract.driverName) ?? normalizeOptionalString(res.customerName),
+            driverPhone: normalizeOptionalString(contract.driverPhone) ?? normalizeOptionalString(res.customerPhone),
+            driverEmail: normalizeOptionalString(contract.driverEmail) ?? normalizeOptionalString(res.customerEmail),
+            driverCountry: normalizeOptionalString(contract.driverCountry) ?? normalizeOptionalString(res.customerCountry),
+            driverAddress: normalizeOptionalString(contract.driverAddress) ?? normalizeOptionalString(res.customerAddress),
+            driverPostalCode: normalizeOptionalString(contract.driverPostalCode) ?? normalizeOptionalString(res.customerPostalCode),
+            driverDocType: normalizeOptionalString(contract.driverDocType) ?? normalizeOptionalString(res.customerDocType),
+            driverDocNumber: normalizeOptionalString(contract.driverDocNumber) ?? normalizeOptionalString(res.customerDocNumber),
+            driverBirthDate: contract.driverBirthDate ?? res.customerBirthDate ?? null,
+            licenseSchool:
+              normalizeOptionalString(contract.licenseSchool) ??
+              (res.isLicense ? normalizeOptionalString(res.licenseSchool) : null),
+            licenseType:
+              normalizeOptionalString(contract.licenseType) ??
+              (res.isLicense ? normalizeOptionalString(res.licenseType) : null),
+            licenseNumber:
+              normalizeOptionalString(contract.licenseNumber) ??
+              (res.isLicense ? normalizeOptionalString(res.licenseNumber) : null),
+          };
+
+          const changed =
+            patch.driverName !== contract.driverName ||
+            patch.driverPhone !== contract.driverPhone ||
+            patch.driverEmail !== contract.driverEmail ||
+            patch.driverCountry !== contract.driverCountry ||
+            patch.driverAddress !== contract.driverAddress ||
+            patch.driverPostalCode !== contract.driverPostalCode ||
+            patch.driverDocType !== contract.driverDocType ||
+            patch.driverDocNumber !== contract.driverDocNumber ||
+            patch.driverBirthDate?.getTime?.() !== contract.driverBirthDate?.getTime?.() ||
+            patch.licenseSchool !== contract.licenseSchool ||
+            patch.licenseType !== contract.licenseType ||
+            patch.licenseNumber !== contract.licenseNumber;
+
+          if (!changed) return;
+
+          await tx.reservationContract.update({
+            where: { id: contract.id },
+            data: patch,
+          });
+        })
+      );
 
       const contracts = await tx.reservationContract.findMany({
         where: { reservationId: id },
