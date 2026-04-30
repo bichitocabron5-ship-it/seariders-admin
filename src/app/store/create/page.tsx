@@ -136,6 +136,7 @@ function StoreCreatePageInner() {
   const [draftRecoveredAt, setDraftRecoveredAt] = useState<number | null>(null);
   const [scheduleInvalidationMessage, setScheduleInvalidationMessage] = useState<string | null>(null);
   const skipNextTimeResetRef = useRef(false);
+  const scheduleContextRef = useRef<{ serviceId: string; category: string; optionId: string } | null>(null);
 
   const applyPrefillReservation = useCallback(
     (res: {
@@ -365,14 +366,32 @@ function StoreCreatePageInner() {
 
   // Cuando cambia el "contexto" (servicio/categoría/pack), limpiamos la hora seleccionada
   useEffect(() => {
+    const nextContext = { serviceId, category, optionId };
     if (skipNextTimeResetRef.current) {
       skipNextTimeResetRef.current = false;
+      scheduleContextRef.current = nextContext;
       return;
     }
+
+    const prevContext = scheduleContextRef.current;
+    scheduleContextRef.current = nextContext;
+
+    if (!prevContext) return;
+    if (
+      prevContext.serviceId === nextContext.serviceId &&
+      prevContext.category === nextContext.category &&
+      prevContext.optionId === nextContext.optionId
+    ) {
+      return;
+    }
+
+    const previousSelectionWasReady = Boolean(prevContext.serviceId && prevContext.optionId);
+    if (!previousSelectionWasReady) return;
+
     if (timeStr.trim()) {
       setScheduleInvalidationMessage("La actividad cambió y la hora anterior dejó de ser válida. Selecciona una nueva hora para recalcular disponibilidad, promociones y descuentos.");
+      setTimeStr("");
     }
-    setTimeStr("");
   }, [serviceId, category, optionId, timeStr]);
 
   useEffect(() => {
@@ -464,6 +483,13 @@ function StoreCreatePageInner() {
     ? jetskiLicenseMode !== "NONE"
     : Boolean(selectedService?.isLicense);
   const isScheduleSelectionReady = Boolean(serviceId && optionId && selectedCategory);
+  const isTodayDraftAutoTimePending =
+    isScheduleSelectionReady &&
+    !isEditMode &&
+    !isMigrateMode &&
+    !scheduleInvalidationMessage &&
+    dateStr === todayMadridYMD() &&
+    !timeStr.trim();
   const selectedServiceLabel = selectedService?.name ?? "";
   const selectedOptionLabel = selectedOpt?.durationMinutes ? `${selectedOpt.durationMinutes} min` : "";
 
@@ -1883,7 +1909,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             <PricingSection
               discountLoading={discountLoading}
               canEditPricing={canEditReservationForm && canEditPricing}
-              isTimeSelectionReady={Boolean(timeStr.trim())}
+              isTimeSelectionReady={Boolean(timeStr.trim()) || isTodayDraftAutoTimePending}
               boothPricingNote={boothPricingNote}
               shownFinalCents={shownFinalCents}
               maxManualDiscountCents={maxManualDiscountCents}
