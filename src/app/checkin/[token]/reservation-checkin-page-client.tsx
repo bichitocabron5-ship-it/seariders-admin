@@ -170,7 +170,7 @@ function getContractFieldErrors({
   const minor = getAgeFlagsFromBirthDate(draft.driverBirthDate);
   const errors: ContractFieldErrors = {
     driverName: draft.driverName.trim() ? null : text.driverName,
-    driverPhone: draft.driverPhone.trim() ? null : text.driverPhone,
+    driverPhone: null,
     driverAddress: draft.driverAddress.trim() ? null : text.driverAddress,
     driverBirthDate: draft.driverBirthDate.trim() ? null : text.driverBirthDate,
     driverDocType: draft.driverDocType.trim() ? null : text.driverDocType,

@@ -262,7 +262,7 @@ export function ContractCard({
   const contractFieldErrors = React.useMemo(() => {
     const errors: Record<string, string | null> = {
       driverName: driverName.trim() ? null : "Indica el nombre y apellidos del conductor.",
-      driverPhone: driverPhone.trim() ? null : "Indica el telefono del conductor.",
+      driverPhone: null,
       driverAddress: driverAddress.trim() ? null : "Indica la direccion del conductor.",
       driverDocType: driverDocType.trim() ? null : "Selecciona el tipo de documento.",
       driverDocNumber: driverDocNumber.trim() ? null : "Indica el numero de documento.",
@@ -283,7 +283,6 @@ export function ContractCard({
     driverDocNumber,
     driverDocType,
     driverName,
-    driverPhone,
     licenseNumber,
     licenseSchool,
     licenseType,

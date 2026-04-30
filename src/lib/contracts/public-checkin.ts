@@ -52,7 +52,6 @@ export function evaluateContractCheckinState(args: {
 
   const baseOk =
     hasText(args.contract.driverName) &&
-    hasText(args.contract.driverPhone) &&
     hasText(args.contract.driverCountry) &&
     hasText(args.contract.driverAddress) &&
     hasText(args.contract.driverDocType) &&

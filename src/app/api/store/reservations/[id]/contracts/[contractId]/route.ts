@@ -196,7 +196,6 @@ export async function PATCH(
       if (updated.status === ContractStatus.READY) {
         const baseOk =
           must(updated.driverName) &&
-          must(updated.driverPhone) &&
           must(updated.driverCountry) &&
           must(updated.driverAddress) &&
           must(updated.driverDocType) &&
