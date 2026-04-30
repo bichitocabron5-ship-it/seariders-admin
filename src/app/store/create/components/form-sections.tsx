@@ -30,6 +30,10 @@ export function AvailabilitySection({
   availabilityError,
   availability,
   selectedCategory,
+  selectedServiceLabel,
+  selectedOptionLabel,
+  isSelectionReady,
+  invalidationMessage,
   timeStr,
   onTimeSelect,
 }: {
@@ -39,6 +43,10 @@ export function AvailabilitySection({
   availabilityError: string | null;
   availability: AvailabilityData | null;
   selectedCategory: string;
+  selectedServiceLabel?: string;
+  selectedOptionLabel?: string;
+  isSelectionReady: boolean;
+  invalidationMessage?: string | null;
   timeStr: string;
   onTimeSelect: (time: string) => void;
 }) {
@@ -47,7 +55,11 @@ export function AvailabilitySection({
       <div>
         <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0369a1" }}>Agenda</div>
         <div style={{ fontSize: 18, fontWeight: 900, marginTop: 4 }}>Disponibilidad</div>
-        <div style={{ fontSize: 13, color: "#64748b" }}>Selecciona fecha y franja horaria según la categoría activa.</div>
+        <div style={{ fontSize: 13, color: "#64748b" }}>
+          {isSelectionReady
+            ? "Selecciona fecha y franja horaria para la actividad elegida."
+            : "Completa primero la actividad para desbloquear la selección de hora."}
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
@@ -57,10 +69,30 @@ export function AvailabilitySection({
         </label>
       </div>
 
+      {selectedServiceLabel || selectedOptionLabel ? (
+        <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", fontSize: 13, color: "#334155", display: "grid", gap: 4 }}>
+          <div style={{ fontWeight: 900 }}>Actividad activa</div>
+          <div>
+            {selectedServiceLabel || "Sin servicio"}
+            {selectedOptionLabel ? ` · ${selectedOptionLabel}` : ""}
+          </div>
+        </div>
+      ) : null}
+
+      {invalidationMessage ? (
+        <div style={{ padding: 12, borderRadius: 14, background: "#fff7ed", border: "1px solid #fdba74", fontSize: 13, color: "#9a3412", fontWeight: 700 }}>
+          {invalidationMessage}
+        </div>
+      ) : null}
+
       {availabilityLoading ? <div style={{ color: "#64748b" }}>Cargando horarios...</div> : null}
       {availabilityError ? <div style={{ color: "#b91c1c", fontWeight: 700 }}>{availabilityError}</div> : null}
 
-      {availability?.ok && selectedCategory ? (
+      {!isSelectionReady ? (
+        <div style={{ padding: 14, borderRadius: 14, border: "1px dashed #cbd5e1", background: "#f8fafc", color: "#64748b", fontSize: 13 }}>
+          Selecciona servicio y duración para consultar disponibilidad y habilitar promociones por hora.
+        </div>
+      ) : availability?.ok && selectedCategory ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(108px, 1fr))", gap: 10 }}>
           {availability.slots.map((s) => {
             const used = Number(s.used?.[selectedCategory] ?? 0);
@@ -102,6 +134,7 @@ export function AvailabilitySection({
 export function PricingSection({
   discountLoading,
   canEditPricing,
+  isTimeSelectionReady,
   boothPricingNote,
   shownFinalCents,
   maxManualDiscountCents,
@@ -133,6 +166,7 @@ export function PricingSection({
 }: {
   discountLoading: boolean;
   canEditPricing: boolean;
+  isTimeSelectionReady: boolean;
   boothPricingNote?: string | null;
   shownFinalCents: number;
   maxManualDiscountCents: number;
@@ -186,6 +220,12 @@ export function PricingSection({
         </div>
         {discountLoading ? <div style={{ fontSize: 12, color: "#64748b" }}>Calculando...</div> : null}
       </div>
+
+      {!isTimeSelectionReady ? (
+        <div style={{ padding: 12, borderRadius: 14, background: "#eff6ff", border: "1px solid #bfdbfe", fontSize: 13, color: "#1d4ed8", fontWeight: 700 }}>
+          Selecciona una hora válida para ver promociones y descuentos automáticos.
+        </div>
+      ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
         <div style={{ padding: 14, borderRadius: 14, border: "1px solid #e2e8f0", background: "#fff" }}>

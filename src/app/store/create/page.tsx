@@ -134,6 +134,7 @@ function StoreCreatePageInner() {
     pendingServiceCents: 0,
   });
   const [draftRecoveredAt, setDraftRecoveredAt] = useState<number | null>(null);
+  const [scheduleInvalidationMessage, setScheduleInvalidationMessage] = useState<string | null>(null);
   const skipNextTimeResetRef = useRef(false);
 
   const applyPrefillReservation = useCallback(
@@ -368,8 +369,11 @@ function StoreCreatePageInner() {
       skipNextTimeResetRef.current = false;
       return;
     }
+    if (timeStr.trim()) {
+      setScheduleInvalidationMessage("La actividad cambió y la hora anterior dejó de ser válida. Selecciona una nueva hora para recalcular disponibilidad, promociones y descuentos.");
+    }
     setTimeStr("");
-  }, [serviceId, category, optionId]);
+  }, [serviceId, category, optionId, timeStr]);
 
   useEffect(() => {
     if (isEditMode || isMigrateMode) return;
@@ -417,6 +421,11 @@ function StoreCreatePageInner() {
     }
   }, [dateStr, timeStr]);
 
+  useEffect(() => {
+    if (!timeStr.trim()) return;
+    setScheduleInvalidationMessage(null);
+  }, [timeStr]);
+
   const {
     selectedService,
     isPackMode,
@@ -445,7 +454,6 @@ function StoreCreatePageInner() {
     setServiceId,
     setOptionId,
     setJetskiLicenseMode,
-    setTimeStr,
     setCartItems,
   });
 
@@ -455,6 +463,9 @@ function StoreCreatePageInner() {
   const isLicense = isJetskiSelection
     ? jetskiLicenseMode !== "NONE"
     : Boolean(selectedService?.isLicense);
+  const isScheduleSelectionReady = Boolean(serviceId && optionId && selectedCategory);
+  const selectedServiceLabel = selectedService?.name ?? "";
+  const selectedOptionLabel = selectedOpt?.durationMinutes ? `${selectedOpt.durationMinutes} min` : "";
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -475,6 +486,7 @@ function StoreCreatePageInner() {
       skipNextTimeResetRef.current = true;
       setDateStr(draft.dateStr || defaultDate);
       setTimeStr(draft.timeStr || "");
+      setScheduleInvalidationMessage(null);
       setCategory(draft.category || "");
       setServiceId(draft.serviceId || "");
       setOptionId(draft.optionId || "");
@@ -1763,19 +1775,6 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           ) : null}
 
           <div style={{ opacity: canEditReservationForm ? 1 : 0.72, pointerEvents: canEditReservationForm ? "auto" : "none" }}>
-            <AvailabilitySection
-              dateStr={dateStr}
-              onDateChange={setDateStr}
-              availabilityLoading={availabilityLoading}
-              availabilityError={availabilityError}
-              availability={availability}
-              selectedCategory={selectedCategory}
-              timeStr={timeStr}
-              onTimeSelect={setTimeStr}
-            />
-          </div>
-
-          <div style={{ opacity: canEditReservationForm ? 1 : 0.72, pointerEvents: canEditReservationForm ? "auto" : "none" }}>
             <StoreCreateCustomerProfileSection
               customerSearch={customerSearch}
               customerMatches={customerMatches}
@@ -1810,6 +1809,26 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               <ReservationBasicsSection {...reservationBasicsSectionProps} />
             </div>
           )}
+
+          <div style={{ opacity: canEditReservationForm ? 1 : 0.72, pointerEvents: canEditReservationForm ? "auto" : "none" }}>
+            <AvailabilitySection
+              dateStr={dateStr}
+              onDateChange={setDateStr}
+              availabilityLoading={availabilityLoading}
+              availabilityError={availabilityError}
+              availability={availability}
+              selectedCategory={selectedCategory}
+              selectedServiceLabel={selectedServiceLabel}
+              selectedOptionLabel={selectedOptionLabel}
+              isSelectionReady={isScheduleSelectionReady}
+              invalidationMessage={scheduleInvalidationMessage}
+              timeStr={timeStr}
+              onTimeSelect={(nextTime) => {
+                setScheduleInvalidationMessage(null);
+                setTimeStr(nextTime);
+              }}
+            />
+          </div>
 
           {prefillReservationId && !migrateFlags?.isHistorical && !isReadOnlyReservation ? (
             <ContractsSection
@@ -1864,6 +1883,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             <PricingSection
               discountLoading={discountLoading}
               canEditPricing={canEditReservationForm && canEditPricing}
+              isTimeSelectionReady={Boolean(timeStr.trim())}
               boothPricingNote={boothPricingNote}
               shownFinalCents={shownFinalCents}
               maxManualDiscountCents={maxManualDiscountCents}

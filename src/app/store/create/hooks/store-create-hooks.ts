@@ -707,7 +707,6 @@ export function useStoreCreateSelection(args: {
   setServiceId: (value: string) => void;
   setOptionId: (value: string) => void;
   setJetskiLicenseMode: (value: JetskiLicenseMode) => void;
-  setTimeStr: (value: string) => void;
   setCartItems: React.Dispatch<React.SetStateAction<CartItem[]>>;
 }) {
   const {
@@ -726,7 +725,6 @@ export function useStoreCreateSelection(args: {
     setServiceId,
     setOptionId,
     setJetskiLicenseMode,
-    setTimeStr,
     setCartItems,
   } = args;
 
@@ -829,9 +827,7 @@ export function useStoreCreateSelection(args: {
       const s0 = list[0];
       if (s0) setServiceId(s0.id);
     }
-
-    setTimeStr("");
-  }, [category, servicesMain, serviceId, setServiceId, setTimeStr]);
+  }, [category, servicesMain, serviceId, setServiceId]);
 
   useEffect(() => {
     let alive = true;
