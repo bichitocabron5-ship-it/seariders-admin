@@ -994,7 +994,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [showFuturePaymentsSection]);
 
-  const MANUAL_DISC_MAX_PCT = 30;
+  const MANUAL_DISC_MAX_PCT = 50;
   const maxManualDiscountCents = Math.floor((shownBaseCents * MANUAL_DISC_MAX_PCT) / 100);
 
   const manualDiscountCentsRaw = Math.round(Number(String(manualDiscountEuros || "").replace(",", ".")) * 100) || 0;

@@ -32,7 +32,7 @@ export function capManualDiscountCents(
 ) {
   const total = Math.max(0, roundMoney(totalBeforeDiscountsCents));
   const requested = Math.max(0, roundMoney(manualDiscountCents ?? 0));
-  const maxManual = Math.floor(total * 0.3);
+  const maxManual = Math.floor(total * 0.5);
   return Math.max(0, Math.min(requested, maxManual));
 }
 

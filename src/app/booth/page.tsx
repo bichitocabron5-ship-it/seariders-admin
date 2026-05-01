@@ -378,7 +378,7 @@ const baseTotalCents = useMemo(
   [effectiveItems, getCartItemUnitPriceCents]
 );
 
-const maxManualDiscountCents = useMemo(() => Math.floor(baseTotalCents * 0.3), [baseTotalCents]);
+const maxManualDiscountCents = useMemo(() => Math.floor(baseTotalCents * 0.5), [baseTotalCents]);
 const discountCentsRaw = useMemo(() => toCentsFromEuroInput(discountEuros), [discountEuros]);
 const discountCentsClamped = useMemo(
   () => Math.max(0, Math.min(discountCentsRaw, maxManualDiscountCents)),

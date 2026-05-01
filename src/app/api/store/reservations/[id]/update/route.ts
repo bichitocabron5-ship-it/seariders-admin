@@ -642,7 +642,7 @@ if (hasProItems) {
       channel,
     });
 
-    // Manual discount (cap 30% del totalBeforeDiscounts)
+    // Manual discount (cap 50% del totalBeforeDiscounts)
     const originalLineKey = `${existing.serviceId}::${existing.optionId}`;
     const matchingBoothLineQty = lineCreates.reduce(
       (sum, line) =>

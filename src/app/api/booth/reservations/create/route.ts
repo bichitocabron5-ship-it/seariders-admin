@@ -249,7 +249,7 @@ export async function POST(req: Request) {
     typeof promoterDiscountShareRaw === "string"
       ? Number(promoterDiscountShareRaw.replace(",", "."))
       : promoterDiscountShareRaw;
-  const maxDiscountCents = Math.floor(grossTotalCents * 0.3);
+  const maxDiscountCents = Math.floor(grossTotalCents * 0.5);
 
   if (discountCents > maxDiscountCents) {
     return NextResponse.json(

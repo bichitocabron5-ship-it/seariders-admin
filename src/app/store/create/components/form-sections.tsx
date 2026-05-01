@@ -275,7 +275,7 @@ export function PricingSection({
           <>
             <label style={{ display: "grid", gap: 6 }}>
               <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
-                Descuento manual opcional. Máximo {euros(maxManualDiscountCents)} (30%)
+                Descuento manual opcional. Máximo {euros(maxManualDiscountCents)} (50%)
               </div>
               <input
                 type="text"

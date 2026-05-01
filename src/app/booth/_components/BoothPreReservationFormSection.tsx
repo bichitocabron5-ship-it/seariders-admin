@@ -331,7 +331,7 @@ export default function BoothPreReservationFormSection({
         </label>
 
         <div style={{ fontSize: 12, opacity: 0.85 }}>
-          Max descuento manual: <b>{euros(maxManualDiscountCents)}</b> (30% sobre {euros(baseTotalCents)})
+          Max descuento manual: <b>{euros(maxManualDiscountCents)}</b> (50% sobre {euros(baseTotalCents)})
           {discountCentsRaw > maxManualDiscountCents ? (
             <span style={{ marginLeft: 8, color: "#b91c1c" }}>limitado a {euros(maxManualDiscountCents)}</span>
           ) : null}
