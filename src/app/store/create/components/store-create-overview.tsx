@@ -36,6 +36,19 @@ const customerPanelStyle: React.CSSProperties = {
   gap: 12,
 };
 
+function formatShortDate(value: string | null) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("es-ES");
+}
+
+function shortReservationId(value: string) {
+  const clean = String(value ?? "").trim();
+  if (clean.length <= 8) return clean || "—";
+  return clean.slice(0, 8).toUpperCase();
+}
+
 export function StoreCreateSummaryStrip({ cards }: StoreCreateSummaryStripProps) {
   return (
     <StoreMetricGrid>
@@ -119,19 +132,45 @@ export function StoreCreateCustomerProfileSection({
                   borderRadius: 12,
                   padding: 12,
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gridTemplateColumns: "minmax(0, 1fr) minmax(160px, 220px)",
                   gap: 12,
                   alignItems: "center",
                 }}
               >
-                <div style={{ display: "grid", gap: 4 }}>
-                  <div style={{ fontWeight: 800 }}>{customer.customerName?.trim() || customer.customerDocNumber?.trim() || customer.phone?.trim() || customer.email?.trim() || "Cliente previo"}</div>
-                  <div style={{ fontSize: 13, opacity: 0.75 }}>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ fontWeight: 800 }}>
+                      {customer.customerName?.trim() || customer.customerDocNumber?.trim() || customer.phone?.trim() || customer.email?.trim() || "Cliente previo"}
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 900,
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                        color: "#0f766e",
+                        background: "#ecfeff",
+                        border: "1px solid #a5f3fc",
+                        borderRadius: 999,
+                        padding: "2px 8px",
+                      }}
+                    >
+                      Res. {shortReservationId(customer.reservationId)}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: 13, opacity: 0.78 }}>
                     {customer.customerDocNumber || "Sin documento"} · {customer.phone || "Sin teléfono"} · {customer.email || "Sin email"}
                   </div>
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, opacity: 0.72 }}>
+                    <span>Nacimiento: {formatShortDate(customer.birthDate)}</span>
+                    <span>País: {customer.country || "—"}</span>
+                    <span>CP: {customer.postalCode || "—"}</span>
+                  </div>
+
                   <div style={{ fontSize: 12, opacity: 0.65 }}>
-                    Última reserva:{" "}
-                    {customer.lastActivityAt ? new Date(customer.lastActivityAt).toLocaleDateString("es-ES") : "—"}
+                    Última reserva: {formatShortDate(customer.lastActivityAt)}
                     {customer.serviceName ? ` · ${customer.serviceName}` : ""}
                   </div>
                 </div>
