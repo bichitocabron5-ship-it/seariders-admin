@@ -1,3 +1,5 @@
+import { clampBps } from "@/lib/commission";
+
 type SubmitCartItem = {
   serviceId: string;
   optionId: string;
@@ -8,6 +10,18 @@ type SubmitCartItem = {
 
 function normTrim(v: unknown) {
   return String(v ?? "").trim();
+}
+
+function toSafePositiveInt(value: unknown, fallback = 1) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.trunc(n));
+}
+
+function toSafeNonNegativeInt(value: unknown, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.trunc(n));
 }
 
 function putIfNonEmpty(obj: Record<string, unknown>, key: string, v: unknown) {
@@ -236,6 +250,9 @@ export function buildCreateBody(args: {
   promoterDiscountShareBps: number;
   itemsToSend: Array<{ serviceId: string; optionId: string; quantity: number; pax: number; promoCode?: string | null }>;
 }) {
+  const sanitizedPromoterDiscountShareBps = clampBps(args.promoterDiscountShareBps);
+  const sanitizedManualDiscountCents = toSafeNonNegativeInt(args.manualDiscountCents);
+
   return {
     customerName: args.customerName.trim(),
     customerPhone: args.customerPhone.trim() || null,
@@ -253,15 +270,21 @@ export function buildCreateBody(args: {
     channelId: args.channelId,
     date: args.dateStr,
     time: args.time,
-    pax: Number(args.pax),
-    companionsCount: Number(args.companions) || 0,
+    pax: toSafePositiveInt(args.pax),
+    companionsCount: toSafeNonNegativeInt(args.companions),
     isLicense: Boolean(args.isLicense),
     jetskiLicenseMode: args.jetskiLicenseMode,
     pricingTier: args.pricingTier,
-    manualDiscountCents: args.manualDiscountCents,
+    manualDiscountCents: sanitizedManualDiscountCents,
     manualDiscountReason: args.manualDiscountReason?.trim() || null,
     discountResponsibility: args.discountResponsibility,
-    promoterDiscountShareBps: args.promoterDiscountShareBps,
-    items: args.itemsToSend,
+    promoterDiscountShareBps: sanitizedPromoterDiscountShareBps,
+    items: args.itemsToSend.map((item) => ({
+      serviceId: item.serviceId,
+      optionId: item.optionId,
+      quantity: toSafePositiveInt(item.quantity),
+      pax: toSafePositiveInt(item.pax),
+      promoCode: item.promoCode ?? null,
+    })),
   };
 }

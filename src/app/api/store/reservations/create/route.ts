@@ -77,6 +77,37 @@ const Body = z.object({
   totalBeforeDiscountsCents: z.number().int().min(0).max(50_000_000).optional(),
 });
 
+function summarizeCreatePayload(json: unknown) {
+  if (!json || typeof json !== "object" || Array.isArray(json)) return { kind: typeof json };
+
+  const body = json as Record<string, unknown>;
+  const items = Array.isArray(body.items) ? body.items : [];
+
+  return {
+    hasCustomerName: typeof body.customerName === "string" && body.customerName.trim().length > 0,
+    channelIdType: body.channelId == null ? String(body.channelId) : typeof body.channelId,
+    dateType: body.date == null ? String(body.date) : typeof body.date,
+    timeType: body.time == null ? String(body.time) : typeof body.time,
+    paxType: body.pax == null ? String(body.pax) : typeof body.pax,
+    manualDiscountCentsType:
+      body.manualDiscountCents == null ? String(body.manualDiscountCents) : typeof body.manualDiscountCents,
+    promoterDiscountShareBpsType:
+      body.promoterDiscountShareBps == null ? String(body.promoterDiscountShareBps) : typeof body.promoterDiscountShareBps,
+    itemsCount: items.length,
+    itemShape: items.slice(0, 3).map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return { kind: typeof item };
+      const row = item as Record<string, unknown>;
+      return {
+        serviceIdType: row.serviceId == null ? String(row.serviceId) : typeof row.serviceId,
+        optionIdType: row.optionId == null ? String(row.optionId) : typeof row.optionId,
+        quantityType: row.quantity == null ? String(row.quantity) : typeof row.quantity,
+        paxType: row.pax == null ? String(row.pax) : typeof row.pax,
+        promoCodeType: row.promoCode == null ? String(row.promoCode) : typeof row.promoCode,
+      };
+    }),
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const session = await requireStore();
@@ -84,7 +115,18 @@ export async function POST(req: Request) {
 
     const json = await req.json().catch(() => null);
     const parsed = Body.safeParse(json);
-    if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
+    if (!parsed.success) {
+      const fields = parsed.error.issues.map((issue) => issue.path.join(".") || "(root)");
+      console.error("[store/reservations/create] invalid payload", {
+        issues: parsed.error.issues.map((issue) => ({
+          path: issue.path.join(".") || "(root)",
+          code: issue.code,
+          message: issue.message,
+        })),
+        summary: summarizeCreatePayload(json),
+      });
+      return new NextResponse(`Datos inválidos (${Array.from(new Set(fields)).join(", ")})`, { status: 400 });
+    }
 
     const b = parsed.data;
 
