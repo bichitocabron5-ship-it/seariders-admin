@@ -227,6 +227,8 @@ export function ReservationCheckinPageClient({
 }) {
   const copy = getPublicCopy(language);
   const sigRefs = useRef<Record<string, SignatureCanvas | null>>({});
+  const contractRefs = useRef<Record<string, HTMLDetailsElement | null>>({});
+  const pendingScrollContractIdRef = useRef<string | null>(null);
   const lastSavedPayloadRef = useRef<string>("");
   const autosaveTimerRef = useRef<number | null>(null);
   const reservationDraftRef = useRef({
@@ -253,6 +255,7 @@ export function ReservationCheckinPageClient({
   const [attemptedSignContracts, setAttemptedSignContracts] = useState<Record<string, boolean>>({});
   const [contractActionErrors, setContractActionErrors] = useState<Record<string, string | null>>({});
   const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [expandedContractId, setExpandedContractId] = useState<string | null>(null);
   const [reservationDraft, setReservationDraft] = useState({
     customerName: "",
     customerPhone: "",
@@ -292,7 +295,39 @@ export function ReservationCheckinPageClient({
     });
   }, []);
 
-  const hydrate = useCallback((data: Snapshot) => {
+  const resolveExpandedContractId = useCallback((
+    contracts: ContractView[],
+    currentExpandedId: string | null,
+    preferredExpandedId?: string | null,
+  ) => {
+    if (preferredExpandedId !== undefined) {
+      if (preferredExpandedId === null) return null;
+      if (contracts.some((contract) => contract.id === preferredExpandedId)) return preferredExpandedId;
+    }
+
+    if (currentExpandedId && contracts.some((contract) => contract.id === currentExpandedId)) {
+      return currentExpandedId;
+    }
+
+    if (contracts.length === 1) {
+      return contracts[0]?.id ?? null;
+    }
+
+    return contracts.find((contract) => contract.status !== "SIGNED")?.id ?? null;
+  }, []);
+
+  const getNextPendingContractId = useCallback((contracts: ContractView[], signedContractId: string) => {
+    const signedIndex = contracts.findIndex((contract) => contract.id === signedContractId);
+    if (signedIndex >= 0) {
+      for (let index = signedIndex + 1; index < contracts.length; index += 1) {
+        if (contracts[index]?.status !== "SIGNED") return contracts[index]?.id ?? null;
+      }
+    }
+
+    return contracts.find((contract) => contract.status !== "SIGNED")?.id ?? null;
+  }, []);
+
+  const hydrate = useCallback((data: Snapshot, options?: { preferredExpandedId?: string | null }) => {
     setSnapshot(data);
     const nextReservationDraft = {
       customerName: data.reservation.customerName ?? "",
@@ -335,7 +370,8 @@ export function ReservationCheckinPageClient({
     contractDraftsRef.current = nextDrafts;
     lastSavedPayloadRef.current = serializePayload(nextReservationDraft, nextDrafts);
     setAutosaveState("idle");
-  }, [serializePayload]);
+    setExpandedContractId((current) => resolveExpandedContractId(data.contracts, current, options?.preferredExpandedId));
+  }, [resolveExpandedContractId, serializePayload]);
 
   useEffect(() => {
     void (async () => {
@@ -457,7 +493,9 @@ export function ReservationCheckinPageClient({
       });
       if (!refresh.ok) throw new Error(await refresh.text());
       const data = (await refresh.json()) as Snapshot;
-      hydrate(data);
+      const nextPendingContractId = getNextPendingContractId(data.contracts, contractId);
+      pendingScrollContractIdRef.current = nextPendingContractId;
+      hydrate(data, { preferredExpandedId: nextPendingContractId });
       signature.clear();
       setContractActionErrors((current) => ({ ...current, [contractId]: null }));
       setSuccess(copy.checkinPage.signedBanner(signerName, formatPublicDate(new Date().toISOString(), language)));
@@ -530,6 +568,21 @@ export function ReservationCheckinPageClient({
       }
     };
   }, [snapshot, loading, saving, signingId, reservationDraft, contractDrafts, persistAll, serializePayload]);
+
+  useEffect(() => {
+    if (!expandedContractId) return;
+    if (pendingScrollContractIdRef.current !== expandedContractId) return;
+
+    const contractNode = contractRefs.current[expandedContractId];
+    if (!contractNode) return;
+
+    pendingScrollContractIdRef.current = null;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        contractNode.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }, [expandedContractId, snapshot]);
 
   if (loading) {
     return <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#475569" }}>{copy.checkinPage.loading}</main>;
@@ -622,6 +675,7 @@ export function ReservationCheckinPageClient({
         {snapshot.contracts.map((contract) => {
           const draft = contractDrafts[contract.id];
           const disabled = contract.status === "SIGNED";
+          const isExpanded = expandedContractId === contract.id;
           const statusBadge = getContractStatusBadge(contract.status, language);
           const fieldErrors = draft
             ? getContractFieldErrors({
@@ -636,7 +690,10 @@ export function ReservationCheckinPageClient({
           return (
             <details
               key={contract.id}
-              open={snapshot.contracts.length === 1 || contract.status !== "SIGNED"}
+              ref={(instance) => {
+                contractRefs.current[contract.id] = instance;
+              }}
+              open={isExpanded}
               style={{
                 background: "#fff",
                 borderRadius: 22,
@@ -646,6 +703,10 @@ export function ReservationCheckinPageClient({
               }}
             >
               <summary
+                onClick={(event) => {
+                  event.preventDefault();
+                  setExpandedContractId((current) => (current === contract.id ? null : contract.id));
+                }}
                 style={{
                   listStyle: "none",
                   cursor: "pointer",
