@@ -37,6 +37,7 @@ export type ReservationRow = {
   paidCents: number;
   paidDepositCents?: number;
   depositCents: number;
+  depositStatus?: "NO_APLICA" | "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA";
   totalToChargeCents: number;
   channelName: string | null;
   serviceName?: string | null;

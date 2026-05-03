@@ -5,7 +5,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
-import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { computeReservationDepositCents, deriveReservationDepositStatus } from "@/lib/reservation-deposits";
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { buildStoreTodayWhere } from "@/lib/store-reservation-visibility";
@@ -192,16 +192,12 @@ export async function GET() {
       requiredUnits > 0 ? { requiredUnits, readyCount } : null;
 
     // estado fianza
-    let depositStatus: "PENDIENTE" | "LIBERABLE" | "DEVUELTA" | "RETENIDA";
-    if (r.depositHeld) {
-      depositStatus = "RETENIDA";
-    } else if (paidDepositCents <= 0) {
-      const hadDepositIn = r.payments.some((p) => p.isDeposit && p.direction === "IN");
-      const hadDepositOut = r.payments.some((p) => p.isDeposit && p.direction === "OUT");
-      depositStatus = hadDepositIn && hadDepositOut ? "DEVUELTA" : "PENDIENTE";
-    } else {
-      depositStatus = "LIBERABLE";
-    }
+    const depositStatus = deriveReservationDepositStatus({
+      depositCents,
+      depositHeld: r.depositHeld,
+      paidDepositCents,
+      payments: r.payments,
+    });
 
     // nombres para UI (main item o fallback legacy)
     const legacyServiceName = r.service?.name ?? null;

@@ -7,7 +7,7 @@ import type { ReservationRow } from "../types";
 import { euros, hhmm, statusColor } from "../utils";
 
 type ContractsState = "OK" | "PARTIAL" | "MISSING" | null;
-type DepositStatus = "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA";
+type DepositStatus = "NO_APLICA" | "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA";
 
 type StoreReservationCardSummaryProps = {
   reservation: ReservationRow;
@@ -54,6 +54,7 @@ function precheckinTone(readyCount: number, requiredUnits: number) {
 }
 
 function depositLabel(depositStatus: DepositStatus) {
+  if (depositStatus === "NO_APLICA") return "Sin fianza";
   if (depositStatus === "PENDIENTE") return "Fianza pendiente";
   if (depositStatus === "LIBERABLE") return "Fianza liberable";
   if (depositStatus === "DEVUELTA") return "Fianza devuelta";
@@ -61,6 +62,7 @@ function depositLabel(depositStatus: DepositStatus) {
 }
 
 function depositTone(depositStatus: DepositStatus) {
+  if (depositStatus === "NO_APLICA") return "neutral" as const;
   if (depositStatus === "PENDIENTE") return "danger" as const;
   if (depositStatus === "LIBERABLE") return "warning" as const;
   if (depositStatus === "DEVUELTA") return "success" as const;
@@ -119,6 +121,7 @@ export function StoreReservationCardSummary({
 }: StoreReservationCardSummaryProps) {
   const timeLabel = hhmm(reservation.scheduledTime) || "sin hora";
   const precheckin = precheckinTone(readyCount, requiredUnits);
+  const showDeposit = depositStatus !== "NO_APLICA";
 
   return (
     <>
@@ -190,8 +193,8 @@ export function StoreReservationCardSummary({
 
       <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
         <StatusBadge tone="info">Servicio {euros(servicePaid)}</StatusBadge>
-        <StatusBadge tone="warning">Fianza {euros(depositPaid)}</StatusBadge>
-        <StatusBadge tone={depositTone(depositStatus)}>{depositLabel(depositStatus)}</StatusBadge>
+        {showDeposit ? <StatusBadge tone="warning">Fianza {euros(depositPaid)}</StatusBadge> : null}
+        {showDeposit ? <StatusBadge tone={depositTone(depositStatus)}>{depositLabel(depositStatus)}</StatusBadge> : null}
         {pendingCents > 0 ? <StatusBadge tone="danger">Pendiente {euros(pendingCents)}</StatusBadge> : <StatusBadge tone="success">Todo cobrado</StatusBadge>}
         {waitMeta ? <StatusBadge tone={waitTone(waitMeta.bg)}>{waitMeta.label}</StatusBadge> : null}
       </div>
@@ -201,7 +204,7 @@ export function StoreReservationCardSummary({
         <div style={{ opacity: 0.8 }}>PVP: {euros(pvpTotal)}</div>
         <div>Servicio: {euros(serviceTotal)}</div>
         <div>Extras: {euros(extrasTotal)}</div>
-        <div>Fianza: {euros(deposit)}</div>
+        {showDeposit ? <div>Fianza: {euros(deposit)}</div> : null}
         <div>
           <strong>Total a cobrar hoy:</strong> {euros(totalToChargeCents)}
         </div>

@@ -85,15 +85,7 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
   const finalTotal = Number(r.finalTotalCents ?? r.totalPriceCents ?? Math.max(0, pvpTotal - autoDisc - manualDisc));
   const paid = Number(r.paidCents ?? 0);
   const paidDepositCents = Number(r.paidDepositCents ?? 0);
-  const hasDepositIn = (r.payments ?? []).some((p) => p.isDeposit && p.direction !== "OUT");
-  const hasDepositOut = (r.payments ?? []).some((p) => p.isDeposit && p.direction === "OUT");
-  const depositStatus = r.depositHeld
-    ? "RETENIDA"
-    : paidDepositCents <= 0
-      ? hasDepositIn && hasDepositOut
-        ? "DEVUELTA"
-        : "PENDIENTE"
-      : "LIBERABLE";
+  const depositStatus = r.depositStatus ?? "NO_APLICA";
   const pendingService = Number(r.pendingServiceCents ?? 0);
   const pendingDeposit = Number(r.pendingDepositCents ?? 0);
   const pendingCents = Number(r.pendingCents ?? 0);
@@ -101,7 +93,7 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
   const waitMeta = getStoreFormalizedWaitMeta({ formalizedAt: r.formalizedAt, status: r.status, pendingTotal, nowMs });
   const isFullyPaid = pendingTotal === 0;
   const servicePaid = Math.max(0, Number(r.paidServiceCents ?? 0));
-  const depositPaid = Math.min(paid, deposit);
+  const depositPaid = Math.max(0, paidDepositCents);
   const hasRefundableAmount = paid > 0;
   const requiredUnits = Number(r.contractsBadge?.requiredUnits ?? 0);
   const readyCount = Number(r.contractsBadge?.readyCount ?? 0);

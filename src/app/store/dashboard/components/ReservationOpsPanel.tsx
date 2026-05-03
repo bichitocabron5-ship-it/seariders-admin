@@ -93,6 +93,7 @@ export function ReservationOpsPanel({
   const depositHeld = r.depositHeld === true;
   const depositHoldReason = r.depositHoldReason ?? null;
   const canRefundDeposit = refundableDepositCents > 0 && !depositHeld;
+  const hasDepositFlow = pendingDeposit > 0 || refundableDepositCents > 0 || depositHeld;
   const isBusy = busyAction !== null;
 
   async function runBusy(action: string, work: () => Promise<void>) {
@@ -166,48 +167,50 @@ export function ReservationOpsPanel({
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <select
-          value={method}
-          onChange={(e) => setMethod(e.target.value as PayMethod)}
-          disabled={isBusy}
-          style={{ ...inputBase, cursor: isBusy ? "wait" : "pointer", padding: 8 }}
-        >
-          <option value="CASH">Efectivo</option>
-          <option value="CARD">Tarjeta</option>
-          <option value="BIZUM">Bizum</option>
-          <option value="TRANSFER">Transferencia</option>
-        </select>
+      {hasDepositFlow ? (
+        <>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              value={method}
+              onChange={(e) => setMethod(e.target.value as PayMethod)}
+              disabled={isBusy}
+              style={{ ...inputBase, cursor: isBusy ? "wait" : "pointer", padding: 8 }}
+            >
+              <option value="CASH">Efectivo</option>
+              <option value="CARD">Tarjeta</option>
+              <option value="BIZUM">Bizum</option>
+              <option value="TRANSFER">Transferencia</option>
+            </select>
 
-        <ActionButton
-          type="button"
-          disabled={!canRefundDeposit || isBusy}
-          onClick={() =>
-            void runBusy("refund-deposit", async () => {
-              await createPayment({
-                reservationId: r.id,
-                amountCents: refundableDepositCents,
-                method,
-                origin: "STORE",
-                isDeposit: true,
-                direction: "OUT",
-              });
-            })
-          }
-          variant="secondary"
-          style={{ opacity: !canRefundDeposit || isBusy ? 0.6 : 1, cursor: !canRefundDeposit || isBusy ? "not-allowed" : "pointer" }}
-        >
-          {busyAction === "refund-deposit" ? "Devolviendo..." : "Devolver fianza"}
-        </ActionButton>
-      </div>
+            <ActionButton
+              type="button"
+              disabled={!canRefundDeposit || isBusy}
+              onClick={() =>
+                void runBusy("refund-deposit", async () => {
+                  await createPayment({
+                    reservationId: r.id,
+                    amountCents: refundableDepositCents,
+                    method,
+                    origin: "STORE",
+                    isDeposit: true,
+                    direction: "OUT",
+                  });
+                })
+              }
+              variant="secondary"
+              style={{ opacity: !canRefundDeposit || isBusy ? 0.6 : 1, cursor: !canRefundDeposit || isBusy ? "not-allowed" : "pointer" }}
+            >
+              {busyAction === "refund-deposit" ? "Devolviendo..." : "Devolver fianza"}
+            </ActionButton>
+          </div>
 
-      {depositHeld ? (
-        <AlertBanner tone="warning" title="Fianza retenida">
-          {depositHoldReason || "Marcada por plataforma. No se puede devolver desde tienda."}
-        </AlertBanner>
-      ) : null}
+          {depositHeld ? (
+            <AlertBanner tone="warning" title="Fianza retenida">
+              {depositHoldReason || "Marcada por plataforma. No se puede devolver desde tienda."}
+            </AlertBanner>
+          ) : null}
 
-      {pendingDeposit > 0 ? (
+          {pendingDeposit > 0 ? (
         <div style={surfaceCard}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
             <div style={{ fontWeight: 800 }}>Cobrar fianza (puede ser mixto)</div>
@@ -299,6 +302,8 @@ export function ReservationOpsPanel({
             </ActionButton>
           </div>
         </div>
+          ) : null}
+        </>
       ) : null}
 
       <div>

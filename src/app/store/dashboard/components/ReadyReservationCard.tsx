@@ -65,14 +65,16 @@ function toneFromStatus(r: ReservationRow) {
   return "info" as const;
 }
 
-function depositLabel(depositStatus: "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA") {
+function depositLabel(depositStatus: "NO_APLICA" | "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA") {
+  if (depositStatus === "NO_APLICA") return "Sin fianza";
   if (depositStatus === "PENDIENTE") return "Fianza pendiente";
   if (depositStatus === "LIBERABLE") return "Fianza liberable";
   if (depositStatus === "DEVUELTA") return "Fianza devuelta";
   return "Fianza retenida";
 }
 
-function depositTone(depositStatus: "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA") {
+function depositTone(depositStatus: "NO_APLICA" | "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA") {
+  if (depositStatus === "NO_APLICA") return "neutral" as const;
   if (depositStatus === "PENDIENTE") return "danger" as const;
   if (depositStatus === "LIBERABLE") return "warning" as const;
   if (depositStatus === "DEVUELTA") return "success" as const;
@@ -114,23 +116,15 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
   const [retainReason, setRetainReason] = useState("");
 
   const paidDepositCents = Number(r.paidDepositCents ?? 0);
-  const deposit = Number(r.depositCents ?? 0);
   const pendingService = Number(r.pendingServiceCents ?? 0);
   const pendingDeposit = Number(r.pendingDepositCents ?? 0);
   const pendingTotal = pendingService + pendingDeposit;
-  const hasDepositIn = (r.payments ?? []).some((p) => p.isDeposit && p.direction !== "OUT");
-  const hasDepositOut = (r.payments ?? []).some((p) => p.isDeposit && p.direction === "OUT");
   const depositHeld = r.depositHeld === true;
   const paid = Number(r.paidCents ?? 0);
   const refundableDepositCents = Math.max(0, paidDepositCents);
   const hasRefundableAmount = paid > 0;
-  const depositStatus = depositHeld
-    ? "RETENIDA"
-    : paidDepositCents <= 0
-      ? hasDepositIn && hasDepositOut
-        ? "DEVUELTA"
-        : "PENDIENTE"
-      : "LIBERABLE";
+  const depositStatus = r.depositStatus ?? "NO_APLICA";
+  const showDeposit = depositStatus !== "NO_APLICA";
   const isFullyPaid = pendingTotal === 0;
   const canAutoCloseReturned = refundableDepositCents === 0 || depositHeld;
 
@@ -250,8 +244,8 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
       ) : null}
 
       <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-        <StatusBadge tone="warning">Fianza {euros(Math.min(paidDepositCents, deposit))}</StatusBadge>
-        <StatusBadge tone={depositTone(depositStatus)}>{depositLabel(depositStatus)}</StatusBadge>
+        {showDeposit ? <StatusBadge tone="warning">Fianza {euros(Math.max(0, paidDepositCents))}</StatusBadge> : null}
+        {showDeposit ? <StatusBadge tone={depositTone(depositStatus)}>{depositLabel(depositStatus)}</StatusBadge> : null}
         {pendingTotal > 0 ? <StatusBadge tone="danger">Pendiente {euros(pendingTotal)}</StatusBadge> : <StatusBadge tone="success">Todo cobrado</StatusBadge>}
       </div>
 

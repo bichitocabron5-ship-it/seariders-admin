@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
-import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { computeReservationDepositCents, deriveReservationDepositStatus } from "@/lib/reservation-deposits";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 
 export const runtime = "nodejs";
@@ -409,16 +409,12 @@ export async function GET() {
     const contractsBadge =
       requiredUnits > 0 ? { requiredUnits, readyCount } : null;
 
-    let depositStatus: "PENDIENTE" | "LIBERABLE" | "DEVUELTA" | "RETENIDA";
-    if (r.depositHeld) {
-      depositStatus = "RETENIDA";
-    } else if (paidDepositCents <= 0) {
-      const hadDepositIn = r.payments.some((p) => p.isDeposit && p.direction === "IN");
-      const hadDepositOut = r.payments.some((p) => p.isDeposit && p.direction === "OUT");
-      depositStatus = hadDepositIn && hadDepositOut ? "DEVUELTA" : "PENDIENTE";
-    } else {
-      depositStatus = "LIBERABLE";
-    }
+    const depositStatus = deriveReservationDepositStatus({
+      depositCents,
+      depositHeld: r.depositHeld,
+      paidDepositCents,
+      payments: r.payments,
+    });
 
     const legacyServiceName = r.service?.name ?? null;
     const legacyDurationMinutes = r.option?.durationMinutes ?? null;
