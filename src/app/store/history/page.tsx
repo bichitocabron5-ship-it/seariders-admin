@@ -933,7 +933,7 @@ export default function StoreHistoryPage() {
       ) : null}
 
       {false && adjustTarget ? (
-        <Card title={`Ajuste económico · ${adjustTarget.customerName || adjustTarget.id}`}>
+        <Card title={`Ajuste economico - ${adjustTarget?.customerName || adjustTarget?.id || ""}`}>
           <div style={{ display: "grid", gap: 14 }}>
             <div style={{ fontSize: 13, color: "#64748b" }}>
               Ajusta el total real cobrado y la fianza manteniendo trazabilidad. El sistema registrará la corrección como ajuste financiero.
