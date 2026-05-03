@@ -42,6 +42,11 @@ function hasText(value: string | null | undefined) {
   return String(value ?? "").trim().length > 0;
 }
 
+function toYmd(value: Date | null | undefined) {
+  if (!value) return null;
+  return value.toISOString().slice(0, 10);
+}
+
 type ReservationProfileRow = {
   id: string;
   customerName: string | null;
@@ -240,7 +245,7 @@ export async function GET(req: Request) {
       customerDocType: fallbackOptionalString(richestReservation.customerDocType, richestContract?.driverDocType),
       customerDocNumber: fallbackOptionalString(richestReservation.customerDocNumber, richestContract?.driverDocNumber),
       country: fallbackOptionalString(richestReservation.customerCountry, richestContract?.driverCountry),
-      birthDate: richestReservation.customerBirthDate ?? richestContract?.driverBirthDate ?? null,
+      birthDate: toYmd(richestReservation.customerBirthDate ?? richestContract?.driverBirthDate ?? null),
       address: fallbackOptionalString(richestReservation.customerAddress, richestContract?.driverAddress),
       postalCode: fallbackOptionalString(richestReservation.customerPostalCode, richestContract?.driverPostalCode),
       licenseSchool: fallbackOptionalString(richestReservation.licenseSchool, richestContract?.licenseSchool),
@@ -260,7 +265,7 @@ export async function GET(req: Request) {
             driverPostalCode: richestContract.driverPostalCode,
             driverDocType: richestContract.driverDocType,
             driverDocNumber: richestContract.driverDocNumber,
-            driverBirthDate: richestContract.driverBirthDate,
+            driverBirthDate: toYmd(richestContract.driverBirthDate),
             minorAuthorizationProvided: richestContract.minorAuthorizationProvided,
             imageConsentAccepted: richestContract.imageConsentAccepted,
             licenseSchool: richestContract.licenseSchool,

@@ -25,6 +25,11 @@ async function requireStoreOrAdmin() {
   return null;
 }
 
+function toYmd(value: Date | null | undefined) {
+  if (!value) return null;
+  return value.toISOString().slice(0, 10);
+}
+
 export async function GET(req: Request) {
   const session = await requireStoreOrAdmin();
   if (!session) {
@@ -88,7 +93,7 @@ export async function GET(req: Request) {
       phone: r.customerPhone ?? null,
       customerDocNumber: r.customerDocNumber ?? null,
       country: r.customerCountry ?? null,
-      birthDate: r.customerBirthDate ?? null,
+      birthDate: toYmd(r.customerBirthDate),
       address: r.customerAddress ?? null,
       postalCode: r.customerPostalCode ?? null,
       licenseNumber: r.licenseNumber ?? null,
