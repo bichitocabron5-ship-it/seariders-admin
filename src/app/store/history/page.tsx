@@ -665,9 +665,9 @@ export default function StoreHistoryPage() {
 
   function openAdjustment(row: HistoryRow) {
     setAdjustTarget(row);
-    setAdjustTotalEuros((Number(row.totalPriceCents ?? 0) / 100).toFixed(2));
-    setAdjustDepositEuros((Number(row.depositCents ?? 0) / 100).toFixed(2));
-    setAdjustNote(row.financialAdjustmentNote ?? "");
+    setAdjustTotalEuros((Number(row.commercial?.totalPriceCents ?? row.totalPriceCents ?? 0) / 100).toFixed(2));
+    setAdjustDepositEuros((Number(row.commercial?.depositCents ?? row.depositCents ?? 0) / 100).toFixed(2));
+    setAdjustNote(row.adjustments?.financialAdjustmentNote ?? row.financialAdjustmentNote ?? "");
   }
 
   async function submitAdjustment() {
@@ -932,7 +932,7 @@ export default function StoreHistoryPage() {
         </Card>
       ) : null}
 
-      {adjustTarget ? (
+      {false && adjustTarget ? (
         <Card title={`Ajuste económico · ${adjustTarget.customerName || adjustTarget.id}`}>
           <div style={{ display: "grid", gap: 14 }}>
             <div style={{ fontSize: 13, color: "#64748b" }}>
@@ -1087,6 +1087,16 @@ export default function StoreHistoryPage() {
         actionLink={actionLink}
         emptyState={emptyState}
         onAdjustFinancials={openAdjustment}
+        adjustTargetId={adjustTarget?.id ?? null}
+        adjustBusy={adjustBusy}
+        adjustTotalEuros={adjustTotalEuros}
+        adjustDepositEuros={adjustDepositEuros}
+        adjustNote={adjustNote}
+        onAdjustTotalEurosChange={setAdjustTotalEuros}
+        onAdjustDepositEurosChange={setAdjustDepositEuros}
+        onAdjustNoteChange={setAdjustNote}
+        onCancelAdjustment={() => setAdjustTarget(null)}
+        onSubmitAdjustment={submitAdjustment}
         onUploadManualContract={uploadManualContract}
         onDownloadManualContract={downloadManualContract}
         manualContractBusyId={manualContractBusyId}
