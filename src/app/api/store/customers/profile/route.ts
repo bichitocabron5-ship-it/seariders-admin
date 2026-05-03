@@ -1,4 +1,3 @@
-// src/app/api/store/customers/profile/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
@@ -231,46 +230,111 @@ export async function GET(req: Request) {
         })
       : [];
 
-  const richestReservation = [...relatedReservations, reservation]
-    .sort((left, right) => contractMandatoryScore(right) - contractMandatoryScore(left))[0] ?? reservation;
+  const fallbackReservation = relatedReservations
+    .filter((row) => row.id !== reservation.id)
+    .sort((left, right) => contractMandatoryScore(right) - contractMandatoryScore(left))[0] ?? null;
 
-  const richestContract = richestReservation.contracts[0] ?? null;
+  const selectedContract = reservation.contracts[0] ?? null;
+  const fallbackContract = fallbackReservation?.contracts[0] ?? null;
+  const contractProfileSourceReservation = selectedContract ? reservation : fallbackReservation;
+  const contractProfileSourceContract = selectedContract ?? fallbackContract;
 
   return NextResponse.json({
     ok: true,
     profile: {
-      customerName: fallbackOptionalString(richestReservation.customerName, richestContract?.driverName),
-      email: fallbackOptionalString(richestReservation.customerEmail, richestContract?.driverEmail),
-      phone: fallbackOptionalString(richestReservation.customerPhone, richestContract?.driverPhone),
-      customerDocType: fallbackOptionalString(richestReservation.customerDocType, richestContract?.driverDocType),
-      customerDocNumber: fallbackOptionalString(richestReservation.customerDocNumber, richestContract?.driverDocNumber),
-      country: fallbackOptionalString(richestReservation.customerCountry, richestContract?.driverCountry),
-      birthDate: toYmd(richestReservation.customerBirthDate ?? richestContract?.driverBirthDate ?? null),
-      address: fallbackOptionalString(richestReservation.customerAddress, richestContract?.driverAddress),
-      postalCode: fallbackOptionalString(richestReservation.customerPostalCode, richestContract?.driverPostalCode),
-      licenseSchool: fallbackOptionalString(richestReservation.licenseSchool, richestContract?.licenseSchool),
-      licenseType: fallbackOptionalString(richestReservation.licenseType, richestContract?.licenseType),
-      licenseNumber: fallbackOptionalString(richestReservation.licenseNumber, richestContract?.licenseNumber),
-      contractProfile: richestContract
+      customerName: fallbackOptionalString(
+        reservation.customerName,
+        selectedContract?.driverName,
+        fallbackReservation?.customerName,
+        fallbackContract?.driverName
+      ),
+      email: fallbackOptionalString(
+        reservation.customerEmail,
+        selectedContract?.driverEmail,
+        fallbackReservation?.customerEmail,
+        fallbackContract?.driverEmail
+      ),
+      phone: fallbackOptionalString(
+        reservation.customerPhone,
+        selectedContract?.driverPhone,
+        fallbackReservation?.customerPhone,
+        fallbackContract?.driverPhone
+      ),
+      customerDocType: fallbackOptionalString(
+        reservation.customerDocType,
+        selectedContract?.driverDocType,
+        fallbackReservation?.customerDocType,
+        fallbackContract?.driverDocType
+      ),
+      customerDocNumber: fallbackOptionalString(
+        reservation.customerDocNumber,
+        selectedContract?.driverDocNumber,
+        fallbackReservation?.customerDocNumber,
+        fallbackContract?.driverDocNumber
+      ),
+      country: fallbackOptionalString(
+        reservation.customerCountry,
+        selectedContract?.driverCountry,
+        fallbackReservation?.customerCountry,
+        fallbackContract?.driverCountry
+      ),
+      birthDate: toYmd(
+        reservation.customerBirthDate ??
+          selectedContract?.driverBirthDate ??
+          fallbackReservation?.customerBirthDate ??
+          fallbackContract?.driverBirthDate ??
+          null
+      ),
+      address: fallbackOptionalString(
+        reservation.customerAddress,
+        selectedContract?.driverAddress,
+        fallbackReservation?.customerAddress,
+        fallbackContract?.driverAddress
+      ),
+      postalCode: fallbackOptionalString(
+        reservation.customerPostalCode,
+        selectedContract?.driverPostalCode,
+        fallbackReservation?.customerPostalCode,
+        fallbackContract?.driverPostalCode
+      ),
+      licenseSchool: fallbackOptionalString(
+        reservation.licenseSchool,
+        selectedContract?.licenseSchool,
+        fallbackReservation?.licenseSchool,
+        fallbackContract?.licenseSchool
+      ),
+      licenseType: fallbackOptionalString(
+        reservation.licenseType,
+        selectedContract?.licenseType,
+        fallbackReservation?.licenseType,
+        fallbackContract?.licenseType
+      ),
+      licenseNumber: fallbackOptionalString(
+        reservation.licenseNumber,
+        selectedContract?.licenseNumber,
+        fallbackReservation?.licenseNumber,
+        fallbackContract?.licenseNumber
+      ),
+      contractProfile: contractProfileSourceReservation && contractProfileSourceContract
         ? {
-            sourceReservationId: richestReservation.id,
-            sourceReservationLabel: [richestReservation.customerName, richestReservation.service?.name]
+            sourceReservationId: contractProfileSourceReservation.id,
+            sourceReservationLabel: [contractProfileSourceReservation.customerName, contractProfileSourceReservation.service?.name]
               .filter((value) => String(value ?? "").trim().length > 0)
               .join(" · "),
-            driverName: richestContract.driverName,
-            driverPhone: richestContract.driverPhone,
-            driverEmail: richestContract.driverEmail,
-            driverCountry: richestContract.driverCountry,
-            driverAddress: richestContract.driverAddress,
-            driverPostalCode: richestContract.driverPostalCode,
-            driverDocType: richestContract.driverDocType,
-            driverDocNumber: richestContract.driverDocNumber,
-            driverBirthDate: toYmd(richestContract.driverBirthDate),
-            minorAuthorizationProvided: richestContract.minorAuthorizationProvided,
-            imageConsentAccepted: richestContract.imageConsentAccepted,
-            licenseSchool: richestContract.licenseSchool,
-            licenseType: richestContract.licenseType,
-            licenseNumber: richestContract.licenseNumber,
+            driverName: contractProfileSourceContract.driverName,
+            driverPhone: contractProfileSourceContract.driverPhone,
+            driverEmail: contractProfileSourceContract.driverEmail,
+            driverCountry: contractProfileSourceContract.driverCountry,
+            driverAddress: contractProfileSourceContract.driverAddress,
+            driverPostalCode: contractProfileSourceContract.driverPostalCode,
+            driverDocType: contractProfileSourceContract.driverDocType,
+            driverDocNumber: contractProfileSourceContract.driverDocNumber,
+            driverBirthDate: toYmd(contractProfileSourceContract.driverBirthDate),
+            minorAuthorizationProvided: contractProfileSourceContract.minorAuthorizationProvided,
+            imageConsentAccepted: contractProfileSourceContract.imageConsentAccepted,
+            licenseSchool: contractProfileSourceContract.licenseSchool,
+            licenseType: contractProfileSourceContract.licenseType,
+            licenseNumber: contractProfileSourceContract.licenseNumber,
           }
         : null,
     },
