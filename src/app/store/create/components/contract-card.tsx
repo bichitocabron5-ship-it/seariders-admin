@@ -226,7 +226,7 @@ export function ContractCard({
   const [driverName, setDriverName] = React.useState<string>(c.driverName ?? "");
   const [driverPhone, setDriverPhone] = React.useState<string>(c.driverPhone ?? "");
   const [driverEmail, setDriverEmail] = React.useState<string>(c.driverEmail ?? "");
-  const [driverCountry, setDriverCountry] = React.useState<string>(c.driverCountry ?? customer.country ?? "ES");
+  const [driverCountry, setDriverCountry] = React.useState<string>(c.driverCountry ?? "");
   const [driverAddress, setDriverAddress] = React.useState<string>(c.driverAddress ?? "");
   const [driverPostalCode, setDriverPostalCode] = React.useState<string>(c.driverPostalCode ?? "");
   const [driverDocType, setDriverDocType] = React.useState<string>(c.driverDocType ?? "");
@@ -324,7 +324,7 @@ export function ContractCard({
     setDriverName(c.driverName ?? "");
     setDriverPhone(c.driverPhone ?? "");
     setDriverEmail(c.driverEmail ?? "");
-    setDriverCountry(c.driverCountry ?? customer.country ?? "ES");
+    setDriverCountry(c.driverCountry ?? "");
     setDriverAddress(c.driverAddress ?? "");
     setDriverPostalCode(c.driverPostalCode ?? "");
     setDriverDocType(c.driverDocType ?? "");
@@ -335,7 +335,7 @@ export function ContractCard({
     setLicenseNumber(c.licenseNumber ?? "");
     setPreparedJetskiId(c.preparedJetskiId ?? "");
     setPreparedAssetId(c.preparedAssetId ?? "");
-  }, [c.id, c.driverAddress, c.driverBirthDate, c.driverCountry, c.driverDocNumber, c.driverDocType, c.driverEmail, c.driverName, c.driverPhone, c.driverPostalCode, c.imageConsentAccepted, c.licenseNumber, c.licenseSchool, c.licenseType, c.minorAuthorizationProvided, c.preparedAssetId, c.preparedJetskiId, customer.country]);
+  }, [c.id, c.driverAddress, c.driverBirthDate, c.driverCountry, c.driverDocNumber, c.driverDocType, c.driverEmail, c.driverName, c.driverPhone, c.driverPostalCode, c.imageConsentAccepted, c.licenseNumber, c.licenseSchool, c.licenseType, c.minorAuthorizationProvided, c.preparedAssetId, c.preparedJetskiId]);
 
   useEffect(() => {
     if (c.status === "SIGNED" || c.status === "VOID") {

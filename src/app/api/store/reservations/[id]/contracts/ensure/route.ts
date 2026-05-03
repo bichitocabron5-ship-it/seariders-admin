@@ -143,23 +143,26 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
         licenseSchool: string | null;
         licenseType: string | null;
         licenseNumber: string | null;
-      }> = missingSlots.map((slot, idx) => ({
-        reservationId: id,
-        unitIndex: maxUnitIndex + idx + 1,
-        logicalUnitIndex: slot,
-        driverName: res.customerName ?? null,
-        driverPhone: res.customerPhone ?? null,
-        driverEmail: res.customerEmail ?? null,
-        driverCountry: res.customerCountry ?? null,
-        driverAddress: res.customerAddress ?? null,
-        driverPostalCode: res.customerPostalCode ?? null,
-        driverDocType: res.customerDocType ?? null,
-        driverDocNumber: res.customerDocNumber ?? null,
-        driverBirthDate: res.customerBirthDate ?? null,
-        licenseSchool: res.isLicense ? res.licenseSchool ?? null : null,
-        licenseType: res.isLicense ? res.licenseType ?? null : null,
-        licenseNumber: res.isLicense ? res.licenseNumber ?? null : null,
-      }));
+      }> = missingSlots.map((slot, idx) => {
+        const isPrimaryContract = slot === 1;
+        return {
+          reservationId: id,
+          unitIndex: maxUnitIndex + idx + 1,
+          logicalUnitIndex: slot,
+          driverName: isPrimaryContract ? res.customerName ?? null : null,
+          driverPhone: isPrimaryContract ? res.customerPhone ?? null : null,
+          driverEmail: isPrimaryContract ? res.customerEmail ?? null : null,
+          driverCountry: isPrimaryContract ? res.customerCountry ?? null : null,
+          driverAddress: isPrimaryContract ? res.customerAddress ?? null : null,
+          driverPostalCode: isPrimaryContract ? res.customerPostalCode ?? null : null,
+          driverDocType: isPrimaryContract ? res.customerDocType ?? null : null,
+          driverDocNumber: isPrimaryContract ? res.customerDocNumber ?? null : null,
+          driverBirthDate: isPrimaryContract ? res.customerBirthDate ?? null : null,
+          licenseSchool: isPrimaryContract && res.isLicense ? res.licenseSchool ?? null : null,
+          licenseType: isPrimaryContract && res.isLicense ? res.licenseType ?? null : null,
+          licenseNumber: isPrimaryContract && res.isLicense ? res.licenseNumber ?? null : null,
+        };
+      });
 
       if (toCreate.length) {
         await tx.reservationContract.createMany({
@@ -175,6 +178,9 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
       await Promise.all(
         visibleDraftContracts.map(async (contract) => {
+          const slot = Number(contract.logicalUnitIndex ?? contract.unitIndex ?? 0);
+          if (slot !== 1) return;
+
           const patch = {
             driverName: normalizeOptionalString(contract.driverName) ?? normalizeOptionalString(res.customerName),
             driverPhone: normalizeOptionalString(contract.driverPhone) ?? normalizeOptionalString(res.customerPhone),

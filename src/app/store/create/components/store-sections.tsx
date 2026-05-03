@@ -136,7 +136,11 @@ export function ContractsSection({
       ].some((value) => String(value ?? "").trim().length > 0) && !contract.imageConsentAccepted && !contract.minorAuthorizationProvided;
     });
 
-    if (!emptyDraftContracts.length) {
+    const primaryEmptyDraftContract = [...emptyDraftContracts].sort(
+      (left, right) => (left.logicalUnitIndex ?? left.unitIndex) - (right.logicalUnitIndex ?? right.unitIndex)
+    )[0];
+
+    if (!primaryEmptyDraftContract || (primaryEmptyDraftContract.logicalUnitIndex ?? primaryEmptyDraftContract.unitIndex) !== 1) {
       onRecoveredContractProfileApplied();
       return;
     }
@@ -146,26 +150,22 @@ export function ContractsSection({
     const applyRecoveredProfile = async () => {
       try {
         setRecoveringProfile(true);
-        await Promise.all(
-          emptyDraftContracts.map((contract) =>
-            patchContract(reservationId, contract.id, {
-              driverName: recoveredContractProfile.driverName ?? null,
-              driverPhone: recoveredContractProfile.driverPhone ?? null,
-              driverEmail: recoveredContractProfile.driverEmail ?? null,
-              driverCountry: recoveredContractProfile.driverCountry ?? null,
-              driverAddress: recoveredContractProfile.driverAddress ?? null,
-              driverPostalCode: recoveredContractProfile.driverPostalCode ?? null,
-              driverDocType: recoveredContractProfile.driverDocType ?? null,
-              driverDocNumber: recoveredContractProfile.driverDocNumber ?? null,
-              driverBirthDate: recoveredContractProfile.driverBirthDate ?? null,
-              minorAuthorizationProvided: Boolean(recoveredContractProfile.minorAuthorizationProvided),
-              imageConsentAccepted: Boolean(recoveredContractProfile.imageConsentAccepted),
-              licenseSchool: recoveredContractProfile.licenseSchool ?? null,
-              licenseType: recoveredContractProfile.licenseType ?? null,
-              licenseNumber: recoveredContractProfile.licenseNumber ?? null,
-            })
-          )
-        );
+        await patchContract(reservationId, primaryEmptyDraftContract.id, {
+          driverName: recoveredContractProfile.driverName ?? null,
+          driverPhone: recoveredContractProfile.driverPhone ?? null,
+          driverEmail: recoveredContractProfile.driverEmail ?? null,
+          driverCountry: recoveredContractProfile.driverCountry ?? null,
+          driverAddress: recoveredContractProfile.driverAddress ?? null,
+          driverPostalCode: recoveredContractProfile.driverPostalCode ?? null,
+          driverDocType: recoveredContractProfile.driverDocType ?? null,
+          driverDocNumber: recoveredContractProfile.driverDocNumber ?? null,
+          driverBirthDate: recoveredContractProfile.driverBirthDate ?? null,
+          minorAuthorizationProvided: Boolean(recoveredContractProfile.minorAuthorizationProvided),
+          imageConsentAccepted: Boolean(recoveredContractProfile.imageConsentAccepted),
+          licenseSchool: recoveredContractProfile.licenseSchool ?? null,
+          licenseType: recoveredContractProfile.licenseType ?? null,
+          licenseNumber: recoveredContractProfile.licenseNumber ?? null,
+        });
 
         if (cancelled) return;
         onRecoveredContractProfileApplied();

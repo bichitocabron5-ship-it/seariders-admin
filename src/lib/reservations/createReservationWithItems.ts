@@ -460,23 +460,26 @@ export async function createReservationWithItems(params: {
 
     if (shouldFormalize && requiredContractUnits > 0) {
       await tx.reservationContract.createMany({
-        data: Array.from({ length: requiredContractUnits }, (_, idx) => ({
-          reservationId: reservation.id,
-          unitIndex: idx + 1,
-          logicalUnitIndex: idx + 1,
-          driverName: input.customerName,
-          driverPhone: customerPhone,
-          driverEmail: customerEmail,
-          driverCountry: customerCountry,
-          driverAddress: customerAddress,
-          driverPostalCode: customerPostalCode,
-          driverDocType: customerDocType,
-          driverDocNumber: customerDocNumber,
-          driverBirthDate: customerBirthDate,
-          licenseSchool: isLicense ? licenseSchool : null,
-          licenseType: isLicense ? licenseType : null,
-          licenseNumber: isLicense ? licenseNumber : null,
-        })),
+        data: Array.from({ length: requiredContractUnits }, (_, idx) => {
+          const isPrimaryContract = idx === 0;
+          return {
+            reservationId: reservation.id,
+            unitIndex: idx + 1,
+            logicalUnitIndex: idx + 1,
+            driverName: isPrimaryContract ? input.customerName : null,
+            driverPhone: isPrimaryContract ? customerPhone : null,
+            driverEmail: isPrimaryContract ? customerEmail : null,
+            driverCountry: isPrimaryContract ? customerCountry : null,
+            driverAddress: isPrimaryContract ? customerAddress : null,
+            driverPostalCode: isPrimaryContract ? customerPostalCode : null,
+            driverDocType: isPrimaryContract ? customerDocType : null,
+            driverDocNumber: isPrimaryContract ? customerDocNumber : null,
+            driverBirthDate: isPrimaryContract ? customerBirthDate : null,
+            licenseSchool: isPrimaryContract && isLicense ? licenseSchool : null,
+            licenseType: isPrimaryContract && isLicense ? licenseType : null,
+            licenseNumber: isPrimaryContract && isLicense ? licenseNumber : null,
+          };
+        }),
         skipDuplicates: true,
       });
     }
