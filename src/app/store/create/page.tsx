@@ -39,6 +39,16 @@ function clampPct(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+function toDateInputYmd(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
+}
+
 const RECOVERED_CONTRACT_PROFILE_STORAGE_KEY = "store-create-recovered-contract-profile";
 const STORE_CREATE_DRAFT_STORAGE_KEY = "store-create-draft";
 const STORE_CREATE_DRAFT_TTL_MS = 6 * 60 * 60 * 1000;
@@ -204,7 +214,7 @@ function StoreCreatePageInner() {
       setCustomerCountry(res.customerCountry ?? "ES");
       setCustomerAddress(res.customerAddress ?? "");
       setCustomerPostalCode(res.customerPostalCode ?? "");
-      setCustomerBirthDate(res.customerBirthDate ? new Date(res.customerBirthDate).toISOString().slice(0, 10) : "");
+      setCustomerBirthDate(toDateInputYmd(res.customerBirthDate));
       setCustomerDocType(res.customerDocType ?? "");
       setCustomerDocNumber(res.customerDocNumber ?? "");
       setMarketingSource(res.marketing ?? "");
@@ -307,13 +317,20 @@ function StoreCreatePageInner() {
       if (p.customerDocType != null) setCustomerDocType(p.customerDocType);
       if (p.customerDocNumber != null) setCustomerDocNumber(p.customerDocNumber);
       if (p.country != null) setCustomerCountry(p.country);
-      if (p.birthDate != null) setCustomerBirthDate(p.birthDate);
+      if (p.birthDate != null) setCustomerBirthDate(toDateInputYmd(p.birthDate));
       if (p.address != null) setCustomerAddress(p.address);
       if (p.postalCode != null) setCustomerPostalCode(p.postalCode);
       if (p.licenseSchool != null) setLicenseSchool(p.licenseSchool);
       if (p.licenseType != null) setLicenseType(p.licenseType);
       if (p.licenseNumber != null) setLicenseNumber(p.licenseNumber);
-      setRecoveredContractProfile(p.contractProfile ?? null);
+      setRecoveredContractProfile(
+        p.contractProfile
+          ? {
+              ...p.contractProfile,
+              driverBirthDate: toDateInputYmd(p.contractProfile.driverBirthDate),
+            }
+          : null
+      );
 
       if (typeof window !== "undefined") {
         if (p.contractProfile) {
@@ -346,7 +363,10 @@ function StoreCreatePageInner() {
         return;
       }
 
-      setRecoveredContractProfile(parsed.profile);
+      setRecoveredContractProfile({
+        ...parsed.profile,
+        driverBirthDate: toDateInputYmd(parsed.profile.driverBirthDate),
+      });
     } catch {
       window.sessionStorage.removeItem(RECOVERED_CONTRACT_PROFILE_STORAGE_KEY);
     }
