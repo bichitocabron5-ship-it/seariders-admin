@@ -287,11 +287,6 @@ const optionsForService = useMemo(
     [options, serviceId]
   );
 
-const selectedOption = useMemo(
-  () => optionsForService.find((o) => o.id === optionId) ?? null,
-  [optionsForService, optionId]
-);
-
 const selectedService = useMemo(() => {
   return services.find((s) => s.id === serviceId) ?? null;
 }, [services, serviceId]);
@@ -1001,8 +996,6 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             commissionPct={commissionPct}
             commissionCents={commissionCents}
             netAfterCommissionCents={netAfterCommissionCents}
-            discountResponsibility={discountResponsibility}
-            promoterDiscountSharePct={promoterDiscountSharePct}
             promoterDiscountCents={commissionBreakdown.promoterDiscountCents}
             companyDiscountCents={commissionBreakdown.companyDiscountCents}
             commissionBaseCents={commissionBreakdown.commissionBaseCents}
@@ -1026,8 +1019,6 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             setPaymentMethod={setPaymentMethod}
             setCategory={setCategory}
             setDiscountEuros={setDiscountEuros}
-            setDiscountResponsibility={setDiscountResponsibility}
-            setPromoterDiscountSharePct={setPromoterDiscountSharePct}
             setBoothNote={setBoothNote}
             setExtraServiceId={setExtraServiceId}
             setExtraQuantity={setExtraQuantity}

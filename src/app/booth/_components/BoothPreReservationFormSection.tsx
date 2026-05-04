@@ -52,8 +52,6 @@ type Props = {
   commissionPct: number;
   commissionCents: number;
   netAfterCommissionCents: number;
-  discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
-  promoterDiscountSharePct: string;
   promoterDiscountCents: number;
   companyDiscountCents: number;
   commissionBaseCents: number;
@@ -77,8 +75,6 @@ type Props = {
   setPaymentMethod: (value: PayMethod) => void;
   setCategory: (value: string) => void;
   setDiscountEuros: (value: string) => void;
-  setDiscountResponsibility: (value: "COMPANY" | "PROMOTER" | "SHARED") => void;
-  setPromoterDiscountSharePct: (value: string) => void;
   setBoothNote: (value: string) => void;
   setExtraServiceId: (value: string) => void;
   setExtraQuantity: (value: number) => void;
@@ -117,8 +113,6 @@ export default function BoothPreReservationFormSection({
   commissionPct,
   commissionCents,
   netAfterCommissionCents,
-  discountResponsibility,
-  promoterDiscountSharePct,
   promoterDiscountCents,
   companyDiscountCents,
   commissionBaseCents,
@@ -142,8 +136,6 @@ export default function BoothPreReservationFormSection({
   setPaymentMethod,
   setCategory,
   setDiscountEuros,
-  setDiscountResponsibility,
-  setPromoterDiscountSharePct,
   setBoothNote,
   setExtraServiceId,
   setExtraQuantity,
