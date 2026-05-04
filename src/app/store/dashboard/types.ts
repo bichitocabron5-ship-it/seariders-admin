@@ -33,6 +33,8 @@ export type ReservationRow = {
   totalPriceCents: number;
   soldTotalCents: number;
   pvpTotalCents?: number;
+  basePriceCents?: number;
+  commissionBaseCents?: number;
   isLicense: boolean;
   paidCents: number;
   paidDepositCents?: number;
@@ -55,6 +57,8 @@ export type ReservationRow = {
   paidServiceCents?: number;
   autoDiscountCents?: number;
   manualDiscountCents?: number;
+  promoterDiscountCents?: number;
+  companyDiscountCents?: number;
   manualDiscountReason?: string | null;
   finalTotalCents?: number;
   platformExtrasPendingCount?: number;

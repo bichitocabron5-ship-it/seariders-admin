@@ -88,6 +88,11 @@ export function ReservationOpsPanel({
   const busyActionRef = useRef<string | null>(null);
   const pendingService = Number(r.pendingServiceCents ?? 0);
   const pendingDeposit = Number(r.pendingDepositCents ?? 0);
+  const autoDisc = Number(r.autoDiscountCents ?? 0);
+  const manualDisc = Number(r.manualDiscountCents ?? 0);
+  const totalDiscount = autoDisc + manualDisc;
+  const pvpTotal = Number(r.pvpTotalCents ?? 0);
+  const finalTotal = Number(r.finalTotalCents ?? r.totalPriceCents ?? Math.max(0, pvpTotal - totalDiscount));
   const paidDepositCents = Number(r.paidDepositCents ?? 0);
   const refundableDepositCents = Math.max(0, paidDepositCents);
   const depositHeld = r.depositHeld === true;
@@ -167,6 +172,16 @@ export function ReservationOpsPanel({
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
+      <div style={surfaceCard}>
+        <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
+          <div>PVP original: {euros(pvpTotal)}</div>
+          <div>Descuento aplicado: -{euros(totalDiscount)}</div>
+          <div>Total final servicio: {euros(finalTotal)}</div>
+          <div>Pendiente servicio: {euros(pendingService)}</div>
+          {pendingDeposit > 0 ? <div>Pendiente fianza: {euros(pendingDeposit)}</div> : null}
+        </div>
+      </div>
+
       {hasDepositFlow ? (
         <>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>

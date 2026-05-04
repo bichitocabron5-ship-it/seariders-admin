@@ -44,10 +44,13 @@ export async function GET() {
       pax: true,
       basePriceCents: true,
       totalPriceCents: true,
+      commissionBaseCents: true,
       depositCents: true,
       isLicense: true,     
       autoDiscountCents: true,
       manualDiscountCents: true,
+      promoterDiscountCents: true,
+      companyDiscountCents: true,
       manualDiscountReason: true,
       
       isPackParent: true,
@@ -156,19 +159,20 @@ export async function GET() {
     // Si aún no hay items (reserva vieja), fallback a legacy totalPriceCents
     const autoDisc = Number(r.autoDiscountCents ?? 0);
     const manualDisc = Number(r.manualDiscountCents ?? 0);
+    const promoterDisc = Number(r.promoterDiscountCents ?? 0);
+    const companyDisc = Number(r.companyDiscountCents ?? 0);
+    const totalDiscountCents = autoDisc + manualDisc;
 
-    const isPack = Boolean(r.isPackParent && r.packId)
+    const isPack = Boolean(r.isPackParent && r.packId);
     const legacyGrossCents = Number(r.totalPriceCents ?? 0) + autoDisc + manualDisc;
 
     const grossCents = isPack
-      ? Number(r.totalPriceCents ?? 0) // ✅ packs: el total está en el padre
+      ? legacyGrossCents
       : (r.items.length > 0
           ? serviceTotalCents + extrasTotalCents
           : legacyGrossCents);
 
-    const soldTotalCents = isPack
-      ? Number(r.totalPriceCents ?? 0)
-      : Math.max(0, grossCents - autoDisc - manualDisc);
+    const soldTotalCents = Math.max(0, grossCents - totalDiscountCents);
  
     // pendientes separados (✅ servicio basado en items)
     const pendingServiceCents = Math.max(0, soldTotalCents - paidServiceCents);
@@ -211,13 +215,12 @@ export async function GET() {
       ? null
       : (mainItem?.option?.durationMinutes ?? legacyDurationMinutes);
 
-    const pvpFromReservation = legacyGrossCents;
-
     const pvpTotalCents = isPack
-      ? pvpFromReservation
+      ? grossCents
       : (r.items.length > 0 ? serviceTotalCents + extrasTotalCents : Number(r.basePriceCents ?? 0));
 
-    const finalTotalCents = Number(r.totalPriceCents ?? pvpTotalCents);
+    const finalTotalCents = Number(r.totalPriceCents ?? Math.max(0, pvpTotalCents - totalDiscountCents));
+    const totalToChargeCents = finalTotalCents + depositCents;
     const storeFlowStage = deriveStoreFlowStage(r.status, r.arrivalAt);
     
     return {
@@ -251,11 +254,15 @@ export async function GET() {
       // legacy (por convivencia)
       basePriceCents: r.basePriceCents,
       totalPriceCents: r.totalPriceCents,
+      commissionBaseCents: r.commissionBaseCents ?? 0,
       depositCents,
       pvpTotalCents,
       finalTotalCents,
+      totalToChargeCents,
       autoDiscountCents: r.autoDiscountCents ?? 0,
       manualDiscountCents: r.manualDiscountCents ?? 0,
+      promoterDiscountCents: promoterDisc,
+      companyDiscountCents: companyDisc,
       manualDiscountReason: r.manualDiscountReason ?? null,
 
       paidCents,

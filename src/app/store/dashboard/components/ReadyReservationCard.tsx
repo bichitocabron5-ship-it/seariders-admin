@@ -119,6 +119,11 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
   const pendingService = Number(r.pendingServiceCents ?? 0);
   const pendingDeposit = Number(r.pendingDepositCents ?? 0);
   const pendingTotal = pendingService + pendingDeposit;
+  const autoDisc = Number(r.autoDiscountCents ?? 0);
+  const manualDisc = Number(r.manualDiscountCents ?? 0);
+  const totalDiscount = autoDisc + manualDisc;
+  const pvpTotal = Number(r.pvpTotalCents ?? 0);
+  const finalTotal = Number(r.finalTotalCents ?? r.totalPriceCents ?? Math.max(0, pvpTotal - totalDiscount));
   const depositHeld = r.depositHeld === true;
   const paid = Number(r.paidCents ?? 0);
   const refundableDepositCents = Math.max(0, paidDepositCents);
@@ -251,6 +256,18 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
 
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed #ddd" }}>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>PVP</div>
+            <div style={{ fontWeight: 800 }}>{euros(pvpTotal)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Descuento</div>
+            <div style={{ fontWeight: 800 }}>-{euros(totalDiscount)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Total final</div>
+            <div style={{ fontWeight: 800 }}>{euros(finalTotal)}</div>
+          </div>
           <div>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Cobrado</div>
             <div style={{ fontWeight: 800 }}>{euros(paid)}</div>

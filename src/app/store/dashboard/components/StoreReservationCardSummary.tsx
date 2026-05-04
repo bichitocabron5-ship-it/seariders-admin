@@ -15,6 +15,8 @@ type StoreReservationCardSummaryProps = {
   pvpTotal: number;
   autoDisc: number;
   manualDisc: number;
+  promoterDisc: number;
+  companyDisc: number;
   servicePaid: number;
   depositPaid: number;
   pendingCents: number;
@@ -99,6 +101,8 @@ export function StoreReservationCardSummary({
   pvpTotal,
   autoDisc,
   manualDisc,
+  promoterDisc,
+  companyDisc,
   servicePaid,
   depositPaid,
   pendingCents,
@@ -122,6 +126,7 @@ export function StoreReservationCardSummary({
   const timeLabel = hhmm(reservation.scheduledTime) || "sin hora";
   const precheckin = precheckinTone(readyCount, requiredUnits);
   const showDeposit = depositStatus !== "NO_APLICA";
+  const totalDiscount = autoDisc + manualDisc;
 
   return (
     <>
@@ -174,11 +179,13 @@ export function StoreReservationCardSummary({
 
           <div style={{ textAlign: "right" }}>
             <div style={{ fontWeight: 900 }}>{euros(finalTotal)}</div>
-            {autoDisc > 0 || manualDisc > 0 ? (
+            {totalDiscount > 0 ? (
               <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
                 <span style={{ textDecoration: "line-through", opacity: 0.7 }}>{euros(pvpTotal)}</span>
                 {autoDisc > 0 ? <span style={{ marginLeft: 8 }}>Auto: -{euros(autoDisc)}</span> : null}
                 {manualDisc > 0 ? <span style={{ marginLeft: 8 }}>Manual: -{euros(manualDisc)}</span> : null}
+                {promoterDisc > 0 ? <span style={{ marginLeft: 8 }}>Promotor: {euros(promoterDisc)}</span> : null}
+                {companyDisc > 0 ? <span style={{ marginLeft: 8 }}>Empresa: {euros(companyDisc)}</span> : null}
                 {reservation.manualDiscountReason ? <div style={{ marginTop: 2, opacity: 0.75 }}>Motivo: {reservation.manualDiscountReason}</div> : null}
               </div>
             ) : null}
@@ -200,14 +207,19 @@ export function StoreReservationCardSummary({
       </div>
 
       <div style={{ opacity: 0.85, marginTop: 6 }}>
-        <div>Total (final): {euros(finalTotal)}</div>
-        <div style={{ opacity: 0.8 }}>PVP: {euros(pvpTotal)}</div>
+        <div>PVP original: {euros(pvpTotal)}</div>
+        <div>Descuento aplicado: -{euros(totalDiscount)}</div>
+        <div>Total final: {euros(finalTotal)}</div>
         <div>Servicio: {euros(serviceTotal)}</div>
         <div>Extras: {euros(extrasTotal)}</div>
         {showDeposit ? <div>Fianza: {euros(deposit)}</div> : null}
         <div>
+          <strong>Pendiente real a cobrar:</strong> {euros(pendingCents)}
+        </div>
+        <div>
           <strong>Total a cobrar hoy:</strong> {euros(totalToChargeCents)}
         </div>
+        {reservation.commissionBaseCents != null ? <div style={{ opacity: 0.8 }}>Base comisionable: {euros(reservation.commissionBaseCents)}</div> : null}
       </div>
 
       {reservation.depositHeld ? (
