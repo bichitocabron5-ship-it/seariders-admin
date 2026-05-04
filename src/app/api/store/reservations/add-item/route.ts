@@ -8,6 +8,8 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
+import { PricingTier } from "@prisma/client";
+import { findActiveServicePrice } from "@/lib/service-pricing";
 
 export const runtime = "nodejs";
 
@@ -77,16 +79,12 @@ export async function POST(req: Request) {
       durationMin = opt.durationMinutes;
     }
 
-    const price = await prisma.servicePrice.findFirst({
-      where: {
-        serviceId,
-        durationMin,
-        isActive: true,
-        validFrom: { lte: now },
-        OR: [{ validTo: null }, { validTo: { gt: now } }],
-      },
-      orderBy: { validFrom: "desc" },
-      select: { id: true, basePriceCents: true },
+    const price = await findActiveServicePrice(prisma, {
+      serviceId,
+      optionId: optionId ?? "",
+      durationMinutes: Number(durationMin ?? 0),
+      now,
+      pricingTier: PricingTier.STANDARD,
     });
 
     if (!price) {
@@ -105,7 +103,7 @@ export async function POST(req: Request) {
           reservationId,
           serviceId,
           optionId: svc.category === "EXTRA" ? null : optionId,
-          servicePriceId: price.id,
+          servicePriceId: price.id ?? null,
           quantity,
           pax,
           unitPriceCents,

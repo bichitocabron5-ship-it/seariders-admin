@@ -496,7 +496,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: qty,
           pax,
           promoCode: item.promoCode ?? null,
-          servicePriceId: price.id,
+          servicePriceId: price.id ?? null,
           unitPriceCents,
           totalPriceCents: unitPriceCents * qty,
           category: String(service.category ?? "").toUpperCase(),

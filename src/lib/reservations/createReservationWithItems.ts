@@ -282,7 +282,7 @@ export async function createReservationWithItems(params: {
       quantity: it.quantity,
       pax: it.pax,
       promoCode: it.promoCode ?? null,
-      servicePriceId: price.id,
+      servicePriceId: price.id ?? null,
       unitPriceCents,
       totalPriceCents: lineTotal,
     });
@@ -314,7 +314,7 @@ export async function createReservationWithItems(params: {
           quantity: it.quantity,
           pax: it.pax,
           promoCode: it.promoCode ?? null,
-          servicePriceId: price.id,
+          servicePriceId: price.id ?? null,
           unitPriceCents,
           totalPriceCents: lineTotal,
           // si quieres marcar el “main” para UI: isPackParent no aplica aquí
