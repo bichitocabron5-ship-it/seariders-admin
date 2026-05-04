@@ -350,13 +350,18 @@ export async function POST(req: Request) {
     });
   }
 
-  let boothCode = "";
+  let boothCode: string | null = null;
   for (let i = 0; i < 10; i++) {
-    boothCode = genBoothCode();
-    const exists = await prisma.reservation.findUnique({ where: { boothCode } }).catch(() => null);
-    if (!exists) break;
+    const candidate = genBoothCode();
+    const exists = await prisma.reservation.findUnique({ where: { boothCode: candidate } }).catch(() => null);
+    if (!exists) {
+      boothCode = candidate;
+      break;
+    }
   }
-  if (!boothCode) return NextResponse.json({ error: "No se pudo generar código" }, { status: 500 });
+  if (!boothCode) {
+    return NextResponse.json({ error: "No se pudo generar un código único para Booth." }, { status: 500 });
+  }
 
   const reservation = await prisma.reservation.create({
     data: {

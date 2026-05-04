@@ -93,6 +93,7 @@ export async function GET(req: Request) {
             pax: true,
             totalPriceCents: true,
             commissionBaseCents: true,
+            appliedCommissionPct: true,
             channel: { select: { name: true } },
             service: { select: { name: true, category: true } },
             option: { select: { durationMinutes: true } },
@@ -151,6 +152,7 @@ export async function GET(req: Request) {
             customerName: true,
             amountCents: true,
             commissionBaseCents: true,
+            appliedCommissionPct: true,
             direction: true,
             method: true,
             description: true,
@@ -216,8 +218,8 @@ export async function GET(req: Request) {
       paymentMethod: null,
       grossExternalAmountCents: null,
       effectiveCommissionPct:
-        Number(reservation.totalPriceCents ?? 0) > 0 && Number(reservation.commissionBaseCents ?? 0) > 0
-          ? Number(((Number(reservation.commissionBaseCents ?? 0) / Number(reservation.totalPriceCents ?? 0)) * 100).toFixed(2))
+        reservation.appliedCommissionPct != null
+          ? Number(Number(reservation.appliedCommissionPct).toFixed(2))
           : null,
       canCancel: false,
     };
@@ -261,8 +263,8 @@ export async function GET(req: Request) {
       paymentMethod: payment.method,
       grossExternalAmountCents,
       effectiveCommissionPct:
-        Number(payment.externalGrossAmountCents ?? 0) > 0 && Number(payment.commissionBaseCents ?? 0) > 0
-          ? Number(((Number(payment.commissionBaseCents ?? 0) / Number(payment.externalGrossAmountCents ?? 0)) * 100).toFixed(2))
+        payment.appliedCommissionPct != null
+          ? Number(Number(payment.appliedCommissionPct).toFixed(2))
           : null,
       canCancel: signedAmount > 0,
     };

@@ -648,12 +648,35 @@ function boatLabel(boat?: string | null) {
   }, [activeTripId, openTripOptions]);
 
   useEffect(() => {
-    // si cambia el servicio, selecciona primera opcion
-    if (serviceId) {
-      const first = options.find(o => o.serviceId === serviceId);
-      if (first) setOptionId(first.id);
+    const nextServices = servicesFiltered.length > 0 ? servicesFiltered : services;
+    if (nextServices.length === 0) {
+      if (serviceId) setServiceId("");
+      return;
     }
-  }, [serviceId, options]);
+
+    const hasSelectedService = nextServices.some((service) => service.id === serviceId);
+    if (!hasSelectedService) {
+      setServiceId(nextServices[0]?.id ?? "");
+    }
+  }, [serviceId, services, servicesFiltered]);
+
+  useEffect(() => {
+    if (!serviceId) {
+      if (optionId) setOptionId("");
+      return;
+    }
+
+    const nextOptions = options.filter((option) => option.serviceId === serviceId);
+    if (nextOptions.length === 0) {
+      if (optionId) setOptionId("");
+      return;
+    }
+
+    const hasSelectedOption = nextOptions.some((option) => option.id === optionId);
+    if (!hasSelectedOption) {
+      setOptionId(nextOptions[0]?.id ?? "");
+    }
+  }, [optionId, options, serviceId]);
 
 useEffect(() => {
   if (!channelId) return;
