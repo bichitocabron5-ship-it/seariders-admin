@@ -296,12 +296,12 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
           ) : null}
 
           <label style={labelStyle}>
-            <span>Duración</span>
+            <span>Opción</span>
             <select value={values.optionId} onChange={(e) => handlers.onOptionChange(e.target.value)} disabled={flags.isVoucherFormalizeFlow} style={inputStyle}>
-              <option value="" disabled>{values.serviceId ? "Selecciona duración..." : "Selecciona servicio primero"}</option>
+              <option value="" disabled>{values.serviceId ? "Selecciona opción..." : "Selecciona servicio primero"}</option>
               {lists.filteredOptions.map((o) => (
                 <option key={o.id} value={o.id}>
-                  {(o.durationMinutes ?? "-")} min - {(o.paxMax ?? "-")} pax ({
+                  {o.displayLabel ?? `${o.durationMinutes ?? "-"} min`} ({
                     (() => {
                       const shownPrice =
                         flags.isJetskiSelection && values.pricingTier === "RESIDENT"
@@ -320,6 +320,9 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
                 </option>
               ))}
             </select>
+            {lists.selectedOpt?.secondaryLabel ? (
+              <div style={captionStyle}>{lists.selectedOpt.secondaryLabel}</div>
+            ) : null}
             {lists.selectedOpt && (lists.selectedOpt.basePriceCents == null || lists.selectedOpt.hasPrice === false) ? (
               <div style={{ fontSize: 12, marginTop: 4, color: "#b91c1c", fontWeight: 700 }}>
                 Esta opción no tiene precio vigente (Admin &gt; Precios).

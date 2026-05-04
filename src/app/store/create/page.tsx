@@ -511,7 +511,8 @@ function StoreCreatePageInner() {
     dateStr === todayMadridYMD() &&
     !timeStr.trim();
   const selectedServiceLabel = selectedService?.name ?? "";
-  const selectedOptionLabel = selectedOpt?.durationMinutes ? `${selectedOpt.durationMinutes} min` : "";
+  const selectedOptionLabel = selectedOpt?.displayLabel ?? (selectedOpt?.durationMinutes ? `${selectedOpt.durationMinutes} min` : "");
+  const selectedOptionSecondaryLabel = selectedOpt?.secondaryLabel ?? null;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1866,6 +1867,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               selectedCategory={selectedCategory}
               selectedServiceLabel={selectedServiceLabel}
               selectedOptionLabel={selectedOptionLabel}
+              selectedOptionSecondaryLabel={selectedOptionSecondaryLabel}
               isSelectionReady={isScheduleSelectionReady}
               invalidationMessage={scheduleInvalidationMessage}
               timeStr={timeStr}

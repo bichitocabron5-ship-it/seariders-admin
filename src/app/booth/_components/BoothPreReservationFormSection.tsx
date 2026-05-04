@@ -6,7 +6,16 @@ import { ActionButton, AlertBanner, SectionCard } from "@/components/seariders-u
 import type { CountryOption } from "@/lib/countries";
 
 type Service = { id: string; name: string; category: string; code?: string | null; isExternalActivity?: boolean | null };
-type Option = { id: string; serviceId: string; durationMinutes: number; paxMax: number; basePriceCents: number };
+type Option = {
+  id: string;
+  serviceId: string;
+  durationMinutes: number;
+  paxMax: number;
+  basePriceCents: number;
+  isPaxCapacityOption?: boolean;
+  displayLabel?: string;
+  secondaryLabel?: string | null;
+};
 type CartItem = { id: string; serviceId: string; optionId: string | null; quantity: number; pax: number; isExtra: boolean };
 type PayMethod = "CASH" | "CARD" | "BIZUM" | "TRANSFER";
 type Channel = {
@@ -141,6 +150,7 @@ export default function BoothPreReservationFormSection({
   setExtraQuantity,
 }: Props) {
   const hasCart = cartItems.length > 0;
+  const selectedOption = optionsForService.find((option) => option.id === optionId) ?? null;
 
   return (
     <SectionCard eyebrow="Booth" title={isExternalCharge ? "Cobro externo" : "Pre-reserva"}>
@@ -205,14 +215,19 @@ export default function BoothPreReservationFormSection({
           </label>
 
           <label>
-            Duración
+            Opción
             <select value={optionId} onChange={(e) => setOptionId(e.target.value)} style={fieldStyle}>
               {optionsForService.map((option) => (
                 <option key={option.id} value={option.id}>
-                  {option.durationMinutes} min · max {option.paxMax} pax · {euros(option.basePriceCents)}
+                  {option.displayLabel ?? `${option.durationMinutes} min`} · {euros(option.basePriceCents)}
                 </option>
               ))}
             </select>
+            {selectedOption?.secondaryLabel ? (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#64748b", fontWeight: 700 }}>
+                {selectedOption.secondaryLabel}
+              </div>
+            ) : null}
           </label>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>

@@ -9,6 +9,9 @@ export type Option = {
   code?: string | null;
   durationMinutes?: number | null;
   paxMax?: number | null;
+  isPaxCapacityOption?: boolean;
+  displayLabel?: string;
+  secondaryLabel?: string | null;
   contractedMinutes?: number | null;
   basePriceCents?: number | null;
   standardPriceCents?: number | null;

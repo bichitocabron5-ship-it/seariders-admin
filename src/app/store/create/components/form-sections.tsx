@@ -32,6 +32,7 @@ export function AvailabilitySection({
   selectedCategory,
   selectedServiceLabel,
   selectedOptionLabel,
+  selectedOptionSecondaryLabel,
   isSelectionReady,
   invalidationMessage,
   timeStr,
@@ -45,6 +46,7 @@ export function AvailabilitySection({
   selectedCategory: string;
   selectedServiceLabel?: string;
   selectedOptionLabel?: string;
+  selectedOptionSecondaryLabel?: string | null;
   isSelectionReady: boolean;
   invalidationMessage?: string | null;
   timeStr: string;
@@ -76,6 +78,7 @@ export function AvailabilitySection({
             {selectedServiceLabel || "Sin servicio"}
             {selectedOptionLabel ? ` · ${selectedOptionLabel}` : ""}
           </div>
+          {selectedOptionSecondaryLabel ? <div>{selectedOptionSecondaryLabel}</div> : null}
         </div>
       ) : null}
 
@@ -90,7 +93,7 @@ export function AvailabilitySection({
 
       {!isSelectionReady ? (
         <div style={{ padding: 14, borderRadius: 14, border: "1px dashed #cbd5e1", background: "#f8fafc", color: "#64748b", fontSize: 13 }}>
-          Selecciona servicio y duración para consultar disponibilidad y habilitar promociones por hora.
+          Selecciona servicio y opción para consultar disponibilidad y habilitar promociones por hora.
         </div>
       ) : availability?.ok && selectedCategory ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(108px, 1fr))", gap: 10 }}>

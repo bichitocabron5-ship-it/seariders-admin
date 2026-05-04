@@ -1,9 +1,11 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { buildOptionPresentation } from "@/lib/service-option-labels";
 
 type OptionRow = {
   id: string;
+  serviceId?: string;
   durationMinutes: number;
   paxMax: number;
   contractedMinutes: number;
@@ -101,6 +103,10 @@ export default function OptionsListSection({
           const busy = savingId === option.id;
           const isEditing = editingId === option.id;
           const currentDraft = isEditing ? draft : null;
+          const optionPresentation = buildOptionPresentation(
+            { ...option, serviceId: option.serviceId ?? "service" },
+            sorted.map((row) => ({ ...row, serviceId: row.serviceId ?? "service" })),
+          );
 
           return (
             <article key={option.id} style={{ ...rowCard, opacity: busy ? 0.65 : 1 }}>
@@ -108,14 +114,14 @@ export default function OptionsListSection({
                 <div style={{ display: "grid", gap: 4 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <div style={{ fontWeight: 950, fontSize: 17, color: "#0f172a" }}>
-                      {option.durationMinutes} min · hasta {option.paxMax} pax
+                      {optionPresentation.displayLabel}
                     </div>
                     <span style={{ ...statusPill, ...(option.isActive ? statusOn : statusOff) }}>
                       {option.isActive ? "Activa" : "Inactiva"}
                     </span>
                   </div>
                   <div style={{ fontSize: 12, color: "#64748b" }}>
-                    Tiempo contratado actual: {option.contractedMinutes} min
+                    {optionPresentation.secondaryLabel ?? `Duración operativa: ${option.durationMinutes} min`} · Tiempo contratado actual: {option.contractedMinutes} min
                   </div>
                 </div>
 
@@ -280,19 +286,19 @@ export default function OptionsListSection({
                     <div style={metaLabel}>PAX máx.</div>
                     <div style={metaValue}>{option.paxMax}</div>
                   </div>
-                    <div style={metaItem}>
-                      <div style={metaLabel}>Contratado</div>
-                      <div style={metaValue}>{option.contractedMinutes} min</div>
-                    </div>
-                    <div style={metaItem}>
-                      <div style={metaLabel}>Store</div>
-                      <div style={metaValue}>{option.visibleInStore ? "Visible" : "Oculta"}</div>
-                    </div>
-                    <div style={metaItem}>
-                      <div style={metaLabel}>Booth</div>
-                      <div style={metaValue}>{option.visibleInBooth ? "Visible" : "Oculta"}</div>
-                    </div>
+                  <div style={metaItem}>
+                    <div style={metaLabel}>Contratado</div>
+                    <div style={metaValue}>{option.contractedMinutes} min</div>
                   </div>
+                  <div style={metaItem}>
+                    <div style={metaLabel}>Store</div>
+                    <div style={metaValue}>{option.visibleInStore ? "Visible" : "Oculta"}</div>
+                  </div>
+                  <div style={metaItem}>
+                    <div style={metaLabel}>Booth</div>
+                    <div style={metaValue}>{option.visibleInBooth ? "Visible" : "Oculta"}</div>
+                  </div>
+                </div>
               )}
             </article>
           );

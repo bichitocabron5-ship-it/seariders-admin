@@ -13,7 +13,16 @@ import BoothPreReservationsSection from "./_components/BoothPreReservationsSecti
 import BoothTripsSection from "./_components/BoothTripsSection";
 
 type Service = { id: string; name: string; category: string; code?: string | null; isExternalActivity?: boolean | null };
-type Option = { id: string; serviceId: string; durationMinutes: number; paxMax: number; basePriceCents: number };
+type Option = {
+  id: string;
+  serviceId: string;
+  durationMinutes: number;
+  paxMax: number;
+  basePriceCents: number;
+  isPaxCapacityOption?: boolean;
+  displayLabel?: string;
+  secondaryLabel?: string | null;
+};
 type CartItem = { id: string; serviceId: string; optionId: string | null; quantity: number; pax: number; isExtra: boolean };
 type ChannelRule = { serviceId: string; commissionPct: number };
 type Channel = {
@@ -340,7 +349,7 @@ const getCartItemLabel = useCallback(
     const service = getServiceById(item.serviceId);
     if (item.isExtra) return `${service?.name ?? "Extra"} · extra`;
     const option = getOptionById(item.optionId);
-    return `${service?.name ?? "Servicio"}${option?.durationMinutes ? ` · ${option.durationMinutes} min` : ""}`;
+    return `${service?.name ?? "Servicio"}${option?.displayLabel ? ` · ${option.displayLabel}` : option?.durationMinutes ? ` · ${option.durationMinutes} min` : ""}`;
   },
   [getOptionById, getServiceById]
 );

@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { PricingTier } from "@prisma/client";
+import { annotateServiceOptions } from "@/lib/service-option-labels";
 
 export const runtime = "nodejs";
 
@@ -167,10 +168,11 @@ export async function GET(req: Request) {
 
   const visibleMainIds = new Set(servicesMain.map((s) => s.id));
 
-  const options = optionsRaw
-    .filter((o) => visibleMainIds.has(o.serviceId))
-    .filter((o) => (origin === "BOOTH" ? o.visibleInBooth : o.visibleInStore))
-    .map((o) => {
+  const options = annotateServiceOptions(
+    optionsRaw
+      .filter((o) => visibleMainIds.has(o.serviceId))
+      .filter((o) => (origin === "BOOTH" ? o.visibleInBooth : o.visibleInStore))
+  ).map((o) => {
       const key = `${o.serviceId}:${o.id}`;
       const standardPriceCents = standardPriceMap.get(key) ?? null;
       const residentPriceCents = residentPriceMap.get(key) ?? null;
