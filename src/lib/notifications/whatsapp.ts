@@ -1,3 +1,5 @@
+import { getDialCodeForCountry } from "@/lib/countries";
+
 type WhatsappTextInput = {
   kind: "text";
   to: string;
@@ -26,20 +28,6 @@ export type WhatsappDispatchResult =
       error: string;
     };
 
-const COUNTRY_DIAL_CODES: Record<string, string> = {
-  ES: "34",
-  FR: "33",
-  DE: "49",
-  IT: "39",
-  PT: "351",
-  GB: "44",
-  IE: "353",
-  NL: "31",
-  BE: "32",
-  CH: "41",
-  AT: "43",
-};
-
 export function normalizePhoneForWhatsApp(phone: string | null | undefined, country?: string | null) {
   const raw = String(phone ?? "").trim();
   if (!raw) return null;
@@ -57,7 +45,7 @@ export function normalizePhoneForWhatsApp(phone: string | null | undefined, coun
     return digits.length >= 8 ? digits : null;
   }
 
-  const dialCode = COUNTRY_DIAL_CODES[String(country ?? "").trim().toUpperCase()];
+  const dialCode = getDialCodeForCountry(country);
   if (!dialCode) return digits.length >= 8 ? digits : null;
 
   const localDigits = digits.startsWith("0") ? digits.slice(1) : digits;

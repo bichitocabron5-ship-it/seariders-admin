@@ -2,6 +2,7 @@
 
 import QRCode from "react-qr-code";
 import { useMemo, useState } from "react";
+import { getDialCodeForCountry } from "@/lib/countries";
 import {
   appendPublicLanguage,
   getDefaultPublicLanguage,
@@ -9,20 +10,6 @@ import {
   PUBLIC_LANGUAGE_OPTIONS,
   type PublicLanguage,
 } from "@/lib/public-links/i18n";
-
-const COUNTRY_DIAL_CODES: Record<string, string> = {
-  ES: "34",
-  FR: "33",
-  DE: "49",
-  IT: "39",
-  PT: "351",
-  GB: "44",
-  IE: "353",
-  NL: "31",
-  BE: "32",
-  CH: "41",
-  AT: "43",
-};
 
 export function normalizePhoneForWhatsApp(phone: string, country?: string | null) {
   const raw = String(phone ?? "").trim();
@@ -41,7 +28,7 @@ export function normalizePhoneForWhatsApp(phone: string, country?: string | null
     return digits.length >= 8 ? digits : null;
   }
 
-  const dialCode = COUNTRY_DIAL_CODES[String(country ?? "").trim().toUpperCase()];
+  const dialCode = getDialCodeForCountry(country);
   if (!dialCode) return digits.length >= 8 ? digits : null;
 
   const localDigits = digits.startsWith("0") ? digits.slice(1) : digits;
