@@ -14,6 +14,21 @@ export type ReservationExtra = {
   totalPriceCents: number;
 };
 
+export type ReservationJetskiAssignment = {
+  assignmentId: string | null;
+  reservationId: string;
+  reservationUnitId: string | null;
+  unitIndex: number | null;
+  jetskiId: string;
+  jetskiNumber: number | null;
+  assignedAt: string | null;
+  startedAt: string | null;
+  expectedEndAt: string | null;
+  returnedAt: string | null;
+  status: string;
+  source: "ASSIGNMENT" | "LEGACY_UNIT";
+};
+
 export type ReservationRow = {
   arrivalAt: string | null;
   id: string;
@@ -62,6 +77,7 @@ export type ReservationRow = {
   manualDiscountReason?: string | null;
   finalTotalCents?: number;
   platformExtrasPendingCount?: number;
+  jetskiAssignments?: ReservationJetskiAssignment[];
   contractsBadge?: {
     requiredUnits?: number;
     readyCount?: number;

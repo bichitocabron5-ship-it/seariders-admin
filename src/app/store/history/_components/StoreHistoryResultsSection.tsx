@@ -34,6 +34,21 @@ type HistoryMeta = {
   historicalAt: string | null;
 };
 
+type JetskiAssignment = {
+  assignmentId: string | null;
+  reservationId: string;
+  reservationUnitId: string | null;
+  unitIndex: number | null;
+  jetskiId: string;
+  jetskiNumber: number | null;
+  assignedAt: string | null;
+  startedAt: string | null;
+  expectedEndAt: string | null;
+  returnedAt: string | null;
+  status: string;
+  source: "ASSIGNMENT" | "LEGACY_UNIT";
+};
+
 type CommercialSnapshot = {
   holderName: string | null;
   holderCountry: string | null;
@@ -119,6 +134,7 @@ type HistoryRow = {
   historyMeta: HistoryMeta;
   commercial: CommercialSnapshot;
   contractual: ContractualSnapshot;
+  jetskiAssignments: JetskiAssignment[];
   adjustments: AdjustmentSnapshot;
   incidents: HistoryIncident[];
 };
@@ -254,6 +270,7 @@ export default function StoreHistoryResultsSection({
                 const maxManualContracts = Math.max(1, Number(row.quantity ?? 1));
                 const canUploadMoreManualContracts =
                   (row.adjustments?.isManualEntry ?? row.isManualEntry) && manualContractsCount < maxManualContracts;
+                const jetskiAssignments = row.jetskiAssignments ?? [];
                 const holdStatus = row.depositHeld
                   ? row.depositReturnedCents > 0
                     ? "Retenida parcial"
@@ -318,6 +335,20 @@ export default function StoreHistoryResultsSection({
                               <strong>Devuelta</strong>
                               <div>{dt(row.arrivalAt)}</div>
                             </div>
+                            {jetskiAssignments.length > 0 ? (
+                              <div>
+                                <strong>Motos usadas</strong>
+                                <div>
+                                  {jetskiAssignments
+                                    .map((assignment) => {
+                                      const unitLabel = assignment.unitIndex ? ` U${assignment.unitIndex}` : "";
+                                      const returnedLabel = assignment.returnedAt ? ` · devuelta ${dt(assignment.returnedAt)}` : "";
+                                      return `Moto ${assignment.jetskiNumber ?? "?"}${unitLabel}${returnedLabel}`;
+                                    })
+                                    .join(" | ")}
+                                </div>
+                              </div>
+                            ) : null}
                             {(row.adjustments?.manualEntryNote || row.manualEntryNote) ? (
                               <div>
                                 <strong>Nota manual</strong>
@@ -572,6 +603,12 @@ export default function StoreHistoryResultsSection({
                           {row.incidents.length > 0 ? (
                             <a href={mechanicsDetailHref(row.incidents[0])} style={actionLink}>
                               Ver mecanica
+                            </a>
+                          ) : null}
+
+                          {row.incidents.length === 0 && jetskiAssignments[0]?.jetskiId ? (
+                            <a href={`/mechanics/jetski/${jetskiAssignments[0].jetskiId}`} style={actionLink}>
+                              Ver moto
                             </a>
                           ) : null}
                         </div>

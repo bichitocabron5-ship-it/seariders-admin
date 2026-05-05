@@ -9,6 +9,7 @@ import { computeReservationDepositCents, deriveReservationDepositStatus } from "
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { buildStoreTodayWhere } from "@/lib/store-reservation-visibility";
+import { buildReservationJetskiAssignments } from "@/lib/jetski-assignment-history";
 
 export const runtime = "nodejs";
 
@@ -106,6 +107,30 @@ export async function GET() {
 
       depositHeld: true,
       depositHoldReason: true,
+      units: {
+        orderBy: { unitIndex: "asc" },
+        select: {
+          id: true,
+          unitIndex: true,
+          jetskiId: true,
+          jetski: { select: { id: true, number: true } },
+        },
+      },
+      monitorRunAssignments: {
+        orderBy: [{ createdAt: "asc" }],
+        select: {
+          id: true,
+          reservationId: true,
+          reservationUnitId: true,
+          status: true,
+          createdAt: true,
+          startedAt: true,
+          expectedEndAt: true,
+          endedAt: true,
+          jetskiId: true,
+          jetski: { select: { id: true, number: true } },
+        },
+      },
     },
   });
 
@@ -222,6 +247,11 @@ export async function GET() {
     const finalTotalCents = Number(r.totalPriceCents ?? Math.max(0, pvpTotalCents - totalDiscountCents));
     const totalToChargeCents = finalTotalCents + depositCents;
     const storeFlowStage = deriveStoreFlowStage(r.status, r.arrivalAt);
+    const jetskiAssignments = buildReservationJetskiAssignments({
+      reservationId: r.id,
+      assignments: r.monitorRunAssignments,
+      units: r.units,
+    });
     
     return {
       id: r.id,
@@ -287,6 +317,7 @@ export async function GET() {
       taxiboatBoat: r.taxiboatTrip?.boat ?? null,
       taxiboatTripNo: r.taxiboatTrip?.tripNo ?? null,
       taxiboatDepartedAt: r.taxiboatTrip?.departedAt ?? null,
+      jetskiAssignments,
 
       items: r.items.map((it) => ({
         id: it.id,

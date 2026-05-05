@@ -65,6 +65,34 @@ type DetailResponse = {
   lastServiceHoursEffective: number | null;
   lastEvent: EventRow | null;
   events: EventRow[];
+  assignmentsToday: UsageAssignmentRow[];
+  recentAssignments: UsageAssignmentRow[];
+};
+
+type UsageAssignmentRow = {
+  id: string;
+  status: string;
+  createdAt: string;
+  startedAt: string | null;
+  expectedEndAt: string | null;
+  endedAt: string | null;
+  reservationId: string;
+  reservationUnitId: string | null;
+  reservationUnit: {
+    unitIndex: number | null;
+  } | null;
+  reservation: {
+    id: string;
+    status: string;
+    customerName: string | null;
+    customerCountry: string | null;
+    activityDate: string;
+    scheduledTime: string | null;
+    service: {
+      name: string | null;
+      category: string | null;
+    } | null;
+  };
 };
 
 type EventRow = {
@@ -817,6 +845,91 @@ export default function MechanicsDetailPage() {
             recurringFaultCatalog={recurringFaultCatalog}
           />
 
+          <div style={{ ...softCard, padding: 16, display: "grid", gap: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0369a1" }}>
+                  Trazabilidad
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 20 }}>Reservas que usaron este recurso</div>
+              </div>
+              <div style={{ fontSize: 13, color: "#475569" }}>
+                Hoy: {data.assignmentsToday.length} · Histórico visible: {data.recentAssignments.length}
+              </div>
+            </div>
+
+            {data.assignmentsToday.length > 0 ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 800, color: "#0f172a" }}>Hoy</div>
+                {data.assignmentsToday.map((assignment) => (
+                  <a
+                    key={`today-${assignment.id}`}
+                    href={`/store/create?editFrom=${assignment.reservationId}`}
+                    style={{
+                      display: "grid",
+                      gap: 4,
+                      padding: 12,
+                      borderRadius: 14,
+                      border: "1px solid #dbe4ea",
+                      color: "#0f172a",
+                      textDecoration: "none",
+                      background: "#fff",
+                    }}
+                  >
+                    <div style={{ fontWeight: 800 }}>
+                      {assignment.reservation.customerName || "Sin nombre"}
+                      {assignment.reservationUnit?.unitIndex ? ` · U${assignment.reservationUnit.unitIndex}` : ""}
+                    </div>
+                    <div style={{ fontSize: 13, color: "#475569" }}>
+                      {assignment.reservation.service?.name || "Servicio"} · {assignment.status}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                      Asignada {dtShort(assignment.createdAt)} · Salida {dtShort(assignment.startedAt)} · Devuelta {dtShort(assignment.endedAt)}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: "#64748b" }}>No hay reservas trazadas hoy para este recurso.</div>
+            )}
+
+            {data.recentAssignments.length > 0 ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 800, color: "#0f172a" }}>Últimas asignaciones</div>
+                {data.recentAssignments.slice(0, 10).map((assignment) => (
+                  <div
+                    key={assignment.id}
+                    style={{
+                      display: "grid",
+                      gap: 4,
+                      padding: 12,
+                      borderRadius: 14,
+                      border: "1px solid #e5e7eb",
+                      background: "#fff",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                      <a
+                        href={`/store/create?editFrom=${assignment.reservationId}`}
+                        style={{ color: "#0f172a", fontWeight: 800, textDecoration: "none" }}
+                      >
+                        {assignment.reservation.customerName || assignment.reservationId}
+                      </a>
+                      <span style={{ fontSize: 12, color: "#475569" }}>{assignment.status}</span>
+                    </div>
+                    <div style={{ fontSize: 13, color: "#475569" }}>
+                      {assignment.reservation.service?.name || "Servicio"}
+                      {assignment.reservationUnit?.unitIndex ? ` · U${assignment.reservationUnit.unitIndex}` : ""}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                      Asignada {dtShort(assignment.createdAt)} · Devuelta {dtShort(assignment.endedAt)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
           <div
             style={{
               display: "grid",
@@ -951,6 +1064,16 @@ function Kpi({
       </div>
     </div>
   );
+}
+
+function dtShort(value: string | null | undefined) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 

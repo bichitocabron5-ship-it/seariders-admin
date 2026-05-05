@@ -13,6 +13,7 @@ import { summarizeReservationContracts } from "@/lib/reservation-parties";
 import { buildStoreHistoryWhere } from "@/lib/store-reservation-visibility";
 import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
 import { deriveStoreHistoryMeta, storeHistoryReasonLabel } from "@/lib/store-history";
+import { buildReservationJetskiAssignments } from "@/lib/jetski-assignment-history";
 
 export const runtime = "nodejs";
 
@@ -191,6 +192,30 @@ export async function GET(req: Request) {
           assetId: true,
         },
       },
+      units: {
+        orderBy: { unitIndex: "asc" },
+        select: {
+          id: true,
+          unitIndex: true,
+          jetskiId: true,
+          jetski: { select: { id: true, number: true } },
+        },
+      },
+      monitorRunAssignments: {
+        orderBy: [{ createdAt: "asc" }],
+        select: {
+          id: true,
+          reservationId: true,
+          reservationUnitId: true,
+          status: true,
+          createdAt: true,
+          startedAt: true,
+          expectedEndAt: true,
+          endedAt: true,
+          jetskiId: true,
+          jetski: { select: { id: true, number: true } },
+        },
+      },
     },
   });
 
@@ -313,6 +338,11 @@ export async function GET(req: Request) {
       appliedCommissionPct != null && appliedCommissionBaseCents > 0
         ? Math.round(appliedCommissionBaseCents * (appliedCommissionPct / 100))
         : null;
+    const jetskiAssignments = buildReservationJetskiAssignments({
+      reservationId: reservation.id,
+      assignments: reservation.monitorRunAssignments,
+      units: reservation.units,
+    });
 
     return {
       id: reservation.id,
@@ -393,6 +423,7 @@ export async function GET(req: Request) {
         readyContractsCount: contractsSummary.readyContractsCount,
         signedContractsCount: contractsSummary.signedContractsCount,
       },
+      jetskiAssignments,
       adjustments: {
         isManualEntry: reservation.isManualEntry,
         manualEntryNote: reservation.manualEntryNote,

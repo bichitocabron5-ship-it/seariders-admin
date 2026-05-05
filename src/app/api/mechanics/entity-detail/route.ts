@@ -6,6 +6,7 @@ import { MaintenanceEntityType, RunAssignmentStatus } from "@prisma/client";
 import { applyLiveHours, calcService, diffHours, isServiceEventType } from "@/lib/mechanics";
 import { requireMechanicsOrAdmin } from "@/lib/mechanics-auth";
 import { getActiveTaxiboatHoursMap } from "@/lib/taxiboat-mechanics";
+import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 
 export const runtime = "nodejs";
 
@@ -181,6 +182,49 @@ async function getJetskiDetail(entityId: string, take: number) {
     serviceWarnHours: Number(entity.serviceWarnHours ?? 70),
   });
 
+  const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
+  const assignmentUsage = await prisma.monitorRunAssignment.findMany({
+    where: {
+      jetskiId: entityId,
+    },
+    orderBy: [{ createdAt: "desc" }],
+    take: 30,
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      startedAt: true,
+      expectedEndAt: true,
+      endedAt: true,
+      reservationId: true,
+      reservationUnitId: true,
+      reservationUnit: {
+        select: {
+          unitIndex: true,
+        },
+      },
+      reservation: {
+        select: {
+          id: true,
+          status: true,
+          customerName: true,
+          customerCountry: true,
+          activityDate: true,
+          scheduledTime: true,
+          service: { select: { name: true, category: true } },
+        },
+      },
+    },
+  });
+  const assignmentsToday = assignmentUsage.filter((assignment) => {
+    const when =
+      assignment.startedAt ??
+      assignment.createdAt ??
+      assignment.reservation.scheduledTime ??
+      assignment.reservation.activityDate;
+    return when >= start && when < endExclusive;
+  });
+
   return {
     ok: true,
     entityType: MaintenanceEntityType.JETSKI,
@@ -193,6 +237,8 @@ async function getJetskiDetail(entityId: string, take: number) {
     lastServiceHoursEffective,
     lastEvent: lastEvt,
     events,
+    assignmentsToday,
+    recentAssignments: assignmentUsage,
   };
 }
 
@@ -353,6 +399,40 @@ async function getAssetDetail(entityId: string, take: number) {
     serviceWarnHours: Number(entity.serviceWarnHours ?? 70),
   });
 
+  const assignmentUsage = await prisma.monitorRunAssignment.findMany({
+    where: {
+      assetId: entityId,
+    },
+    orderBy: [{ createdAt: "desc" }],
+    take: 30,
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      startedAt: true,
+      expectedEndAt: true,
+      endedAt: true,
+      reservationId: true,
+      reservationUnitId: true,
+      reservationUnit: {
+        select: {
+          unitIndex: true,
+        },
+      },
+      reservation: {
+        select: {
+          id: true,
+          status: true,
+          customerName: true,
+          customerCountry: true,
+          activityDate: true,
+          scheduledTime: true,
+          service: { select: { name: true, category: true } },
+        },
+      },
+    },
+  });
+
   return {
     ok: true,
     entityType: MaintenanceEntityType.ASSET,
@@ -365,6 +445,8 @@ async function getAssetDetail(entityId: string, take: number) {
     lastServiceHoursEffective,
     lastEvent: lastEvt,
     events,
+    assignmentsToday: [],
+    recentAssignments: assignmentUsage,
   };
 }
 

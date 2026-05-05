@@ -37,6 +37,21 @@ type HistoryMeta = {
   historicalAt: string | null;
 };
 
+type JetskiAssignment = {
+  assignmentId: string | null;
+  reservationId: string;
+  reservationUnitId: string | null;
+  unitIndex: number | null;
+  jetskiId: string;
+  jetskiNumber: number | null;
+  assignedAt: string | null;
+  startedAt: string | null;
+  expectedEndAt: string | null;
+  returnedAt: string | null;
+  status: string;
+  source: "ASSIGNMENT" | "LEGACY_UNIT";
+};
+
 type CommercialSnapshot = {
   holderName: string | null;
   holderCountry: string | null;
@@ -122,6 +137,7 @@ type HistoryRow = {
   historyMeta: HistoryMeta;
   commercial: CommercialSnapshot;
   contractual: ContractualSnapshot;
+  jetskiAssignments: JetskiAssignment[];
   adjustments: AdjustmentSnapshot;
   incidents: HistoryIncident[];
 };

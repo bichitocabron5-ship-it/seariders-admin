@@ -132,6 +132,7 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
   const showDeposit = depositStatus !== "NO_APLICA";
   const isFullyPaid = pendingTotal === 0;
   const canAutoCloseReturned = refundableDepositCents === 0 || depositHeld;
+  const jetskiAssignments = r.jetskiAssignments ?? [];
 
   const partialRefundCents = useMemo(() => {
     const raw = Number(String(partialRefundEuros ?? "").replace(",", "."));
@@ -238,6 +239,17 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
           {r.durationMinutes ? ` · ${r.durationMinutes} min` : ""}
         </div>
       </div>
+
+      {jetskiAssignments.length > 0 ? (
+        <div style={{ fontSize: 13, color: "#0f172a", marginTop: 6 }}>
+          Motos:{" "}
+          {jetskiAssignments
+            .map((assignment) =>
+              `Moto ${assignment.jetskiNumber ?? "?"}${assignment.unitIndex ? ` U${assignment.unitIndex}` : ""}`
+            )
+            .join(" · ")}
+        </div>
+      ) : null}
 
       {r.platformExtrasPendingCount ? (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>

@@ -127,6 +127,7 @@ export function StoreReservationCardSummary({
   const precheckin = precheckinTone(readyCount, requiredUnits);
   const showDeposit = depositStatus !== "NO_APLICA";
   const totalDiscount = autoDisc + manualDisc;
+  const jetskiAssignments = reservation.jetskiAssignments ?? [];
 
   return (
     <>
@@ -197,6 +198,17 @@ export function StoreReservationCardSummary({
           {reservation.durationMinutes ? ` · ${reservation.durationMinutes} min` : ""}
         </div>
       </div>
+
+      {jetskiAssignments.length > 0 ? (
+        <div style={{ fontSize: 13, color: "#0f172a", marginTop: 6 }}>
+          Motos:{" "}
+          {jetskiAssignments
+            .map((assignment) =>
+              `Moto ${assignment.jetskiNumber ?? "?"}${assignment.unitIndex ? ` U${assignment.unitIndex}` : ""}`
+            )
+            .join(" · ")}
+        </div>
+      ) : null}
 
       <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
         <StatusBadge tone="info">Servicio {euros(servicePaid)}</StatusBadge>
