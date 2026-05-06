@@ -11,6 +11,10 @@ type Props = {
   newAllowsPromotions: boolean;
   newCommissionEnabled: boolean;
   newCommissionPct: string;
+  newCustomerDiscountMode: "PERCENT" | "FIXED";
+  newCustomerDiscountValue: string;
+  newPromoterCommissionMode: "PERCENT" | "FIXED";
+  newPromoterCommissionValue: string;
   newDiscountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
   newPromoterDiscountSharePct: string;
   creating: boolean;
@@ -22,6 +26,10 @@ type Props = {
   setNewAllowsPromotions: (value: boolean) => void;
   setNewCommissionEnabled: (value: boolean) => void;
   setNewCommissionPct: (value: string) => void;
+  setNewCustomerDiscountMode: (value: "PERCENT" | "FIXED") => void;
+  setNewCustomerDiscountValue: (value: string) => void;
+  setNewPromoterCommissionMode: (value: "PERCENT" | "FIXED") => void;
+  setNewPromoterCommissionValue: (value: string) => void;
   setNewDiscountResponsibility: (value: "COMPANY" | "PROMOTER" | "SHARED") => void;
   setNewPromoterDiscountSharePct: (value: string) => void;
   createChannel: () => void | Promise<void>;
@@ -41,6 +49,10 @@ export default function CreateChannelSection({
   newAllowsPromotions,
   newCommissionEnabled,
   newCommissionPct,
+  newCustomerDiscountMode,
+  newCustomerDiscountValue,
+  newPromoterCommissionMode,
+  newPromoterCommissionValue,
   newDiscountResponsibility,
   newPromoterDiscountSharePct,
   creating,
@@ -52,6 +64,10 @@ export default function CreateChannelSection({
   setNewAllowsPromotions,
   setNewCommissionEnabled,
   setNewCommissionPct,
+  setNewCustomerDiscountMode,
+  setNewCustomerDiscountValue,
+  setNewPromoterCommissionMode,
+  setNewPromoterCommissionValue,
   setNewDiscountResponsibility,
   setNewPromoterDiscountSharePct,
   createChannel,
@@ -107,6 +123,47 @@ export default function CreateChannelSection({
               step={0.01}
               value={newCommissionPct}
               onChange={(e) => setNewCommissionPct(e.target.value)}
+              style={inputStyle}
+              disabled={!newCommissionEnabled}
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+            Descuento cliente
+            <select value={newCustomerDiscountMode} onChange={(e) => setNewCustomerDiscountMode(e.target.value as "PERCENT" | "FIXED")} style={inputStyle}>
+              <option value="PERCENT">Porcentaje</option>
+              <option value="FIXED">Importe fijo</option>
+            </select>
+          </label>
+
+          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+            {newCustomerDiscountMode === "FIXED" ? "Descuento cliente (EUR)" : "Descuento cliente (%)"}
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={newCustomerDiscountValue}
+              onChange={(e) => setNewCustomerDiscountValue(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+            Comisión promotor
+            <select value={newPromoterCommissionMode} onChange={(e) => setNewPromoterCommissionMode(e.target.value as "PERCENT" | "FIXED")} style={inputStyle}>
+              <option value="PERCENT">Porcentaje</option>
+              <option value="FIXED">Importe fijo</option>
+            </select>
+          </label>
+
+          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+            {newPromoterCommissionMode === "FIXED" ? "Comisión promotor (EUR)" : "Comisión promotor (%)"}
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={newPromoterCommissionValue}
+              onChange={(e) => setNewPromoterCommissionValue(e.target.value)}
               style={inputStyle}
               disabled={!newCommissionEnabled}
             />

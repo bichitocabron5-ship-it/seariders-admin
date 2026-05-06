@@ -54,6 +54,24 @@ export default function ChannelsConfigurationSection({
   statusOn,
   statusOff,
 }: Props) {
+  function fmtDiscount(channel: Channel) {
+    if (channel.customerDiscountMode === "FIXED") {
+      return `Dto cliente ${(Number(channel.customerDiscountCents ?? 0) / 100).toFixed(2)} EUR`;
+    }
+    return `Dto cliente ${(Number(channel.customerDiscountValue ?? 0) || 0).toFixed(2)}%`;
+  }
+
+  function fmtCommission(channel: Channel) {
+    if (!channel.commissionEnabled) return "Sin comisión";
+    if (channel.promoterCommissionMode === "FIXED") {
+      return `Comisión fija ${(Number(channel.promoterCommissionCents ?? 0) / 100).toFixed(2)} EUR`;
+    }
+    const pct = (channel.commissionBps ?? 0) / 100;
+    return channel.kind === "EXTERNAL_ACTIVITY"
+      ? `Partner ${pct.toFixed(2)}% · Seariders ${(100 - pct).toFixed(2)}%`
+      : `Comisión ${pct.toFixed(2)}%`;
+  }
+
   return (
     <section style={panelStyle}>
       <div style={panelHeader}>
@@ -71,11 +89,7 @@ export default function ChannelsConfigurationSection({
             const promoterSharePct = (channel.promoterDiscountShareBps ?? 0) / 100;
             const busy = savingId === channel.id;
             const kindLabel = channel.kind === "EXTERNAL_ACTIVITY" ? "Actividad externa" : "Canal estándar";
-            const commissionLabel = channel.commissionEnabled
-              ? channel.kind === "EXTERNAL_ACTIVITY"
-                ? `Partner ${pct.toFixed(2)}% · Seariders ${(100 - pct).toFixed(2)}%`
-                : `Comisión ${pct.toFixed(2)}%`
-              : "Sin comisión";
+            const commissionLabel = fmtCommission(channel);
             const discountPolicyLabel =
               channel.discountResponsibility === "PROMOTER"
                 ? "Dto promotor"
@@ -109,6 +123,9 @@ export default function ChannelsConfigurationSection({
                       </span>
                       <span style={{ ...statusPill, ...(channel.discountResponsibility === "COMPANY" ? statusOff : statusOn) }}>
                         {discountPolicyLabel}
+                      </span>
+                      <span style={{ ...statusPill, ...statusOn }}>
+                        {fmtDiscount(channel)}
                       </span>
                     </div>
                     <div style={{ fontSize: 12, color: "#64748b" }}>
@@ -205,6 +222,96 @@ export default function ChannelsConfigurationSection({
                         const value = Number(e.target.value || 0);
                         const bps = Math.round(value * 100);
                         void patchChannel(channel.id, { commissionBps: bps });
+                      }}
+                      style={inputStyle}
+                    />
+                  </label>
+
+                  <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    Descuento cliente
+                    <select
+                      value={channel.customerDiscountMode ?? "PERCENT"}
+                      disabled={busy}
+                      onChange={(e) => {
+                        const mode = e.target.value as "PERCENT" | "FIXED";
+                        void patchChannel(channel.id, {
+                          customerDiscountMode: mode,
+                          customerDiscountCents: mode === "FIXED" ? channel.customerDiscountCents ?? 0 : 0,
+                        });
+                      }}
+                      style={inputStyle}
+                    >
+                      <option value="PERCENT">Porcentaje</option>
+                      <option value="FIXED">Importe fijo</option>
+                    </select>
+                  </label>
+
+                  <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    {(channel.customerDiscountMode ?? "PERCENT") === "FIXED" ? "Descuento cliente (EUR)" : "Descuento cliente (%)"}
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={
+                        (channel.customerDiscountMode ?? "PERCENT") === "FIXED"
+                          ? ((Number(channel.customerDiscountCents ?? 0) / 100).toFixed(2))
+                          : String(Number(channel.customerDiscountValue ?? 0))
+                      }
+                      disabled={busy}
+                      onChange={(e) => {
+                        const value = Number(e.target.value || 0);
+                        void patchChannel(channel.id, {
+                          customerDiscountValue: value,
+                          customerDiscountCents:
+                            (channel.customerDiscountMode ?? "PERCENT") === "FIXED" ? Math.round(value * 100) : 0,
+                        });
+                      }}
+                      style={inputStyle}
+                    />
+                  </label>
+
+                  <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    Comisión promotor
+                    <select
+                      value={channel.promoterCommissionMode ?? "PERCENT"}
+                      disabled={busy || !channel.commissionEnabled}
+                      onChange={(e) => {
+                        const mode = e.target.value as "PERCENT" | "FIXED";
+                        void patchChannel(channel.id, {
+                          promoterCommissionMode: mode,
+                          promoterCommissionCents: mode === "FIXED" ? channel.promoterCommissionCents ?? 0 : 0,
+                        });
+                      }}
+                      style={inputStyle}
+                    >
+                      <option value="PERCENT">Porcentaje</option>
+                      <option value="FIXED">Importe fijo</option>
+                    </select>
+                  </label>
+
+                  <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    {(channel.promoterCommissionMode ?? "PERCENT") === "FIXED" ? "Comisión promotor (EUR)" : "Comisión promotor (%)"}
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={
+                        (channel.promoterCommissionMode ?? "PERCENT") === "FIXED"
+                          ? ((Number(channel.promoterCommissionCents ?? 0) / 100).toFixed(2))
+                          : String(Number(channel.promoterCommissionValue ?? pct))
+                      }
+                      disabled={busy || !channel.commissionEnabled}
+                      onChange={(e) => {
+                        const value = Number(e.target.value || 0);
+                        void patchChannel(channel.id, {
+                          promoterCommissionValue: value,
+                          promoterCommissionCents:
+                            (channel.promoterCommissionMode ?? "PERCENT") === "FIXED" ? Math.round(value * 100) : 0,
+                          commissionBps:
+                            (channel.promoterCommissionMode ?? "PERCENT") === "PERCENT"
+                              ? Math.round(value * 100)
+                              : channel.commissionBps ?? 0,
+                        });
                       }}
                       style={inputStyle}
                     />

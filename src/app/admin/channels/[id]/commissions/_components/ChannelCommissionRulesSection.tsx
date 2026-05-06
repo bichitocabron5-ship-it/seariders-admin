@@ -21,6 +21,9 @@ type Rule = {
   id?: string;
   serviceId: string;
   commissionPct: number;
+  promoterCommissionMode?: "PERCENT" | "FIXED";
+  promoterCommissionValue?: number;
+  promoterCommissionCents?: number;
   isActive: boolean;
 };
 
@@ -79,8 +82,17 @@ export default function ChannelCommissionRulesSection({
 
       <div style={{ padding: 14, display: "grid", gap: 12 }}>
         {services.map((service) => {
-          const rule = rules[service.id] ?? { serviceId: service.id, commissionPct: 0, isActive: false };
+          const rule = rules[service.id] ?? {
+            serviceId: service.id,
+            commissionPct: 0,
+            promoterCommissionMode: "PERCENT",
+            promoterCommissionValue: 0,
+            promoterCommissionCents: 0,
+            isActive: false,
+          };
           const pct = rule.commissionPct ?? 0;
+          const commissionMode = rule.promoterCommissionMode ?? "PERCENT";
+          const fixedEuros = ((Number(rule.promoterCommissionCents ?? 0) || 0) / 100).toFixed(2);
           const active = rule.isActive === true;
 
           return (
@@ -97,13 +109,15 @@ export default function ChannelCommissionRulesSection({
                   </div>
                   <div style={{ fontSize: 12, color: "#64748b" }}>
                     {active
-                      ? `Este servicio usa una comision propia del ${pct}%`
+                      ? commissionMode === "FIXED"
+                        ? `Este servicio usa una comisión fija de ${fixedEuros} EUR`
+                        : `Este servicio usa una comision propia del ${pct}%`
                       : `Este servicio hereda la comision base del canal (${fallbackPct.toFixed(2)}%)`}
                   </div>
                 </div>
 
                 <div style={resultBox}>
-                  Resultado comision: <strong>{active ? `${pct}%` : `${fallbackPct.toFixed(2)}%`}</strong>
+                  Resultado comision: <strong>{active ? (commissionMode === "FIXED" ? `${fixedEuros} EUR` : `${pct}%`) : `${fallbackPct.toFixed(2)}%`}</strong>
                 </div>
               </div>
 
@@ -117,6 +131,7 @@ export default function ChannelCommissionRulesSection({
                       onSetRule(service.id, {
                         isActive: next,
                         commissionPct: next ? (rules[service.id]?.commissionPct ?? Math.round(fallbackPct)) : (rules[service.id]?.commissionPct ?? 0),
+                        promoterCommissionMode: rules[service.id]?.promoterCommissionMode ?? "PERCENT",
                       });
                     }}
                   />
@@ -124,17 +139,44 @@ export default function ChannelCommissionRulesSection({
                 </label>
 
                 <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                  Comision del servicio (%)
+                  Modo de comisión
+                  <select
+                    value={commissionMode}
+                    onChange={(e) =>
+                      onSetRule(service.id, {
+                        promoterCommissionMode: e.target.value as "PERCENT" | "FIXED",
+                      })
+                    }
+                    style={inputStyle}
+                    disabled={!active}
+                  >
+                    <option value="PERCENT">Porcentaje</option>
+                    <option value="FIXED">Importe fijo</option>
+                  </select>
+                </label>
+
+                <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                  {commissionMode === "FIXED" ? "Comisión fija (EUR)" : "Comisión del servicio (%)"}
                   <input
                     type="number"
                     min={0}
-                    max={100}
-                    step={1}
-                    value={pct}
+                    max={commissionMode === "FIXED" ? undefined : 100}
+                    step={0.01}
+                    value={commissionMode === "FIXED" ? fixedEuros : pct}
                     onChange={(e) =>
-                      onSetRule(service.id, {
-                        commissionPct: Math.max(0, Math.min(100, Number(e.target.value || 0))),
-                      })
+                      onSetRule(
+                        service.id,
+                        commissionMode === "FIXED"
+                          ? {
+                              promoterCommissionValue: Math.max(0, Number(e.target.value || 0)),
+                              promoterCommissionCents: Math.round(Math.max(0, Number(e.target.value || 0)) * 100),
+                            }
+                          : {
+                              commissionPct: Math.max(0, Math.min(100, Number(e.target.value || 0))),
+                              promoterCommissionValue: Math.max(0, Number(e.target.value || 0)),
+                              promoterCommissionCents: 0,
+                            }
+                      )
                     }
                     style={inputStyle}
                     disabled={!active}

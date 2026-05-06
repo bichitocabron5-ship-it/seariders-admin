@@ -40,6 +40,10 @@ export default function AdminChannelsPage() {
   const [newAllowsPromotions, setNewAllowsPromotions] = useState(false);
   const [newCommissionEnabled, setNewCommissionEnabled] = useState(false);
   const [newCommissionPct, setNewCommissionPct] = useState("0");
+  const [newCustomerDiscountMode, setNewCustomerDiscountMode] = useState<"PERCENT" | "FIXED">("PERCENT");
+  const [newCustomerDiscountValue, setNewCustomerDiscountValue] = useState("0");
+  const [newPromoterCommissionMode, setNewPromoterCommissionMode] = useState<"PERCENT" | "FIXED">("PERCENT");
+  const [newPromoterCommissionValue, setNewPromoterCommissionValue] = useState("0");
   const [newDiscountResponsibility, setNewDiscountResponsibility] = useState<Channel["discountResponsibility"]>("COMPANY");
   const [newPromoterDiscountSharePct, setNewPromoterDiscountSharePct] = useState("50");
 
@@ -113,8 +117,20 @@ export default function AdminChannelsPage() {
       if (!Number.isFinite(parsedPct) || parsedPct < 0 || parsedPct > 100) {
         throw new Error("La comisión base debe estar entre 0 y 100");
       }
+      const parsedCustomerDiscountValue = Number(newCustomerDiscountValue || "0");
+      if (!Number.isFinite(parsedCustomerDiscountValue) || parsedCustomerDiscountValue < 0) {
+        throw new Error("El descuento cliente debe ser un valor positivo");
+      }
+      const parsedPromoterCommissionValue = Number(newPromoterCommissionValue || "0");
+      if (!Number.isFinite(parsedPromoterCommissionValue) || parsedPromoterCommissionValue < 0) {
+        throw new Error("La comisión promotor debe ser un valor positivo");
+      }
 
       const commissionBps = Math.round(parsedPct * 100);
+      const customerDiscountCents =
+        newCustomerDiscountMode === "FIXED" ? Math.round(parsedCustomerDiscountValue * 100) : 0;
+      const promoterCommissionCents =
+        newPromoterCommissionMode === "FIXED" ? Math.round(parsedPromoterCommissionValue * 100) : 0;
       const promoterDiscountShareBps =
         newDiscountResponsibility === "PROMOTER"
           ? 10_000
@@ -134,6 +150,12 @@ export default function AdminChannelsPage() {
           allowsPromotions: newAllowsPromotions,
           commissionEnabled: newCommissionEnabled,
           commissionBps,
+          customerDiscountMode: newCustomerDiscountMode,
+          customerDiscountValue: parsedCustomerDiscountValue,
+          customerDiscountCents,
+          promoterCommissionMode: newPromoterCommissionMode,
+          promoterCommissionValue: parsedPromoterCommissionValue,
+          promoterCommissionCents,
           discountResponsibility: newDiscountResponsibility,
           promoterDiscountShareBps,
         }),
@@ -155,6 +177,10 @@ export default function AdminChannelsPage() {
       setNewAllowsPromotions(false);
       setNewCommissionEnabled(false);
       setNewCommissionPct("0");
+      setNewCustomerDiscountMode("PERCENT");
+      setNewCustomerDiscountValue("0");
+      setNewPromoterCommissionMode("PERCENT");
+      setNewPromoterCommissionValue("0");
       setNewDiscountResponsibility("COMPANY");
       setNewPromoterDiscountSharePct("50");
     } catch (e: unknown) {
@@ -212,6 +238,10 @@ export default function AdminChannelsPage() {
         newAllowsPromotions={newAllowsPromotions}
         newCommissionEnabled={newCommissionEnabled}
         newCommissionPct={newCommissionPct}
+        newCustomerDiscountMode={newCustomerDiscountMode}
+        newCustomerDiscountValue={newCustomerDiscountValue}
+        newPromoterCommissionMode={newPromoterCommissionMode}
+        newPromoterCommissionValue={newPromoterCommissionValue}
         newDiscountResponsibility={newDiscountResponsibility}
         newPromoterDiscountSharePct={newPromoterDiscountSharePct}
         creating={creating}
@@ -223,6 +253,10 @@ export default function AdminChannelsPage() {
         setNewAllowsPromotions={setNewAllowsPromotions}
         setNewCommissionEnabled={setNewCommissionEnabled}
         setNewCommissionPct={setNewCommissionPct}
+        setNewCustomerDiscountMode={setNewCustomerDiscountMode}
+        setNewCustomerDiscountValue={setNewCustomerDiscountValue}
+        setNewPromoterCommissionMode={setNewPromoterCommissionMode}
+        setNewPromoterCommissionValue={setNewPromoterCommissionValue}
         setNewDiscountResponsibility={setNewDiscountResponsibility}
         setNewPromoterDiscountSharePct={setNewPromoterDiscountSharePct}
         createChannel={createChannel}
