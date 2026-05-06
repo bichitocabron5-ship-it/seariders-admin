@@ -154,6 +154,12 @@ model Channel {
   name                       String                  @unique
   kind                       ChannelKind             @default(STANDARD)
   commissionPct              Float                   @default(0)
+  customerDiscountMode       CommercialValueMode     @default(PERCENT)
+  customerDiscountValue      Float                   @default(0)
+  customerDiscountCents      Int                     @default(0)
+  promoterCommissionMode     CommercialValueMode     @default(PERCENT)
+  promoterCommissionValue    Float                   @default(0)
+  promoterCommissionCents    Int                     @default(0)
   discountResponsibility     DiscountResponsibility  @default(COMPANY)
   promoterDiscountShareBps   Int                     @default(0)
   isActive                   Boolean                 @default(true)
@@ -179,8 +185,11 @@ model ChannelCommissionRule {
   serviceId String
   service   Service @relation(fields: [serviceId], references: [id])
 
-  commissionPct Int
-  isActive      Boolean @default(true)
+  commissionPct           Int
+  promoterCommissionMode  CommercialValueMode @default(PERCENT)
+  promoterCommissionValue Float               @default(0)
+  promoterCommissionCents Int                 @default(0)
+  isActive                Boolean             @default(true)
 
   createdAt DateTime @default(now())
 
@@ -323,6 +332,12 @@ model Reservation {
   basePriceCents       Int
   commissionBaseCents  Int                   @default(0)
   appliedCommissionPct Float?
+  appliedCommissionMode CommercialValueMode  @default(PERCENT)
+  appliedCommissionValue Float               @default(0)
+  appliedCommissionCents Int                 @default(0)
+  customerDiscountMode CommercialValueMode   @default(PERCENT)
+  customerDiscountValue Float                @default(0)
+  customerDiscountCents Int                  @default(0)
   manualDiscountCents  Int                   @default(0)
   autoDiscountCents    Int                   @default(0) // ✅ NUEVO (promo automática o por código)
   discountResponsibility DiscountResponsibility @default(COMPANY)
@@ -1002,6 +1017,12 @@ model Payment {
   amountCents     Int
   commissionBaseCents Int          @default(0)
   appliedCommissionPct Float?
+  appliedCommissionMode CommercialValueMode @default(PERCENT)
+  appliedCommissionValue Float              @default(0)
+  appliedCommissionCents Int                @default(0)
+  customerDiscountMode CommercialValueMode  @default(PERCENT)
+  customerDiscountValue Float               @default(0)
+  customerDiscountCents Int                 @default(0)
   externalDiscountCents Int        @default(0)
   discountResponsibility DiscountResponsibility @default(COMPANY)
   promoterDiscountShareBps Int     @default(0)
@@ -2168,6 +2189,11 @@ enum DiscountResponsibility {
   COMPANY
   PROMOTER
   SHARED
+}
+
+enum CommercialValueMode {
+  PERCENT
+  FIXED
 }
 
 enum RoleName {

@@ -133,6 +133,12 @@ export async function GET(req: Request) {
       totalPriceCents: true,
       commissionBaseCents: true,
       appliedCommissionPct: true,
+      appliedCommissionMode: true,
+      appliedCommissionValue: true,
+      appliedCommissionCents: true,
+      customerDiscountMode: true,
+      customerDiscountValue: true,
+      customerDiscountCents: true,
       depositCents: true,
       depositHeld: true,
       depositHoldReason: true,
@@ -330,12 +336,14 @@ export async function GET(req: Request) {
       reservation.appliedCommissionPct != null
         ? Number(reservation.appliedCommissionPct)
         : null;
+    const appliedCommissionMode = reservation.appliedCommissionMode ?? "PERCENT";
     const appliedCommissionBaseCents =
       Number(reservation.commissionBaseCents ?? 0) > 0
         ? Number(reservation.commissionBaseCents ?? 0)
         : Number(reservation.totalPriceCents ?? 0);
-    const commissionAmountCents =
-      appliedCommissionPct != null && appliedCommissionBaseCents > 0
+    const commissionAmountCents = Number(reservation.appliedCommissionCents ?? 0) > 0
+      ? Number(reservation.appliedCommissionCents ?? 0)
+      : appliedCommissionPct != null && appliedCommissionBaseCents > 0
         ? Math.round(appliedCommissionBaseCents * (appliedCommissionPct / 100))
         : null;
     const jetskiAssignments = buildReservationJetskiAssignments({
@@ -364,7 +372,9 @@ export async function GET(req: Request) {
       totalPriceCents: reservation.totalPriceCents,
       commissionBaseCents: appliedCommissionBaseCents,
       appliedCommissionPct,
+      appliedCommissionMode,
       commissionAmountCents,
+      customerDiscountCents: Number(reservation.customerDiscountCents ?? 0),
       depositCents: depositPlannedCents,
       depositHeld: reservation.depositHeld,
       depositHoldReason: reservation.depositHoldReason,
@@ -407,7 +417,9 @@ export async function GET(req: Request) {
         totalPriceCents: reservation.totalPriceCents,
         commissionBaseCents: appliedCommissionBaseCents,
         appliedCommissionPct,
+        appliedCommissionMode,
         commissionAmountCents,
+        customerDiscountCents: Number(reservation.customerDiscountCents ?? 0),
         servicePaidCents,
         servicePendingCents,
         depositCents: depositPlannedCents,

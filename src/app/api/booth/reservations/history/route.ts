@@ -94,6 +94,8 @@ export async function GET(req: Request) {
             totalPriceCents: true,
             commissionBaseCents: true,
             appliedCommissionPct: true,
+            appliedCommissionCents: true,
+            customerDiscountCents: true,
             channel: { select: { name: true } },
             service: { select: { name: true, category: true } },
             option: { select: { durationMinutes: true } },
@@ -153,6 +155,8 @@ export async function GET(req: Request) {
             amountCents: true,
             commissionBaseCents: true,
             appliedCommissionPct: true,
+            appliedCommissionCents: true,
+            customerDiscountCents: true,
             direction: true,
             method: true,
             description: true,
@@ -221,6 +225,8 @@ export async function GET(req: Request) {
         reservation.appliedCommissionPct != null
           ? Number(Number(reservation.appliedCommissionPct).toFixed(2))
           : null,
+      commissionAmountCents: Number(reservation.appliedCommissionCents ?? 0),
+      customerDiscountCents: Number(reservation.customerDiscountCents ?? 0),
       canCancel: false,
     };
   });
@@ -266,6 +272,8 @@ export async function GET(req: Request) {
         payment.appliedCommissionPct != null
           ? Number(Number(payment.appliedCommissionPct).toFixed(2))
           : null,
+      commissionAmountCents: Number(payment.appliedCommissionCents ?? 0),
+      customerDiscountCents: Number(payment.customerDiscountCents ?? 0),
       canCancel: signedAmount > 0,
     };
   });

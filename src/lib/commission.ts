@@ -1,10 +1,14 @@
 import type { Prisma } from "@prisma/client";
 
 export type DiscountResponsibility = "COMPANY" | "PROMOTER" | "SHARED";
+export type CommercialValueMode = "PERCENT" | "FIXED";
 
 export type CommissionRuleLike = {
   serviceId: string;
   commissionPct?: number | null;
+  promoterCommissionMode?: CommercialValueMode | null;
+  promoterCommissionValue?: number | null;
+  promoterCommissionCents?: number | null;
 };
 
 export type CommissionChannelLike = {
@@ -12,9 +16,25 @@ export type CommissionChannelLike = {
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;
   commissionPct?: number | null;
+  promoterCommissionMode?: CommercialValueMode | null;
+  promoterCommissionValue?: number | null;
+  promoterCommissionCents?: number | null;
+  customerDiscountMode?: CommercialValueMode | null;
+  customerDiscountValue?: number | null;
+  customerDiscountCents?: number | null;
   discountResponsibility?: DiscountResponsibility | null;
   promoterDiscountShareBps?: number | null;
   commissionRules?: CommissionRuleLike[] | null;
+};
+
+export type AppliedCommercialSnapshot = {
+  appliedCommissionPct: number | null;
+  appliedCommissionMode: CommercialValueMode;
+  appliedCommissionValue: number;
+  appliedCommissionCents: number;
+  customerDiscountMode: CommercialValueMode;
+  customerDiscountValue: number;
+  customerDiscountCents: number;
 };
 
 export function clampCommissionPct(p: unknown) {
@@ -29,6 +49,10 @@ export function clampBps(value: unknown) {
   return Math.max(0, Math.min(10_000, Math.round(n)));
 }
 
+export function roundCents(n: number) {
+  return Math.round(Number(n ?? 0));
+}
+
 export function pctToRate(pct?: number | null) {
   return clampCommissionPct(pct) / 100;
 }
@@ -36,11 +60,7 @@ export function pctToRate(pct?: number | null) {
 export function bpsToRate(bps?: number | null) {
   const n = Number(bps ?? 0);
   if (!Number.isFinite(n) || n <= 0) return 0;
-  return n / 10000;
-}
-
-export function roundCents(n: number) {
-  return Math.round(Number(n ?? 0));
+  return n / 10_000;
 }
 
 export function commissionFromBase(baseCents: number, rate: number) {
@@ -59,25 +79,102 @@ export function commissionRateForSeariders(rate: number, kind?: CommissionChanne
   return normalized;
 }
 
-export function resolveCommissionRate(args: {
+export function normalizeCommercialValueMode(value?: string | null): CommercialValueMode {
+  return value === "FIXED" ? "FIXED" : "PERCENT";
+}
+
+function coerceCommercialValue(mode: CommercialValueMode, value?: number | null, cents?: number | null) {
+  if (mode === "FIXED") {
+    const fixedCents = Math.max(0, roundCents(cents ?? value ?? 0));
+    return { mode, value: fixedCents / 100, cents: fixedCents };
+  }
+
+  const pct = Math.max(0, Number(value ?? 0));
+  return { mode, value: pct, cents: 0 };
+}
+
+function resolveRuleCommercial(args: {
   channel?: CommissionChannelLike | null;
   serviceId: string;
   rulePct?: number | null;
 }) {
   const { channel, serviceId, rulePct } = args;
-  if (!channel || !channel.commissionEnabled) return 0;
+  const rule = channel?.commissionRules?.find((item) => item.serviceId === serviceId) ?? null;
 
-  if (rulePct != null) return commissionRateForSeariders(pctToRate(rulePct), channel.kind);
-
-  const rule = channel.commissionRules?.find((r) => r.serviceId === serviceId);
-  if (rule && rule.commissionPct != null) {
-    return commissionRateForSeariders(pctToRate(rule.commissionPct), channel.kind);
+  if (rulePct != null) {
+    return {
+      mode: "PERCENT" as const,
+      value: clampCommissionPct(rulePct),
+      cents: 0,
+      source: "RULE_PCT" as const,
+    };
   }
 
-  const byBps = bpsToRate(channel.commissionBps);
-  if (byBps > 0) return commissionRateForSeariders(byBps, channel.kind);
+  if (rule) {
+    const mode = normalizeCommercialValueMode(rule.promoterCommissionMode);
+    if (mode === "FIXED") {
+      const fixed = coerceCommercialValue(
+        mode,
+        rule.promoterCommissionValue,
+        rule.promoterCommissionCents
+      );
+      if (fixed.cents > 0) {
+        return { ...fixed, source: "RULE_FIXED" as const };
+      }
+    }
 
-  return commissionRateForSeariders(pctToRate(channel.commissionPct), channel.kind);
+    if (rule.commissionPct != null) {
+      return {
+        mode: "PERCENT" as const,
+        value: clampCommissionPct(rule.commissionPct),
+        cents: 0,
+        source: "RULE_PCT" as const,
+      };
+    }
+  }
+
+  const channelMode = normalizeCommercialValueMode(channel?.promoterCommissionMode);
+  if (channelMode === "FIXED") {
+    const fixed = coerceCommercialValue(
+      channelMode,
+      channel?.promoterCommissionValue,
+      channel?.promoterCommissionCents
+    );
+    if (fixed.cents > 0) {
+      return { ...fixed, source: "CHANNEL_FIXED" as const };
+    }
+  }
+
+  const byBps = (Number(channel?.commissionBps ?? 0) || 0) / 100;
+  if (byBps > 0) {
+    return {
+      mode: "PERCENT" as const,
+      value: byBps,
+      cents: 0,
+      source: "CHANNEL_BPS" as const,
+    };
+  }
+
+  return {
+    mode: "PERCENT" as const,
+    value: Math.max(0, Number(channel?.commissionPct ?? 0) || 0),
+    cents: 0,
+    source: "CHANNEL_PCT" as const,
+  };
+}
+
+export function resolveCommissionRate(args: {
+  channel?: CommissionChannelLike | null;
+  serviceId: string;
+  rulePct?: number | null;
+}) {
+  const { channel } = args;
+  if (!channel || !channel.commissionEnabled) return 0;
+
+  const resolved = resolveRuleCommercial(args);
+  if (resolved.mode === "FIXED") return 0;
+
+  return commissionRateForSeariders(pctToRate(resolved.value), channel.kind);
 }
 
 export function resolveAppliedCommissionPct(args: {
@@ -87,14 +184,120 @@ export function resolveAppliedCommissionPct(args: {
 }) {
   const { channel } = args;
   if (!channel || !channel.commissionEnabled) return null;
+
+  const resolved = resolveRuleCommercial(args);
+  if (resolved.mode === "FIXED") return null;
+
   return rateToPct(resolveCommissionRate(args));
 }
 
-export async function getAppliedCommissionPctTx(
+export function resolveCustomerDiscountSnapshot(args: {
+  channel?: CommissionChannelLike | null;
+  quantity?: number | null;
+  baseCents: number;
+}) {
+  const mode = normalizeCommercialValueMode(args.channel?.customerDiscountMode);
+  const value = Number(args.channel?.customerDiscountValue ?? 0) || 0;
+  const quantity = Math.max(1, Number(args.quantity ?? 1));
+  const baseCents = Math.max(0, roundCents(args.baseCents));
+
+  if (!args.channel) {
+    return {
+      customerDiscountMode: "PERCENT" as const,
+      customerDiscountValue: 0,
+      customerDiscountCents: 0,
+    };
+  }
+
+  if (mode === "FIXED") {
+    const fixedPerUnitCents = Math.max(
+      0,
+      roundCents(args.channel?.customerDiscountCents ?? Math.round(value * 100))
+    );
+    return {
+      customerDiscountMode: mode,
+      customerDiscountValue: fixedPerUnitCents / 100,
+      customerDiscountCents: Math.min(baseCents, fixedPerUnitCents * quantity),
+    };
+  }
+
+  const pct = Math.max(0, value);
+  return {
+    customerDiscountMode: mode,
+    customerDiscountValue: pct,
+    customerDiscountCents: Math.min(baseCents, commissionFromBase(baseCents, pct / 100)),
+  };
+}
+
+export function resolveAppliedCommercialSnapshot(args: {
+  channel?: CommissionChannelLike | null;
+  serviceId: string;
+  commissionBaseCents: number;
+  quantity?: number | null;
+  customerDiscountBaseCents: number;
+  rulePct?: number | null;
+}) {
+  const { channel } = args;
+  const quantity = Math.max(1, Number(args.quantity ?? 1));
+  const customerDiscount = resolveCustomerDiscountSnapshot({
+    channel,
+    quantity,
+    baseCents: args.customerDiscountBaseCents,
+  });
+
+  if (!channel || !channel.commissionEnabled) {
+    return {
+      appliedCommissionPct: null,
+      appliedCommissionMode: "PERCENT" as const,
+      appliedCommissionValue: 0,
+      appliedCommissionCents: 0,
+      ...customerDiscount,
+    };
+  }
+
+  const resolved = resolveRuleCommercial(args);
+  if (resolved.mode === "FIXED") {
+    return {
+      appliedCommissionPct: null,
+      appliedCommissionMode: resolved.mode,
+      appliedCommissionValue: resolved.cents / 100,
+      appliedCommissionCents: resolved.cents * quantity,
+      ...customerDiscount,
+    };
+  }
+
+  const appliedCommissionPct = rateToPct(
+    commissionRateForSeariders(pctToRate(resolved.value), channel.kind)
+  );
+
+  return {
+    appliedCommissionPct,
+    appliedCommissionMode: resolved.mode,
+    appliedCommissionValue: resolved.value,
+    appliedCommissionCents: commissionFromBase(args.commissionBaseCents, appliedCommissionPct / 100),
+    ...customerDiscount,
+  };
+}
+
+export async function getAppliedCommercialSnapshotTx(
   tx: Prisma.TransactionClient,
-  args: { channelId?: string | null; serviceId?: string | null }
+  args: {
+    channelId?: string | null;
+    serviceId?: string | null;
+    commissionBaseCents: number;
+    customerDiscountBaseCents: number;
+    quantity?: number | null;
+  }
 ) {
-  if (!args.channelId || !args.serviceId) return null;
+  if (!args.channelId || !args.serviceId) {
+    return resolveAppliedCommercialSnapshot({
+      channel: null,
+      serviceId: args.serviceId ?? "",
+      commissionBaseCents: args.commissionBaseCents,
+      customerDiscountBaseCents: args.customerDiscountBaseCents,
+      quantity: args.quantity,
+    });
+  }
 
   const channel = await tx.channel.findUnique({
     where: { id: args.channelId },
@@ -103,20 +306,52 @@ export async function getAppliedCommissionPctTx(
       commissionEnabled: true,
       commissionBps: true,
       commissionPct: true,
+      promoterCommissionMode: true,
+      promoterCommissionValue: true,
+      promoterCommissionCents: true,
+      customerDiscountMode: true,
+      customerDiscountValue: true,
+      customerDiscountCents: true,
       commissionRules: {
         where: {
           isActive: true,
           serviceId: args.serviceId,
         },
-        select: { serviceId: true, commissionPct: true },
+        select: {
+          serviceId: true,
+          commissionPct: true,
+          promoterCommissionMode: true,
+          promoterCommissionValue: true,
+          promoterCommissionCents: true,
+        },
       },
     },
   });
 
-  return resolveAppliedCommissionPct({
+  return resolveAppliedCommercialSnapshot({
     channel,
     serviceId: args.serviceId,
+    commissionBaseCents: args.commissionBaseCents,
+    customerDiscountBaseCents: args.customerDiscountBaseCents,
+    quantity: args.quantity,
   });
+}
+
+export async function getAppliedCommissionPctTx(
+  tx: Prisma.TransactionClient,
+  args: { channelId?: string | null; serviceId?: string | null }
+) {
+  if (!args.channelId || !args.serviceId) return null;
+
+  const snapshot = await getAppliedCommercialSnapshotTx(tx, {
+    channelId: args.channelId,
+    serviceId: args.serviceId,
+    commissionBaseCents: 0,
+    customerDiscountBaseCents: 0,
+    quantity: 1,
+  });
+
+  return snapshot.appliedCommissionPct;
 }
 
 export function normalizeDiscountResponsibility(value?: string | null): DiscountResponsibility {

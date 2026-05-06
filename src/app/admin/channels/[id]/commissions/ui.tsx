@@ -22,6 +22,9 @@ type Rule = {
   id?: string;
   serviceId: string;
   commissionPct: number;
+  promoterCommissionMode?: "PERCENT" | "FIXED";
+  promoterCommissionValue?: number;
+  promoterCommissionCents?: number;
   isActive: boolean;
 };
 
@@ -36,6 +39,9 @@ type Channel = {
   name: string;
   commissionEnabled: boolean;
   commissionBps: number | null;
+  promoterCommissionMode?: "PERCENT" | "FIXED";
+  promoterCommissionValue?: number | null;
+  promoterCommissionCents?: number | null;
 };
 
 function eurosFromCents(cents: number) {
@@ -67,7 +73,15 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
   function applyCommissionData(data: {
     channel?: Channel | null;
     services?: Service[];
-    rules?: Array<{ id?: string; serviceId: string; commissionPct?: number; isActive?: boolean }>;
+    rules?: Array<{
+      id?: string;
+      serviceId: string;
+      commissionPct?: number;
+      promoterCommissionMode?: "PERCENT" | "FIXED";
+      promoterCommissionValue?: number;
+      promoterCommissionCents?: number;
+      isActive?: boolean;
+    }>;
     optionPrices?: Array<{ optionId: string; priceCents?: number | null }>;
     optionPricingAvailable?: boolean;
   }) {
@@ -81,6 +95,9 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
         id: rule.id,
         serviceId: rule.serviceId,
         commissionPct: rule.commissionPct ?? 0,
+        promoterCommissionMode: rule.promoterCommissionMode ?? "PERCENT",
+        promoterCommissionValue: rule.promoterCommissionValue ?? 0,
+        promoterCommissionCents: rule.promoterCommissionCents ?? 0,
         isActive: rule.isActive ?? true,
       };
     }
@@ -157,6 +174,9 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
       return {
         serviceId: service.id,
         commissionPct: Math.max(0, Math.min(100, Math.trunc(rule.commissionPct ?? 0))),
+        promoterCommissionMode: rule.promoterCommissionMode ?? "PERCENT",
+        promoterCommissionValue: rule.promoterCommissionValue ?? 0,
+        promoterCommissionCents: rule.promoterCommissionCents ?? 0,
         isActive: rule.isActive === true,
       };
     });

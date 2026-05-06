@@ -13,6 +13,12 @@ type Channel = {
   allowsPromotions: boolean;
   commissionEnabled: boolean;
   commissionBps: number | null;
+  customerDiscountMode?: "PERCENT" | "FIXED" | null;
+  customerDiscountValue?: number | null;
+  customerDiscountCents?: number | null;
+  promoterCommissionMode?: "PERCENT" | "FIXED" | null;
+  promoterCommissionValue?: number | null;
+  promoterCommissionCents?: number | null;
   discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
   promoterDiscountShareBps: number | null;
 };

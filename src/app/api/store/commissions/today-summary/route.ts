@@ -34,6 +34,7 @@ export async function GET() {
         serviceId: true,
         commissionBaseCents: true,
         appliedCommissionPct: true,
+        appliedCommissionCents: true,
         totalPriceCents: true,
         channel: {
           select: {
@@ -73,6 +74,7 @@ export async function GET() {
         amountCents: true,
         commissionBaseCents: true,
         appliedCommissionPct: true,
+        appliedCommissionCents: true,
         direction: true,
         isExternalCommissionOnly: true,
         externalGrossAmountCents: true,
@@ -166,7 +168,10 @@ export async function GET() {
             });
       if (appliedPct == null) continue;
 
-      const commission = commissionFromBase(base, appliedPct / 100);
+      const commission =
+        Number(r.appliedCommissionCents ?? 0) > 0
+          ? Number(r.appliedCommissionCents ?? 0)
+          : commissionFromBase(base, appliedPct / 100);
       if (commission <= 0) continue;
 
       count++;
@@ -210,7 +215,10 @@ export async function GET() {
             });
       if (appliedPct == null) continue;
 
-      const commission = commissionFromBase(base, appliedPct / 100);
+      const commission =
+        Number(payment.appliedCommissionCents ?? 0) > 0
+          ? Number(payment.appliedCommissionCents ?? 0)
+          : commissionFromBase(base, appliedPct / 100);
       if (commission <= 0) continue;
 
       count++;

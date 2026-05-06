@@ -61,8 +61,10 @@ type CommercialSnapshot = {
   pax: number | null;
   isLicense: boolean | null;
   totalPriceCents: number | null;
+  customerDiscountCents?: number | null;
   commissionBaseCents: number | null;
   appliedCommissionPct: number | null;
+  appliedCommissionMode?: string | null;
   commissionAmountCents: number | null;
   servicePaidCents: number;
   servicePendingCents: number;
@@ -108,8 +110,10 @@ type HistoryRow = {
   pax: number | null;
   isLicense: boolean | null;
   totalPriceCents: number | null;
+  customerDiscountCents?: number | null;
   commissionBaseCents: number | null;
   appliedCommissionPct: number | null;
+  appliedCommissionMode?: string | null;
   commissionAmountCents: number | null;
   depositCents: number | null;
   depositHeld: boolean;
@@ -533,6 +537,15 @@ export default function StoreHistoryResultsSection({
                               </div>
                               <div style={mutedText}>
                                 Base {euros(row.commercial.commissionBaseCents)} - Comision {euros(row.commercial.commissionAmountCents)}
+                              </div>
+                            </>
+                          ) : row.commercial?.commissionAmountCents != null ? (
+                            <>
+                              <div style={mutedText}>
+                                Comision fija - {euros(row.commercial.commissionAmountCents)}
+                              </div>
+                              <div style={mutedText}>
+                                Base {euros(row.commercial.commissionBaseCents)} - Cliente dto {euros(row.commercial.customerDiscountCents)}
                               </div>
                             </>
                           ) : (

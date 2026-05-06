@@ -6,7 +6,11 @@ import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
-import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
+import {
+  getAppliedCommercialSnapshotTx,
+  resolveCustomerDiscountSnapshot,
+  resolveDiscountPolicy,
+} from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 
 type CreateItemInput = {
@@ -109,6 +113,9 @@ export async function createReservationWithItems(params: {
     select: {
       id: true,
       allowsPromotions: true,
+      customerDiscountMode: true,
+      customerDiscountValue: true,
+      customerDiscountCents: true,
       discountResponsibility: true,
       promoterDiscountShareBps: true,
     },
@@ -327,6 +334,16 @@ export async function createReservationWithItems(params: {
       }
     }
 
+      const reservationQuantity =
+        packMeta
+          ? packQty
+          : (resolvedItems[0]?.quantity ?? 1);
+      const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
+        channel: ch,
+        quantity: reservationQuantity,
+        baseCents: totalBeforeDiscounts,
+      });
+
       const commercial = await computeReservationCommercialBreakdown({
         when: pricingWhen,
         discountLines: itemCreates.map((item) => ({
@@ -343,6 +360,7 @@ export async function createReservationWithItems(params: {
         customerCountry,
         promotionsEnabled,
         totalBeforeDiscountsCents: totalBeforeDiscounts,
+        customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
         manualDiscountCents: input.manualDiscountCents ?? 0,
         discountResponsibility: discountPolicy.discountResponsibility,
         promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
@@ -356,13 +374,12 @@ export async function createReservationWithItems(params: {
         ? { serviceId: packMeta.serviceId, optionId: packMeta.packOptionId }
         : resolvedItems[0];
 
-      const reservationQuantity =
-        packMeta
-          ? packQty
-          : (resolvedItems[0]?.quantity ?? 1);
-      const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+      const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
         channelId: ch.id,
         serviceId: main.serviceId,
+        commissionBaseCents: commercial.commissionBaseCents,
+        customerDiscountBaseCents: totalBeforeDiscounts,
+        quantity: reservationQuantity,
       });
 
       const reservation = await tx.reservation.create({
@@ -393,7 +410,13 @@ export async function createReservationWithItems(params: {
           // Totales
           basePriceCents,
           commissionBaseCents: commercial.commissionBaseCents,
-          appliedCommissionPct,
+          appliedCommissionPct: commercialSnapshot.appliedCommissionPct,
+          appliedCommissionMode: commercialSnapshot.appliedCommissionMode,
+          appliedCommissionValue: commercialSnapshot.appliedCommissionValue,
+          appliedCommissionCents: commercialSnapshot.appliedCommissionCents,
+          customerDiscountMode: commercialSnapshot.customerDiscountMode,
+          customerDiscountValue: commercialSnapshot.customerDiscountValue,
+          customerDiscountCents: commercialSnapshot.customerDiscountCents,
           autoDiscountCents: commercial.autoDiscountCents,
           manualDiscountCents: commercial.manualDiscountCents,
           discountResponsibility: commercial.discountResponsibility,

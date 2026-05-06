@@ -13,6 +13,9 @@ const PutBody = z.object({
     z.object({
       serviceId: z.string().min(1),
       commissionPct: z.number().int().min(0).max(100),
+      promoterCommissionMode: z.enum(["PERCENT", "FIXED"]).default("PERCENT"),
+      promoterCommissionValue: z.number().min(0).max(1000000).default(0),
+      promoterCommissionCents: z.number().int().min(0).max(100000000).optional(),
       isActive: z.boolean().default(true),
     })
   ),
@@ -66,7 +69,16 @@ export async function GET(
   const [channel, services, options, prices, rules] = await Promise.all([
     prisma.channel.findUnique({
       where: { id: channelId },
-      select: { id: true, name: true, kind: true, commissionEnabled: true, commissionBps: true },
+      select: {
+        id: true,
+        name: true,
+        kind: true,
+        commissionEnabled: true,
+        commissionBps: true,
+        promoterCommissionMode: true,
+        promoterCommissionValue: true,
+        promoterCommissionCents: true,
+      },
     }),
     prisma.service.findMany({
       where: { isActive: true },
@@ -99,7 +111,15 @@ export async function GET(
     }),
     prisma.channelCommissionRule.findMany({
       where: { channelId },
-      select: { id: true, serviceId: true, commissionPct: true, isActive: true },
+      select: {
+        id: true,
+        serviceId: true,
+        commissionPct: true,
+        promoterCommissionMode: true,
+        promoterCommissionValue: true,
+        promoterCommissionCents: true,
+        isActive: true,
+      },
     }),
   ]);
 
@@ -207,11 +227,26 @@ export async function PUT(
             ruleUpserts.map((rule) =>
               tx.channelCommissionRule.upsert({
                 where: { channelId_serviceId: { channelId, serviceId: rule.serviceId } },
-                update: { commissionPct: rule.commissionPct, isActive: true },
+                update: {
+                  commissionPct: rule.commissionPct,
+                  promoterCommissionMode: rule.promoterCommissionMode,
+                  promoterCommissionValue: rule.promoterCommissionValue,
+                  promoterCommissionCents:
+                    rule.promoterCommissionMode === "FIXED"
+                      ? Math.max(0, Math.round(rule.promoterCommissionCents ?? (rule.promoterCommissionValue * 100)))
+                      : 0,
+                  isActive: true,
+                },
                 create: {
                   channelId,
                   serviceId: rule.serviceId,
                   commissionPct: rule.commissionPct,
+                  promoterCommissionMode: rule.promoterCommissionMode,
+                  promoterCommissionValue: rule.promoterCommissionValue,
+                  promoterCommissionCents:
+                    rule.promoterCommissionMode === "FIXED"
+                      ? Math.max(0, Math.round(rule.promoterCommissionCents ?? (rule.promoterCommissionValue * 100)))
+                      : 0,
                   isActive: true,
                 },
               })

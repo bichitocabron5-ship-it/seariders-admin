@@ -14,6 +14,12 @@ const Body = z.object({
   allowsPromotions: z.boolean().optional(),
   commissionEnabled: z.boolean().optional(),
   commissionBps: z.number().int().min(0).max(10000).optional(), // 0..100% en bps
+  customerDiscountMode: z.enum(["PERCENT", "FIXED"]).optional(),
+  customerDiscountValue: z.number().min(0).max(1000000).optional(),
+  customerDiscountCents: z.number().int().min(0).max(100000000).optional(),
+  promoterCommissionMode: z.enum(["PERCENT", "FIXED"]).optional(),
+  promoterCommissionValue: z.number().min(0).max(1000000).optional(),
+  promoterCommissionCents: z.number().int().min(0).max(100000000).optional(),
   discountResponsibility: z.enum(["COMPANY", "PROMOTER", "SHARED"]).optional(),
   promoterDiscountShareBps: z.number().int().min(0).max(10000).optional(),
   isActive: z.boolean().optional(),
@@ -62,6 +68,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       isActive: parsed.data.isActive,
       commissionEnabled: normalizedCommission.commissionEnabled,
       commissionBps: normalizedCommission.commissionBps,
+      customerDiscountMode: parsed.data.customerDiscountMode,
+      customerDiscountValue: parsed.data.customerDiscountValue,
+      customerDiscountCents:
+        parsed.data.customerDiscountMode === undefined
+          ? undefined
+          : parsed.data.customerDiscountMode === "FIXED"
+            ? Math.max(0, Math.round(parsed.data.customerDiscountCents ?? ((parsed.data.customerDiscountValue ?? 0) * 100)))
+            : 0,
+      promoterCommissionMode: parsed.data.promoterCommissionMode,
+      promoterCommissionValue: parsed.data.promoterCommissionValue,
+      promoterCommissionCents:
+        parsed.data.promoterCommissionMode === undefined
+          ? undefined
+          : parsed.data.promoterCommissionMode === "FIXED"
+            ? Math.max(0, Math.round(parsed.data.promoterCommissionCents ?? ((parsed.data.promoterCommissionValue ?? 0) * 100)))
+            : 0,
       discountResponsibility: parsed.data.discountResponsibility,
       promoterDiscountShareBps:
         parsed.data.discountResponsibility === undefined && parsed.data.promoterDiscountShareBps === undefined
@@ -88,6 +110,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       allowsPromotions: true,
       commissionEnabled: true,
       commissionBps: true,
+      customerDiscountMode: true,
+      customerDiscountValue: true,
+      customerDiscountCents: true,
+      promoterCommissionMode: true,
+      promoterCommissionValue: true,
+      promoterCommissionCents: true,
       discountResponsibility: true,
       promoterDiscountShareBps: true,
     },

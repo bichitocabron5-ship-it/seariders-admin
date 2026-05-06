@@ -24,6 +24,12 @@ type Channel = {
   kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;
+  customerDiscountMode?: "PERCENT" | "FIXED" | null;
+  customerDiscountValue?: number | null;
+  customerDiscountCents?: number | null;
+  promoterCommissionMode?: "PERCENT" | "FIXED" | null;
+  promoterCommissionValue?: number | null;
+  promoterCommissionCents?: number | null;
   discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED" | null;
   promoterDiscountShareBps?: number | null;
 };

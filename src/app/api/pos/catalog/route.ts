@@ -124,6 +124,12 @@ export async function GET(req: Request) {
         allowsPromotions: true,
         commissionEnabled: true,
         commissionBps: true,
+        customerDiscountMode: true,
+        customerDiscountValue: true,
+        customerDiscountCents: true,
+        promoterCommissionMode: true,
+        promoterCommissionValue: true,
+        promoterCommissionCents: true,
         discountResponsibility: true,
         promoterDiscountShareBps: true,
         commissionRules: {
@@ -131,6 +137,9 @@ export async function GET(req: Request) {
           select: {
             serviceId: true,
             commissionPct: true,
+            promoterCommissionMode: true,
+            promoterCommissionValue: true,
+            promoterCommissionCents: true,
           },
         },
       },

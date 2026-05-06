@@ -16,6 +16,7 @@ type ComputeReservationCommercialArgs = {
   customerCountry?: string | null;
   promotionsEnabled: boolean;
   totalBeforeDiscountsCents: number;
+  customerDiscountCents?: number | null;
   manualDiscountCents?: number | null;
   discountResponsibility: DiscountResponsibility;
   promoterDiscountShareBps?: number | null;
@@ -40,8 +41,9 @@ export async function computeReservationCommercialBreakdown(
   args: ComputeReservationCommercialArgs
 ) {
   const totalBeforeDiscountsCents = Math.max(0, roundMoney(args.totalBeforeDiscountsCents));
+  const customerDiscountCents = Math.max(0, roundMoney(args.customerDiscountCents ?? 0));
   const manualDiscountCents = capManualDiscountCents(
-    totalBeforeDiscountsCents,
+    Math.max(0, totalBeforeDiscountsCents - customerDiscountCents),
     args.manualDiscountCents
   );
 
@@ -66,7 +68,7 @@ export async function computeReservationCommercialBreakdown(
     }
   }
 
-  const totalDiscountCents = autoDiscountCents + manualDiscountCents;
+  const totalDiscountCents = customerDiscountCents + autoDiscountCents + manualDiscountCents;
   const commissionBreakdown = computeCommissionableBase({
     grossBaseCents: totalBeforeDiscountsCents,
     totalDiscountCents,
@@ -84,6 +86,7 @@ export async function computeReservationCommercialBreakdown(
 
   return {
     totalBeforeDiscountsCents,
+    customerDiscountCents,
     autoDiscountCents,
     manualDiscountCents,
     totalDiscountCents,

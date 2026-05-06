@@ -46,8 +46,10 @@ export async function GET() {
       basePriceCents: true,
       totalPriceCents: true,
       commissionBaseCents: true,
+      appliedCommissionCents: true,
       depositCents: true,
       isLicense: true,     
+      customerDiscountCents: true,
       autoDiscountCents: true,
       manualDiscountCents: true,
       promoterDiscountCents: true,
@@ -186,7 +188,8 @@ export async function GET() {
     const manualDisc = Number(r.manualDiscountCents ?? 0);
     const promoterDisc = Number(r.promoterDiscountCents ?? 0);
     const companyDisc = Number(r.companyDiscountCents ?? 0);
-    const totalDiscountCents = autoDisc + manualDisc;
+    const channelCustomerDiscountCents = Number(r.customerDiscountCents ?? 0);
+    const totalDiscountCents = channelCustomerDiscountCents + autoDisc + manualDisc;
 
     const isPack = Boolean(r.isPackParent && r.packId);
     const legacyGrossCents = Number(r.totalPriceCents ?? 0) + autoDisc + manualDisc;
@@ -285,10 +288,12 @@ export async function GET() {
       basePriceCents: r.basePriceCents,
       totalPriceCents: r.totalPriceCents,
       commissionBaseCents: r.commissionBaseCents ?? 0,
+      appliedCommissionCents: Number(r.appliedCommissionCents ?? 0),
       depositCents,
       pvpTotalCents,
       finalTotalCents,
       totalToChargeCents,
+      customerDiscountCents: channelCustomerDiscountCents,
       autoDiscountCents: r.autoDiscountCents ?? 0,
       manualDiscountCents: r.manualDiscountCents ?? 0,
       promoterDiscountCents: promoterDisc,

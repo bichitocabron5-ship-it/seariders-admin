@@ -14,9 +14,8 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import {
-  commissionFromBase,
-  getAppliedCommissionPctTx,
-  resolveCommissionRate,
+  getAppliedCommercialSnapshotTx,
+  resolveCustomerDiscountSnapshot,
   resolveDiscountPolicy,
 } from "@/lib/commission";
 import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
@@ -122,11 +121,23 @@ export async function POST(req: Request) {
             commissionEnabled: true,
             commissionBps: true,
             commissionPct: true,
+            promoterCommissionMode: true,
+            promoterCommissionValue: true,
+            promoterCommissionCents: true,
+            customerDiscountMode: true,
+            customerDiscountValue: true,
+            customerDiscountCents: true,
             discountResponsibility: true,
             promoterDiscountShareBps: true,
             commissionRules: {
               where: { isActive: true },
-              select: { serviceId: true, commissionPct: true },
+              select: {
+                serviceId: true,
+                commissionPct: true,
+                promoterCommissionMode: true,
+                promoterCommissionValue: true,
+                promoterCommissionCents: true,
+              },
             },
           },
         })
@@ -265,6 +276,12 @@ export async function POST(req: Request) {
     channel,
   });
 
+  const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
+    channel,
+    quantity: mainItem.quantity,
+    baseCents: grossTotalCents,
+  });
+
   const commercial = await computeReservationCommercialBreakdown({
     when: now,
     discountLines: pricedItems.map((item) => ({
@@ -278,12 +295,20 @@ export async function POST(req: Request) {
     customerCountry: parsed.data.customerCountry,
     promotionsEnabled: false,
     totalBeforeDiscountsCents: grossTotalCents,
+    customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
     manualDiscountCents: discountCents,
     discountResponsibility: discountPolicy.discountResponsibility,
     promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
   });
-
   const mainService = servicesById.get(mainItem.serviceId)!;
+  const commercialSnapshot = await getAppliedCommercialSnapshotTx(prisma, {
+    channelId: parsed.data.channelId ?? null,
+    serviceId: mainService.id,
+    commissionBaseCents: commercial.commissionBaseCents,
+    customerDiscountBaseCents: grossTotalCents,
+    quantity: mainItem.quantity,
+  });
+
   const isExternalCharge = channel?.kind === "EXTERNAL_ACTIVITY";
 
   if (isExternalCharge) {
@@ -304,12 +329,8 @@ export async function POST(req: Request) {
       shiftSessionId: session.shiftSessionId,
     });
 
-    const commissionRate = resolveCommissionRate({
-      channel,
-      serviceId: mainService.id,
-    });
-    const commissionCents = commissionFromBase(commercial.commissionBaseCents, commissionRate);
-    const commissionPct = Number((commissionRate * 100).toFixed(2));
+    const commissionCents = commercialSnapshot.appliedCommissionCents;
+    const commissionPct = commercialSnapshot.appliedCommissionPct;
 
     const payment = await prisma.payment.create({
       data: {
@@ -318,6 +339,12 @@ export async function POST(req: Request) {
         amountCents: commissionCents,
         commissionBaseCents: commercial.commissionBaseCents,
         appliedCommissionPct: commissionPct,
+        appliedCommissionMode: commercialSnapshot.appliedCommissionMode,
+        appliedCommissionValue: commercialSnapshot.appliedCommissionValue,
+        appliedCommissionCents: commercialSnapshot.appliedCommissionCents,
+        customerDiscountMode: commercialSnapshot.customerDiscountMode,
+        customerDiscountValue: commercialSnapshot.customerDiscountValue,
+        customerDiscountCents: commercialSnapshot.customerDiscountCents,
         externalDiscountCents: commercial.totalDiscountCents,
         discountResponsibility: commercial.discountResponsibility,
         promoterDiscountShareBps: commercial.promoterDiscountShareBps,
@@ -376,10 +403,13 @@ export async function POST(req: Request) {
       pax: mainItem.pax,
       basePriceCents: serviceSubtotalCents,
       commissionBaseCents: commercial.commissionBaseCents,
-      appliedCommissionPct: await getAppliedCommissionPctTx(prisma, {
-        channelId: parsed.data.channelId ?? null,
-        serviceId: mainItem.serviceId,
-      }),
+      appliedCommissionPct: commercialSnapshot.appliedCommissionPct,
+      appliedCommissionMode: commercialSnapshot.appliedCommissionMode,
+      appliedCommissionValue: commercialSnapshot.appliedCommissionValue,
+      appliedCommissionCents: commercialSnapshot.appliedCommissionCents,
+      customerDiscountMode: commercialSnapshot.customerDiscountMode,
+      customerDiscountValue: commercialSnapshot.customerDiscountValue,
+      customerDiscountCents: commercialSnapshot.customerDiscountCents,
       autoDiscountCents: commercial.autoDiscountCents,
       manualDiscountCents: commercial.manualDiscountCents,
       discountResponsibility: commercial.discountResponsibility,
