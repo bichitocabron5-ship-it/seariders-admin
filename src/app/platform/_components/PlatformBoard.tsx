@@ -15,6 +15,7 @@ import type {
 } from "../types/types";
 import { operabilityBadgeStyle, operabilityLabel } from "@/lib/operability-ui";
 import { isAssetCompatibleWithServiceCategory } from "@/lib/platform-resource-compat";
+import { canShareMonitorAssetWithReservation } from "@/lib/platform-shared-resource";
 import { opsStyles } from "@/components/ops-ui";
 import PlatformAssignModal from "./PlatformAssignModal";
 import PlatformAssignmentActionsModal from "./PlatformAssignmentActionsModal";
@@ -48,6 +49,17 @@ function getSuggestedRunForQueueItem(item: QueueItem, runs: RunOpen[]) {
     return runs.find((run) => run.mode === "SOLO") ?? runs.find((run) => run.mode === "TEST") ?? runs[0] ?? null;
   }
   return runs.find((run) => run.mode === "MONITOR") ?? runs[0] ?? null;
+}
+
+function canUseSharedMonitorAsset(item: QueueItem | null, run: RunOpen | null) {
+  if (!item || !run) return false;
+
+  return canShareMonitorAssetWithReservation({
+    runKind: run.kind,
+    runMode: run.mode,
+    serviceCategory: item.category ?? null,
+    isLicense: item.isLicense,
+  });
 }
 
 function mechanicsDetailHref(params: {
@@ -362,6 +374,30 @@ export default function PlatformBoard(props: Props) {
   const blockedCount = kind === "JETSKI"
     ? Math.max(0, jetskis.length - assignableJetskis.length)
     : Math.max(0, assets.length - assignableAssets.length);
+  const selectedAssignRun = useMemo(
+    () => readyRuns.find((run) => run.id === assignRunId) ?? null,
+    [assignRunId, readyRuns]
+  );
+  const sharedMonitorAsset = useMemo(() => {
+    if (kind !== "NAUTICA") return null;
+    if (!canUseSharedMonitorAsset(assignTarget, selectedAssignRun)) return null;
+    if (!selectedAssignRun?.monitorAssetId) return null;
+
+    const asset = assets.find((entry) => entry.id === selectedAssignRun.monitorAssetId);
+    if (!asset) return null;
+    if (asset.platformUsage !== "CUSTOMER_ASSIGNABLE") return null;
+    if (asset.operabilityStatus !== "OPERATIONAL") return null;
+    if (
+      !isAssetCompatibleWithServiceCategory({
+        assetType: asset.type,
+        serviceCategory: assignTarget?.category ?? null,
+      })
+    ) {
+      return null;
+    }
+
+    return asset;
+  }, [assets, assignTarget, kind, selectedAssignRun]);
   const assignRunOptions = useMemo(
     () =>
         readyRuns.map((run) => ({
@@ -377,18 +413,28 @@ export default function PlatformBoard(props: Props) {
             id: jetski.id,
             label: `Moto ${jetski.number || "-"}`,
           }))
-        : assignableAssets
-            .filter((asset) =>
-              isAssetCompatibleWithServiceCategory({
-                assetType: asset.type,
-                serviceCategory: assignTarget?.category ?? null,
-              })
-            )
-            .map((asset) => ({
-              id: asset.id,
-              label: `${asset.name} · ${asset.type}`,
-            })),
-    [assignTarget?.category, assignableAssets, assignableJetskis, kind]
+        : [
+            ...assignableAssets
+              .filter((asset) =>
+                isAssetCompatibleWithServiceCategory({
+                  assetType: asset.type,
+                  serviceCategory: assignTarget?.category ?? null,
+                })
+              )
+              .map((asset) => ({
+                id: asset.id,
+                label: `${asset.name} · ${asset.type}`,
+              })),
+            ...(sharedMonitorAsset
+              ? [
+                  {
+                    id: sharedMonitorAsset.id,
+                    label: `${sharedMonitorAsset.name} · ${sharedMonitorAsset.type} · Compartido con monitor`,
+                  },
+                ]
+              : []),
+          ].filter((option, index, arr) => arr.findIndex((entry) => entry.id === option.id) === index),
+    [assignTarget?.category, assignableAssets, assignableJetskis, kind, sharedMonitorAsset]
   );
   const radarItems = useMemo(
     () =>
@@ -475,7 +521,36 @@ export default function PlatformBoard(props: Props) {
 
   useEffect(() => { if (createRunResourceId === NO_RESOURCE_SELECTED) return; const exists = kind === "JETSKI" ? assignableJetskis.some((j) => j.id === createRunResourceId) : runBaseAssets.some((a) => a.id === createRunResourceId); if (!exists) setCreateRunResourceId(NO_RESOURCE_SELECTED); }, [kind, assignableJetskis, runBaseAssets, createRunResourceId]);
   useEffect(() => { if (kind === "NAUTICA" && createRunResourceId === NO_RESOURCE_SELECTED && runBaseAssets.length > 0) setCreateRunResourceId(runBaseAssets[0].id); }, [kind, runBaseAssets, createRunResourceId]);
-  function openAssign(item: QueueItem) { setAssignTarget(item); setAssignOpen(true); setAssignError(null); const suggestedRun = getSuggestedRunForQueueItem(item, readyRuns); setAssignRunId(suggestedRun?.id || ""); const free = kind === "JETSKI" ? assignableJetskis[0] : assignableAssets.find((asset) => isAssetCompatibleWithServiceCategory({ assetType: asset.type, serviceCategory: item.category ?? null })); setAssignResourceId(free?.id || ""); }
+  useEffect(() => {
+    if (!assignOpen) return;
+    if (!assignResourceOptions.some((option) => option.id === assignResourceId)) {
+      setAssignResourceId(assignResourceOptions[0]?.id ?? "");
+    }
+  }, [assignOpen, assignResourceId, assignResourceOptions]);
+  function openAssign(item: QueueItem) {
+    setAssignTarget(item);
+    setAssignOpen(true);
+    setAssignError(null);
+    const suggestedRun = getSuggestedRunForQueueItem(item, readyRuns);
+    setAssignRunId(suggestedRun?.id || "");
+    const sharedAllowed = canUseSharedMonitorAsset(item, suggestedRun);
+    const sharedAsset =
+      sharedAllowed && suggestedRun?.monitorAssetId
+        ? assets.find((asset) => asset.id === suggestedRun.monitorAssetId) ?? null
+        : null;
+    const free =
+      kind === "JETSKI"
+        ? assignableJetskis[0]
+        : sharedAsset && sharedAsset.platformUsage === "CUSTOMER_ASSIGNABLE" && sharedAsset.operabilityStatus === "OPERATIONAL"
+          ? sharedAsset
+          : assignableAssets.find((asset) =>
+              isAssetCompatibleWithServiceCategory({
+                assetType: asset.type,
+                serviceCategory: item.category ?? null,
+              })
+            );
+    setAssignResourceId(free?.id || "");
+  }
   async function doAssign() {
     if (!assignTarget) return; setAssignError(null); if (!assignRunId) return setAssignError("Selecciona un monitor o salida."); if (!assignResourceId) return setAssignError(kind === "JETSKI" ? "Selecciona una moto." : "Selecciona un recurso.");
     setAssignBusy(true);

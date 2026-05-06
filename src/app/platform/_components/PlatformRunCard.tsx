@@ -209,6 +209,11 @@ export default function PlatformRunCard({
               ? `Moto ${assignment.jetski.number}`
               : "Moto"
             : assignment.asset?.name || "Recurso";
+          const isSharedMonitorAsset =
+            kind === "NAUTICA" &&
+            Boolean(run.monitorAssetId) &&
+            Boolean(assignment.assetId) &&
+            run.monitorAssetId === assignment.assetId;
           const mins = assignment.durationMinutesSnapshot || null;
 
           return (
@@ -217,6 +222,7 @@ export default function PlatformRunCard({
                 <div style={{ fontWeight: 950 }}>
                   {customer}
                   <span style={{ opacity: 0.75 }}> | {resourceLabel}</span>
+                  {isSharedMonitorAsset ? <span style={{ opacity: 0.75 }}> | Compartido con monitor</span> : null}
                   {mins ? <span style={{ opacity: 0.75 }}> | {mins} min</span> : null}
                 </div>
                 <div style={assignmentBadgesStyle}>
@@ -242,6 +248,7 @@ export default function PlatformRunCard({
                     {queuedIsCritical ? ` | ALERTA CRÍTICA (${assignedQueueCriticalMinutes}+ min)` : queuedIsWarn ? ` | Alerta de espera (${assignedQueueWarnMinutes}+ min)` : ""}
                   </div>
                 )}
+                <div>Reserva: {assignment.reservationId.slice(-8)}</div>
               </div>
 
               {hasTimes ? (

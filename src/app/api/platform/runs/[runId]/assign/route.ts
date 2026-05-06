@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { platformAssignmentBlockingReason } from "@/lib/operability";
 import { assetCompatibilityReason, isAssetCompatibleWithServiceCategory } from "@/lib/platform-resource-compat";
+import { canShareMonitorAssetWithReservation } from "@/lib/platform-shared-resource";
 import { deriveReservationStatusFromUnits } from "@/lib/reservation-status";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import {
@@ -57,6 +58,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           kind: true,
           mode: true,
           status: true,
+          monitorAssetId: true,
           monitorId: true,
           monitor: { select: { maxCapacity: true } },
           assignments: {
@@ -93,6 +95,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
             select: {
               id: true,
               status: true,
+              isLicense: true,
               option: { select: { durationMinutes: true } },
               service: { select: { category: true, name: true } },
             },
@@ -267,12 +270,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           throw new Error(blockReason);
         }
 
+        const allowSharedMonitorAsset =
+          run.monitorAssetId === b.assetId &&
+          canShareMonitorAssetWithReservation({
+            runKind: run.kind,
+            runMode: run.mode,
+            serviceCategory: unit.reservation.service?.category ?? null,
+            isLicense: unit.reservation.isLicense,
+          });
+
         const dup = await tx.monitorRunAssignment.findFirst({
           where: {
             assetId: b.assetId,
             status: { in: [RunAssignmentStatus.QUEUED, RunAssignmentStatus.ACTIVE] },
             run: { status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] } },
             endedAt: null,
+            ...(allowSharedMonitorAsset
+              ? {
+                  OR: [{ runId: { not: runId } }, { runId, reservationUnitId: { not: unit.id } }],
+                }
+              : {}),
           },
           select: { id: true },
         });
