@@ -1,4 +1,4 @@
-﻿// src/app/api/admin/cash-closures/[id]/void/route.ts
+// src/app/api/admin/cash-closures/[closureId]/void/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -16,29 +16,35 @@ async function requireAdmin() {
 }
 
 const Body = z.object({
-  id: z.string().min(1),
   reason: z.string().min(1).max(500),
 });
 
-export async function POST(req: Request) {
+export async function POST(
+  req: Request,
+  ctx: { params: Promise<{ closureId: string }> | { closureId: string } }
+) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const rawParams = await ctx.params;
+  const closureId = typeof rawParams?.closureId === "string" ? rawParams.closureId.trim() : "";
+  if (!closureId) return new NextResponse("Datos inválidos", { status: 400 });
 
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
   if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
-  const { id, reason } = parsed.data;
+  const { reason } = parsed.data;
 
   const closure = await prisma.cashClosure.findUnique({
-    where: { id },
+    where: { id: closureId },
     select: { id: true, isVoided: true },
   });
   if (!closure) return new NextResponse("Cierre no existe", { status: 404 });
-  if (closure.isVoided) return NextResponse.json({ ok: true, id }); // idempotente
+  if (closure.isVoided) return NextResponse.json({ ok: true, id: closureId }); // idempotente
 
   await prisma.cashClosure.update({
-    where: { id },
+    where: { id: closureId },
     data: {
       isVoided: true,
       voidedAt: new Date(),
@@ -52,6 +58,5 @@ export async function POST(req: Request) {
     select: { id: true },
   });
 
-  return NextResponse.json({ ok: true, id });
+  return NextResponse.json({ ok: true, id: closureId });
 }
-
