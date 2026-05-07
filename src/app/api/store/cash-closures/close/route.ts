@@ -75,6 +75,16 @@ export async function POST(req: Request) {
       });
       if (existing) throw new Error("Ya existe un cierre para ese origin/turno/día (no anulado).");
 
+      const voidedClosure = await tx.cashClosure.findFirst({
+        where: {
+          origin,
+          businessDate,
+          shift,
+          isVoided: true,
+        },
+        select: { id: true },
+      });
+
       // 2) validar shift sessions (1–4)
       const shiftSessionWhere: Prisma.ShiftSessionWhereInput = {
         id: { in: parsed.data.shiftSessionIds },
@@ -227,33 +237,59 @@ export async function POST(req: Request) {
         },
       };
 
-      // 5) crear cierre
-      const closure = await tx.cashClosure.create({
-        data: {
-          origin,
-          shift,
-          businessDate,
-          cashShift: { connect: { id: cashShift.id } },
-          windowFrom: from,
-          windowTo: to,
-          computedJson: computed as Prisma.InputJsonValue,
-          declaredJson: recomputedDeclared as Prisma.InputJsonValue,
-          systemJson: system as Prisma.InputJsonValue,
-          diffJson: diff as Prisma.InputJsonValue,
-          note: parsed.data.note ?? null,
-          closedByUser: {
-            connect: { id: userId }
-          },
-
-          users: {
-            create: ssUnique.map((s) => ({
-              userId: s.userId,
-              roleNameAtClose: s.role.name,
-            })),
-          },
+      // 6) crear cierre o reutilizar uno anulado del mismo día/origin/shift.
+      const closureBaseData = {
+        origin,
+        shift,
+        businessDate,
+        cashShift: { connect: { id: cashShift.id } },
+        windowFrom: from,
+        windowTo: to,
+        computedJson: computed as Prisma.InputJsonValue,
+        declaredJson: recomputedDeclared as Prisma.InputJsonValue,
+        systemJson: system as Prisma.InputJsonValue,
+        diffJson: diff as Prisma.InputJsonValue,
+        note: parsed.data.note ?? null,
+        closedAt: new Date(),
+        closedByUser: {
+          connect: { id: userId },
         },
-        select: { id: true },
-      });
+      };
+
+      const closure = voidedClosure
+        ? await tx.cashClosure.update({
+            where: { id: voidedClosure.id },
+            data: {
+              ...closureBaseData,
+              isVoided: false,
+              voidedAt: null,
+              voidReason: null,
+              voidedByUser: { disconnect: true },
+              reviewedAt: null,
+              reviewNote: null,
+              reviewedByUser: { disconnect: true },
+              users: {
+                deleteMany: {},
+                create: ssUnique.map((s) => ({
+                  userId: s.userId,
+                  roleNameAtClose: s.role.name,
+                })),
+              },
+            },
+            select: { id: true },
+          })
+        : await tx.cashClosure.create({
+            data: {
+              ...closureBaseData,
+              users: {
+                create: ssUnique.map((s) => ({
+                  userId: s.userId,
+                  roleNameAtClose: s.role.name,
+                })),
+              },
+            },
+            select: { id: true },
+          });
 
       return { id: closure.id };
     });
