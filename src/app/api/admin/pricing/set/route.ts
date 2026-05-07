@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { PricingTier } from "@prisma/client";
+import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
 
 export const runtime = "nodejs";
 
@@ -33,7 +34,9 @@ export async function POST(req: Request) {
   if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const { serviceId, optionId, durationMin, pricingTier, basePriceCents } = parsed.data;
-  const now = parsed.data.validFrom ? new Date(parsed.data.validFrom) : new Date();
+  const now = parsed.data.validFrom
+    ? new Date(parsed.data.validFrom)
+    : utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
 
   // Validación: no ambos
   if (optionId && durationMin != null) {

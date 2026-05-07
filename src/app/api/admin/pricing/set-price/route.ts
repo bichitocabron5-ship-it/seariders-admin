@@ -4,6 +4,7 @@ import { z } from "zod";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
+import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,9 @@ export async function POST(req: Request) {
   if (!parsed.success) return new NextResponse("Datos inválidos", { status: 400 });
 
   const { serviceId, optionId, basePriceCents } = parsed.data;
-  const validFrom = parsed.data.validFrom ? new Date(parsed.data.validFrom) : new Date();
+  const validFrom = parsed.data.validFrom
+    ? new Date(parsed.data.validFrom)
+    : utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
 
   // 1) Validar servicio
   const svc = await prisma.service.findUnique({
