@@ -155,6 +155,13 @@ export function PricingSection({
   shownBaseCents,
   shownReason,
   commissionBaseCents,
+  commissionEnabled,
+  commissionMode,
+  commissionValue,
+  commissionCents,
+  customerDiscountMode,
+  customerDiscountValue,
+  customerDiscountCents,
   promoterDiscountCents,
   companyDiscountCents,
   promoterNominalPct,
@@ -187,6 +194,13 @@ export function PricingSection({
   shownBaseCents: number;
   shownReason: string;
   commissionBaseCents: number;
+  commissionEnabled: boolean;
+  commissionMode: "PERCENT" | "FIXED";
+  commissionValue: number;
+  commissionCents: number;
+  customerDiscountMode: "PERCENT" | "FIXED";
+  customerDiscountValue: number;
+  customerDiscountCents: number;
   promoterDiscountCents: number;
   companyDiscountCents: number;
   promoterNominalPct: number;
@@ -357,6 +371,32 @@ export function PricingSection({
       ) : (
         <div style={{ fontSize: 12, color: "#64748b" }}>Sin descuento automático.</div>
       )}
+
+      {commissionEnabled ? (
+        <div style={{ padding: 12, borderRadius: 14, background: "#ecfeff", border: "1px solid #a5f3fc", fontSize: 13, color: "#155e75", display: "grid", gap: 6 }}>
+          <div style={{ fontWeight: 900 }}>Comisión aplicada por canal</div>
+          <div>
+            Base comisionable <strong>{euros(commissionBaseCents)}</strong> · Comisión{" "}
+            <strong>
+              {commissionMode === "FIXED" ? `${commissionValue.toFixed(2)} EUR` : `${commissionValue.toFixed(2)}%`}
+            </strong>
+          </div>
+          <div>
+            Importe estimado: <strong>{euros(commissionCents)}</strong>
+          </div>
+          {customerDiscountCents > 0 ? (
+            <div>
+              Descuento cliente canal:{" "}
+              <strong>
+                {customerDiscountMode === "FIXED"
+                  ? `${customerDiscountValue.toFixed(2)} EUR`
+                  : `${customerDiscountValue.toFixed(2)}%`}
+              </strong>{" "}
+              · total aplicado <strong>{euros(customerDiscountCents)}</strong>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {promoterDiscountCents > 0 ? (
         <div style={{ padding: 12, borderRadius: 14, background: "#fff7ed", border: "1px solid #fed7aa", fontSize: 13, color: "#7c2d12" }}>

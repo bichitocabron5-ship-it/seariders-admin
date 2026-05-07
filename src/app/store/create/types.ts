@@ -36,7 +36,13 @@ export type Channel = {
   promoterCommissionCents?: number | null;
   discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED" | null;
   promoterDiscountShareBps?: number | null;
-  commissionRules?: Array<{ serviceId: string; commissionPct?: number | null }> | null;
+  commissionRules?: Array<{
+    serviceId: string;
+    commissionPct?: number | null;
+    promoterCommissionMode?: "PERCENT" | "FIXED" | null;
+    promoterCommissionValue?: number | null;
+    promoterCommissionCents?: number | null;
+  }> | null;
 };
 
 export type CartItem = {

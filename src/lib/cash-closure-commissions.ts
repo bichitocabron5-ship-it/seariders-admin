@@ -1,6 +1,11 @@
 import { PaymentOrigin } from "@prisma/client";
 
-import { commissionFromBase, proportionalCommissionBaseForCollected, resolveCommissionRate } from "@/lib/commission";
+import {
+  commissionFromBase,
+  proportionalCommissionBaseForCollected,
+  resolveCommissionRate,
+  roundCents,
+} from "@/lib/commission";
 import { prisma } from "@/lib/prisma";
 
 function signed(amountCents: number, direction: string) {
@@ -56,6 +61,10 @@ export async function getCashClosureCommissionSummary(args: {
       serviceId: true,
       totalPriceCents: true,
       commissionBaseCents: true,
+      appliedCommissionPct: true,
+      appliedCommissionMode: true,
+      appliedCommissionValue: true,
+      appliedCommissionCents: true,
       channelId: true,
       channel: {
         select: {
@@ -139,13 +148,7 @@ export async function getCashClosureCommissionSummary(args: {
 
   for (const r of reservations) {
     const ch = r.channel;
-    if (!ch || !ch.commissionEnabled) continue;
-
-    const rate = resolveCommissionRate({
-      channel: ch,
-      serviceId: r.serviceId,
-    });
-    if (!rate) continue;
+    if (!ch) continue;
 
     const rawNetService = netServiceByRes.get(r.id) ?? 0;
     const baseService =
@@ -158,12 +161,32 @@ export async function getCashClosureCommissionSummary(args: {
         : rawNetService;
     const baseDeposit = netDepositByRes.get(r.id) ?? 0;
     const baseTotal = baseService + (ch.commissionAppliesToDeposit ? baseDeposit : 0);
+    const storedFixedCommissionCents =
+      r.appliedCommissionMode === "FIXED" ? Math.max(0, Number(r.appliedCommissionCents ?? 0)) : 0;
 
-    if (!baseTotal) continue;
+    let commissionCents = 0;
+    if (storedFixedCommissionCents > 0) {
+      commissionCents = roundCents(
+        Math.max(0, rawNetService) *
+          (storedFixedCommissionCents / Math.max(1, Number(r.totalPriceCents ?? 0)))
+      );
+    } else {
+      const storedPct = Number(r.appliedCommissionPct ?? 0);
+      const rate =
+        storedPct > 0
+          ? storedPct / 100
+          : resolveCommissionRate({
+              channel: ch,
+              serviceId: r.serviceId,
+            });
+      if (!rate || !baseTotal) continue;
+      commissionCents = commissionFromBase(baseTotal, rate);
+    }
 
-    const c = commissionFromBase(baseTotal, rate);
+    if (!commissionCents && !baseTotal) continue;
+
     const row = ensureRow(ch.id, ch.name, ch.kind ?? null);
-    accumulateCommission(row, c);
+    accumulateCommission(row, commissionCents);
     row.baseServiceCents += baseService;
     row.baseDepositCents += baseDeposit;
     row.baseTotalCents += baseTotal;

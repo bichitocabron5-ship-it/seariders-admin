@@ -7,7 +7,11 @@ import { BUSINESS_TZ, shouldAutoFormalize } from "@/lib/tz-business";
 import { needsContractForCategory } from "@/lib/reservation-rules";
 import { getReservationWorkflowState, type ReservationWorkflowResult } from "@/lib/reservation-workflow";
 import { opsStyles } from "@/components/ops-ui";
-import { computeCommissionableBase, resolveDiscountPolicy } from "@/lib/commission";
+import {
+  computeCommissionableBase,
+  resolveAppliedCommercialSnapshot,
+  resolveDiscountPolicy,
+} from "@/lib/commission";
 import { AvailabilitySection, FutureReservationPaymentsSection, PricingSection, SubmitSection } from "./components/form-sections";
 import { ReservationBasicsSection } from "./components/reservation-basics-section";
 import { CartSection, ContractsSection } from "./components/store-sections";
@@ -1043,32 +1047,42 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       shownDiscountCents,
     ]
   );
-  const storeCommissionPct = useMemo(() => {
-    if (useCart) return 0;
-    if (!selectedChannel?.commissionEnabled || !selectedService?.id) return 0;
-    const specificRule = selectedChannel.commissionRules?.find((rule) => rule.serviceId === selectedService.id);
-    const channelPct = specificRule?.commissionPct != null
-      ? Number(specificRule.commissionPct)
-      : Number(selectedChannel.commissionBps ?? 0) / 100;
-    return selectedChannel.kind === "EXTERNAL_ACTIVITY"
-      ? clampPct(100 - channelPct)
-      : clampPct(channelPct);
-  }, [selectedChannel, selectedService, useCart]);
-  const storePromoterBasePct = useMemo(() => {
-    if (useCart) return 0;
-    if (!selectedChannel?.commissionEnabled || !selectedService?.id) return 0;
-    const specificRule = selectedChannel.commissionRules?.find((rule) => rule.serviceId === selectedService.id);
-    return clampPct(
-      specificRule?.commissionPct != null
-        ? Number(specificRule.commissionPct)
-        : Number(selectedChannel.commissionBps ?? 0) / 100
-    );
-  }, [selectedChannel, selectedService, useCart]);
-  const storeCommissionCents = useMemo(
-    () => Math.round(commissionBreakdown.commissionBaseCents * (storeCommissionPct / 100)),
-    [commissionBreakdown.commissionBaseCents, storeCommissionPct]
+  const commissionPreviewServiceId = useMemo(
+    () => cartItems[0]?.serviceId ?? selectedService?.id ?? null,
+    [cartItems, selectedService]
   );
-  const storePromoterNominalPct = useMemo(() => storePromoterBasePct, [storePromoterBasePct]);
+  const commissionPreviewQuantity = useMemo(
+    () => cartItems[0]?.quantity ?? quantity,
+    [cartItems, quantity]
+  );
+  const commercialPreview = useMemo(
+    () =>
+      resolveAppliedCommercialSnapshot({
+        channel: selectedChannel,
+        serviceId: commissionPreviewServiceId ?? "",
+        commissionBaseCents: commissionBreakdown.commissionBaseCents,
+        customerDiscountBaseCents: shownBaseCents,
+        quantity: commissionPreviewQuantity,
+      }),
+    [
+      commissionBreakdown.commissionBaseCents,
+      commissionPreviewQuantity,
+      commissionPreviewServiceId,
+      selectedChannel,
+      shownBaseCents,
+    ]
+  );
+  const storeCommissionCents = useMemo(
+    () => Number(commercialPreview.appliedCommissionCents ?? 0),
+    [commercialPreview.appliedCommissionCents]
+  );
+  const storePromoterNominalPct = useMemo(
+    () =>
+      commercialPreview.appliedCommissionMode === "PERCENT"
+        ? clampPct(Number(commercialPreview.appliedCommissionValue ?? 0))
+        : 0,
+    [commercialPreview.appliedCommissionMode, commercialPreview.appliedCommissionValue]
+  );
   const storePromoterEffectivePct = useMemo(
     () =>
       shownBaseCents > 0
@@ -1949,6 +1963,13 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               shownBaseCents={shownBaseCents}
               shownReason={shownReason ?? ""}
               commissionBaseCents={commissionBreakdown.commissionBaseCents}
+              commissionEnabled={Boolean(selectedChannel?.commissionEnabled)}
+              commissionMode={commercialPreview.appliedCommissionMode}
+              commissionValue={Number(commercialPreview.appliedCommissionValue ?? 0)}
+              commissionCents={storeCommissionCents}
+              customerDiscountMode={commercialPreview.customerDiscountMode}
+              customerDiscountValue={Number(commercialPreview.customerDiscountValue ?? 0)}
+              customerDiscountCents={Number(commercialPreview.customerDiscountCents ?? 0)}
               promoterDiscountCents={commissionBreakdown.promoterDiscountCents}
               companyDiscountCents={commissionBreakdown.companyDiscountCents}
               promoterNominalPct={storePromoterNominalPct}

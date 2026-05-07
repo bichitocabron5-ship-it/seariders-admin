@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
 type Channel = {
   id: string;
@@ -54,6 +54,40 @@ export default function ChannelsConfigurationSection({
   statusOn,
   statusOff,
 }: Props) {
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  function draftKey(channelId: string, field: string) {
+    return `${channelId}:${field}`;
+  }
+
+  function getDraft(channelId: string, field: string, fallback: string) {
+    return drafts[draftKey(channelId, field)] ?? fallback;
+  }
+
+  function setDraft(channelId: string, field: string, value: string) {
+    setDrafts((prev) => ({ ...prev, [draftKey(channelId, field)]: value }));
+  }
+
+  const formattedByChannel = useMemo(
+    () =>
+      Object.fromEntries(
+        channels.map((channel) => [
+          channel.id,
+          {
+            customerDiscount:
+              (channel.customerDiscountMode ?? "PERCENT") === "FIXED"
+                ? (Number(channel.customerDiscountCents ?? 0) / 100).toFixed(2)
+                : String(Number(channel.customerDiscountValue ?? 0)),
+            promoterCommission:
+              (channel.promoterCommissionMode ?? "PERCENT") === "FIXED"
+                ? (Number(channel.promoterCommissionCents ?? 0) / 100).toFixed(2)
+                : String(Number(channel.promoterCommissionValue ?? ((channel.commissionBps ?? 0) / 100))),
+          },
+        ])
+      ),
+    [channels]
+  );
+
   function fmtDiscount(channel: Channel) {
     if (channel.customerDiscountMode === "FIXED") {
       return `Dto cliente ${(Number(channel.customerDiscountCents ?? 0) / 100).toFixed(2)} EUR`;
@@ -249,21 +283,23 @@ export default function ChannelsConfigurationSection({
                   <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
                     {(channel.customerDiscountMode ?? "PERCENT") === "FIXED" ? "Descuento cliente (EUR)" : "Descuento cliente (%)"}
                     <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={
-                        (channel.customerDiscountMode ?? "PERCENT") === "FIXED"
-                          ? ((Number(channel.customerDiscountCents ?? 0) / 100).toFixed(2))
-                          : String(Number(channel.customerDiscountValue ?? 0))
-                      }
+                      type="text"
+                      inputMode="decimal"
+                      value={getDraft(channel.id, "customerDiscount", formattedByChannel[channel.id]?.customerDiscount ?? "0")}
                       disabled={busy}
                       onChange={(e) => {
-                        const value = Number(e.target.value || 0);
+                        setDraft(channel.id, "customerDiscount", e.target.value);
+                      }}
+                      onBlur={() => {
+                        const value = Number(
+                          getDraft(channel.id, "customerDiscount", formattedByChannel[channel.id]?.customerDiscount ?? "0").replace(",", ".") || 0
+                        );
                         void patchChannel(channel.id, {
-                          customerDiscountValue: value,
+                          customerDiscountValue: Number.isFinite(value) ? value : 0,
                           customerDiscountCents:
-                            (channel.customerDiscountMode ?? "PERCENT") === "FIXED" ? Math.round(value * 100) : 0,
+                            (channel.customerDiscountMode ?? "PERCENT") === "FIXED"
+                              ? Math.round((Number.isFinite(value) ? value : 0) * 100)
+                              : 0,
                         });
                       }}
                       style={inputStyle}
@@ -292,24 +328,26 @@ export default function ChannelsConfigurationSection({
                   <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
                     {(channel.promoterCommissionMode ?? "PERCENT") === "FIXED" ? "Comisión promotor (EUR)" : "Comisión promotor (%)"}
                     <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={
-                        (channel.promoterCommissionMode ?? "PERCENT") === "FIXED"
-                          ? ((Number(channel.promoterCommissionCents ?? 0) / 100).toFixed(2))
-                          : String(Number(channel.promoterCommissionValue ?? pct))
-                      }
+                      type="text"
+                      inputMode="decimal"
+                      value={getDraft(channel.id, "promoterCommission", formattedByChannel[channel.id]?.promoterCommission ?? String(pct))}
                       disabled={busy || !channel.commissionEnabled}
                       onChange={(e) => {
-                        const value = Number(e.target.value || 0);
+                        setDraft(channel.id, "promoterCommission", e.target.value);
+                      }}
+                      onBlur={() => {
+                        const value = Number(
+                          getDraft(channel.id, "promoterCommission", formattedByChannel[channel.id]?.promoterCommission ?? String(pct)).replace(",", ".") || 0
+                        );
                         void patchChannel(channel.id, {
-                          promoterCommissionValue: value,
+                          promoterCommissionValue: Number.isFinite(value) ? value : 0,
                           promoterCommissionCents:
-                            (channel.promoterCommissionMode ?? "PERCENT") === "FIXED" ? Math.round(value * 100) : 0,
+                            (channel.promoterCommissionMode ?? "PERCENT") === "FIXED"
+                              ? Math.round((Number.isFinite(value) ? value : 0) * 100)
+                              : 0,
                           commissionBps:
                             (channel.promoterCommissionMode ?? "PERCENT") === "PERCENT"
-                              ? Math.round(value * 100)
+                              ? Math.round((Number.isFinite(value) ? value : 0) * 100)
                               : channel.commissionBps ?? 0,
                         });
                       }}
