@@ -5,7 +5,11 @@ import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
+import {
+  getAppliedCommissionPctTx,
+  resolveCustomerDiscountSnapshot,
+  resolveDiscountPolicy,
+} from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { PricingTier } from "@prisma/client";
@@ -170,6 +174,9 @@ export async function POST(req: Request) {
             where: { id: reservationPricing.channelId },
             select: {
               allowsPromotions: true,
+              customerDiscountMode: true,
+              customerDiscountValue: true,
+              customerDiscountCents: true,
               discountResponsibility: true,
               promoterDiscountShareBps: true,
             },
@@ -206,6 +213,14 @@ export async function POST(req: Request) {
             nextMatchingQuantity,
           })
         : Number(reservationPricing.manualDiscountCents ?? 0);
+      const totalMainQuantity = allItems
+        .filter((item) => !item.isExtra)
+        .reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
+      const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
+        channel,
+        quantity: totalMainQuantity,
+        baseCents: newTotal,
+      });
       const commercial = await computeReservationCommercialBreakdown({
         when: new Date(),
         discountLines: allItems.map((item) => ({
@@ -219,6 +234,7 @@ export async function POST(req: Request) {
         customerCountry: reservationPricing.customerCountry ?? null,
         promotionsEnabled,
         totalBeforeDiscountsCents: newTotal,
+        customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
         manualDiscountCents,
         discountResponsibility: discountPolicy.discountResponsibility,
         promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
@@ -234,6 +250,9 @@ export async function POST(req: Request) {
           basePriceCents: serviceSubtotal,
           commissionBaseCents: commercial.commissionBaseCents,
           appliedCommissionPct,
+          customerDiscountMode: customerDiscountSnapshot.customerDiscountMode,
+          customerDiscountValue: customerDiscountSnapshot.customerDiscountValue,
+          customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
           autoDiscountCents: commercial.autoDiscountCents,
           manualDiscountCents: commercial.manualDiscountCents,
           discountResponsibility: commercial.discountResponsibility,

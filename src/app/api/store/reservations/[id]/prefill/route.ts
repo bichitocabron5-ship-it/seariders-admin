@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { getReservationWorkflowState } from "@/lib/reservation-workflow";
+import { getReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 
 export const runtime = "nodejs";
@@ -60,6 +61,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       promoterDiscountCents: true,
       companyDiscountCents: true,
       totalPriceCents: true,
+      depositCents: true,
       source: true,
       customerName: true,
       boothNote: true,
@@ -175,14 +177,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const isCanceled = r.status === "CANCELED";
   const isCompleted = r.status === "COMPLETED";
   const isReadOnly = isHistorical || isCanceled;
-  const paidServiceCents = (r.payments ?? [])
-    .filter((payment) => !payment.isDeposit)
-    .reduce(
-      (sum, payment) => sum + (payment.direction === "OUT" ? -Number(payment.amountCents ?? 0) : Number(payment.amountCents ?? 0)),
-      0
-    );
-  const totalServiceCents = Number(r.totalPriceCents ?? 0);
-  const pendingServiceCents = Math.max(0, totalServiceCents - paidServiceCents);
+  const paymentStatus = getReservationPaymentStatus({
+    totalPriceCents: r.totalPriceCents,
+    depositCents: r.depositCents,
+    quantity: r.quantity,
+    isLicense: Boolean(r.isLicense),
+    serviceCategory: r.service?.category,
+    items: r.items,
+    payments: r.payments,
+  });
+  const totalServiceCents = paymentStatus.serviceDueCents;
+  const paidServiceCents = paymentStatus.paidServiceCents;
+  const pendingServiceCents = paymentStatus.pendingServiceCents;
+  const pendingDepositCents = paymentStatus.pendingDepositCents;
   const requiredUnits = computeRequiredContractUnits({
     quantity: r.quantity ?? 0,
     isLicense: Boolean(r.isLicense),
@@ -203,7 +210,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     requiredUnits,
     readyCount,
     pendingServiceCents,
-    pendingDepositCents: 0,
+    pendingDepositCents,
     signedCount,
   });
 
@@ -213,6 +220,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       totalServiceCents,
       paidServiceCents: Math.max(0, paidServiceCents),
       pendingServiceCents,
+      pendingDepositCents,
     },
     flags: {
       isPast,

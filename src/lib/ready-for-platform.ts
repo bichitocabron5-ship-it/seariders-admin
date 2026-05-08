@@ -1,7 +1,7 @@
 import { ReservationStatus } from "@prisma/client";
 
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
-import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { getReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 
 type ReadyReservation = {
@@ -17,9 +17,19 @@ type ReadyReservation = {
     isExtra: boolean;
     service: { category: string | null } | null;
   }>;
-  contracts: Array<{ unitIndex: number; logicalUnitIndex?: number | null; status: string; supersededAt?: Date | string | null; createdAt?: Date | string | null }>;
+  contracts: Array<{
+    unitIndex: number;
+    logicalUnitIndex?: number | null;
+    status: string;
+    supersededAt?: Date | string | null;
+    createdAt?: Date | string | null;
+  }>;
   payments: Array<{ amountCents: number; isDeposit: boolean; direction: string }>;
 };
+
+function euros(cents: number) {
+  return `${(Math.max(0, Number(cents ?? 0)) / 100).toFixed(2)} €`;
+}
 
 export function evaluateReadyForPlatform(reservation: ReadyReservation) {
   if (reservation.status === ReservationStatus.CANCELED) {
@@ -52,31 +62,28 @@ export function evaluateReadyForPlatform(reservation: ReadyReservation) {
     };
   }
 
-  const servicePaidCents = (reservation.payments ?? [])
-    .filter((payment) => !payment.isDeposit)
-    .reduce((sum, payment) => sum + (payment.direction === "OUT" ? -1 : 1) * Number(payment.amountCents ?? 0), 0);
-
-  const depositPaidCents = (reservation.payments ?? [])
-    .filter((payment) => payment.isDeposit)
-    .reduce((sum, payment) => sum + (payment.direction === "OUT" ? -1 : 1) * Number(payment.amountCents ?? 0), 0);
-
-  const serviceDueCents = Number(reservation.totalPriceCents ?? 0);
-  const depositDueCents = computeReservationDepositCents({
-    storedDepositCents: reservation.depositCents,
+  const paymentStatus = getReservationPaymentStatus({
+    totalPriceCents: reservation.totalPriceCents,
+    depositCents: reservation.depositCents,
     quantity: reservation.quantity,
     isLicense: Boolean(reservation.isLicense),
-    serviceCategory: reservation.service?.category ?? null,
-    items: reservation.items ?? [],
+    serviceCategory: reservation.service?.category,
+    items: reservation.items,
+    payments: reservation.payments,
   });
-
-  const pendingServiceCents = Math.max(0, serviceDueCents - servicePaidCents);
-  const pendingDepositCents = Math.max(0, depositDueCents - depositPaidCents);
-  const fullyPaid = pendingServiceCents === 0 && pendingDepositCents === 0;
+  const { pendingServiceCents, pendingDepositCents, fullyPaid } = paymentStatus;
 
   if (!fullyPaid) {
+    const missing: string[] = [];
+    if (pendingServiceCents > 0) missing.push(`servicio ${euros(pendingServiceCents)}`);
+    if (pendingDepositCents > 0) missing.push(`fianza ${euros(pendingDepositCents)}`);
+
     return {
       ok: false as const,
-      error: "La reserva no está completamente cobrada.",
+      error:
+        missing.length > 0
+          ? `La reserva no está completamente cobrada. Pendiente: ${missing.join(" y ")}.`
+          : "La reserva no está completamente cobrada.",
       requiredUnits,
       readyCount,
       pendingServiceCents,

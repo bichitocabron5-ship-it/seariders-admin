@@ -13,7 +13,11 @@ import { countReadyVisibleContracts, listMissingLogicalUnits } from "@/lib/contr
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
-import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
+import {
+  getAppliedCommissionPctTx,
+  resolveCustomerDiscountSnapshot,
+  resolveDiscountPolicy,
+} from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 
 export const runtime = "nodejs";
@@ -529,6 +533,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             where: { id: effectiveChannelId },
             select: {
               allowsPromotions: true,
+              customerDiscountMode: true,
+              customerDiscountValue: true,
+              customerDiscountCents: true,
               discountResponsibility: true,
               promoterDiscountShareBps: true,
             },
@@ -561,6 +568,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
               nextMatchingQuantity: matchingBoothLineQty,
             })
           : Number(current.manualDiscountCents ?? 0);
+      const totalMainQuantity = lineCreates.reduce(
+        (sum, line) => sum + Number(line.quantity ?? 0),
+        0
+      );
+      const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
+        channel,
+        quantity: totalMainQuantity,
+        baseCents: totalBeforeDiscounts,
+      });
 
       const commercial = await computeReservationCommercialBreakdown({
         when: pricingWhen,
@@ -575,6 +591,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         customerCountry: customerCountry.toUpperCase(),
         promotionsEnabled,
         totalBeforeDiscountsCents: totalBeforeDiscounts,
+        customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
         manualDiscountCents: incomingManualDiscountCents,
         discountResponsibility: discountPolicy.discountResponsibility,
         promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
@@ -603,7 +620,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         throw new Error("Faltan datos de licencia (escuela, tipo y número).");
       }
 
-      const totalMainQuantity = lineCreates.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0);
       const depositCents = computeDepositFromResolvedItems({
         isLicense: reservationState.isLicense,
         resolvedItems: lineCreates.map((line) => ({
@@ -647,6 +663,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           basePriceCents: serviceSubtotal,
           commissionBaseCents: commercial.commissionBaseCents,
           appliedCommissionPct,
+          customerDiscountMode: customerDiscountSnapshot.customerDiscountMode,
+          customerDiscountValue: customerDiscountSnapshot.customerDiscountValue,
+          customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
           autoDiscountCents: commercial.autoDiscountCents,
           manualDiscountCents: commercial.manualDiscountCents,
           discountResponsibility: commercial.discountResponsibility,

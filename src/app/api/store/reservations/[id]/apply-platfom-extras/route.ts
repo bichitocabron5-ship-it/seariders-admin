@@ -5,7 +5,11 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
-import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
+import {
+  getAppliedCommissionPctTx,
+  resolveCustomerDiscountSnapshot,
+  resolveDiscountPolicy,
+} from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 
 // Si tu enum se llama distinto, ajusta aquí:
@@ -52,6 +56,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           promoCode: true,
           customerCountry: true,
           channelId: true,
+          quantity: true,
           discountResponsibility: true,
           promoterDiscountShareBps: true,
         },
@@ -184,6 +189,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
               where: { id: res.channelId },
               select: {
                 allowsPromotions: true,
+                customerDiscountMode: true,
+                customerDiscountValue: true,
+                customerDiscountCents: true,
                 discountResponsibility: true,
                 promoterDiscountShareBps: true,
               },
@@ -194,6 +202,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           responsibility: res.discountResponsibility,
           promoterDiscountShareBps: res.promoterDiscountShareBps,
           channel,
+        });
+        const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
+          channel,
+          quantity: res.quantity,
+          baseCents: newTotal,
         });
         const commercial = await computeReservationCommercialBreakdown({
           when: new Date(),
@@ -210,6 +223,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           customerCountry: res.customerCountry ?? null,
           promotionsEnabled,
           totalBeforeDiscountsCents: newTotal,
+          customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
           manualDiscountCents: Number(res.manualDiscountCents ?? 0),
           discountResponsibility: discountPolicy.discountResponsibility,
           promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
@@ -225,6 +239,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             basePriceCents: serviceSubtotal,
             commissionBaseCents: commercial.commissionBaseCents,
             appliedCommissionPct,
+            customerDiscountMode: customerDiscountSnapshot.customerDiscountMode,
+            customerDiscountValue: customerDiscountSnapshot.customerDiscountValue,
+            customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
             autoDiscountCents: commercial.autoDiscountCents,
             manualDiscountCents: commercial.manualDiscountCents,
             discountResponsibility: commercial.discountResponsibility,

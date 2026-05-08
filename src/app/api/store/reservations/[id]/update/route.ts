@@ -12,7 +12,11 @@ import type { Prisma } from "@prisma/client";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
-import { getAppliedCommissionPctTx, resolveDiscountPolicy } from "@/lib/commission";
+import {
+  getAppliedCommissionPctTx,
+  resolveCustomerDiscountSnapshot,
+  resolveDiscountPolicy,
+} from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import {
   contractLogicalUnitIndex,
@@ -630,7 +634,14 @@ if (hasProItems) {
     const channel = effectiveChannelId
       ? await prisma.channel.findUnique({
           where: { id: effectiveChannelId },
-          select: { allowsPromotions: true, discountResponsibility: true, promoterDiscountShareBps: true },
+          select: {
+            allowsPromotions: true,
+            customerDiscountMode: true,
+            customerDiscountValue: true,
+            customerDiscountCents: true,
+            discountResponsibility: true,
+            promoterDiscountShareBps: true,
+          },
         })
       : null;
     const promotionsEnabled =
@@ -658,6 +669,15 @@ if (hasProItems) {
             nextMatchingQuantity: matchingBoothLineQty,
           })
         : (b.manualDiscountCents !== undefined ? Number(b.manualDiscountCents) : Number(existingPack.manualDiscountCents ?? 0));
+    const totalMainQuantity = lineCreates.reduce(
+      (sum, line) => sum + Number(line.quantity ?? 0),
+      0
+    );
+    const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
+      channel,
+      quantity: totalMainQuantity,
+      baseCents: totalBeforeDiscounts,
+    });
     const commercial = await computeReservationCommercialBreakdown({
       when: pricingWhen,
       discountLines: lineCreates.map((line) => ({
@@ -671,6 +691,7 @@ if (hasProItems) {
       customerCountry: country,
       promotionsEnabled,
       totalBeforeDiscountsCents: totalBeforeDiscounts,
+      customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
       manualDiscountCents: incomingManual,
       discountResponsibility: discountPolicy.discountResponsibility,
       promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
@@ -689,7 +710,6 @@ if (hasProItems) {
     const depositCents = depositPerUnit * jetskiUnits;
 
     // Compat main: primer item
-    const totalMainQuantity = lineCreates.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0);
     const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
       channelId: b.channelId ?? null,
       serviceId: main.serviceId,
@@ -713,6 +733,9 @@ if (hasProItems) {
       basePriceCents: serviceSubtotal,
       commissionBaseCents: commercial.commissionBaseCents,
       appliedCommissionPct,
+      customerDiscountMode: customerDiscountSnapshot.customerDiscountMode,
+      customerDiscountValue: customerDiscountSnapshot.customerDiscountValue,
+      customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
       autoDiscountCents: commercial.autoDiscountCents,
       manualDiscountCents: commercial.manualDiscountCents,
       discountResponsibility: commercial.discountResponsibility,
@@ -968,7 +991,14 @@ if (hasProItems) {
     const channel = effectiveChannelId
       ? await tx.channel.findUnique({
           where: { id: effectiveChannelId },
-          select: { allowsPromotions: true, discountResponsibility: true, promoterDiscountShareBps: true },
+          select: {
+            allowsPromotions: true,
+            customerDiscountMode: true,
+            customerDiscountValue: true,
+            customerDiscountCents: true,
+            discountResponsibility: true,
+            promoterDiscountShareBps: true,
+          },
         })
       : null;
     const promotionsEnabled = isBoothReservation ? false : (channel ? Boolean(channel.allowsPromotions) : true);
@@ -1043,6 +1073,11 @@ if (hasProItems) {
           nextMatchingQuantity: existing.serviceId === b.serviceId && existing.optionId === b.optionId ? b.quantity : 0,
         })
       : Number(existing.manualDiscountCents ?? 0);
+    const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
+      channel,
+      quantity: Number(b.quantity),
+      baseCents: totalBeforeDiscounts,
+    });
     const commercial = await computeReservationCommercialBreakdown({
       when: pricingWhen,
       discountLines: [
@@ -1058,6 +1093,7 @@ if (hasProItems) {
       customerCountry: customerCountry === undefined ? existing.customerCountry : customerCountry,
       promotionsEnabled,
       totalBeforeDiscountsCents: totalBeforeDiscounts,
+      customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
       manualDiscountCents: incomingManualDiscountCents,
       discountResponsibility: discountPolicy.discountResponsibility,
       promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
@@ -1073,6 +1109,9 @@ if (hasProItems) {
         basePriceCents: serviceSubtotal,
         commissionBaseCents: commercial.commissionBaseCents,
         appliedCommissionPct,
+        customerDiscountMode: customerDiscountSnapshot.customerDiscountMode,
+        customerDiscountValue: customerDiscountSnapshot.customerDiscountValue,
+        customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
         autoDiscountCents: commercial.autoDiscountCents,
         manualDiscountCents: commercial.manualDiscountCents,
         discountResponsibility: commercial.discountResponsibility,

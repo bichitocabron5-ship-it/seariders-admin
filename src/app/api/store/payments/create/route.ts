@@ -9,7 +9,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
-import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { getReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { ensureReservationPlatformUnitsTx } from "@/lib/reservation-platform";
@@ -119,26 +119,21 @@ export async function POST(req: Request) {
         throw Object.assign(new Error("Reserva no encontrada"), { status: 404 });
       }
 
-      // Netos por tipo (IN suma, OUT resta)
-      const netServicePaidCents = reservation.payments
-        .filter((p) => !p.isDeposit)
-        .reduce((sum, p) => sum + (p.direction === "OUT" ? -1 : 1) * p.amountCents, 0);
-
-      const netDepositPaidCents = reservation.payments
-        .filter((p) => p.isDeposit)
-        .reduce((sum, p) => sum + (p.direction === "OUT" ? -1 : 1) * p.amountCents, 0);
-
-      const serviceDueCents = Number(reservation.totalPriceCents ?? 0);
-      const depositDueCents = computeReservationDepositCents({
-        storedDepositCents: reservation.depositCents,
+      const paymentStatus = getReservationPaymentStatus({
+        totalPriceCents: reservation.totalPriceCents,
+        depositCents: reservation.depositCents,
         quantity: reservation.quantity,
         isLicense: Boolean(reservation.isLicense),
-        serviceCategory: reservation.service?.category ?? null,
-        items: reservation.items ?? [],
+        serviceCategory: reservation.service?.category,
+        items: reservation.items,
+        payments: reservation.payments,
       });
-
-      const pendingServiceCents = Math.max(0, serviceDueCents - netServicePaidCents);
-      const pendingDepositCents = Math.max(0, depositDueCents - netDepositPaidCents);
+      const {
+        paidServiceCents: netServicePaidCents,
+        paidDepositCents: netDepositPaidCents,
+        pendingServiceCents,
+        pendingDepositCents,
+      } = paymentStatus;
 
       // Bloqueo de caja: no permitir cobro si faltan contratos operativos.
       if (direction === "IN" && reservation.formalizedAt) {
@@ -220,8 +215,8 @@ export async function POST(req: Request) {
       const newNetDepositPaidCents =
         netDepositPaidCents + (isDeposit ? (direction === "OUT" ? -1 : 1) * amountCents : 0);
 
-      const newPendingServiceCents = Math.max(0, serviceDueCents - newNetServicePaidCents);
-      const newPendingDepositCents = Math.max(0, depositDueCents - newNetDepositPaidCents);
+      const newPendingServiceCents = Math.max(0, paymentStatus.serviceDueCents - newNetServicePaidCents);
+      const newPendingDepositCents = Math.max(0, paymentStatus.depositDueCents - newNetDepositPaidCents);
 
       const fullyPaid = newPendingServiceCents === 0 && newPendingDepositCents === 0;
 

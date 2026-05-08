@@ -5,11 +5,12 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
-import { computeReservationDepositCents, deriveReservationDepositStatus } from "@/lib/reservation-deposits";
+import { deriveReservationDepositStatus } from "@/lib/reservation-deposits";
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { buildStoreTodayWhere } from "@/lib/store-reservation-visibility";
 import { buildReservationJetskiAssignments } from "@/lib/jetski-assignment-history";
+import { getReservationPaymentStatus } from "@/lib/reservation-payment-status";
 
 export const runtime = "nodejs";
 
@@ -143,32 +144,19 @@ export async function GET() {
       return sum + sign * p.amountCents;
     }, 0);
 
-    const paidServiceCents = r.payments
-      .filter((p) => !p.isDeposit)
-      .reduce((sum, p) => {
-        const sign = p.direction === "OUT" ? -1 : 1;
-        return sum + sign * p.amountCents;
-      }, 0);
-
-    const paidDepositCents = r.payments
-      .filter((p) => p.isDeposit)
-      .reduce((sum, p) => {
-        const sign = p.direction === "OUT" ? -1 : 1;
-        return sum + sign * p.amountCents;
-      }, 0);
-
-    const refundableDepositCents = Math.max(0, paidDepositCents);
-    const depositCents = computeReservationDepositCents({
-      storedDepositCents: r.depositCents,
+    const paymentStatus = getReservationPaymentStatus({
+      totalPriceCents: r.totalPriceCents,
+      depositCents: r.depositCents,
       quantity: r.quantity,
       isLicense: Boolean(r.isLicense),
-      serviceCategory: r.service?.category ?? null,
-      items: (r.items ?? []).map((item) => ({
-        quantity: item.quantity ?? 0,
-        isExtra: Boolean(item.isExtra),
-        service: item.service ? { category: item.service.category ?? null } : null,
-      })),
+      serviceCategory: r.service?.category,
+      items: r.items,
+      payments: r.payments,
     });
+    const paidServiceCents = paymentStatus.paidServiceCents;
+    const paidDepositCents = paymentStatus.paidDepositCents;
+    const refundableDepositCents = Math.max(0, paidDepositCents);
+    const depositCents = paymentStatus.depositDueCents;
 
     // items principal + extras
     const mainItem = r.items.find((it) => !it.isExtra) ?? null;
@@ -203,8 +191,8 @@ export async function GET() {
     const soldTotalCents = Math.max(0, Number(r.totalPriceCents ?? Math.max(0, grossCents - totalDiscountCents)));
  
     // pendientes separados (✅ servicio basado en items)
-    const pendingServiceCents = Math.max(0, Number(r.totalPriceCents ?? Math.max(0, grossCents - totalDiscountCents)) - paidServiceCents);
-    const pendingDepositCents = Math.max(0, depositCents - refundableDepositCents);
+    const pendingServiceCents = paymentStatus.pendingServiceCents;
+    const pendingDepositCents = paymentStatus.pendingDepositCents;
     const pendingCents = pendingServiceCents + pendingDepositCents;
 
     const requiredUnits = computeRequiredContractUnits({
