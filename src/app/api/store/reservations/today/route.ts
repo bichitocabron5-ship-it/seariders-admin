@@ -192,7 +192,7 @@ export async function GET() {
     const totalDiscountCents = channelCustomerDiscountCents + autoDisc + manualDisc;
 
     const isPack = Boolean(r.isPackParent && r.packId);
-    const legacyGrossCents = Number(r.totalPriceCents ?? 0) + autoDisc + manualDisc;
+    const legacyGrossCents = Number(r.totalPriceCents ?? 0) + totalDiscountCents;
 
     const grossCents = isPack
       ? legacyGrossCents
@@ -200,10 +200,10 @@ export async function GET() {
           ? serviceTotalCents + extrasTotalCents
           : legacyGrossCents);
 
-    const soldTotalCents = Math.max(0, grossCents - totalDiscountCents);
+    const soldTotalCents = Math.max(0, Number(r.totalPriceCents ?? Math.max(0, grossCents - totalDiscountCents)));
  
     // pendientes separados (✅ servicio basado en items)
-    const pendingServiceCents = Math.max(0, soldTotalCents - paidServiceCents);
+    const pendingServiceCents = Math.max(0, Number(r.totalPriceCents ?? Math.max(0, grossCents - totalDiscountCents)) - paidServiceCents);
     const pendingDepositCents = Math.max(0, depositCents - refundableDepositCents);
     const pendingCents = pendingServiceCents + pendingDepositCents;
 

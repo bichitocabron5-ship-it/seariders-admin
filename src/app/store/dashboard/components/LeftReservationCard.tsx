@@ -77,12 +77,15 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
   const serviceTotal = Number(r.serviceTotalCents ?? 0);
   const extrasTotal = Number(r.extrasTotalCents ?? 0);
   const deposit = Number(r.depositCents ?? 0);
+  const customerDisc = Number(r.customerDiscountCents ?? 0);
   const autoDisc = Number(r.autoDiscountCents ?? 0);
   const manualDisc = Number(r.manualDiscountCents ?? 0);
   const promoterDisc = Number(r.promoterDiscountCents ?? 0);
   const companyDisc = Number(r.companyDiscountCents ?? 0);
   const pvpTotal = Number(r.pvpTotalCents ?? 0);
-  const finalTotal = Number(r.finalTotalCents ?? r.totalPriceCents ?? Math.max(0, pvpTotal - autoDisc - manualDisc));
+  const finalTotal = Number(
+    r.finalTotalCents ?? r.totalPriceCents ?? Math.max(0, pvpTotal - customerDisc - autoDisc - manualDisc)
+  );
   const totalToChargeCents = Number(r.totalToChargeCents ?? (finalTotal + deposit));
   const paid = Number(r.paidCents ?? 0);
   const paidDepositCents = Number(r.paidDepositCents ?? 0);
@@ -108,6 +111,7 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
         reservation={r}
         finalTotal={finalTotal}
         pvpTotal={pvpTotal}
+        customerDisc={customerDisc}
         autoDisc={autoDisc}
         manualDisc={manualDisc}
         promoterDisc={promoterDisc}

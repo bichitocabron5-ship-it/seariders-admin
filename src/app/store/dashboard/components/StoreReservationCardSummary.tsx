@@ -13,6 +13,7 @@ type StoreReservationCardSummaryProps = {
   reservation: ReservationRow;
   finalTotal: number;
   pvpTotal: number;
+  customerDisc: number;
   autoDisc: number;
   manualDisc: number;
   promoterDisc: number;
@@ -99,6 +100,7 @@ export function StoreReservationCardSummary({
   reservation,
   finalTotal,
   pvpTotal,
+  customerDisc,
   autoDisc,
   manualDisc,
   promoterDisc,
@@ -126,7 +128,7 @@ export function StoreReservationCardSummary({
   const timeLabel = hhmm(reservation.scheduledTime) || "sin hora";
   const precheckin = precheckinTone(readyCount, requiredUnits);
   const showDeposit = depositStatus !== "NO_APLICA";
-  const totalDiscount = autoDisc + manualDisc;
+  const totalDiscount = customerDisc + autoDisc + manualDisc;
   const jetskiAssignments = reservation.jetskiAssignments ?? [];
 
   return (
@@ -183,6 +185,7 @@ export function StoreReservationCardSummary({
             {totalDiscount > 0 ? (
               <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
                 <span style={{ textDecoration: "line-through", opacity: 0.7 }}>{euros(pvpTotal)}</span>
+                {customerDisc > 0 ? <span style={{ marginLeft: 8 }}>Canal: -{euros(customerDisc)}</span> : null}
                 {autoDisc > 0 ? <span style={{ marginLeft: 8 }}>Auto: -{euros(autoDisc)}</span> : null}
                 {manualDisc > 0 ? <span style={{ marginLeft: 8 }}>Manual: -{euros(manualDisc)}</span> : null}
                 {promoterDisc > 0 ? <span style={{ marginLeft: 8 }}>Promotor: {euros(promoterDisc)}</span> : null}

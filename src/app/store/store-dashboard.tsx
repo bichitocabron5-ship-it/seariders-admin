@@ -350,8 +350,8 @@ export default function StoreDashboard() {
   const rowsSorted = useMemo(
     () =>
       [...rows].sort((a, b) => {
-        const aTotal = Number(a.soldTotalCents ?? a.totalPriceCents ?? 0) + Number(a.depositCents ?? 0);
-        const bTotal = Number(b.soldTotalCents ?? b.totalPriceCents ?? 0) + Number(b.depositCents ?? 0);
+        const aTotal = Number(a.totalToChargeCents ?? 0);
+        const bTotal = Number(b.totalToChargeCents ?? 0);
         const aPaid = Number(a.paidCents ?? 0);
         const bPaid = Number(b.paidCents ?? 0);
         const aPending = Math.max(0, aTotal - aPaid);
@@ -410,7 +410,7 @@ export default function StoreDashboard() {
     () =>
       rows.reduce<TotalsSummary>(
         (acc, r) => {
-          const totalToCharge = Number(r.soldTotalCents ?? r.totalPriceCents ?? 0) + Number(r.depositCents ?? 0);
+          const totalToCharge = Number(r.totalToChargeCents ?? 0);
           const paid = Number(r.paidCents ?? 0);
           const pending = Math.max(0, totalToCharge - paid);
           acc.dayCount += 1;

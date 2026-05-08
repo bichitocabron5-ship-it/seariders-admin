@@ -88,9 +88,10 @@ export function ReservationOpsPanel({
   const busyActionRef = useRef<string | null>(null);
   const pendingService = Number(r.pendingServiceCents ?? 0);
   const pendingDeposit = Number(r.pendingDepositCents ?? 0);
+  const customerDisc = Number(r.customerDiscountCents ?? 0);
   const autoDisc = Number(r.autoDiscountCents ?? 0);
   const manualDisc = Number(r.manualDiscountCents ?? 0);
-  const totalDiscount = autoDisc + manualDisc;
+  const totalDiscount = customerDisc + autoDisc + manualDisc;
   const pvpTotal = Number(r.pvpTotalCents ?? 0);
   const finalTotal = Number(r.finalTotalCents ?? r.totalPriceCents ?? Math.max(0, pvpTotal - totalDiscount));
   const paidDepositCents = Number(r.paidDepositCents ?? 0);

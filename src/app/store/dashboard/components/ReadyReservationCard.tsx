@@ -119,9 +119,10 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
   const pendingService = Number(r.pendingServiceCents ?? 0);
   const pendingDeposit = Number(r.pendingDepositCents ?? 0);
   const pendingTotal = pendingService + pendingDeposit;
+  const customerDisc = Number(r.customerDiscountCents ?? 0);
   const autoDisc = Number(r.autoDiscountCents ?? 0);
   const manualDisc = Number(r.manualDiscountCents ?? 0);
-  const totalDiscount = autoDisc + manualDisc;
+  const totalDiscount = customerDisc + autoDisc + manualDisc;
   const pvpTotal = Number(r.pvpTotalCents ?? 0);
   const finalTotal = Number(r.finalTotalCents ?? r.totalPriceCents ?? Math.max(0, pvpTotal - totalDiscount));
   const depositHeld = r.depositHeld === true;
