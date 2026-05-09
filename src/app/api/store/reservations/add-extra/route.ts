@@ -6,7 +6,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 import {
-  getAppliedCommissionPctTx,
+  getAppliedCommercialSnapshotTx,
   resolveCustomerDiscountSnapshot,
   resolveDiscountPolicy,
 } from "@/lib/commission";
@@ -212,9 +212,12 @@ export async function POST(req: Request) {
         discountResponsibility: discountPolicy.discountResponsibility,
         promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
       });
-      const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+      const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
         channelId: reservation.channelId,
         serviceId: reservation.serviceId,
+        commissionBaseCents: commercial.commissionBaseCents,
+        customerDiscountBaseCents: newTotal,
+        quantity: reservation.quantity,
       });
 
       await tx.reservation.update({
@@ -222,7 +225,10 @@ export async function POST(req: Request) {
         data: {
           basePriceCents: serviceSubtotal,
           commissionBaseCents: commercial.commissionBaseCents,
-          appliedCommissionPct,
+          appliedCommissionPct: commercialSnapshot.appliedCommissionPct,
+          appliedCommissionMode: commercialSnapshot.appliedCommissionMode,
+          appliedCommissionValue: commercialSnapshot.appliedCommissionValue,
+          appliedCommissionCents: commercialSnapshot.appliedCommissionCents,
           customerDiscountMode: customerDiscountSnapshot.customerDiscountMode,
           customerDiscountValue: customerDiscountSnapshot.customerDiscountValue,
           customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,

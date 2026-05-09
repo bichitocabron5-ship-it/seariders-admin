@@ -7,7 +7,7 @@ import { cookies } from "next/headers";
 import { ReservationStatus } from "@prisma/client";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 import {
-  getAppliedCommissionPctTx,
+  getAppliedCommercialSnapshotTx,
   resolveCustomerDiscountSnapshot,
   resolveDiscountPolicy,
 } from "@/lib/commission";
@@ -162,9 +162,13 @@ export async function POST(req: Request) {
         discountResponsibility: discountPolicy.discountResponsibility,
         promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
       });
-      const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+      const mainServiceId = items.find((item) => !item.isExtra)?.serviceId ?? null;
+      const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
         channelId: r.channelId,
-        serviceId: items.find((item) => !item.isExtra)?.serviceId ?? null,
+        serviceId: mainServiceId,
+        commissionBaseCents: commercial.commissionBaseCents,
+        customerDiscountBaseCents: newTotal,
+        quantity: r.quantity,
       });
 
       const updated = await tx.reservation.update({
@@ -172,7 +176,10 @@ export async function POST(req: Request) {
         data: {
           basePriceCents: serviceSubtotal,
           commissionBaseCents: commercial.commissionBaseCents,
-          appliedCommissionPct,
+          appliedCommissionPct: commercialSnapshot.appliedCommissionPct,
+          appliedCommissionMode: commercialSnapshot.appliedCommissionMode,
+          appliedCommissionValue: commercialSnapshot.appliedCommissionValue,
+          appliedCommissionCents: commercialSnapshot.appliedCommissionCents,
           customerDiscountMode: customerDiscountSnapshot.customerDiscountMode,
           customerDiscountValue: customerDiscountSnapshot.customerDiscountValue,
           customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,

@@ -13,7 +13,7 @@ import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/bo
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
 import {
-  getAppliedCommissionPctTx,
+  getAppliedCommercialSnapshotTx,
   resolveCustomerDiscountSnapshot,
   resolveDiscountPolicy,
 } from "@/lib/commission";
@@ -710,9 +710,12 @@ if (hasProItems) {
     const depositCents = depositPerUnit * jetskiUnits;
 
     // Compat main: primer item
-    const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+    const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
       channelId: b.channelId ?? null,
       serviceId: main.serviceId,
+      commissionBaseCents: commercial.commissionBaseCents,
+      customerDiscountBaseCents: totalBeforeDiscounts,
+      quantity: totalMainQuantity,
     });
 
     const data: Prisma.ReservationUncheckedUpdateInput = {
@@ -732,7 +735,10 @@ if (hasProItems) {
 
       basePriceCents: serviceSubtotal,
       commissionBaseCents: commercial.commissionBaseCents,
-      appliedCommissionPct,
+      appliedCommissionPct: commercialSnapshot.appliedCommissionPct,
+      appliedCommissionMode: commercialSnapshot.appliedCommissionMode,
+      appliedCommissionValue: commercialSnapshot.appliedCommissionValue,
+      appliedCommissionCents: commercialSnapshot.appliedCommissionCents,
       customerDiscountMode: customerDiscountSnapshot.customerDiscountMode,
       customerDiscountValue: customerDiscountSnapshot.customerDiscountValue,
       customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
@@ -1098,9 +1104,12 @@ if (hasProItems) {
       discountResponsibility: discountPolicy.discountResponsibility,
       promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
     });
-    const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+    const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
       channelId: b.channelId ?? existing.channelId ?? null,
       serviceId: svc.id,
+      commissionBaseCents: commercial.commissionBaseCents,
+      customerDiscountBaseCents: totalBeforeDiscounts,
+      quantity: Number(b.quantity),
     });
 
     await tx.reservation.update({
@@ -1108,7 +1117,10 @@ if (hasProItems) {
       data: {
         basePriceCents: serviceSubtotal,
         commissionBaseCents: commercial.commissionBaseCents,
-        appliedCommissionPct,
+        appliedCommissionPct: commercialSnapshot.appliedCommissionPct,
+        appliedCommissionMode: commercialSnapshot.appliedCommissionMode,
+        appliedCommissionValue: commercialSnapshot.appliedCommissionValue,
+        appliedCommissionCents: commercialSnapshot.appliedCommissionCents,
         customerDiscountMode: customerDiscountSnapshot.customerDiscountMode,
         customerDiscountValue: customerDiscountSnapshot.customerDiscountValue,
         customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,

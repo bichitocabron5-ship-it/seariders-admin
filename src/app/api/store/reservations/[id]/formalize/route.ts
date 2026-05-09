@@ -14,7 +14,7 @@ import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/bo
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
 import {
-  getAppliedCommissionPctTx,
+  getAppliedCommercialSnapshotTx,
   resolveCustomerDiscountSnapshot,
   resolveDiscountPolicy,
 } from "@/lib/commission";
@@ -627,9 +627,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: line.quantity,
         })),
       });
-      const appliedCommissionPct = await getAppliedCommissionPctTx(tx, {
+      const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
         channelId: effectiveChannelId,
         serviceId: mainLine.serviceId,
+        commissionBaseCents: commercial.commissionBaseCents,
+        customerDiscountBaseCents: totalBeforeDiscounts,
+        quantity: totalMainQuantity,
       });
 
       await tx.reservation.update({
@@ -662,7 +665,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           scheduledTime,
           basePriceCents: serviceSubtotal,
           commissionBaseCents: commercial.commissionBaseCents,
-          appliedCommissionPct,
+          appliedCommissionPct: commercialSnapshot.appliedCommissionPct,
+          appliedCommissionMode: commercialSnapshot.appliedCommissionMode,
+          appliedCommissionValue: commercialSnapshot.appliedCommissionValue,
+          appliedCommissionCents: commercialSnapshot.appliedCommissionCents,
           customerDiscountMode: customerDiscountSnapshot.customerDiscountMode,
           customerDiscountValue: customerDiscountSnapshot.customerDiscountValue,
           customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
