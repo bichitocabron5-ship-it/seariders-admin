@@ -416,13 +416,20 @@ const commissionPct = useMemo(() => {
 }, [commissionServiceId, selectedChannel]);
 
 const commissionBreakdown = useMemo(
-  () =>
-    computeCommissionableBase({
+  () => {
+    const baseBreakdown = computeCommissionableBase({
       grossBaseCents: baseTotalCents,
-      totalDiscountCents: discountCentsClamped,
+      totalDiscountCents: 0,
       responsibility: discountResponsibility,
       promoterDiscountShareBps: Math.round(Number(promoterDiscountSharePct || "0") * 100),
-    }),
+    });
+    return {
+      ...baseBreakdown,
+      discountCents: discountCentsClamped,
+      commissionBaseCents: Math.max(0, baseBreakdown.commissionBaseCents - discountCentsClamped),
+      companyDiscountCents: baseBreakdown.companyDiscountCents + discountCentsClamped,
+    };
+  },
   [baseTotalCents, discountCentsClamped, discountResponsibility, promoterDiscountSharePct]
 );
 

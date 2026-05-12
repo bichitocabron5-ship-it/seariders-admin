@@ -68,10 +68,11 @@ export async function computeReservationCommercialBreakdown(
     }
   }
 
-  const totalDiscountCents = customerDiscountCents + autoDiscountCents + manualDiscountCents;
+  const nonManualDiscountCents = customerDiscountCents + autoDiscountCents;
+  const totalDiscountCents = nonManualDiscountCents + manualDiscountCents;
   const commissionBreakdown = computeCommissionableBase({
     grossBaseCents: totalBeforeDiscountsCents,
-    totalDiscountCents,
+    totalDiscountCents: nonManualDiscountCents,
     responsibility: args.discountResponsibility,
     promoterDiscountShareBps: args.promoterDiscountShareBps ?? null,
   });
@@ -93,5 +94,8 @@ export async function computeReservationCommercialBreakdown(
     finalTotalCents: Math.max(0, totalBeforeDiscountsCents - totalDiscountCents),
     promoCode: args.promotionsEnabled && uniquePromoCodes.length === 1 ? uniquePromoCodes[0] : null,
     ...commissionBreakdown,
+    discountCents: totalDiscountCents,
+    commissionBaseCents: Math.max(0, commissionBreakdown.commissionBaseCents - manualDiscountCents),
+    companyDiscountCents: commissionBreakdown.companyDiscountCents + manualDiscountCents,
   };
 }
