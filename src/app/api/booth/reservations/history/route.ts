@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { type AppSession, sessionOptions } from "@/lib/session";
 import { BUSINESS_TZ, tzLocalToUtcDate, utcDateFromYmdInTz } from "@/lib/tz-business";
+import { resolveCommissionForReporting } from "@/lib/commission-reporting";
 
 export const runtime = "nodejs";
 
@@ -91,12 +92,36 @@ export async function GET(req: Request) {
             customerCountry: true,
             quantity: true,
             pax: true,
+            serviceId: true,
             totalPriceCents: true,
             commissionBaseCents: true,
+            appliedCommissionMode: true,
+            appliedCommissionValue: true,
             appliedCommissionPct: true,
             appliedCommissionCents: true,
             customerDiscountCents: true,
-            channel: { select: { name: true } },
+            channel: {
+              select: {
+                name: true,
+                kind: true,
+                commissionEnabled: true,
+                commissionBps: true,
+                commissionPct: true,
+                promoterCommissionMode: true,
+                promoterCommissionValue: true,
+                promoterCommissionCents: true,
+                commissionRules: {
+                  where: { isActive: true },
+                  select: {
+                    serviceId: true,
+                    commissionPct: true,
+                    promoterCommissionMode: true,
+                    promoterCommissionValue: true,
+                    promoterCommissionCents: true,
+                  },
+                },
+              },
+            },
             service: { select: { name: true, category: true } },
             option: { select: { durationMinutes: true } },
             payments: {
@@ -152,8 +177,11 @@ export async function GET(req: Request) {
             id: true,
             createdAt: true,
             customerName: true,
+            serviceId: true,
             amountCents: true,
             commissionBaseCents: true,
+            appliedCommissionMode: true,
+            appliedCommissionValue: true,
             appliedCommissionPct: true,
             appliedCommissionCents: true,
             customerDiscountCents: true,
@@ -172,12 +200,47 @@ export async function GET(req: Request) {
               orderBy: { createdAt: "asc" },
             },
             service: { select: { name: true, category: true } },
-            channel: { select: { name: true } },
+            channel: {
+              select: {
+                name: true,
+                kind: true,
+                commissionEnabled: true,
+                commissionBps: true,
+                commissionPct: true,
+                promoterCommissionMode: true,
+                promoterCommissionValue: true,
+                promoterCommissionCents: true,
+                commissionRules: {
+                  where: { isActive: true },
+                  select: {
+                    serviceId: true,
+                    commissionPct: true,
+                    promoterCommissionMode: true,
+                    promoterCommissionValue: true,
+                    promoterCommissionCents: true,
+                  },
+                },
+              },
+            },
           },
         })
       : [];
 
   const reservationRows = reservationRowsDb.map((reservation) => {
+    const resolvedCommission = resolveCommissionForReporting({
+      commissionBaseCents: reservation.commissionBaseCents,
+      appliedCommissionMode: reservation.appliedCommissionMode,
+      appliedCommissionValue: reservation.appliedCommissionValue,
+      appliedCommissionPct: reservation.appliedCommissionPct,
+      appliedCommissionCents: reservation.appliedCommissionCents,
+      legacyBaseCents:
+        Number(reservation.commissionBaseCents ?? 0) > 0
+          ? Number(reservation.commissionBaseCents ?? 0)
+          : Number(reservation.totalPriceCents ?? 0),
+      channel: reservation.channel,
+      serviceId: reservation.serviceId,
+      quantity: reservation.quantity,
+    });
     const servicePaidCents = reservation.payments
       .filter((payment) => payment.origin === "BOOTH" && !payment.isDeposit)
       .reduce((sum, payment) => {
@@ -222,10 +285,10 @@ export async function GET(req: Request) {
       paymentMethod: null,
       grossExternalAmountCents: null,
       effectiveCommissionPct:
-        reservation.appliedCommissionPct != null
-          ? Number(Number(reservation.appliedCommissionPct).toFixed(2))
+        resolvedCommission.appliedCommissionPct != null
+          ? Number(resolvedCommission.appliedCommissionPct.toFixed(2))
           : null,
-      commissionAmountCents: Number(reservation.appliedCommissionCents ?? 0),
+      commissionAmountCents: resolvedCommission.appliedCommissionCents,
       customerDiscountCents: Number(reservation.customerDiscountCents ?? 0),
       canCancel: false,
     };
@@ -241,6 +304,21 @@ export async function GET(req: Request) {
     const signedAmount = originalAmount + reversalNet;
     const grossExternalAmountCents = Number(payment.externalGrossAmountCents ?? 0) || null;
     const lastPaymentAt = payment.reversals[payment.reversals.length - 1]?.createdAt ?? payment.createdAt;
+    const resolvedCommission = payment.isExternalCommissionOnly
+      ? null
+      : resolveCommissionForReporting({
+          commissionBaseCents: payment.commissionBaseCents,
+          appliedCommissionMode: payment.appliedCommissionMode,
+          appliedCommissionValue: payment.appliedCommissionValue,
+          appliedCommissionPct: payment.appliedCommissionPct,
+          appliedCommissionCents: payment.appliedCommissionCents,
+          legacyBaseCents:
+            Number(payment.commissionBaseCents ?? 0) > 0
+              ? Number(payment.commissionBaseCents ?? 0)
+              : Math.max(0, signedAmount),
+          channel: payment.channel,
+          serviceId: payment.serviceId,
+        });
 
     return {
       id: payment.id,
@@ -269,10 +347,12 @@ export async function GET(req: Request) {
       paymentMethod: payment.method,
       grossExternalAmountCents,
       effectiveCommissionPct:
-        payment.appliedCommissionPct != null
-          ? Number(Number(payment.appliedCommissionPct).toFixed(2))
+        resolvedCommission?.appliedCommissionPct != null
+          ? Number(resolvedCommission.appliedCommissionPct.toFixed(2))
           : null,
-      commissionAmountCents: Number(payment.appliedCommissionCents ?? 0),
+      commissionAmountCents: payment.isExternalCommissionOnly
+        ? Math.max(0, signedAmount)
+        : resolvedCommission?.appliedCommissionCents ?? 0,
       customerDiscountCents: Number(payment.customerDiscountCents ?? 0),
       canCancel: signedAmount > 0,
     };

@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { ReservationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { clampCommissionPct, commissionFromBase, resolveAppliedCommissionPct } from "@/lib/commission";
+import { resolveCommissionForReporting } from "@/lib/commission-reporting";
 import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 import { requireApiRole } from "@/lib/auth";
 
@@ -33,6 +33,8 @@ export async function GET() {
         channelId: true,
         serviceId: true,
         commissionBaseCents: true,
+        appliedCommissionMode: true,
+        appliedCommissionValue: true,
         appliedCommissionPct: true,
         appliedCommissionCents: true,
         totalPriceCents: true,
@@ -44,22 +46,23 @@ export async function GET() {
             commissionEnabled: true,
             commissionBps: true, // fallback
             commissionPct: true,
+            promoterCommissionMode: true,
+            promoterCommissionValue: true,
+            promoterCommissionCents: true,
             commissionRules: {
               where: { isActive: true },
-              select: { serviceId: true, commissionPct: true },
+              select: {
+                serviceId: true,
+                commissionPct: true,
+                promoterCommissionMode: true,
+                promoterCommissionValue: true,
+                promoterCommissionCents: true,
+              },
             },
           },
         },
       },
     });
-
-    const channelIds = Array.from(
-      new Set(reservations.map((r) => r.channelId).filter(Boolean) as string[])
-    );
-
-    const serviceIds = Array.from(
-      new Set(reservations.map((r) => r.serviceId).filter(Boolean) as string[])
-    );
 
     const externalPayments = await prisma.payment.findMany({
       where: {
@@ -73,6 +76,8 @@ export async function GET() {
       select: {
         amountCents: true,
         commissionBaseCents: true,
+        appliedCommissionMode: true,
+        appliedCommissionValue: true,
         appliedCommissionPct: true,
         appliedCommissionCents: true,
         direction: true,
@@ -94,40 +99,28 @@ export async function GET() {
             commissionEnabled: true,
             commissionBps: true,
             commissionPct: true,
+            promoterCommissionMode: true,
+            promoterCommissionValue: true,
+            promoterCommissionCents: true,
             commissionRules: {
               where: { isActive: true },
-              select: { serviceId: true, commissionPct: true },
+              select: {
+                serviceId: true,
+                commissionPct: true,
+                promoterCommissionMode: true,
+                promoterCommissionValue: true,
+                promoterCommissionCents: true,
+              },
             },
           },
         },
       },
     });
 
-    for (const payment of externalPayments) {
-      if (payment.channelId) channelIds.push(payment.channelId);
-      if (payment.serviceId) serviceIds.push(payment.serviceId);
-    }
-
-    if (channelIds.length === 0 || serviceIds.length === 0) {
+    if (reservations.length === 0 && externalPayments.length === 0) {
       return NextResponse.json({ count: 0, totalCommissionCents: 0, byChannel: {}, byOrigin: {} });
     }
 
-    // 2) Reglas específicas channel+service
-    const rules = await prisma.channelCommissionRule.findMany({
-      where: {
-        isActive: true,
-        channelId: { in: channelIds },
-        serviceId: { in: serviceIds },
-      },
-      select: { channelId: true, serviceId: true, commissionPct: true },
-    });
-
-    const ruleMap = new Map<string, number>();
-    for (const r of rules) {
-      ruleMap.set(`${r.channelId}:${r.serviceId}`, clampCommissionPct(r.commissionPct));
-    }
-
-    // 3) Calcular comisiones
     let count = 0;
     let totalCommissionCents = 0;
     const byChannel: Record<string, number> = {};
@@ -149,35 +142,26 @@ export async function GET() {
     for (const r of reservations) {
       const ch = r.channel;
       if (!ch || !ch.commissionEnabled) continue;
-
-      const base =
-        Number(r.commissionBaseCents ?? 0) > 0
-          ? Number(r.commissionBaseCents ?? 0)
-          : Number(r.totalPriceCents ?? 0);
-      if (base <= 0) continue; // evita "comisiones" sin base
-
-      const key = `${ch.id}:${r.serviceId}`;
-      const rulePct = ruleMap.get(key); // 0..100
-      const appliedPct =
-        r.appliedCommissionPct != null
-          ? Number(r.appliedCommissionPct)
-          : resolveAppliedCommissionPct({
-              channel: ch,
-              serviceId: r.serviceId,
-              rulePct: rulePct ?? null,
-            });
-      if (appliedPct == null) continue;
-
-      const commission =
-        Number(r.appliedCommissionCents ?? 0) > 0
-          ? Number(r.appliedCommissionCents ?? 0)
-          : commissionFromBase(base, appliedPct / 100);
+      const resolvedCommission = resolveCommissionForReporting({
+        commissionBaseCents: r.commissionBaseCents,
+        appliedCommissionMode: r.appliedCommissionMode,
+        appliedCommissionValue: r.appliedCommissionValue,
+        appliedCommissionPct: r.appliedCommissionPct,
+        appliedCommissionCents: r.appliedCommissionCents,
+        legacyBaseCents:
+          Number(r.commissionBaseCents ?? 0) > 0
+            ? Number(r.commissionBaseCents ?? 0)
+            : Number(r.totalPriceCents ?? 0),
+        channel: ch,
+        serviceId: r.serviceId,
+      });
+      const commission = resolvedCommission.appliedCommissionCents;
       if (commission <= 0) continue;
 
       count++;
       addCommission("STORE", ch.name, commission);
 
-      // debug.push({ reservationId: r.id, channel: ch.name, base, appliedPct, commission, hasRule: rulePct != null });
+      // debug.push({ reservationId: r.id, channel: ch.name, commission, source: resolvedCommission.source });
     }
 
     for (const payment of externalPayments) {
@@ -200,25 +184,20 @@ export async function GET() {
         continue;
       }
 
-      const base = Number(payment.commissionBaseCents ?? 0) > 0 ? Number(payment.commissionBaseCents ?? 0) : signedAmount;
-      if (base <= 0) continue;
-
-      const key = `${ch.id}:${payment.serviceId}`;
-      const rulePct = ruleMap.get(key);
-      const appliedPct =
-        payment.appliedCommissionPct != null
-          ? Number(payment.appliedCommissionPct)
-          : resolveAppliedCommissionPct({
-              channel: ch,
-              serviceId: payment.serviceId,
-              rulePct: rulePct ?? null,
-            });
-      if (appliedPct == null) continue;
-
-      const commission =
-        Number(payment.appliedCommissionCents ?? 0) > 0
-          ? Number(payment.appliedCommissionCents ?? 0)
-          : commissionFromBase(base, appliedPct / 100);
+      const resolvedCommission = resolveCommissionForReporting({
+        commissionBaseCents: payment.commissionBaseCents,
+        appliedCommissionMode: payment.appliedCommissionMode,
+        appliedCommissionValue: payment.appliedCommissionValue,
+        appliedCommissionPct: payment.appliedCommissionPct,
+        appliedCommissionCents: payment.appliedCommissionCents,
+        legacyBaseCents:
+          Number(payment.commissionBaseCents ?? 0) > 0
+            ? Number(payment.commissionBaseCents ?? 0)
+            : signedAmount,
+        channel: ch,
+        serviceId: payment.serviceId,
+      });
+      const commission = resolvedCommission.appliedCommissionCents;
       if (commission <= 0) continue;
 
       count++;

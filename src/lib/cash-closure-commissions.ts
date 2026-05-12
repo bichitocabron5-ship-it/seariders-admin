@@ -3,9 +3,9 @@ import { PaymentOrigin } from "@prisma/client";
 import {
   commissionFromBase,
   proportionalCommissionBaseForCollected,
-  resolveCommissionRate,
   roundCents,
 } from "@/lib/commission";
+import { resolveCommissionForReporting } from "@/lib/commission-reporting";
 import { prisma } from "@/lib/prisma";
 
 function signed(amountCents: number, direction: string) {
@@ -30,6 +30,10 @@ export async function getCashClosureCommissionSummary(args: {
       channelId: true,
       amountCents: true,
       commissionBaseCents: true,
+      appliedCommissionMode: true,
+      appliedCommissionValue: true,
+      appliedCommissionPct: true,
+      appliedCommissionCents: true,
       isExternalCommissionOnly: true,
       externalGrossAmountCents: true,
       direction: true,
@@ -43,9 +47,18 @@ export async function getCashClosureCommissionSummary(args: {
           commissionAppliesToDeposit: true,
           commissionBps: true,
           commissionPct: true,
+          promoterCommissionMode: true,
+          promoterCommissionValue: true,
+          promoterCommissionCents: true,
           commissionRules: {
             where: { isActive: true },
-            select: { serviceId: true, commissionPct: true },
+            select: {
+              serviceId: true,
+              commissionPct: true,
+              promoterCommissionMode: true,
+              promoterCommissionValue: true,
+              promoterCommissionCents: true,
+            },
           },
         },
       },
@@ -75,9 +88,18 @@ export async function getCashClosureCommissionSummary(args: {
           commissionAppliesToDeposit: true,
           commissionBps: true,
           commissionPct: true,
+          promoterCommissionMode: true,
+          promoterCommissionValue: true,
+          promoterCommissionCents: true,
           commissionRules: {
             where: { isActive: true },
-            select: { serviceId: true, commissionPct: true },
+            select: {
+              serviceId: true,
+              commissionPct: true,
+              promoterCommissionMode: true,
+              promoterCommissionValue: true,
+              promoterCommissionCents: true,
+            },
           },
         },
       },
@@ -161,8 +183,23 @@ export async function getCashClosureCommissionSummary(args: {
         : rawNetService;
     const baseDeposit = netDepositByRes.get(r.id) ?? 0;
     const baseTotal = baseService + (ch.commissionAppliesToDeposit ? baseDeposit : 0);
+    const resolvedCommission = resolveCommissionForReporting({
+      commissionBaseCents: r.commissionBaseCents,
+      appliedCommissionMode: r.appliedCommissionMode,
+      appliedCommissionValue: r.appliedCommissionValue,
+      appliedCommissionPct: r.appliedCommissionPct,
+      appliedCommissionCents: r.appliedCommissionCents,
+      legacyBaseCents:
+        Number(r.commissionBaseCents ?? 0) > 0
+          ? Number(r.commissionBaseCents ?? 0)
+          : Number(r.totalPriceCents ?? 0),
+      channel: ch,
+      serviceId: r.serviceId,
+    });
     const storedFixedCommissionCents =
-      r.appliedCommissionMode === "FIXED" ? Math.max(0, Number(r.appliedCommissionCents ?? 0)) : 0;
+      resolvedCommission.appliedCommissionMode === "FIXED"
+        ? Math.max(0, Number(resolvedCommission.appliedCommissionCents ?? 0))
+        : 0;
 
     let commissionCents = 0;
     if (storedFixedCommissionCents > 0) {
@@ -171,14 +208,7 @@ export async function getCashClosureCommissionSummary(args: {
           (storedFixedCommissionCents / Math.max(1, Number(r.totalPriceCents ?? 0)))
       );
     } else {
-      const storedPct = Number(r.appliedCommissionPct ?? 0);
-      const rate =
-        storedPct > 0
-          ? storedPct / 100
-          : resolveCommissionRate({
-              channel: ch,
-              serviceId: r.serviceId,
-            });
+      const rate = Math.max(0, Number(resolvedCommission.appliedCommissionPct ?? 0)) / 100;
       if (!rate || !baseTotal) continue;
       commissionCents = commissionFromBase(baseTotal, rate);
     }
@@ -215,13 +245,23 @@ export async function getCashClosureCommissionSummary(args: {
     const baseTotal = p.isDeposit && !ch.commissionAppliesToDeposit ? 0 : signed(p.commissionBaseCents ?? p.amountCents, p.direction);
     if (!baseTotal) continue;
 
-    const c = commissionFromBase(
-      baseTotal,
-      resolveCommissionRate({
-        channel: ch,
-        serviceId: p.serviceId,
-      })
-    );
+    const resolvedCommission = resolveCommissionForReporting({
+      commissionBaseCents: p.commissionBaseCents,
+      appliedCommissionMode: p.appliedCommissionMode,
+      appliedCommissionValue: p.appliedCommissionValue,
+      appliedCommissionPct: p.appliedCommissionPct,
+      appliedCommissionCents: p.appliedCommissionCents,
+      legacyBaseCents: Math.abs(baseTotal),
+      channel: ch,
+      serviceId: p.serviceId,
+    });
+    const c =
+      resolvedCommission.appliedCommissionMode === "FIXED"
+        ? Math.max(0, signed(resolvedCommission.appliedCommissionCents, p.direction))
+        : commissionFromBase(
+            baseTotal,
+            Math.max(0, Number(resolvedCommission.appliedCommissionPct ?? 0)) / 100
+          );
     if (!c) continue;
 
     accumulateCommission(row, c);

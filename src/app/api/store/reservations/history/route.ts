@@ -14,6 +14,7 @@ import { buildStoreHistoryWhere } from "@/lib/store-reservation-visibility";
 import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
 import { deriveStoreHistoryMeta, storeHistoryReasonLabel } from "@/lib/store-history";
 import { buildReservationJetskiAssignments } from "@/lib/jetski-assignment-history";
+import { resolveCommissionForReporting } from "@/lib/commission-reporting";
 
 export const runtime = "nodejs";
 
@@ -130,6 +131,7 @@ export async function GET(req: Request) {
       quantity: true,
       pax: true,
       isLicense: true,
+      serviceId: true,
       totalPriceCents: true,
       commissionBaseCents: true,
       appliedCommissionPct: true,
@@ -155,7 +157,28 @@ export async function GET(req: Request) {
           driverName: true,
         },
       },
-      channel: { select: { name: true } },
+      channel: {
+        select: {
+          name: true,
+          kind: true,
+          commissionEnabled: true,
+          commissionBps: true,
+          commissionPct: true,
+          promoterCommissionMode: true,
+          promoterCommissionValue: true,
+          promoterCommissionCents: true,
+          commissionRules: {
+            where: { isActive: true },
+            select: {
+              serviceId: true,
+              commissionPct: true,
+              promoterCommissionMode: true,
+              promoterCommissionValue: true,
+              promoterCommissionCents: true,
+            },
+          },
+        },
+      },
       service: { select: { name: true, category: true } },
       option: { select: { durationMinutes: true } },
       parentReservation: {
@@ -332,19 +355,26 @@ export async function GET(req: Request) {
       arrivalAt: reservation.arrivalAt,
       createdAt: reservation.createdAt,
     });
-    const appliedCommissionPct =
-      reservation.appliedCommissionPct != null
-        ? Number(reservation.appliedCommissionPct)
-        : null;
-    const appliedCommissionMode = reservation.appliedCommissionMode ?? "PERCENT";
-    const appliedCommissionBaseCents =
-      Number(reservation.commissionBaseCents ?? 0) > 0
-        ? Number(reservation.commissionBaseCents ?? 0)
-        : Number(reservation.totalPriceCents ?? 0);
-    const commissionAmountCents = Number(reservation.appliedCommissionCents ?? 0) > 0
-      ? Number(reservation.appliedCommissionCents ?? 0)
-      : appliedCommissionPct != null && appliedCommissionBaseCents > 0
-        ? Math.round(appliedCommissionBaseCents * (appliedCommissionPct / 100))
+    const resolvedCommission = resolveCommissionForReporting({
+      commissionBaseCents: reservation.commissionBaseCents,
+      appliedCommissionMode: reservation.appliedCommissionMode,
+      appliedCommissionValue: reservation.appliedCommissionValue,
+      appliedCommissionPct: reservation.appliedCommissionPct,
+      appliedCommissionCents: reservation.appliedCommissionCents,
+      legacyBaseCents:
+        Number(reservation.commissionBaseCents ?? 0) > 0
+          ? Number(reservation.commissionBaseCents ?? 0)
+          : Number(reservation.totalPriceCents ?? 0),
+      channel: reservation.channel,
+      serviceId: reservation.serviceId,
+      quantity: reservation.quantity,
+    });
+    const appliedCommissionPct = resolvedCommission.appliedCommissionPct;
+    const appliedCommissionMode = resolvedCommission.appliedCommissionMode;
+    const appliedCommissionBaseCents = resolvedCommission.commissionBaseCents;
+    const commissionAmountCents =
+      resolvedCommission.appliedCommissionCents > 0
+        ? resolvedCommission.appliedCommissionCents
         : null;
     const jetskiAssignments = buildReservationJetskiAssignments({
       reservationId: reservation.id,
