@@ -58,6 +58,39 @@ type InternalUsageResponse = {
   };
 };
 
+type AemetDay = {
+  fecha: string;
+  cielo: {
+    manana: string | null;
+    tarde: string | null;
+  };
+  viento: {
+    manana: string | null;
+    tarde: string | null;
+  };
+  oleaje: {
+    manana: string | null;
+    tarde: string | null;
+  };
+  temperaturaMaxima: number | null;
+  temperaturaAgua: number | null;
+  uv: number | null;
+};
+
+type AemetResponse = {
+  ok: boolean;
+  data: {
+    fuente: string;
+    fuenteUrl: string;
+    playa: string;
+    elaborado: string | null;
+    dias: AemetDay[];
+  } | null;
+  stale: boolean;
+  cachedAt: string | null;
+  error: string | null;
+};
+
 const EMPTY_SUMMARY: InternalUsageResponse["summary"] = {
   total: 0,
   linkedEmployees: 0,
@@ -76,6 +109,33 @@ function dt(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function shortDt(value: string | null | undefined) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function dayLabel(value: string) {
+  if (!/^\d{8}$/.test(value)) return value;
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(4, 6)) - 1;
+  const day = Number(value.slice(6, 8));
+  return new Date(year, month, day).toLocaleDateString("es-ES", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
+function textOrDash(value: string | number | null | undefined, suffix = "") {
+  if (value === null || value === undefined || value === "") return "-";
+  return `${value}${suffix}`;
 }
 
 function statusLabel(status: string) {
@@ -101,6 +161,9 @@ export default function AdminOperationsPage() {
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [weather, setWeather] = useState<AemetResponse | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [weatherRefreshing, setWeatherRefreshing] = useState(false);
 
   const [q, setQ] = useState("");
   const [employeeId, setEmployeeId] = useState("");
@@ -118,6 +181,34 @@ export default function AdminOperationsPage() {
     p.set("take", "150");
     return p.toString();
   }, [q, employeeId, status, dateFrom, dateTo]);
+
+  const loadWeather = useCallback(async (forceRefresh = false) => {
+    if (forceRefresh) {
+      setWeatherRefreshing(true);
+    } else {
+      setWeatherLoading(true);
+    }
+
+    try {
+      const res = await fetch(`/api/weather/aemet${forceRefresh ? "?refresh=1" : ""}`, {
+        cache: "no-store",
+        method: forceRefresh ? "POST" : "GET",
+      });
+      const json = (await res.json()) as AemetResponse;
+      setWeather(json);
+    } catch (e: unknown) {
+      setWeather({
+        ok: false,
+        data: null,
+        stale: true,
+        cachedAt: null,
+        error: e instanceof Error ? e.message : "No se pudo cargar la previsión AEMET.",
+      });
+    } finally {
+      setWeatherLoading(false);
+      setWeatherRefreshing(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -144,6 +235,10 @@ export default function AdminOperationsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadWeather();
+  }, [loadWeather]);
 
   return (
     <div style={pageStyle}>
@@ -172,6 +267,52 @@ export default function AdminOperationsPage() {
         <MetricCard title="En mar" value={summary.inSea} />
         <MetricCard title="Completadas" value={summary.completed} />
         <MetricCard title="Minutos trazados" value={summary.totalMinutes} />
+      </section>
+
+      <section style={panelStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={sectionEyebrowStyle}>Fuente: AEMET</div>
+            <h2 style={sectionTitleStyle}>Previsión AEMET Playa del Centre</h2>
+            <div style={metaStyle}>
+              {weather?.data?.playa ? `${weather.data.playa} · ` : ""}Elaborado {shortDt(weather?.data?.elaborado)}
+              {weather?.cachedAt ? ` · Cache ${shortDt(weather.cachedAt)}` : ""}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {weather?.stale ? <span style={warningPill}>Último dato disponible</span> : null}
+            <a href={weather?.data?.fuenteUrl ?? "https://www.aemet.es/es/eltiempo/prediccion/playas/del-centre-0801502"} target="_blank" rel="noreferrer" style={ghostBtn}>Ver fuente</a>
+            <button type="button" onClick={() => void loadWeather(true)} style={darkBtn} disabled={weatherRefreshing}>
+              {weatherRefreshing ? "Actualizando..." : "Actualizar ahora"}
+            </button>
+          </div>
+        </div>
+
+        {weather?.error ? <div style={weather.stale ? warningStyle : errorStyle}>{weather.error}</div> : null}
+        {weatherLoading ? <div style={{ color: "#64748b" }}>Cargando previsión AEMET...</div> : null}
+        {!weatherLoading && !weather?.data ? (
+          <div style={{ color: "#64748b" }}>Sin previsión disponible ahora mismo.</div>
+        ) : null}
+
+        {weather?.data ? (
+          <div style={weatherGridStyle}>
+            {weather.data.dias.map((day) => (
+              <article key={day.fecha} style={weatherCardStyle}>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <strong style={{ fontSize: 18, color: "#0f172a" }}>{dayLabel(day.fecha)}</strong>
+                  <div style={metaStyle}>Máx {textOrDash(day.temperaturaMaxima, "°C")} · Agua {textOrDash(day.temperaturaAgua, "°C")} · UV {textOrDash(day.uv)}</div>
+                </div>
+
+                <div style={weatherRowsStyle}>
+                  <WeatherRow label="Cielo" manana={day.cielo.manana} tarde={day.cielo.tarde} />
+                  <WeatherRow label="Viento" manana={day.viento.manana} tarde={day.viento.tarde} />
+                  <WeatherRow label="Oleaje" manana={day.oleaje.manana} tarde={day.oleaje.tarde} />
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section style={panelStyle}>
@@ -254,6 +395,16 @@ export default function AdminOperationsPage() {
   );
 }
 
+function WeatherRow({ label, manana, tarde }: { label: string; manana: string | null; tarde: string | null }) {
+  return (
+    <div style={weatherRowStyle}>
+      <div style={{ fontWeight: 800, color: "#334155" }}>{label}</div>
+      <div style={metaStyle}>Mañana: {textOrDash(manana)}</div>
+      <div style={metaStyle}>Tarde: {textOrDash(tarde)}</div>
+    </div>
+  );
+}
+
 function MetricCard({ title, value }: { title: string; value: number }) {
   return (
     <article style={metricCardStyle}>
@@ -328,6 +479,21 @@ const panelStyle: CSSProperties = {
   gap: 14,
 };
 
+const sectionEyebrowStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "#0f766e",
+};
+
+const sectionTitleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 26,
+  fontWeight: 950,
+  color: "#0f172a",
+};
+
 const filtersGrid: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
@@ -400,6 +566,15 @@ const errorStyle: CSSProperties = {
   fontWeight: 700,
 };
 
+const warningStyle: CSSProperties = {
+  borderRadius: 14,
+  border: "1px solid #fde68a",
+  background: "#fffbeb",
+  color: "#92400e",
+  padding: "10px 12px",
+  fontWeight: 700,
+};
+
 const darkBtn: CSSProperties = {
   padding: "10px 14px",
   borderRadius: 14,
@@ -422,4 +597,40 @@ const ghostBtn: CSSProperties = {
 const linkBtn: CSSProperties = {
   ...ghostBtn,
   textAlign: "center",
+};
+
+const warningPill: CSSProperties = {
+  ...pillStyle,
+  background: "#fffbeb",
+  color: "#92400e",
+  border: "1px solid #fde68a",
+};
+
+const weatherGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: 12,
+};
+
+const weatherCardStyle: CSSProperties = {
+  border: "1px solid #dbe4ea",
+  borderRadius: 18,
+  padding: 16,
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+  display: "grid",
+  gap: 12,
+};
+
+const weatherRowsStyle: CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const weatherRowStyle: CSSProperties = {
+  borderRadius: 14,
+  border: "1px solid #e2e8f0",
+  background: "#fff",
+  padding: "10px 12px",
+  display: "grid",
+  gap: 4,
 };
