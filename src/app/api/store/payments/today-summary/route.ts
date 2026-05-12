@@ -1,10 +1,10 @@
 ﻿// src/app/api/store/payments/today-summary/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { BUSINESS_TZ, tzDayRangeUtc, utcDateFromYmdInTz, todayYmdInTz } from "@/lib/tz-business";
 import { PaymentOrigin } from "@prisma/client";
 import { z } from "zod";
 import { requireApiRole } from "@/lib/auth";
+import { getBusinessDayRange } from "@/lib/business-day";
 
 export const runtime = "nodejs";
 
@@ -12,15 +12,6 @@ const Query = z.object({
   origin: z.nativeEnum(PaymentOrigin).optional(),
   date: z.string().min(10).max(10).optional(),
 });
-
-function dayRangeFromYmd(ymd: string) {
-  const start = utcDateFromYmdInTz(BUSINESS_TZ, ymd);
-  const next = new Date(start);
-  next.setUTCDate(next.getUTCDate() + 1);
-  const nextYmd = todayYmdInTz(BUSINESS_TZ, next);
-  const endExclusive = utcDateFromYmdInTz(BUSINESS_TZ, nextYmd);
-  return { start, endExclusive };
-}
 
 export async function GET(req: Request) {
   try {
@@ -39,8 +30,8 @@ export async function GET(req: Request) {
     }
 
     const { start, endExclusive } = parsed.data.date
-      ? dayRangeFromYmd(parsed.data.date)
-      : tzDayRangeUtc(BUSINESS_TZ);
+      ? getBusinessDayRange(parsed.data.date)
+      : getBusinessDayRange();
 
     const payments = await prisma.payment.findMany({
       where: {

@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { cookies } from "next/headers";
-import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 import { ReservationStatus } from "@prisma/client";
+import { getBusinessDayRange } from "@/lib/business-day";
 
 export const runtime = "nodejs";
 
@@ -41,7 +41,7 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
+  const { start, endExclusive } = getBusinessDayRange();
 
   // 1) Traer reservas BOOTH del día + info del viaje
   const rowsDb = await prisma.reservation.findMany({

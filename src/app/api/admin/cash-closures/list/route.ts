@@ -8,6 +8,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { PaymentOrigin, ShiftName } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { getCashClosureCommissionSummary } from "@/lib/cash-closure-commissions";
+import { getBusinessDayRange } from "@/lib/business-day";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,12 +27,6 @@ const Q = z.object({
   includeVoided: z.enum(["0", "1"]).optional(),
   take: z.string().optional(),
 });
-
-function parseBusinessDate(yyyyMmDd: string) {
-  const d = new Date(yyyyMmDd + "T00:00:00.000");
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
 
 export async function GET(req: Request) {
   const session = await requireAdmin();
@@ -52,7 +47,7 @@ export async function GET(req: Request) {
   const where: Prisma.CashClosureWhereInput = {};
   if (parsed.data.origin) where.origin = parsed.data.origin;
   if (parsed.data.shift) where.shift = parsed.data.shift;
-  if (parsed.data.date) where.businessDate = parseBusinessDate(parsed.data.date);
+  if (parsed.data.date) where.businessDate = getBusinessDayRange(parsed.data.date).start;
   if (parsed.data.includeVoided !== "1") where.isVoided = false;
 
   const rows = await prisma.cashClosure.findMany({

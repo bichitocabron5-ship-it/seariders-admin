@@ -2,6 +2,7 @@
 import { PaymentMethod, PaymentOrigin, PaymentDirection, RoleName, ShiftName } from "@prisma/client";
 import { getSlotPolicy } from "@/lib/slotting";
 import { BUSINESS_TZ, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
+import { getBusinessDate, getBusinessDayRange } from "@/lib/business-day";
 
 export const METHODS: PaymentMethod[] = ["CASH", "CARD", "BIZUM", "TRANSFER", "VOUCHER"] as const;
 
@@ -97,9 +98,7 @@ export function normalizeClosureShift(origin: PaymentOrigin, shift: ShiftName): 
 }
 
 function dayStart(businessDate: Date) {
-  const d0 = new Date(businessDate);
-  d0.setHours(0, 0, 0, 0);
-  return d0;
+  return getBusinessDayRange(getBusinessDate(businessDate)).start;
 }
 
 /**
@@ -112,43 +111,29 @@ export function shiftWindow(
   shift: ShiftName
 ): { from: Date; to: Date } {
   const d0 = dayStart(businessDate);
+  const ymd = getBusinessDate(businessDate);
 
   // ✅ Si NO está partido: todo el día, independientemente de MORNING/AFTERNOON
   if (!isOriginSplitByShift(origin)) {
-    const from = new Date(d0);
-    const to = new Date(d0);
-    to.setHours(23, 59, 59, 999);
-    return { from, to };
+    return { from: d0, to: getBusinessDayRange(ymd).endExclusive };
   }
 
   // ✅ BOOTH partido (9–14 / 14–19)
   // Ajusta aquí si cambian horarios
-  const from = new Date(d0);
-  const to = new Date(d0);
+  const from = utcDateTimeFromYmdHmInTz(BUSINESS_TZ, ymd, shift === "MORNING" ? "09:00" : "14:00");
+  const to = utcDateTimeFromYmdHmInTz(BUSINESS_TZ, ymd, shift === "MORNING" ? "14:00" : "19:00");
 
-  if (shift === "MORNING") {
-    from.setHours(9, 0, 0, 0);
-    to.setHours(14, 0, 0, 0);
-  } else {
-    from.setHours(14, 0, 0, 0);
-    to.setHours(19, 0, 0, 0);
-  }
+  if (!from || !to) throw new Error("No se pudo resolver la ventana de turno.");
 
   return { from, to };
 }
 
 export function parseBusinessDate(yyyyMmDd?: string) {
-  const d = yyyyMmDd ? new Date(yyyyMmDd + "T00:00:00.000") : new Date();
-  if (!Number.isFinite(d.getTime())) throw new Error("date inválida");
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return yyyyMmDd ? getBusinessDayRange(yyyyMmDd).start : getBusinessDayRange().start;
 }
 
 function ymdFromBusinessDate(businessDate: Date) {
-  const y = businessDate.getFullYear();
-  const m = String(businessDate.getMonth() + 1).padStart(2, "0");
-  const d = String(businessDate.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return getBusinessDate(businessDate);
 }
 
 export async function getClosureWindow(

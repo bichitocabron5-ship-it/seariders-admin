@@ -4,7 +4,7 @@ import { z } from "zod";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
+import { getBusinessDayRange } from "@/lib/business-day";
 
 export const runtime = "nodejs";
 
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   const { serviceId, optionId, basePriceCents } = parsed.data;
   const validFrom = parsed.data.validFrom
     ? new Date(parsed.data.validFrom)
-    : utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
+    : getBusinessDayRange().start;
 
   // 1) Validar servicio
   const svc = await prisma.service.findUnique({

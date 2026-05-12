@@ -11,10 +11,10 @@ import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 import { getPassVoucherPaidCents, getSignedPaymentCents } from "@/lib/pass-vouchers";
 import { summarizeReservationContracts } from "@/lib/reservation-parties";
 import { buildStoreHistoryWhere } from "@/lib/store-reservation-visibility";
-import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
 import { deriveStoreHistoryMeta, storeHistoryReasonLabel } from "@/lib/store-history";
 import { buildReservationJetskiAssignments } from "@/lib/jetski-assignment-history";
 import { resolveCommissionForReporting } from "@/lib/commission-reporting";
+import { getBusinessDayRange } from "@/lib/business-day";
 
 export const runtime = "nodejs";
 
@@ -55,7 +55,7 @@ export async function GET(req: Request) {
   }
 
   const { q, status, hasIncident, depositHeld, dateFrom, dateTo, take } = parsed.data;
-  const historyStart = utcDateFromYmdInTz(BUSINESS_TZ, todayYmdInTz(BUSINESS_TZ));
+  const historyStart = getBusinessDayRange().start;
   const where: Record<string, unknown> = {
     AND: [buildStoreHistoryWhere({ start: historyStart, endExclusive: historyStart })],
   };
@@ -99,10 +99,12 @@ export async function GET(req: Request) {
   }
 
   if (dateFrom || dateTo) {
+    const fromRange = dateFrom ? getBusinessDayRange(dateFrom) : null;
+    const toRange = dateTo ? getBusinessDayRange(dateTo) : null;
     pushAnd({
       activityDate: {
-        ...(dateFrom ? { gte: new Date(`${dateFrom}T00:00:00.000Z`) } : {}),
-        ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {}),
+        ...(fromRange ? { gte: fromRange.start } : {}),
+        ...(toRange ? { lt: toRange.endExclusive } : {}),
       },
     });
   }
@@ -500,9 +502,11 @@ export async function GET(req: Request) {
   }
 
   if (dateFrom || dateTo) {
+    const fromRange = dateFrom ? getBusinessDayRange(dateFrom) : null;
+    const toRange = dateTo ? getBusinessDayRange(dateTo) : null;
     const soldAt = {
-      ...(dateFrom ? { gte: new Date(`${dateFrom}T00:00:00.000Z`) } : {}),
-      ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {}),
+      ...(fromRange ? { gte: fromRange.start } : {}),
+      ...(toRange ? { lt: toRange.endExclusive } : {}),
     };
     passWhere.soldAt = soldAt;
     giftWhere.soldAt = soldAt;

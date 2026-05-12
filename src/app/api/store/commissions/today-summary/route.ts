@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { ReservationStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { resolveCommissionForReporting } from "@/lib/commission-reporting";
-import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
+import { getBusinessDayRange } from "@/lib/business-day";
 import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export async function GET() {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
+    const { start, endExclusive } = getBusinessDayRange();
 
     // 1) Reservas del dia de negocio con canal
     const reservations = await prisma.reservation.findMany({

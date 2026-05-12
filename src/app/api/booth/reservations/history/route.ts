@@ -5,8 +5,8 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { type AppSession, sessionOptions } from "@/lib/session";
-import { BUSINESS_TZ, tzLocalToUtcDate, utcDateFromYmdInTz } from "@/lib/tz-business";
 import { resolveCommissionForReporting } from "@/lib/commission-reporting";
+import { getBusinessDayRange } from "@/lib/business-day";
 
 export const runtime = "nodejs";
 
@@ -59,16 +59,12 @@ export async function GET(req: Request) {
   }
 
   if (dateFrom || dateTo) {
-    const endExclusive = dateTo
-      ? (() => {
-          const [y, m, d] = dateTo.split("-").map(Number);
-          return tzLocalToUtcDate(BUSINESS_TZ, y, m, d + 1, 0, 0);
-        })()
-      : undefined;
+    const fromRange = dateFrom ? getBusinessDayRange(dateFrom) : null;
+    const toRange = dateTo ? getBusinessDayRange(dateTo) : null;
 
     where.activityDate = {
-      ...(dateFrom ? { gte: utcDateFromYmdInTz(BUSINESS_TZ, dateFrom) } : {}),
-      ...(endExclusive ? { lt: endExclusive } : {}),
+      ...(fromRange ? { gte: fromRange.start } : {}),
+      ...(toRange ? { lt: toRange.endExclusive } : {}),
     };
   }
 
@@ -154,16 +150,12 @@ export async function GET(req: Request) {
   }
 
   if (dateFrom || dateTo) {
-    const endExclusive = dateTo
-      ? (() => {
-          const [y, m, d] = dateTo.split("-").map(Number);
-          return tzLocalToUtcDate(BUSINESS_TZ, y, m, d + 1, 0, 0);
-        })()
-      : undefined;
+    const fromRange = dateFrom ? getBusinessDayRange(dateFrom) : null;
+    const toRange = dateTo ? getBusinessDayRange(dateTo) : null;
 
     paymentWhere.createdAt = {
-      ...(dateFrom ? { gte: utcDateFromYmdInTz(BUSINESS_TZ, dateFrom) } : {}),
-      ...(endExclusive ? { lt: endExclusive } : {}),
+      ...(fromRange ? { gte: fromRange.start } : {}),
+      ...(toRange ? { lt: toRange.endExclusive } : {}),
     };
   }
 

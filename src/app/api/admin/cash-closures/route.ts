@@ -7,6 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { PaymentOrigin } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
+import { getBusinessDayRange } from "@/lib/business-day";
 
 export const runtime = "nodejs";
 
@@ -22,13 +23,6 @@ const Q = z.object({
   date: z.string().min(10).max(10).optional(),
 });
 
-function parseBusinessDate(yyyyMmDd: string) {
-  const d = new Date(yyyyMmDd + "T00:00:00.000");
-  if (!Number.isFinite(d.getTime())) throw new Error("date inválida");
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
 export async function GET(req: Request) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -42,7 +36,7 @@ export async function GET(req: Request) {
 
   const where: Prisma.CashClosureWhereInput = {};
   if (parsed.data.origin) where.origin = parsed.data.origin;
-  if (parsed.data.date) where.businessDate = parseBusinessDate(parsed.data.date);
+  if (parsed.data.date) where.businessDate = getBusinessDayRange(parsed.data.date).start;
 
   const rows = await prisma.cashClosure.findMany({
     where,
