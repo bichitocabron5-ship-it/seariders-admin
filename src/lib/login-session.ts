@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 
 import { prisma } from "@/lib/prisma";
 import { redirectPathFromRole } from "@/lib/auth-redirect";
+import { getBusinessDayRange } from "@/lib/business-day";
 import { type AppSession, sessionOptions } from "@/lib/session";
 
 export async function finalizeLoginSession(args: {
@@ -12,8 +13,7 @@ export async function finalizeLoginSession(args: {
   role: RoleName;
   shift: "MORNING" | "AFTERNOON";
 }) {
-  const businessDate = new Date();
-  businessDate.setHours(0, 0, 0, 0);
+  const businessDate = getBusinessDayRange().start;
 
   const roleRow = await prisma.role.findUnique({
     where: { name: args.role },
