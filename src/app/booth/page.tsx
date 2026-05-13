@@ -416,20 +416,13 @@ const commissionPct = useMemo(() => {
 }, [commissionServiceId, selectedChannel]);
 
 const commissionBreakdown = useMemo(
-  () => {
-    const baseBreakdown = computeCommissionableBase({
+  () =>
+    computeCommissionableBase({
       grossBaseCents: baseTotalCents,
-      totalDiscountCents: 0,
+      totalDiscountCents: discountCentsClamped,
       responsibility: discountResponsibility,
       promoterDiscountShareBps: Math.round(Number(promoterDiscountSharePct || "0") * 100),
-    });
-    return {
-      ...baseBreakdown,
-      discountCents: discountCentsClamped,
-      commissionBaseCents: Math.max(0, baseBreakdown.commissionBaseCents - discountCentsClamped),
-      companyDiscountCents: baseBreakdown.companyDiscountCents + discountCentsClamped,
-    };
-  },
+    }),
   [baseTotalCents, discountCentsClamped, discountResponsibility, promoterDiscountSharePct]
 );
 
@@ -1044,6 +1037,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             promoterDiscountCents={commissionBreakdown.promoterDiscountCents}
             companyDiscountCents={commissionBreakdown.companyDiscountCents}
             commissionBaseCents={commissionBreakdown.commissionBaseCents}
+            discountResponsibility={discountResponsibility}
             cartItems={cartItems}
             extraServiceId={extraServiceId}
             extraQuantity={extraQuantity}

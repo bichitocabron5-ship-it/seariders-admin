@@ -361,6 +361,9 @@ export function PricingSection({
           <div style={{ marginTop: 6 }}>
             Descuento promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa: <strong>{euros(companyDiscountCents)}</strong>
           </div>
+          <div style={{ marginTop: 6 }}>
+            Asunción descuento manual: <strong>{discountResponsibility === "PROMOTER" ? "Promotor" : discountResponsibility === "SHARED" ? "Compartido" : "Empresa"}</strong>
+          </div>
           {promoterDiscountCents > 0 ? (
             <div style={{ marginTop: 6 }}>
               Promotor: <strong>{promoterNominalPct.toFixed(2)}%</strong> nominal → <strong>{promoterEffectivePct.toFixed(2)}%</strong> efectivo
@@ -405,6 +408,9 @@ export function PricingSection({
           </div>
           <div style={{ marginTop: 6 }}>
             El promotor asume <strong>{euros(promoterDiscountCents)}</strong> del descuento.
+          </div>
+          <div style={{ marginTop: 6 }}>
+            Regla aplicada: <strong>{discountResponsibility === "SHARED" ? "Compartido" : "Promotor"}</strong>
           </div>
           <div style={{ marginTop: 6 }}>
             Comisión/promotor: <strong>{promoterNominalPct.toFixed(2)}%</strong> nominal → <strong>{promoterEffectivePct.toFixed(2)}%</strong> efectivo

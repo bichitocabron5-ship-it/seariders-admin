@@ -70,6 +70,7 @@ type Props = {
   promoterDiscountCents: number;
   companyDiscountCents: number;
   commissionBaseCents: number;
+  discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
   cartItems: CartItem[];
   extraServiceId: string;
   extraQuantity: number;
@@ -131,6 +132,7 @@ export default function BoothPreReservationFormSection({
   promoterDiscountCents,
   companyDiscountCents,
   commissionBaseCents,
+  discountResponsibility,
   cartItems,
   extraServiceId,
   extraQuantity,
@@ -374,6 +376,16 @@ export default function BoothPreReservationFormSection({
                   <div style={{ fontSize: 12, color: "#475569" }}>
                     Descuento asumido por promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa:{" "}
                     <strong>{euros(companyDiscountCents)}</strong>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#475569" }}>
+                    Regla de descuento manual:{" "}
+                    <strong>
+                      {discountResponsibility === "PROMOTER"
+                        ? "Promotor"
+                        : discountResponsibility === "SHARED"
+                          ? "Compartido"
+                          : "Empresa"}
+                    </strong>
                   </div>
                   <div style={{ fontSize: 13, color: "#0f172a", fontWeight: 800 }}>
                     Neto estimado a liquidar al partner: {euros(netAfterCommissionCents)}

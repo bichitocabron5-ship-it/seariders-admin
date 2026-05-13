@@ -1028,25 +1028,15 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     ? Math.max(0, shownFinalCents - manualDiscountCents)
     : shownFinalCents;
   const commissionBreakdown = useMemo(
-    () => {
-      const baseBreakdown = computeCommissionableBase({
+    () =>
+      computeCommissionableBase({
         grossBaseCents: shownBaseCents,
         totalDiscountCents: canEditPricing
-          ? shownDiscountCents
-          : Number(prefillPricing?.autoDiscountCents ?? 0),
+          ? shownDiscountCents + manualDiscountCents
+          : Number((prefillPricing?.manualDiscountCents ?? 0) + (prefillPricing?.autoDiscountCents ?? 0)),
         responsibility: canEditPricing ? discountResponsibility : prefillPricing ? discountResponsibility : "COMPANY",
         promoterDiscountShareBps: Math.round(Number(promoterDiscountSharePct || "0") * 100),
-      });
-      const manualDiscountForCommission = canEditPricing
-        ? manualDiscountCents
-        : Number(prefillPricing?.manualDiscountCents ?? 0);
-      return {
-        ...baseBreakdown,
-        discountCents: baseBreakdown.discountCents + manualDiscountForCommission,
-        commissionBaseCents: Math.max(0, baseBreakdown.commissionBaseCents - manualDiscountForCommission),
-        companyDiscountCents: baseBreakdown.companyDiscountCents + manualDiscountForCommission,
-      };
-    },
+      }),
     [
       canEditPricing,
       discountResponsibility,
