@@ -303,6 +303,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
               driverBirthDate: true,
               driverDocType: true,
               driverDocNumber: true,
+              licenseSchool: true,
+              licenseType: true,
+              licenseNumber: true,
             },
           },
         },
@@ -606,15 +609,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         isLicense: b.isLicense ?? current.isLicense,
         pricingTier: b.pricingTier ?? current.pricingTier,
       });
+      const contractLicenseFallback = primaryContract ?? contractCompatibilityFallback;
 
       const finalLicenseSchool = normalizeOptionalString(
-        b.licenseSchool !== undefined ? b.licenseSchool : current.licenseSchool
+        b.licenseSchool !== undefined
+          ? b.licenseSchool
+          : (current.licenseSchool ?? contractLicenseFallback?.licenseSchool ?? null)
       );
       const finalLicenseType = normalizeOptionalString(
-        b.licenseType !== undefined ? b.licenseType : current.licenseType
+        b.licenseType !== undefined
+          ? b.licenseType
+          : (current.licenseType ?? contractLicenseFallback?.licenseType ?? null)
       );
       const finalLicenseNumber = normalizeOptionalString(
-        b.licenseNumber !== undefined ? b.licenseNumber : current.licenseNumber
+        b.licenseNumber !== undefined
+          ? b.licenseNumber
+          : (current.licenseNumber ?? contractLicenseFallback?.licenseNumber ?? null)
       );
       if (reservationState.isLicense && (!finalLicenseSchool || !finalLicenseType || !finalLicenseNumber)) {
         throw new Error("Faltan datos de licencia (escuela, tipo y número).");

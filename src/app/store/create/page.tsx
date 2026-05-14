@@ -1306,7 +1306,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       }
 
       if (isEditMode && editReservationId) {
-        const updated = await submitStoreCreateEditFlow({
+        await submitStoreCreateEditFlow({
           editReservationId,
           customerName,
           quantity,
@@ -1340,15 +1340,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           licenseNumber,
           promoCode: applyPromo ? selectedPromoCode || null : null,
         });
-        await refreshPrefill();
-        await refreshContracts(editReservationId);
-        router.replace(
-          Number(updated.requiredUnits ?? 0) > Number(updated.readyCount ?? 0)
-            ? `/store/create?editFrom=${updated.id}#contracts`
-            : `/store/create?editFrom=${updated.id}`,
-          { scroll: false }
-        );
-        setSubmitSuccess("Cambios guardados.");
+        router.push("/store");
         return;
       }
 
