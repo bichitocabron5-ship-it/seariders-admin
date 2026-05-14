@@ -23,6 +23,19 @@ type EventRow = {
   costCents: number | null;
   faultCode: string | null;
   reopenCount: number;
+  incident: {
+    id: string;
+    type: "ACCIDENT" | "DAMAGE" | "MECHANICAL" | "OTHER";
+    level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+    status: "OPEN" | "LINKED" | "RESOLVED" | "CANCELED";
+    isOpen: boolean;
+    description: string | null;
+    notes: string | null;
+    runId: string | null;
+    assignmentId: string | null;
+    reservationUnitId: string | null;
+    createdAt: string;
+  } | null;
   partUsages: Array<{
     id: string;
     qty: number;
@@ -103,6 +116,17 @@ function fmtDateTime(iso: string | null) {
 
 function isEditableEventStatus(status: string) {
   return status === "OPEN" || status === "IN_PROGRESS" || status === "EXTERNAL";
+}
+
+function incidentTypeLabel(type: NonNullable<EventRow["incident"]>["type"]) {
+  const map = {
+    ACCIDENT: "Accidente",
+    DAMAGE: "Daño",
+    MECHANICAL: "Avería",
+    OTHER: "Incidencia",
+  } as const;
+
+  return map[type] ?? type;
 }
 
 function EventCard({
@@ -226,6 +250,32 @@ function EventCard({
       ) : null}
 
       {event.note ? <div style={{ fontSize: 13 }}>{event.note}</div> : null}
+
+      {event.incident ? (
+        <div
+          style={{
+            border: "1px solid #dbe4ea",
+            background: "#fff",
+            borderRadius: 10,
+            padding: 10,
+            display: "grid",
+            gap: 4,
+            fontSize: 13,
+          }}
+        >
+          <div style={{ fontWeight: 900 }}>
+            {incidentTypeLabel(event.incident.type)} vinculada · {event.incident.level}
+            {event.incident.isOpen ? " · Abierta" : " · Cerrada"}
+          </div>
+          <div style={{ color: "#475569" }}>
+            {event.incident.description || event.incident.notes || "Salida cerrada con incidencia asociada."}
+          </div>
+          <div style={{ color: "#64748b", fontSize: 12 }}>
+            Registrada {fmtDateTime(event.incident.createdAt)}
+            {event.incident.assignmentId ? ` · Salida ${event.incident.assignmentId}` : ""}
+          </div>
+        </div>
+      ) : null}
 
       <div style={{ fontSize: 13, opacity: 0.85 }}>
         Coste: <b>{eurFromCents(event.costCents)}</b>

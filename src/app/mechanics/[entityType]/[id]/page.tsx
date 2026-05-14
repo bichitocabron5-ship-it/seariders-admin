@@ -97,18 +97,18 @@ type UsageAssignmentRow = {
 
 type EventRow = {
   id: string;
-    entityType: MaintenanceEntityType;
-    type: MaintenanceEventType;
-    hoursAtService: number | null;
-    note: string | null;
-    createdAt: string;
-    createdByUserId: string | null;
-    createdByUser: {
-      id: string;
-      username?: string | null;
-      email?: string | null;
-      fullName?: string | null;
-    } | null;
+  entityType: MaintenanceEntityType;
+  type: MaintenanceEventType;
+  hoursAtService: number | null;
+  note: string | null;
+  createdAt: string;
+  createdByUserId: string | null;
+  createdByUser: {
+    id: string;
+    username?: string | null;
+    email?: string | null;
+    fullName?: string | null;
+  } | null;
 
   status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "EXTERNAL" | "CANCELED";
   severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
@@ -120,6 +120,19 @@ type EventRow = {
   resolvedAt: string | null;
   faultCode: string | null;
   reopenCount: number;
+  incident: {
+    id: string;
+    type: "ACCIDENT" | "DAMAGE" | "MECHANICAL" | "OTHER";
+    level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+    status: "OPEN" | "LINKED" | "RESOLVED" | "CANCELED";
+    isOpen: boolean;
+    description: string | null;
+    notes: string | null;
+    runId: string | null;
+    assignmentId: string | null;
+    reservationUnitId: string | null;
+    createdAt: string;
+  } | null;
 
   partUsages: Array<{
     id: string;
@@ -845,91 +858,6 @@ export default function MechanicsDetailPage() {
             recurringFaultCatalog={recurringFaultCatalog}
           />
 
-          <div style={{ ...softCard, padding: 16, display: "grid", gap: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#0369a1" }}>
-                  Trazabilidad
-                </div>
-                <div style={{ fontWeight: 900, fontSize: 20 }}>Reservas que usaron este recurso</div>
-              </div>
-              <div style={{ fontSize: 13, color: "#475569" }}>
-                Hoy: {data.assignmentsToday.length} · Histórico visible: {data.recentAssignments.length}
-              </div>
-            </div>
-
-            {data.assignmentsToday.length > 0 ? (
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontWeight: 800, color: "#0f172a" }}>Hoy</div>
-                {data.assignmentsToday.map((assignment) => (
-                  <a
-                    key={`today-${assignment.id}`}
-                    href={`/store/create?editFrom=${assignment.reservationId}`}
-                    style={{
-                      display: "grid",
-                      gap: 4,
-                      padding: 12,
-                      borderRadius: 14,
-                      border: "1px solid #dbe4ea",
-                      color: "#0f172a",
-                      textDecoration: "none",
-                      background: "#fff",
-                    }}
-                  >
-                    <div style={{ fontWeight: 800 }}>
-                      {assignment.reservation.customerName || "Sin nombre"}
-                      {assignment.reservationUnit?.unitIndex ? ` · U${assignment.reservationUnit.unitIndex}` : ""}
-                    </div>
-                    <div style={{ fontSize: 13, color: "#475569" }}>
-                      {assignment.reservation.service?.name || "Servicio"} · {assignment.status}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>
-                      Asignada {dtShort(assignment.createdAt)} · Salida {dtShort(assignment.startedAt)} · Devuelta {dtShort(assignment.endedAt)}
-                    </div>
-                  </a>
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontSize: 13, color: "#64748b" }}>No hay reservas trazadas hoy para este recurso.</div>
-            )}
-
-            {data.recentAssignments.length > 0 ? (
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontWeight: 800, color: "#0f172a" }}>Últimas asignaciones</div>
-                {data.recentAssignments.slice(0, 10).map((assignment) => (
-                  <div
-                    key={assignment.id}
-                    style={{
-                      display: "grid",
-                      gap: 4,
-                      padding: 12,
-                      borderRadius: 14,
-                      border: "1px solid #e5e7eb",
-                      background: "#fff",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                      <a
-                        href={`/store/create?editFrom=${assignment.reservationId}`}
-                        style={{ color: "#0f172a", fontWeight: 800, textDecoration: "none" }}
-                      >
-                        {assignment.reservation.customerName || assignment.reservationId}
-                      </a>
-                      <span style={{ fontSize: 12, color: "#475569" }}>{assignment.status}</span>
-                    </div>
-                    <div style={{ fontSize: 13, color: "#475569" }}>
-                      {assignment.reservation.service?.name || "Servicio"}
-                      {assignment.reservationUnit?.unitIndex ? ` · U${assignment.reservationUnit.unitIndex}` : ""}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>
-                      Asignada {dtShort(assignment.createdAt)} · Devuelta {dtShort(assignment.endedAt)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
           <div
             style={{
               display: "grid",
@@ -1065,18 +993,5 @@ function Kpi({
     </div>
   );
 }
-
-function dtShort(value: string | null | undefined) {
-  if (!value) return "—";
-  return new Date(value).toLocaleString("es-ES", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-
-
 
 
