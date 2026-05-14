@@ -5,8 +5,10 @@ import {
   computeCommissionableBase,
   computeCommissionableBaseFromScopedDiscount,
   proportionalCommissionBaseForCollected,
+  resolveAppliedCommercialSnapshot,
   resolveDiscountPolicy,
 } from "./commission";
+import { finalizeReservationCommercialBreakdown } from "./reservation-commercial-breakdown";
 
 test("computeCommissionableBase keeps gross commission base when company assumes discount", () => {
   const result = computeCommissionableBase({
@@ -77,4 +79,82 @@ test("resolveDiscountPolicy falls back to channel defaults", () => {
 
   assert.equal(policy.discountResponsibility, "SHARED");
   assert.equal(policy.promoterDiscountShareBps, 4_000);
+});
+
+test("percentage commission uses the persisted commissionable base without discounts", () => {
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    manualDiscountCents: 0,
+    discountResponsibility: "COMPANY",
+  });
+
+  const snapshot = resolveAppliedCommercialSnapshot({
+    channel: {
+      commissionEnabled: true,
+      commissionPct: 20,
+    },
+    serviceId: "svc-1",
+    commissionBaseCents: commercial.commissionBaseCents,
+    customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
+    quantity: 1,
+  });
+
+  assert.equal(snapshot.appliedCommissionMode, "PERCENT");
+  assert.equal(snapshot.appliedCommissionPct, 20);
+  assert.equal(snapshot.appliedCommissionCents, 2_000);
+});
+
+test("fixed commission keeps the configured amount even when the promoter discount changes the base", () => {
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    manualDiscountCents: 2_000,
+    discountResponsibility: "PROMOTER",
+  });
+
+  const snapshot = resolveAppliedCommercialSnapshot({
+    channel: {
+      commissionEnabled: true,
+      promoterCommissionMode: "FIXED",
+      promoterCommissionCents: 1_500,
+    },
+    serviceId: "svc-1",
+    commissionBaseCents: commercial.commissionBaseCents,
+    customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
+    quantity: 1,
+  });
+
+  assert.equal(commercial.commissionBaseCents, 8_000);
+  assert.equal(snapshot.appliedCommissionMode, "FIXED");
+  assert.equal(snapshot.appliedCommissionPct, null);
+  assert.equal(snapshot.appliedCommissionCents, 1_500);
+});
+
+test("fixed customer discount does not reduce a fixed promoter commission base or amount", () => {
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    customerDiscountCents: 2_000,
+    manualDiscountCents: 0,
+    discountResponsibility: "PROMOTER",
+  });
+
+  const snapshot = resolveAppliedCommercialSnapshot({
+    channel: {
+      commissionEnabled: true,
+      customerDiscountMode: "FIXED",
+      customerDiscountCents: 2_000,
+      promoterCommissionMode: "FIXED",
+      promoterCommissionCents: 1_250,
+    },
+    serviceId: "svc-1",
+    commissionBaseCents: commercial.commissionBaseCents,
+    customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
+    quantity: 1,
+  });
+
+  assert.equal(commercial.finalTotalCents, 8_000);
+  assert.equal(commercial.commissionBaseCents, 10_000);
+  assert.equal(commercial.promoterDiscountCents, 0);
+  assert.equal(snapshot.appliedCommissionMode, "FIXED");
+  assert.equal(snapshot.appliedCommissionCents, 1_250);
+  assert.equal(Math.max(0, commercial.finalTotalCents - snapshot.appliedCommissionCents), 6_750);
 });

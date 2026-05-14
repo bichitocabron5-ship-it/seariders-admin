@@ -1,5 +1,8 @@
 import { computeAutoDiscountDetail } from "@/lib/discounts";
-import { computeCommissionableBase, type DiscountResponsibility } from "@/lib/commission";
+import type { DiscountResponsibility } from "@/lib/commission";
+import {
+  finalizeReservationCommercialBreakdown,
+} from "@/lib/reservation-commercial-breakdown";
 
 type DiscountLineInput = {
   serviceId: string;
@@ -27,26 +30,9 @@ function roundMoney(value: number) {
   return Math.round(Number(value ?? 0));
 }
 
-export function capManualDiscountCents(
-  totalBeforeDiscountsCents: number,
-  manualDiscountCents: number | null | undefined
-) {
-  const total = Math.max(0, roundMoney(totalBeforeDiscountsCents));
-  const requested = Math.max(0, roundMoney(manualDiscountCents ?? 0));
-  const maxManual = Math.floor(total * 0.5);
-  return Math.max(0, Math.min(requested, maxManual));
-}
-
 export async function computeReservationCommercialBreakdown(
   args: ComputeReservationCommercialArgs
 ) {
-  const totalBeforeDiscountsCents = Math.max(0, roundMoney(args.totalBeforeDiscountsCents));
-  const customerDiscountCents = Math.max(0, roundMoney(args.customerDiscountCents ?? 0));
-  const manualDiscountCents = capManualDiscountCents(
-    Math.max(0, totalBeforeDiscountsCents - customerDiscountCents),
-    args.manualDiscountCents
-  );
-
   let autoDiscountCents = 0;
   if (args.promotionsEnabled && args.allowAutoDiscount !== false) {
     for (const line of args.discountLines) {
@@ -68,14 +54,6 @@ export async function computeReservationCommercialBreakdown(
     }
   }
 
-  const totalDiscountCents = customerDiscountCents + autoDiscountCents + manualDiscountCents;
-  const commissionBreakdown = computeCommissionableBase({
-    grossBaseCents: totalBeforeDiscountsCents,
-    totalDiscountCents,
-    responsibility: args.discountResponsibility,
-    promoterDiscountShareBps: args.promoterDiscountShareBps ?? null,
-  });
-
   const uniquePromoCodes = Array.from(
     new Set(
       args.discountLines
@@ -84,14 +62,17 @@ export async function computeReservationCommercialBreakdown(
     )
   );
 
-  return {
-    totalBeforeDiscountsCents,
-    customerDiscountCents,
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: args.totalBeforeDiscountsCents,
+    customerDiscountCents: args.customerDiscountCents,
     autoDiscountCents,
-    manualDiscountCents,
-    totalDiscountCents,
-    finalTotalCents: Math.max(0, totalBeforeDiscountsCents - totalDiscountCents),
+    manualDiscountCents: args.manualDiscountCents,
+    discountResponsibility: args.discountResponsibility,
+    promoterDiscountShareBps: args.promoterDiscountShareBps ?? null,
+  });
+
+  return {
     promoCode: args.promotionsEnabled && uniquePromoCodes.length === 1 ? uniquePromoCodes[0] : null,
-    ...commissionBreakdown,
+    ...commercial,
   };
 }

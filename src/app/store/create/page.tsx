@@ -8,10 +8,10 @@ import { needsContractForCategory } from "@/lib/reservation-rules";
 import { getReservationWorkflowState, type ReservationWorkflowResult } from "@/lib/reservation-workflow";
 import { opsStyles } from "@/components/ops-ui";
 import {
-  computeCommissionableBase,
   resolveAppliedCommercialSnapshot,
   resolveDiscountPolicy,
 } from "@/lib/commission";
+import { finalizeReservationCommercialBreakdown } from "@/lib/reservation-commercial-breakdown";
 import { AvailabilitySection, FutureReservationPaymentsSection, PricingSection, SubmitSection } from "./components/form-sections";
 import { ReservationBasicsSection } from "./components/reservation-basics-section";
 import { CartSection, ContractsSection } from "./components/store-sections";
@@ -1029,12 +1029,12 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     : shownFinalCents;
   const commissionBreakdown = useMemo(
     () =>
-      computeCommissionableBase({
-        grossBaseCents: shownBaseCents,
-        totalDiscountCents: canEditPricing
-          ? shownDiscountCents + manualDiscountCents
-          : Number((prefillPricing?.manualDiscountCents ?? 0) + (prefillPricing?.autoDiscountCents ?? 0)),
-        responsibility: canEditPricing ? discountResponsibility : prefillPricing ? discountResponsibility : "COMPANY",
+      finalizeReservationCommercialBreakdown({
+        totalBeforeDiscountsCents: shownBaseCents,
+        customerDiscountCents: canEditPricing ? shownDiscountCents : Number(prefillPricing?.autoDiscountCents ?? 0),
+        autoDiscountCents: 0,
+        manualDiscountCents: canEditPricing ? manualDiscountCents : Number(prefillPricing?.manualDiscountCents ?? 0),
+        discountResponsibility: canEditPricing ? discountResponsibility : prefillPricing ? discountResponsibility : "COMPANY",
         promoterDiscountShareBps: Math.round(Number(promoterDiscountSharePct || "0") * 100),
       }),
     [

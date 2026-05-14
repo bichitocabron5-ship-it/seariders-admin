@@ -5,8 +5,9 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertBanner } from "@/components/seariders-ui";
 import { getCountryOptionsEs } from "@/lib/countries";
 import { opsStyles } from "@/components/ops-ui";
-import { computeCommissionableBase, resolveDiscountPolicy } from "@/lib/commission";
+import { resolveDiscountPolicy } from "@/lib/commission";
 import { useLiveRefresh } from "@/hooks/use-live-refresh";
+import { finalizeReservationCommercialBreakdown } from "@/lib/reservation-commercial-breakdown";
 import BoothOverviewSection from "./_components/BoothOverviewSection";
 import BoothPreReservationFormSection from "./_components/BoothPreReservationFormSection";
 import BoothPreReservationsSection from "./_components/BoothPreReservationsSection";
@@ -417,10 +418,10 @@ const commissionPct = useMemo(() => {
 
 const commissionBreakdown = useMemo(
   () =>
-    computeCommissionableBase({
-      grossBaseCents: baseTotalCents,
-      totalDiscountCents: discountCentsClamped,
-      responsibility: discountResponsibility,
+    finalizeReservationCommercialBreakdown({
+      totalBeforeDiscountsCents: baseTotalCents,
+      manualDiscountCents: discountCentsClamped,
+      discountResponsibility,
       promoterDiscountShareBps: Math.round(Number(promoterDiscountSharePct || "0") * 100),
     }),
   [baseTotalCents, discountCentsClamped, discountResponsibility, promoterDiscountSharePct]
