@@ -361,7 +361,15 @@ export function useReservationPrefill(args: {
   return { migrateLoading, migrateError, migrateFlags, refreshPrefill };
 }
 
-export function useAvailability(dateStr: string, availabilityTick: number) {
+export function useAvailability(
+  dateStr: string,
+  availabilityTick: number,
+  filters?: {
+    category?: string | null;
+    durationMinutes?: number | null;
+    quantity?: number | null;
+  }
+) {
   const [availability, setAvailability] = useState<AvailabilityData | null>(null);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
@@ -372,7 +380,19 @@ export function useAvailability(dateStr: string, availabilityTick: number) {
       setAvailabilityLoading(true);
       setAvailabilityError(null);
       try {
-        const r = await fetch(`/api/store/availability?date=${dateStr}&t=${availabilityTick}`, {
+        const params = new URLSearchParams({
+          date: dateStr,
+          t: String(availabilityTick),
+        });
+        if (filters?.category) params.set("category", String(filters.category).toUpperCase());
+        if (Number(filters?.durationMinutes ?? 0) > 0) {
+          params.set("durationMinutes", String(Number(filters?.durationMinutes)));
+        }
+        if (Number(filters?.quantity ?? 0) > 0) {
+          params.set("quantity", String(Number(filters?.quantity)));
+        }
+
+        const r = await fetch(`/api/store/availability?${params.toString()}`, {
           cache: "no-store",
           signal: ac.signal,
         });
@@ -388,7 +408,7 @@ export function useAvailability(dateStr: string, availabilityTick: number) {
       }
     })();
     return () => ac.abort();
-  }, [dateStr, availabilityTick]);
+  }, [dateStr, availabilityTick, filters?.category, filters?.durationMinutes, filters?.quantity]);
 
   return { availability, availabilityLoading, availabilityError };
 }

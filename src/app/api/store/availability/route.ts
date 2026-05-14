@@ -5,6 +5,10 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import {
+  getOperationalCapacityUnits,
+  getOperationalDurationMinutes,
+} from "@/lib/reservation-operations";
+import {
   BUSINESS_TZ,
   utcDateFromYmdInTz,
   utcDateTimeFromYmdHmInTz,
@@ -56,6 +60,9 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const date = url.searchParams.get("date");
+  const selectedCategory = String(url.searchParams.get("category") ?? "").trim().toUpperCase() || null;
+  const selectedDurationMinutes = Number(url.searchParams.get("durationMinutes") ?? 0);
+  const selectedQuantity = Number(url.searchParams.get("quantity") ?? 0);
   if (!date || date.length !== 10) {
     return NextResponse.json({ error: "date requerido (YYYY-MM-DD)" }, { status: 400 });
   }
@@ -149,16 +156,21 @@ export async function GET(req: Request) {
   function pushUsage(params: { scheduledTime: Date | null; category: string; qty: number; durMinutes: number }) {
     const category = String(params.category ?? "UNKNOWN").toUpperCase();
     const qty = Math.max(1, Number(params.qty ?? 1));
+    const operationalQty = getOperationalCapacityUnits({ category, quantity: qty });
 
     if (!params.scheduledTime) {
-      noTime[category] = (noTime[category] ?? 0) + qty;
+      noTime[category] = (noTime[category] ?? 0) + operationalQty;
       return;
     }
 
     const hhmm = hhmmInMadridFromUtc(params.scheduledTime);
     const start = hmToMinutes(hhmm);
 
-    const dur = Math.max(1, Number(params.durMinutes ?? interval));
+    const dur = getOperationalDurationMinutes({
+      category,
+      durationMinutes: params.durMinutes ?? interval,
+      quantity: qty,
+    });
     const slotsNeeded = Math.max(1, Math.ceil(dur / interval));
 
     // redondear al slot anterior (floor)
@@ -168,7 +180,7 @@ export async function GET(req: Request) {
     for (let i = 0; i < slotsNeeded; i++) {
       const idx = startIdx + i;
       if (idx < 0 || idx >= slotTimes.length) continue;
-      usedBySlot[idx][category] = (usedBySlot[idx][category] ?? 0) + qty;
+      usedBySlot[idx][category] = (usedBySlot[idx][category] ?? 0) + operationalQty;
     }
   }
 
@@ -183,19 +195,61 @@ export async function GET(req: Request) {
   }
 
   // 7) Construir free + isFull
+  const requestedOperationalDuration =
+    selectedCategory && selectedDurationMinutes > 0 && selectedQuantity > 0
+      ? getOperationalDurationMinutes({
+          category: selectedCategory,
+          durationMinutes: selectedDurationMinutes,
+          quantity: selectedQuantity,
+        })
+      : null;
+  const requestedOperationalUnits =
+    selectedCategory && selectedQuantity > 0
+      ? getOperationalCapacityUnits({
+          category: selectedCategory,
+          quantity: selectedQuantity,
+        })
+      : null;
+
   const slots = slotTimes.map((time, idx) => {
     const used = usedBySlot[idx];
     const free: Record<string, number> = {};
     const isFull: Record<string, boolean> = {};
+    const isSelectable: Record<string, boolean> = {};
 
     for (const [cat, maxUnits] of Object.entries(limits)) {
       const u = used[cat] ?? 0;
       const f = Math.max(0, maxUnits - u);
       free[cat] = f;
       isFull[cat] = f <= 0;
+
+       if (
+        selectedCategory === cat &&
+        requestedOperationalDuration !== null &&
+        requestedOperationalUnits !== null
+      ) {
+        const slotsNeeded = Math.max(1, Math.ceil(requestedOperationalDuration / interval));
+        const startMinute = startMin + idx * interval;
+        const fitsInSchedule = startMinute + slotsNeeded * interval <= endMin;
+        let fitsCapacity = fitsInSchedule;
+
+        if (fitsCapacity) {
+          for (let step = 0; step < slotsNeeded; step++) {
+            const slotUsage = usedBySlot[idx + step]?.[cat] ?? 0;
+            if (slotUsage + requestedOperationalUnits > maxUnits) {
+              fitsCapacity = false;
+              break;
+            }
+          }
+        }
+
+        isSelectable[cat] = fitsCapacity;
+      } else {
+        isSelectable[cat] = !isFull[cat];
+      }
     }
 
-    return { time, used, free, isFull };
+    return { time, used, free, isFull, isSelectable };
   });
 
   return NextResponse.json({

@@ -19,6 +19,7 @@ import {
   resolveDiscountPolicy,
 } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
+import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 
 export const runtime = "nodejs";
 
@@ -432,6 +433,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const lineCreates: Array<{
         serviceId: string;
         optionId: string;
+        durationMinutes: number;
         quantity: number;
         pax: number;
         promoCode: string | null;
@@ -470,6 +472,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           lineCreates.push({
             serviceId: service.id,
             optionId: option.id,
+            durationMinutes: Number(option.durationMinutes ?? 30),
             quantity: qty,
             pax,
             promoCode: item.promoCode ?? null,
@@ -500,6 +503,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         lineCreates.push({
           serviceId: service.id,
           optionId: option.id,
+          durationMinutes: Number(option.durationMinutes ?? 30),
           quantity: qty,
           pax,
           promoCode: item.promoCode ?? null,
@@ -523,6 +527,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           },
         })),
       });
+
+      if (scheduledTime) {
+        const dayEndExclusiveUtc = new Date(activityDate.getTime() + 24 * 60 * 60 * 1000);
+        for (const line of lineCreates) {
+          await assertSlotCapacityOrThrow({
+            tx,
+            dateStartUtc: activityDate,
+            dateEndExclusiveUtc: dayEndExclusiveUtc,
+            scheduledStartUtc: scheduledTime,
+            category: line.category,
+            durationMinutes: line.durationMinutes,
+            units: line.quantity,
+            excludeReservationId: current.id,
+          });
+        }
+      }
 
       const serviceSubtotal = lineCreates.reduce((sum, line) => sum + line.totalPriceCents, 0);
       const extrasTotal = (current.items ?? [])

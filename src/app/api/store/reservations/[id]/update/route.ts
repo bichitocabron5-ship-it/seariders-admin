@@ -24,6 +24,7 @@ import {
   listMissingLogicalUnits,
   pickVisibleContractsByLogicalUnit,
 } from "@/lib/contracts/active-contracts";
+import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 
 export const runtime = "nodejs";
 
@@ -534,6 +535,7 @@ if (hasProItems) {
     const lineCreates: Array<{
       serviceId: string;
       optionId: string;
+      durationMinutes: number;
       quantity: number;
       pax: number;
       promoCode: string | null;
@@ -562,6 +564,7 @@ if (hasProItems) {
         lineCreates.push({
           serviceId: it.serviceId,
           optionId: it.optionId,
+          durationMinutes: Number(opt.durationMinutes ?? 30),
           quantity: qty,
           pax: Math.max(1, Number(it.pax || b.pax)),
           promoCode: existingPack.source === "BOOTH" ? null : (String(it.promoCode ?? "").trim().toUpperCase() || null),
@@ -590,6 +593,7 @@ if (hasProItems) {
       lineCreates.push({
         serviceId: it.serviceId,
         optionId: it.optionId,
+        durationMinutes: Number(opt.durationMinutes ?? 30),
         quantity: qty,
         pax: Math.max(1, Number(it.pax || b.pax)),
         promoCode: existingPack.source === "BOOTH" ? null : (String(it.promoCode ?? "").trim().toUpperCase() || null),
@@ -598,6 +602,22 @@ if (hasProItems) {
         totalPriceCents: lineTotal,
         category: String(svc.category ?? "UNKNOWN").toUpperCase(),
       });
+    }
+
+    if (scheduledTime) {
+      const dayEndExclusiveUtc = new Date(activityDate.getTime() + 24 * 60 * 60 * 1000);
+      for (const line of lineCreates) {
+        await assertSlotCapacityOrThrow({
+          tx,
+          dateStartUtc: activityDate,
+          dateEndExclusiveUtc: dayEndExclusiveUtc,
+          scheduledStartUtc: scheduledTime,
+          category: line.category,
+          durationMinutes: line.durationMinutes,
+          units: line.quantity,
+          excludeReservationId: id,
+        });
+      }
     }
 
     // Borrar items reales antiguos

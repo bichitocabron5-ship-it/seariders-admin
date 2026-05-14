@@ -1,5 +1,10 @@
-import { BUSINESS_TZ } from "@/lib/tz-business";
 import type { Prisma } from "@prisma/client";
+
+import {
+  getOperationalCapacityUnits,
+  getOperationalDurationMinutes,
+} from "@/lib/reservation-operations";
+import { BUSINESS_TZ } from "@/lib/tz-business";
 
 function hhmmToMinutes(hhmm: string) {
   const [h, m] = hhmm.split(":").map(Number);
@@ -18,16 +23,17 @@ function hhmmInMadridFromUtc(d: Date) {
 function ceilDiv(a: number, b: number) {
   return Math.floor((a + b - 1) / b);
 }
+
 export async function assertSlotCapacityOrThrow(args: {
   tx: Prisma.TransactionClient;
-  dateStartUtc: Date;		// inicio del día (Madrid) en UTC
-  dateEndExclusiveUtc: Date;	// fin exclusivo del día (Madrid) en UTC
-  scheduledStartUtc: Date;	// hora de inicio (UTC)
-  category: string;		// "JETSKI" | "BOAT" | "TOWABLE" | "JETCAR"
-  durationMinutes: number;	// duración del option
-  units: number;		// units = quantity
+  dateStartUtc: Date;
+  dateEndExclusiveUtc: Date;
+  scheduledStartUtc: Date;
+  category: string;
+  durationMinutes: number;
+  units: number;
+  excludeReservationId?: string;
 }) {
-
   const { tx, dateStartUtc, dateEndExclusiveUtc, scheduledStartUtc } = args;
   const category = String(args.category ?? "").toUpperCase();
 
@@ -36,10 +42,8 @@ export async function assertSlotCapacityOrThrow(args: {
     select: { maxUnits: true },
   });
 
-  // si no hay limite configurado, no consumimos capacidad
   if (!limit) return;
 
-  // 1) Policy
   const policy = await tx.slotPolicy.findFirst({ orderBy: { createdAt: "desc" } });
   const interval = policy?.intervalMinutes ?? 30;
   const openTime = policy?.openTime ?? "09:00";
@@ -47,11 +51,8 @@ export async function assertSlotCapacityOrThrow(args: {
 
   const openMin = hhmmToMinutes(openTime);
   const closeMin = hhmmToMinutes(closeTime);
-
-  // 2) Limit por categor?a
   const maxUnits = Number(limit.maxUnits ?? 0);
 
-  // 3) Índices de slot requeridos
   const startHm = hhmmInMadridFromUtc(scheduledStartUtc);
   const startMin = hhmmToMinutes(startHm);
 
@@ -59,10 +60,20 @@ export async function assertSlotCapacityOrThrow(args: {
     throw new Error(`Hora fuera de horario (${openTime}–${closeTime}).`);
   }
 
-  const slotsNeeded = Math.max(1, ceilDiv(Math.max(1, args.durationMinutes), interval));
+  const operationalDurationMinutes = getOperationalDurationMinutes({
+    category,
+    durationMinutes: args.durationMinutes,
+    quantity: args.units,
+  });
+  const slotsNeeded = Math.max(1, ceilDiv(Math.max(1, operationalDurationMinutes), interval));
   const startIdx = Math.floor((startMin - openMin) / interval);
 
-  // 4) Traer reservas del día de esa categoría
+  if (startMin + slotsNeeded * interval > closeMin) {
+    throw new Error(
+      `No caben ${operationalDurationMinutes} min seguidos dentro del horario (${openTime}–${closeTime}).`
+    );
+  }
+
   const existing = await tx.reservation.findMany({
     where: {
       source: "STORE",
@@ -70,6 +81,7 @@ export async function assertSlotCapacityOrThrow(args: {
       scheduledTime: { not: null },
       activityDate: { gte: dateStartUtc, lt: dateEndExclusiveUtc },
       service: { category },
+      ...(args.excludeReservationId ? { id: { not: args.excludeReservationId } } : {}),
     },
     select: {
       scheduledTime: true,
@@ -78,34 +90,43 @@ export async function assertSlotCapacityOrThrow(args: {
     },
   });
 
-  // 5) Construir uso por slot
   const usedByIdx = new Map<number, number>();
 
-  for (const r of existing) {
-    const st = r.scheduledTime ? new Date(r.scheduledTime) : null;
-    if (!st) continue;
+  for (const reservation of existing) {
+    const scheduledTime = reservation.scheduledTime ? new Date(reservation.scheduledTime) : null;
+    if (!scheduledTime) continue;
 
-    const hm = hhmmInMadridFromUtc(st);
-    const m = hhmmToMinutes(hm);
-    const idx0 = Math.floor((m - openMin) / interval);
+    const hm = hhmmInMadridFromUtc(scheduledTime);
+    const minute = hhmmToMinutes(hm);
+    const idx0 = Math.floor((minute - openMin) / interval);
 
-    const dur = Math.max(1, Number(r.option?.durationMinutes ?? interval));
-    const rSlots = Math.max(1, ceilDiv(dur, interval));
+    const duration = getOperationalDurationMinutes({
+      category,
+      durationMinutes: reservation.option?.durationMinutes ?? interval,
+      quantity: reservation.quantity ?? 1,
+    });
+    const reservationSlots = Math.max(1, ceilDiv(duration, interval));
+    const usedUnits = getOperationalCapacityUnits({
+      category,
+      quantity: reservation.quantity ?? 1,
+    });
 
-    for (let i = 0; i < rSlots; i++) {
+    for (let i = 0; i < reservationSlots; i++) {
       const idx = idx0 + i;
-      usedByIdx.set(idx, (usedByIdx.get(idx) ?? 0) + Math.max(1, Number(r.quantity ?? 1)));
+      usedByIdx.set(idx, (usedByIdx.get(idx) ?? 0) + usedUnits);
     }
   }
 
-  // 6) Validar que la nueva reserva cabe en todos los slots que ocupa
-  const units = Math.max(1, Number(args.units ?? 1));
+  const requestedUnits = getOperationalCapacityUnits({
+    category,
+    quantity: args.units ?? 1,
+  });
 
   for (let i = 0; i < slotsNeeded; i++) {
     const idx = startIdx + i;
     const used = usedByIdx.get(idx) ?? 0;
 
-    if (used + units > maxUnits) {
+    if (used + requestedUnits > maxUnits) {
       throw new Error(`Slot completo (${category}).`);
     }
   }

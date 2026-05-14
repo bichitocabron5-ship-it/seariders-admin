@@ -7,6 +7,7 @@ import { assetCompatibilityReason, isAssetCompatibleWithServiceCategory } from "
 import { canShareMonitorAssetWithReservation } from "@/lib/platform-shared-resource";
 import { deriveReservationStatusFromUnits } from "@/lib/reservation-status";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
+import { getOperationalDurationMinutes } from "@/lib/reservation-operations";
 import {
   MonitorRunKind,
   MonitorRunMode,
@@ -96,7 +97,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
               id: true,
               status: true,
               isLicense: true,
+              quantity: true,
               option: { select: { durationMinutes: true } },
+              pax: true,
               service: { select: { category: true, name: true } },
             },
           },
@@ -116,7 +119,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
       }
 
       // 3) Validación recurso según kind
-      const duration = Math.max(1, Number(unit.reservation.option?.durationMinutes ?? 0));
+      const duration = getOperationalDurationMinutes({
+        category: unit.reservation.service?.category ?? null,
+        durationMinutes: unit.reservation.option?.durationMinutes ?? 0,
+        quantity: unit.reservation.quantity ?? 1,
+      });
 
       // Exclusividad global (recurso no puede estar QUEUED/ACTIVE en otro run)
       // - JETSKI: jetskiId
@@ -195,6 +202,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
             assetId: true,
             durationMinutesSnapshot: true,
             createdAt: true,
+            reservation: {
+              select: {
+                customerName: true,
+                pax: true,
+                quantity: true,
+                service: { select: { name: true, category: true } },
+                option: { select: { durationMinutes: true } },
+              },
+            },
           },
         });
 
@@ -316,6 +332,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
             assetId: true,
             durationMinutesSnapshot: true,
             createdAt: true,
+            reservation: {
+              select: {
+                customerName: true,
+                pax: true,
+                quantity: true,
+                service: { select: { name: true, category: true } },
+                option: { select: { durationMinutes: true } },
+              },
+            },
           },
         });
 

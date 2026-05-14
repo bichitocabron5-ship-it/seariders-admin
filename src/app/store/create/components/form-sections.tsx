@@ -101,30 +101,41 @@ export function AvailabilitySection({
             const used = Number(s.used?.[selectedCategory] ?? 0);
             const max = Number(availability?.limits?.[selectedCategory] ?? 0);
             const full = Boolean(s.isFull?.[selectedCategory]);
+            const selectable = s.isSelectable?.[selectedCategory] ?? !full;
             const isSelected = timeStr === s.time;
 
             return (
               <button
                 key={s.time}
                 type="button"
-                disabled={full}
+                disabled={!selectable}
                 onClick={() => onTimeSelect(s.time)}
                 style={{
                   padding: "12px 10px",
                   borderRadius: 14,
-                  border: full ? "1px solid #fecaca" : isSelected ? "1px solid #0f172a" : "1px solid #d0d9e4",
+                  border: !selectable ? "1px solid #fecaca" : isSelected ? "1px solid #0f172a" : "1px solid #d0d9e4",
                   fontWeight: 800,
-                  background: full ? "#fff1f2" : isSelected ? "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)" : "#fff",
-                  color: full ? "#b91c1c" : isSelected ? "#fff" : "#111827",
-                  cursor: full ? "not-allowed" : "pointer",
+                  background: !selectable ? "#fff1f2" : isSelected ? "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)" : "#fff",
+                  color: !selectable ? "#b91c1c" : isSelected ? "#fff" : "#111827",
+                  cursor: !selectable ? "not-allowed" : "pointer",
                   display: "grid",
                   gap: 4,
                 }}
-                title={`${used}/${max} ${full ? "COMPLETO" : "disponible"}`}
+                title={
+                  selectable
+                    ? `${used}/${max} disponible`
+                    : full
+                      ? `${used}/${max} COMPLETO`
+                      : "No caben todos los slots consecutivos"
+                }
               >
                 <div>{s.time}</div>
                 <div style={{ fontSize: 11, opacity: 0.8 }}>{used}/{max}</div>
-                {full ? <div style={{ fontSize: 11, fontWeight: 900 }}>Completo</div> : null}
+                {!selectable ? (
+                  <div style={{ fontSize: 11, fontWeight: 900 }}>
+                    {full ? "Completo" : "Bloque no cabe"}
+                  </div>
+                ) : null}
               </button>
             );
           })}

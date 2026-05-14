@@ -289,8 +289,6 @@ function StoreCreatePageInner() {
     isHistorical: Boolean(migrateFlags?.isHistorical),
   });
 
-  const { availability, availabilityLoading, availabilityError } = useAvailability(dateStr, availabilityTick);
-
   const {
     loadingCatalog,
     catalogError,
@@ -498,6 +496,12 @@ function StoreCreatePageInner() {
     setOptionId,
     setJetskiLicenseMode,
     setCartItems,
+  });
+
+  const { availability, availabilityLoading, availabilityError } = useAvailability(dateStr, availabilityTick, {
+    category: selectedCategory || null,
+    durationMinutes: selectedOpt?.durationMinutes ?? null,
+    quantity,
   });
 
   const isJetskiSelection = selectedCategory === "JETSKI";

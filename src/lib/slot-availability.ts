@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import {
+  getOperationalCapacityUnits,
+  getOperationalDurationMinutes,
+} from "@/lib/reservation-operations";
 import { BUSINESS_TZ, utcDateFromYmdInTz } from "@/lib/tz-business";
 
 function hmToMinutes(hm: string) {
@@ -20,6 +24,7 @@ export async function checkSlotCapacity(params: {
 
   const interval = policy.intervalMinutes;
   const openTime = policy.openTime;
+  const closeTime = policy.closeTime;
 
   const limitRow = await prisma.slotLimit.findUnique({
     where: { category },
@@ -28,12 +33,21 @@ export async function checkSlotCapacity(params: {
   if (!limitRow) throw new Error(`SlotLimit no configurado para ${category}`);
 
   const maxUnits = limitRow.maxUnits;
-
   const startMin = hmToMinutes(openTime);
+  const closeMin = hmToMinutes(closeTime);
   const timeMin = hmToMinutes(time);
 
-  const slotsNeeded = Math.ceil(durationMinutes / interval);
+  const operationalDurationMinutes = getOperationalDurationMinutes({
+    category,
+    durationMinutes,
+    quantity,
+  });
+  const slotsNeeded = Math.ceil(operationalDurationMinutes / interval);
   const startSlotIndex = Math.floor((timeMin - startMin) / interval);
+
+  if (timeMin + slotsNeeded * interval > closeMin) {
+    return false;
+  }
 
   const dayStartUtc = utcDateFromYmdInTz(BUSINESS_TZ, date);
   const nextDay = new Date(dayStartUtc.getTime() + 24 * 60 * 60 * 1000);
@@ -54,32 +68,44 @@ export async function checkSlotCapacity(params: {
 
   const usedPerSlot: Record<number, number> = {};
 
-  for (const r of reservations) {
-    if (!r.scheduledTime) continue;
-    if (r.service?.category !== category) continue;
+  for (const reservation of reservations) {
+    if (!reservation.scheduledTime) continue;
+    if (reservation.service?.category !== category) continue;
 
     const hhmm = new Intl.DateTimeFormat("en-GB", {
       timeZone: BUSINESS_TZ,
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
-    }).format(r.scheduledTime);
+    }).format(reservation.scheduledTime);
 
-    const rStartMin = hmToMinutes(hhmm);
-    const rSlots = Math.ceil((r.option?.durationMinutes ?? interval) / interval);
-    const rStartIdx = Math.floor((rStartMin - startMin) / interval);
+    const reservationStartMin = hmToMinutes(hhmm);
+    const reservationSlots = Math.ceil(
+      getOperationalDurationMinutes({
+        category,
+        durationMinutes: reservation.option?.durationMinutes ?? interval,
+        quantity: reservation.quantity ?? 1,
+      }) / interval
+    );
+    const reservationStartIdx = Math.floor((reservationStartMin - startMin) / interval);
+    const reservationUnits = getOperationalCapacityUnits({
+      category,
+      quantity: reservation.quantity ?? 1,
+    });
 
-    for (let i = 0; i < rSlots; i++) {
-      const idx = rStartIdx + i;
-      usedPerSlot[idx] = (usedPerSlot[idx] ?? 0) + (r.quantity ?? 1);
+    for (let i = 0; i < reservationSlots; i++) {
+      const idx = reservationStartIdx + i;
+      usedPerSlot[idx] = (usedPerSlot[idx] ?? 0) + reservationUnits;
     }
   }
+
+  const requestedUnits = getOperationalCapacityUnits({ category, quantity });
 
   for (let i = 0; i < slotsNeeded; i++) {
     const idx = startSlotIndex + i;
     const used = usedPerSlot[idx] ?? 0;
 
-    if (used + quantity > maxUnits) {
+    if (used + requestedUnits > maxUnits) {
       return false;
     }
   }

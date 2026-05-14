@@ -265,6 +265,7 @@ export type AvailabilitySlot = {
   time: string;
   used?: Record<string, number>;
   isFull?: Record<string, boolean>;
+  isSelectable?: Record<string, boolean>;
 };
 
 export type AvailabilityData = {

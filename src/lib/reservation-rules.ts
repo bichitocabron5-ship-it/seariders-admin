@@ -1,3 +1,5 @@
+import { getOperationalPlatformUnits } from "@/lib/reservation-operations";
+
 type ContractItem = {
   quantity: number | null;
   isExtra: boolean;
@@ -50,12 +52,19 @@ export function computeRequiredPlatformUnits(input: {
     for (const it of mainItems) {
       const qty = Number(it.quantity ?? 0);
       const cat = it.service?.category ?? "";
-      if (needsPlatformUnitForCategory(cat)) sum += qty;
+      if (needsPlatformUnitForCategory(cat)) {
+        sum += getOperationalPlatformUnits({ category: cat, quantity: qty });
+      }
     }
     if (sum > 0) return sum;
   }
 
   const qty = Math.max(0, Number(input.quantity ?? 0));
   if (input.serviceCategory === undefined) return qty; // compat legacy when category is not loaded
-  return needsPlatformUnitForCategory(input.serviceCategory) ? qty : 0;
+  return needsPlatformUnitForCategory(input.serviceCategory)
+    ? getOperationalPlatformUnits({
+        category: input.serviceCategory,
+        quantity: qty,
+      })
+    : 0;
 }

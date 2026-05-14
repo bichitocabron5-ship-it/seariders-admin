@@ -12,6 +12,10 @@ import {
 import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
+import {
+  getOperationalBlockLabel,
+  getOperationalDurationMinutes,
+} from "@/lib/reservation-operations";
 
 export const runtime = "nodejs";
 
@@ -234,10 +238,21 @@ export async function GET(req: Request) {
     customerName: u.reservation.customerName,
     serviceName: u.reservation.service?.name ?? null,
     category: u.reservation.service?.category ?? null,
-    durationMinutes: u.reservation.option?.durationMinutes ?? null,
+    durationMinutes: getOperationalDurationMinutes({
+      category: u.reservation.service?.category ?? null,
+      durationMinutes: u.reservation.option?.durationMinutes ?? null,
+      quantity: u.reservation.quantity ?? null,
+    }),
     pax: u.reservation.pax ?? null,
     quantity: u.reservation.quantity ?? null,
     isLicense: Boolean(u.reservation.isLicense),
+    label: getOperationalBlockLabel({
+      serviceName: u.reservation.service?.name ?? null,
+      quantity: u.reservation.quantity ?? null,
+      pax: u.reservation.pax ?? null,
+      durationMinutes: u.reservation.option?.durationMinutes ?? null,
+      category: u.reservation.service?.category ?? null,
+    }),
   }));
 
   // 2) Jetskis activos (disponibles)
@@ -284,7 +299,15 @@ export async function GET(req: Request) {
           expectedEndAt: true,
           startedAt: true,
           durationMinutesSnapshot: true,
-          reservation: { select: { customerName: true } },
+          reservation: {
+            select: {
+              customerName: true,
+              pax: true,
+              quantity: true,
+              service: { select: { name: true, category: true } },
+              option: { select: { durationMinutes: true } },
+            },
+          },
           jetski: { select: { number: true } },
         },
       },

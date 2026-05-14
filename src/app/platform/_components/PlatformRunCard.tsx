@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import type { MonitorRunKind, RunOpen } from "../types/types";
+import { getOperationalBlockLabel } from "@/lib/reservation-operations";
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
@@ -215,6 +216,13 @@ export default function PlatformRunCard({
             Boolean(assignment.assetId) &&
             run.monitorAssetId === assignment.assetId;
           const mins = assignment.durationMinutesSnapshot || null;
+          const operationalLabel = getOperationalBlockLabel({
+            serviceName: assignment.reservation?.service?.name ?? null,
+            quantity: assignment.reservation?.quantity ?? null,
+            pax: assignment.reservation?.pax ?? null,
+            durationMinutes: assignment.reservation?.option?.durationMinutes ?? mins,
+            category: assignment.reservation?.service?.category ?? null,
+          });
 
           return (
             <div key={assignment.id} style={{ ...assignmentCardStyle, border: `1px solid ${colors.bd}`, background: colors.bg }}>
@@ -248,6 +256,7 @@ export default function PlatformRunCard({
                     {queuedIsCritical ? ` | ALERTA CRÍTICA (${assignedQueueCriticalMinutes}+ min)` : queuedIsWarn ? ` | Alerta de espera (${assignedQueueWarnMinutes}+ min)` : ""}
                   </div>
                 )}
+                <div>{operationalLabel}</div>
                 <div>Reserva: {assignment.reservationId.slice(-8)}</div>
               </div>
 

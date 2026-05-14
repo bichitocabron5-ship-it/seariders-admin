@@ -1,9 +1,13 @@
 import { prisma } from "@/lib/prisma";
+import {
+  getOperationalCapacityUnits,
+  getOperationalDurationMinutes,
+} from "@/lib/reservation-operations";
 
 type SlotPolicy = {
   intervalMinutes: number;
-  openTime: string;  // "HH:mm"
-  closeTime: string; // "HH:mm"
+  openTime: string;
+  closeTime: string;
 };
 
 function hhmmToMinutes(hhmm: string) {
@@ -16,11 +20,11 @@ function ceilDiv(a: number, b: number) {
 }
 
 export async function getSlotPolicy(tx = prisma): Promise<SlotPolicy> {
-  const p = await tx.slotPolicy.findFirst({ orderBy: { createdAt: "desc" } });
+  const policy = await tx.slotPolicy.findFirst({ orderBy: { createdAt: "desc" } });
   return {
-    intervalMinutes: p?.intervalMinutes ?? 30,
-    openTime: p?.openTime ?? "09:00",
-    closeTime: p?.closeTime ?? "20:00",
+    intervalMinutes: policy?.intervalMinutes ?? 30,
+    openTime: policy?.openTime ?? "09:00",
+    closeTime: policy?.closeTime ?? "20:00",
   };
 }
 
@@ -28,7 +32,6 @@ export async function getCategoryCapacity(category: string, tx = prisma): Promis
   const row = await tx.slotLimit.findUnique({ where: { category } });
   if (row?.maxUnits != null) return row.maxUnits;
 
-  // defaults “duros” hasta que admin lo controle todo
   if (String(category).toUpperCase() === "JETSKI") return 10;
   return 1;
 }
@@ -42,29 +45,19 @@ export function computeEndFromSlots(start: Date, slots: number, intervalMin: num
 }
 
 export function assertTimeWithinBusinessHours(
-  dateStr: string,           // "YYYY-MM-DD"
-  timeStr: string,           // "HH:mm"
+  dateStr: string,
+  timeStr: string,
   policy: SlotPolicy
 ) {
-  const t = hhmmToMinutes(timeStr);
+  const minute = hhmmToMinutes(timeStr);
   const open = hhmmToMinutes(policy.openTime);
   const close = hhmmToMinutes(policy.closeTime);
 
-  // permitimos empezar hasta close-interval (si no, la actividad se sale)
-  if (t < open || t >= close) {
+  if (minute < open || minute >= close) {
     throw new Error(`Hora fuera de horario (${policy.openTime}–${policy.closeTime}).`);
   }
 }
 
-/**
- * Valida capacidad por solapamiento.
- *
- * Requiere:
- * - category (del service)
- * - durationMin (del option)
- * - quantity (units)
- * - scheduledStart (Date UTC)
- */
 export async function assertCapacityOrThrow(args: {
   category: string;
   durationMin: number;
@@ -77,13 +70,15 @@ export async function assertCapacityOrThrow(args: {
   const policy = await getSlotPolicy(tx);
   const intervalMin = policy.intervalMinutes;
 
-  const slots = computeSlotsNeeded(args.durationMin, intervalMin);
+  const operationalDurationMin = getOperationalDurationMinutes({
+    category: args.category,
+    durationMinutes: args.durationMin,
+    quantity: args.quantity,
+  });
+  const slots = computeSlotsNeeded(operationalDurationMin, intervalMin);
   const end = computeEndFromSlots(args.scheduledStart, slots, intervalMin);
 
   const cap = await getCategoryCapacity(args.category, tx);
-
-  // Traemos reservas que potencialmente solapan (margen: mismo día y cercanas por hora).
-  // Nota: como tú ya guardas activityDate a “mediodía UTC”, lo más estable es filtrar por rango de time.
   const windowStart = new Date(args.scheduledStart.getTime() - 24 * 60 * 60_000);
   const windowEnd = new Date(end.getTime() + 24 * 60 * 60_000);
 
@@ -101,38 +96,46 @@ export async function assertCapacityOrThrow(args: {
     },
   });
 
-  // Construimos consumo por “slot index” relativo al start del día (en minutos)
-  // Para hacerlo simple y robusto: discretizamos por intervalMin sobre timestamps.
-  const toSlotIndex = (d: Date) => Math.floor(d.getTime() / (intervalMin * 60_000));
+  const toSlotIndex = (date: Date) => Math.floor(date.getTime() / (intervalMin * 60_000));
 
   const reqStartIdx = toSlotIndex(args.scheduledStart);
-  const reqEndIdx = toSlotIndex(end); // end es exclusivo en la práctica
-
-  // acumulamos consumo por índice
+  const reqEndIdx = toSlotIndex(end);
   const usage = new Map<number, number>();
 
-  for (const r of existing) {
-    const st = r.scheduledTime ? new Date(r.scheduledTime) : null;
-    if (!st) continue;
+  for (const reservation of existing) {
+    const scheduledTime = reservation.scheduledTime ? new Date(reservation.scheduledTime) : null;
+    if (!scheduledTime) continue;
 
-    const dur = Number(r.option?.durationMinutes ?? 0) || intervalMin;
-    const slotsR = computeSlotsNeeded(dur, intervalMin);
-    const endR = computeEndFromSlots(st, slotsR, intervalMin);
+    const duration = getOperationalDurationMinutes({
+      category: args.category,
+      durationMinutes: Number(reservation.option?.durationMinutes ?? 0) || intervalMin,
+      quantity: reservation.quantity ?? 1,
+    });
+    const reservationSlots = computeSlotsNeeded(duration, intervalMin);
+    const reservationEnd = computeEndFromSlots(scheduledTime, reservationSlots, intervalMin);
 
-    const a = toSlotIndex(st);
-    const b = toSlotIndex(endR);
+    const startIdx = toSlotIndex(scheduledTime);
+    const endIdx = toSlotIndex(reservationEnd);
 
-    // solapa si (a < reqEnd && b > reqStart)
-    if (!(a < reqEndIdx && b > reqStartIdx)) continue;
+    if (!(startIdx < reqEndIdx && endIdx > reqStartIdx)) continue;
 
-    for (let i = Math.max(a, reqStartIdx); i < Math.min(b, reqEndIdx); i++) {
-      usage.set(i, (usage.get(i) ?? 0) + Number(r.quantity ?? 1));
+    const units = getOperationalCapacityUnits({
+      category: args.category,
+      quantity: reservation.quantity ?? 1,
+    });
+
+    for (let i = Math.max(startIdx, reqStartIdx); i < Math.min(endIdx, reqEndIdx); i++) {
+      usage.set(i, (usage.get(i) ?? 0) + units);
     }
   }
 
-  // añadimos la nueva reserva y validamos
+  const requestedUnits = getOperationalCapacityUnits({
+    category: args.category,
+    quantity: args.quantity,
+  });
+
   for (let i = reqStartIdx; i < reqEndIdx; i++) {
-    const total = (usage.get(i) ?? 0) + args.quantity;
+    const total = (usage.get(i) ?? 0) + requestedUnits;
     if (total > cap) {
       throw new Error(`Sin disponibilidad: capacidad ${cap} excedida en ese horario (${args.category}).`);
     }

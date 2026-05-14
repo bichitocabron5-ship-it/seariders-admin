@@ -83,7 +83,16 @@ export async function GET(req: Request) {
           startedAt: true,
           expectedEndAt: true,
           durationMinutesSnapshot: true,
-          reservation: { select: { id: true, customerName: true } },
+          reservation: {
+            select: {
+              id: true,
+              customerName: true,
+              pax: true,
+              quantity: true,
+              service: { select: { name: true, category: true } },
+              option: { select: { durationMinutes: true } },
+            },
+          },
         },
       },
     },
