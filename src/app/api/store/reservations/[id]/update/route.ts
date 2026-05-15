@@ -43,6 +43,36 @@ function accumulateLineQuantity(
   map.set(key, (map.get(key) ?? 0) + Math.max(0, Number(args.quantity ?? 0)));
 }
 
+function normalizeComparableOptionalString(value: string | null | undefined) {
+  if (value == null) return null;
+  const trimmed = String(value).trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function sameInstant(a: Date | null | undefined, b: Date | null | undefined) {
+  const at = a?.getTime() ?? null;
+  const bt = b?.getTime() ?? null;
+  return at === bt;
+}
+
+function buildComparableComposition(
+  items: Array<{ serviceId: string; optionId: string; quantity: number; pax: number }>
+) {
+  return items
+    .map((item) => ({
+      serviceId: item.serviceId,
+      optionId: item.optionId,
+      quantity: Number(item.quantity ?? 0),
+      pax: Number(item.pax ?? 0),
+    }))
+    .sort((a, b) =>
+      a.serviceId.localeCompare(b.serviceId) ||
+      a.optionId.localeCompare(b.optionId) ||
+      a.quantity - b.quantity ||
+      a.pax - b.pax
+    );
+}
+
 async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: string) {
   const reservation = await tx.reservation.findUnique({
     where: { id: reservationId },
@@ -349,6 +379,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       status: true,
       serviceId: true,
       optionId: true,
+      pax: true,
       quantity: true,
       isLicense: true,
       jetskiLicenseMode: true,
@@ -368,6 +399,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       customerDocType: true,
       customerDocNumber: true,
       marketing: true,
+      companionsCount: true,
 
       // licencia actual
       licenseSchool: true,
@@ -389,8 +421,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           serviceId: true,
           optionId: true,
           quantity: true,
+          pax: true,
           isExtra: true,
           service: { select: { category: true } },
+          option: { select: { durationMinutes: true } },
         },
       },
       contracts: {
@@ -406,8 +440,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     },
   });
   if (!existing) return new NextResponse("Reserva no existe", { status: 404 });
-  if (existing.status === ReservationStatus.CANCELED || existing.status === ReservationStatus.COMPLETED) {
-    return new NextResponse("La reserva cancelada o completada no se puede editar.", { status: 409 });
+  if (
+    existing.status === ReservationStatus.CANCELED ||
+    existing.status === ReservationStatus.COMPLETED ||
+    existing.status === ReservationStatus.IN_SEA
+  ) {
+    return new NextResponse("La reserva cancelada, en curso o completada no se puede editar.", { status: 409 });
   }
   const existingRequiredUnits = computeRequiredContractUnits({
     quantity: existing.quantity ?? 0,
@@ -433,6 +471,113 @@ const tz = BUSINESS_TZ;
 const activityDate = utcDateFromYmdInTz(tz, b.activityDate);
 const scheduledTime = utcDateTimeFromYmdHmInTz(tz, b.activityDate, b.time ?? null);
 const pricingWhen = scheduledTime ?? activityDate;
+const requestedServiceId = hasProItems
+  ? (b.items?.[0]?.serviceId ?? existing.serviceId)
+  : (b.serviceId ?? existing.serviceId);
+const requestedServiceCategory =
+  requestedServiceId === existing.serviceId
+    ? existing.service?.category ?? null
+    : (
+        await prisma.service.findUnique({
+          where: { id: requestedServiceId },
+          select: { category: true },
+        })
+      )?.category ?? null;
+const requestedReservationState = deriveCommercialReservationState({
+  serviceCategory: requestedServiceCategory,
+  jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
+  isLicense: b.isLicense,
+  pricingTier: b.pricingTier ?? existing.pricingTier,
+});
+const priceSensitiveChanged =
+  existing.serviceId !== b.serviceId ||
+  existing.optionId !== b.optionId ||
+  Number(existing.quantity) !== Number(b.quantity) ||
+  Boolean(existing.isLicense) !== Boolean(requestedReservationState.isLicense) ||
+  existing.pricingTier !== requestedReservationState.pricingTier;
+const mainCount = await prisma.reservationItem.count({
+  where: { reservationId: id, isExtra: false },
+});
+const isMultiOrPack = mainCount > 1 || Boolean(existing.isPackParent);
+const customerPhone = normalizeOptionalString(b.customerPhone);
+const customerEmail = normalizeOptionalString(b.customerEmail);
+const customerCountry = normalizeOptionalString(b.customerCountry);
+const customerAddress = normalizeOptionalString(b.customerAddress);
+const customerPostalCode = normalizeOptionalString(b.customerPostalCode);
+const customerBirthDate = b.customerBirthDate !== undefined ? (b.customerBirthDate ? new Date(b.customerBirthDate) : null) : undefined;
+const customerDocType = normalizeOptionalString(b.customerDocType);
+const customerDocNumber = normalizeOptionalString(b.customerDocNumber);
+const marketing = normalizeOptionalString(b.marketing);
+const licenseSchool = normalizeOptionalString(b.licenseSchool);
+const licenseType = normalizeOptionalString(b.licenseType);
+const licenseNumber = normalizeOptionalString(b.licenseNumber);
+const finalLicenseSchool = licenseSchool === undefined ? existing.licenseSchool : licenseSchool;
+const finalLicenseType = licenseType === undefined ? existing.licenseType : licenseType;
+const finalLicenseNumber = licenseNumber === undefined ? existing.licenseNumber : licenseNumber;
+const existingComposition = buildComparableComposition(
+  (existing.items ?? [])
+    .filter((item) => !item.isExtra && item.optionId)
+    .map((item) => ({
+      serviceId: item.serviceId,
+      optionId: item.optionId!,
+      quantity: Number(item.quantity ?? 0),
+      pax: Number(item.pax ?? existing.pax ?? 0),
+    }))
+);
+const nextComposition = buildComparableComposition(
+  (b.items?.length
+    ? b.items
+    : [{
+        serviceId: b.serviceId ?? existing.serviceId,
+        optionId: b.optionId ?? existing.optionId,
+        quantity: Number(b.quantity ?? existing.quantity ?? 0),
+        pax: Number(b.pax ?? existing.pax ?? 0),
+      }]).map((item) => ({
+    serviceId: item.serviceId,
+    optionId: item.optionId,
+    quantity: Number(item.quantity ?? 0),
+    pax: Number(item.pax ?? 0),
+  }))
+);
+const scheduleChanged =
+  !sameInstant(existing.activityDate, activityDate) || !sameInstant(existing.scheduledTime, scheduledTime);
+const compositionChanged = JSON.stringify(existingComposition) !== JSON.stringify(nextComposition);
+const resolvedCustomerPhone = customerPhone === undefined ? normalizeComparableOptionalString(existing.customerPhone) : customerPhone;
+const resolvedCustomerEmail = customerEmail === undefined ? normalizeComparableOptionalString(existing.customerEmail) : customerEmail;
+const resolvedCustomerCountry =
+  customerCountry === undefined
+    ? normalizeComparableOptionalString(existing.customerCountry)?.toUpperCase() ?? null
+    : normalizeComparableOptionalString(customerCountry)?.toUpperCase() ?? null;
+const resolvedCustomerAddress =
+  customerAddress === undefined ? normalizeComparableOptionalString(existing.customerAddress) : customerAddress;
+const resolvedCustomerPostalCode =
+  customerPostalCode === undefined ? normalizeComparableOptionalString(existing.customerPostalCode) : customerPostalCode;
+const resolvedCustomerBirthDate = customerBirthDate === undefined ? existing.customerBirthDate : customerBirthDate;
+const resolvedCustomerDocType =
+  customerDocType === undefined ? normalizeComparableOptionalString(existing.customerDocType) : customerDocType;
+const resolvedCustomerDocNumber =
+  customerDocNumber === undefined ? normalizeComparableOptionalString(existing.customerDocNumber) : customerDocNumber;
+const resolvedMarketing = marketing === undefined ? normalizeComparableOptionalString(existing.marketing) : marketing;
+const protectedNonScheduleFieldsChanged =
+  Number(existing.pax ?? 0) !== Number(b.pax ?? 0) ||
+  Number(existing.companionsCount ?? 0) !== Number(b.companionsCount ?? 0) ||
+  (existing.channelId ?? null) !== (b.channelId ?? null) ||
+  Boolean(existing.isLicense) !== Boolean(requestedReservationState.isLicense) ||
+  existing.jetskiLicenseMode !== requestedReservationState.jetskiLicenseMode ||
+  existing.pricingTier !== requestedReservationState.pricingTier ||
+  normalizeComparableOptionalString(existing.customerPhone) !== resolvedCustomerPhone ||
+  normalizeComparableOptionalString(existing.customerEmail) !== resolvedCustomerEmail ||
+  (normalizeComparableOptionalString(existing.customerCountry)?.toUpperCase() ?? null) !== resolvedCustomerCountry ||
+  normalizeComparableOptionalString(existing.customerAddress) !== resolvedCustomerAddress ||
+  normalizeComparableOptionalString(existing.customerPostalCode) !== resolvedCustomerPostalCode ||
+  !sameInstant(existing.customerBirthDate, resolvedCustomerBirthDate) ||
+  normalizeComparableOptionalString(existing.customerDocType) !== resolvedCustomerDocType ||
+  normalizeComparableOptionalString(existing.customerDocNumber) !== resolvedCustomerDocNumber ||
+  normalizeComparableOptionalString(existing.marketing) !== resolvedMarketing ||
+  normalizeComparableOptionalString(existing.licenseSchool) !== normalizeComparableOptionalString(finalLicenseSchool) ||
+  normalizeComparableOptionalString(existing.licenseType) !== normalizeComparableOptionalString(finalLicenseType) ||
+  normalizeComparableOptionalString(existing.licenseNumber) !== normalizeComparableOptionalString(finalLicenseNumber);
+const isScheduleOnlyChange = scheduleChanged && !compositionChanged && !protectedNonScheduleFieldsChanged;
 
 if (hasProItems) {
   // Si es pack padre, no debería permitir editar items aquí.
@@ -480,6 +625,13 @@ if (hasProItems) {
   let shouldVersionLockedContractsForPro = false;
 
   if (lockedContractsCount > 0) {
+    if (!isScheduleOnlyChange && protectedNonScheduleFieldsChanged) {
+      return new NextResponse(
+        "La reserva tiene contratos preparados o firmados. Solo puedes reagendar fecha y hora sin tocar pax, datos legales ni composición de la reserva.",
+        { status: 409 }
+      );
+    }
+
     const existingLineQty = new Map<string, number>();
     const nextLineQty = new Map<string, number>();
     const existingServiceQty = new Map<string, number>();
@@ -512,7 +664,7 @@ if (hasProItems) {
     const isReducingLockedService = Array.from(existingServiceQty.entries()).some(
       ([serviceId, qty]) => (nextServiceQty.get(serviceId) ?? 0) < qty
     );
-    if (signedContractsCount > 0) {
+    if (signedContractsCount > 0 && !isScheduleOnlyChange) {
       shouldVersionLockedContractsForPro = true;
     } else if (isReducingLockedBase) {
       const canRegenerateByDurationChange = !isReducingLockedService;
@@ -808,58 +960,6 @@ if (hasProItems) {
   return NextResponse.json({ ok: true, ...result });
 }
 
-  const requestedServiceId = hasProItems
-    ? (b.items?.[0]?.serviceId ?? existing.serviceId)
-    : (b.serviceId ?? existing.serviceId);
-  const requestedServiceCategory =
-    requestedServiceId === existing.serviceId
-      ? existing.service?.category ?? null
-      : (
-          await prisma.service.findUnique({
-            where: { id: requestedServiceId },
-            select: { category: true },
-          })
-        )?.category ?? null;
-  const requestedReservationState = deriveCommercialReservationState({
-    serviceCategory: requestedServiceCategory,
-    jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
-    isLicense: b.isLicense,
-    pricingTier: b.pricingTier ?? existing.pricingTier,
-  });
-
-  const priceSensitiveChanged =
-    existing.serviceId !== b.serviceId ||
-    existing.optionId !== b.optionId ||
-    Number(existing.quantity) !== Number(b.quantity) ||
-    Boolean(existing.isLicense) !== Boolean(requestedReservationState.isLicense) ||
-    existing.pricingTier !== requestedReservationState.pricingTier;
-
-  const mainCount = await prisma.reservationItem.count({
-    where: { reservationId: id, isExtra: false },
-  });
-
-  const isMultiOrPack = mainCount > 1 || Boolean(existing.isPackParent);
-
-  // normalizar opcionales (misma semántica)
-  const customerPhone = normalizeOptionalString(b.customerPhone);
-  const customerEmail = normalizeOptionalString(b.customerEmail);
-  const customerCountry = normalizeOptionalString(b.customerCountry);
-  const customerAddress = normalizeOptionalString(b.customerAddress);
-  const customerPostalCode = normalizeOptionalString(b.customerPostalCode);
-  const customerBirthDate = b.customerBirthDate !== undefined ? (b.customerBirthDate ? new Date(b.customerBirthDate) : null) : undefined;
-  const customerDocType = normalizeOptionalString(b.customerDocType);
-  const customerDocNumber = normalizeOptionalString(b.customerDocNumber);
-  const marketing = normalizeOptionalString(b.marketing);
-
-  const licenseSchool = normalizeOptionalString(b.licenseSchool);
-  const licenseType = normalizeOptionalString(b.licenseType);
-  const licenseNumber = normalizeOptionalString(b.licenseNumber);
-
-  // calcular valores finales (merge): undefined => keep existing
-  const finalLicenseSchool = licenseSchool === undefined ? existing.licenseSchool : licenseSchool;
-  const finalLicenseType = licenseType === undefined ? existing.licenseType : licenseType;
-  const finalLicenseNumber = licenseNumber === undefined ? existing.licenseNumber : licenseNumber;
-
   // regla de negocio recomendada:
   // - si isLicense=true => deben existir (después del merge)
   // - si isLicense=false => limpiamos (evita datos basura)
@@ -894,6 +994,13 @@ if (hasProItems) {
 
   // Si no hay cambio de precio, solo update de campos
   if (!priceSensitiveChanged) {
+    if (lockedContractsCount > 0 && !isScheduleOnlyChange && protectedNonScheduleFieldsChanged) {
+      return new NextResponse(
+        "La reserva tiene contratos preparados o firmados. Solo puedes reagendar fecha y hora sin tocar pax, datos legales ni composición de la reserva.",
+        { status: 409 }
+      );
+    }
+
     if (lockedContractsCount > 0 && Number(b.quantity ?? existing.quantity ?? 0) < Number(existing.quantity ?? 0)) {
       return new NextResponse(
         "La reserva tiene contratos preparados o firmados. No puedes reducir la cantidad ya contratada.",
@@ -924,6 +1031,22 @@ if (hasProItems) {
     }
 
     const contracts = await prisma.$transaction(async (tx) => {
+      if (scheduledTime) {
+        const dayEndExclusiveUtc = new Date(activityDate.getTime() + 24 * 60 * 60 * 1000);
+        for (const item of (existing.items ?? []).filter((row) => !row.isExtra)) {
+          await assertSlotCapacityOrThrow({
+            tx,
+            dateStartUtc: activityDate,
+            dateEndExclusiveUtc: dayEndExclusiveUtc,
+            scheduledStartUtc: scheduledTime,
+            category: String(item.service?.category ?? "UNKNOWN").toUpperCase(),
+            durationMinutes: Number(item.option?.durationMinutes ?? 30),
+            units: Number(item.quantity ?? 0),
+            excludeReservationId: id,
+          });
+        }
+      }
+
       await tx.reservation.update({
         where: { id },
         data,

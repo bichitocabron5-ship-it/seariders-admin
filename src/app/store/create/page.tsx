@@ -1664,7 +1664,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
                   ? "Reserva cancelada en modo consulta. Puedes revisar datos, pero no modificarla."
                   : "Reserva histórica en modo consulta. Se muestran los datos guardados sin permitir edición."
                 : uiMode === "EDIT"
-                ? "Puedes editar la reserva antes de preparar contratos. Si ya existen contratos listos o firmados, la edición se bloquea para no dejar documentación desalineada."
+                ? "Puedes editar la reserva. Si ya existen contratos listos o firmados, solo se permite reagendar fecha/hora sin tocar pax, datos legales ni composición."
                 : uiMode === "FORMALIZE"
                   ? "Completa los datos mínimos, valida contratos y deja la reserva lista para la operativa de tienda."
                   : "Prepara la reserva, revisa precio y disponibilidad y continúa después con el cobro y la operación."}
@@ -1728,7 +1728,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             Esta reserva ya tiene contratos firmados.
           </div>
           <div style={{ fontSize: 13, color: "#475569" }}>
-            Si cambias actividad, duración o cantidad, los contratos firmados actuales se conservarán como histórico y el sistema generará nuevos contratos para volver a firmar la versión actualizada.
+            Puedes cambiar solo fecha y hora sin perder contratos ni firmas. Si cambias actividad, duración, cantidad, pax o datos legales, se mantiene la protección contractual existente.
           </div>
         </section>
       ) : null}
@@ -1749,7 +1749,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             Esta reserva ya tiene contratos en estado READY.
           </div>
           <div style={{ fontSize: 13, color: "#92400e" }}>
-            Si cambias la duración dentro de la misma actividad, los contratos READY volverán a DRAFT para regenerarse. Si ya hubiera contratos firmados, la edición seguiría bloqueada.
+            Puedes cambiar solo fecha y hora sin regenerar contratos. Si cambias la duración dentro de la misma actividad, los contratos READY volverán a DRAFT para regenerarse.
           </div>
         </section>
       ) : null}
