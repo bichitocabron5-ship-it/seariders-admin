@@ -65,8 +65,13 @@ type Props = {
   discountCentsClamped: number;
   finalTotalCents: number;
   commissionPct: number;
+  commissionMode: "PERCENT" | "FIXED";
+  commissionValue: number;
   commissionCents: number;
   netAfterCommissionCents: number;
+  customerDiscountMode: "PERCENT" | "FIXED";
+  customerDiscountValue: number;
+  customerDiscountCents: number;
   promoterDiscountCents: number;
   companyDiscountCents: number;
   commissionBaseCents: number;
@@ -127,8 +132,13 @@ export default function BoothPreReservationFormSection({
   discountCentsClamped,
   finalTotalCents,
   commissionPct,
+  commissionMode,
+  commissionValue,
   commissionCents,
   netAfterCommissionCents,
+  customerDiscountMode,
+  customerDiscountValue,
+  customerDiscountCents,
   promoterDiscountCents,
   companyDiscountCents,
   commissionBaseCents,
@@ -159,6 +169,9 @@ export default function BoothPreReservationFormSection({
 }: Props) {
   const hasCart = cartItems.length > 0;
   const selectedOption = optionsForService.find((option) => option.id === optionId) ?? null;
+  const hasCommercialSummary =
+    Boolean(selectedChannel?.commissionEnabled) &&
+    (commissionCents > 0 || customerDiscountCents > 0 || promoterDiscountCents > 0 || companyDiscountCents > 0);
 
   return (
     <SectionCard eyebrow="Booth" title={isExternalCharge ? "Cobro externo" : "Pre-reserva"}>
@@ -357,22 +370,45 @@ export default function BoothPreReservationFormSection({
             <div style={{ fontSize: 13, color: "#334155" }}>
               Precio base: <strong>{euros(baseTotalCents)}</strong>
             </div>
-            <div style={{ fontSize: 13, color: discountCentsClamped > 0 ? "#0f172a" : "#64748b" }}>
-              Descuento aplicado: <strong>-{euros(discountCentsClamped)}</strong>
+            <div
+              style={{
+                fontSize: 13,
+                color: customerDiscountCents + discountCentsClamped > 0 ? "#0f172a" : "#64748b",
+              }}
+            >
+              Descuento aplicado: <strong>-{euros(customerDiscountCents + discountCentsClamped)}</strong>
             </div>
             <div style={{ fontSize: 15, color: "#0f172a", fontWeight: 900 }}>
               {isExternalCharge ? "Importe final del cobro" : "Precio final de la reserva"}: {euros(finalTotalCents)}
             </div>
             {selectedChannel ? (
-              commissionPct > 0 ? (
+              hasCommercialSummary ? (
                 <>
                   <div style={{ fontSize: 13, color: "#334155" }}>
-                    Comisión estimada para SeaRiders ({selectedChannel.name} · {commissionPct.toFixed(2)}%):{" "}
+                    Comisión estimada para SeaRiders ({selectedChannel.name} ·{" "}
+                    {commissionMode === "FIXED" ? `${commissionValue.toFixed(2)} EUR` : `${commissionPct.toFixed(2)}%`}
+                    ):{" "}
                     <strong>{euros(commissionCents)}</strong>
                   </div>
                   <div style={{ fontSize: 13, color: "#334155" }}>
                     Base comisionable: <strong>{euros(commissionBaseCents)}</strong>
                   </div>
+                  {commissionMode === "FIXED" ? (
+                    <div style={{ fontSize: 12, color: "#475569" }}>
+                      Modalidad comision: <strong>{commissionValue.toFixed(2)} EUR fijos</strong>
+                    </div>
+                  ) : null}
+                  {customerDiscountCents > 0 ? (
+                    <div style={{ fontSize: 12, color: "#475569" }}>
+                      Descuento cliente canal:{" "}
+                      <strong>
+                        {customerDiscountMode === "FIXED"
+                          ? `${customerDiscountValue.toFixed(2)} EUR`
+                          : `${customerDiscountValue.toFixed(2)}%`}
+                      </strong>{" "}
+                      · total aplicado: <strong>{euros(customerDiscountCents)}</strong>
+                    </div>
+                  ) : null}
                   <div style={{ fontSize: 12, color: "#475569" }}>
                     Descuento asumido por promotor: <strong>{euros(promoterDiscountCents)}</strong> · empresa:{" "}
                     <strong>{euros(companyDiscountCents)}</strong>

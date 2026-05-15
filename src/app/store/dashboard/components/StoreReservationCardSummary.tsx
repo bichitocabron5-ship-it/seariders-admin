@@ -130,6 +130,15 @@ export function StoreReservationCardSummary({
   const showDeposit = depositStatus !== "NO_APLICA";
   const totalDiscount = customerDisc + autoDisc + manualDisc;
   const jetskiAssignments = reservation.jetskiAssignments ?? [];
+  const appliedCommissionMode = reservation.appliedCommissionMode ?? "PERCENT";
+  const appliedCommissionValue = Number(reservation.appliedCommissionValue ?? 0);
+  const appliedCommissionPct = reservation.appliedCommissionPct != null ? Number(reservation.appliedCommissionPct) : null;
+  const appliedCommissionCents = Number(reservation.appliedCommissionCents ?? 0);
+  const hasCommercialSummary =
+    appliedCommissionCents > 0 ||
+    customerDisc > 0 ||
+    promoterDisc > 0 ||
+    companyDisc > 0;
 
   return (
     <>
@@ -234,7 +243,21 @@ export function StoreReservationCardSummary({
         <div>
           <strong>Total a cobrar hoy:</strong> {euros(totalToChargeCents)}
         </div>
-        {reservation.commissionBaseCents != null ? <div style={{ opacity: 0.8 }}>Base comisionable: {euros(reservation.commissionBaseCents)}</div> : null}
+        {hasCommercialSummary ? (
+          <>
+            <div style={{ opacity: 0.8 }}>Base comisionable: {euros(Number(reservation.commissionBaseCents ?? 0))}</div>
+            {appliedCommissionCents > 0 ? (
+              <div style={{ opacity: 0.8 }}>
+                Comisión canal:{" "}
+                {appliedCommissionMode === "FIXED"
+                  ? `${appliedCommissionValue.toFixed(2)} EUR`
+                  : `${Number(appliedCommissionPct ?? appliedCommissionValue).toFixed(2)}%`}{" "}
+                · {euros(appliedCommissionCents)}
+              </div>
+            ) : null}
+            {customerDisc > 0 ? <div style={{ opacity: 0.8 }}>Descuento cliente canal: {euros(customerDisc)}</div> : null}
+          </>
+        ) : null}
       </div>
 
       {reservation.depositHeld ? (

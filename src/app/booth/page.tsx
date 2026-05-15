@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertBanner } from "@/components/seariders-ui";
 import { getCountryOptionsEs } from "@/lib/countries";
 import { opsStyles } from "@/components/ops-ui";
-import { resolveDiscountPolicy } from "@/lib/commission";
+import { resolveAppliedCommercialSnapshot, resolveCustomerDiscountSnapshot, resolveDiscountPolicy } from "@/lib/commission";
 import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import { finalizeReservationCommercialBreakdown } from "@/lib/reservation-commercial-breakdown";
 import BoothOverviewSection from "./_components/BoothOverviewSection";
@@ -25,7 +25,13 @@ type Option = {
   secondaryLabel?: string | null;
 };
 type CartItem = { id: string; serviceId: string; optionId: string | null; quantity: number; pax: number; isExtra: boolean };
-type ChannelRule = { serviceId: string; commissionPct: number };
+type ChannelRule = {
+  serviceId: string;
+  commissionPct?: number | null;
+  promoterCommissionMode?: "PERCENT" | "FIXED" | null;
+  promoterCommissionValue?: number | null;
+  promoterCommissionCents?: number | null;
+};
 type Channel = {
   id: string;
   name: string;
@@ -207,16 +213,6 @@ function toCentsFromEuroInput(v: string) {
   return Math.round(n * 100);
 }
 
-function clampPct(v: number) {
-  if (!Number.isFinite(v)) return 0;
-  return Math.max(0, Math.min(100, v));
-}
-
-function searidersPctFromChannelPct(channelPct: number, kind?: Channel["kind"] | null) {
-  const normalized = clampPct(channelPct);
-  return kind === "EXTERNAL_ACTIVITY" ? clampPct(100 - normalized) : normalized;
-}
-
 function isJetskiService(svc?: { code?: string | null; name?: string | null } | null) {
   const key = normalize(svc?.code ?? svc?.name ?? "");
   return key.includes("jetski") || key.includes("jet") || key.includes("moto");
@@ -395,41 +391,61 @@ const discountCentsClamped = useMemo(
   () => Math.max(0, Math.min(discountCentsRaw, maxManualDiscountCents)),
   [discountCentsRaw, maxManualDiscountCents]
 );
-const finalTotalCents = useMemo(
-  () => Math.max(0, baseTotalCents - discountCentsClamped),
-  [baseTotalCents, discountCentsClamped]
-);
-
 const commissionServiceId = useMemo(
   () => effectiveItems.find((item) => !item.isExtra)?.serviceId ?? selectedService?.id ?? null,
   [effectiveItems, selectedService]
 );
-
-const commissionPct = useMemo(() => {
-  if (!selectedChannel?.commissionEnabled || !commissionServiceId) return 0;
-
-  const specificRule = selectedChannel.commissionRules?.find((rule) => rule.serviceId === commissionServiceId);
-  if (specificRule) {
-    return searidersPctFromChannelPct(Number(specificRule.commissionPct ?? 0), selectedChannel.kind);
-  }
-
-  return searidersPctFromChannelPct(Number(selectedChannel.commissionBps ?? 0) / 100, selectedChannel.kind);
-}, [commissionServiceId, selectedChannel]);
+const commissionPreviewQuantity = useMemo(
+  () => effectiveItems.find((item) => !item.isExtra)?.quantity ?? quantity,
+  [effectiveItems, quantity]
+);
+const customerDiscountSnapshot = useMemo(
+  () =>
+    resolveCustomerDiscountSnapshot({
+      channel: selectedChannel,
+      quantity: commissionPreviewQuantity,
+      baseCents: baseTotalCents,
+    }),
+  [baseTotalCents, commissionPreviewQuantity, selectedChannel]
+);
 
 const commissionBreakdown = useMemo(
   () =>
     finalizeReservationCommercialBreakdown({
       totalBeforeDiscountsCents: baseTotalCents,
+      customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
       manualDiscountCents: discountCentsClamped,
       discountResponsibility,
       promoterDiscountShareBps: Math.round(Number(promoterDiscountSharePct || "0") * 100),
     }),
-  [baseTotalCents, discountCentsClamped, discountResponsibility, promoterDiscountSharePct]
+  [
+    baseTotalCents,
+    customerDiscountSnapshot.customerDiscountCents,
+    discountCentsClamped,
+    discountResponsibility,
+    promoterDiscountSharePct,
+  ]
+);
+const finalTotalCents = useMemo(() => commissionBreakdown.finalTotalCents, [commissionBreakdown.finalTotalCents]);
+const commercialPreview = useMemo(
+  () =>
+    resolveAppliedCommercialSnapshot({
+      channel: selectedChannel,
+      serviceId: commissionServiceId ?? "",
+      commissionBaseCents: commissionBreakdown.commissionBaseCents,
+      customerDiscountBaseCents: baseTotalCents,
+      quantity: commissionPreviewQuantity,
+    }),
+  [baseTotalCents, commissionPreviewQuantity, commissionServiceId, commissionBreakdown.commissionBaseCents, selectedChannel]
+);
+const commissionPct = useMemo(
+  () => Number(commercialPreview.appliedCommissionPct ?? 0),
+  [commercialPreview.appliedCommissionPct]
 );
 
 const commissionCents = useMemo(
-  () => Math.round(commissionBreakdown.commissionBaseCents * (commissionPct / 100)),
-  [commissionBreakdown.commissionBaseCents, commissionPct]
+  () => Number(commercialPreview.appliedCommissionCents ?? 0),
+  [commercialPreview.appliedCommissionCents]
 );
 const netAfterCommissionCents = useMemo(() => Math.max(0, finalTotalCents - commissionCents), [finalTotalCents, commissionCents]);
 
@@ -1033,8 +1049,13 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             discountCentsClamped={discountCentsClamped}
             finalTotalCents={finalTotalCents}
             commissionPct={commissionPct}
+            commissionMode={commercialPreview.appliedCommissionMode}
+            commissionValue={Number(commercialPreview.appliedCommissionValue ?? 0)}
             commissionCents={commissionCents}
             netAfterCommissionCents={netAfterCommissionCents}
+            customerDiscountMode={customerDiscountSnapshot.customerDiscountMode}
+            customerDiscountValue={Number(customerDiscountSnapshot.customerDiscountValue ?? 0)}
+            customerDiscountCents={customerDiscountSnapshot.customerDiscountCents}
             promoterDiscountCents={commissionBreakdown.promoterDiscountCents}
             companyDiscountCents={commissionBreakdown.companyDiscountCents}
             commissionBaseCents={commissionBreakdown.commissionBaseCents}

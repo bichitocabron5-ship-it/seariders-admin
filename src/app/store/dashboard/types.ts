@@ -50,6 +50,9 @@ export type ReservationRow = {
   pvpTotalCents?: number;
   basePriceCents?: number;
   commissionBaseCents?: number;
+  appliedCommissionMode?: "PERCENT" | "FIXED" | null;
+  appliedCommissionValue?: number | null;
+  appliedCommissionPct?: number | null;
   appliedCommissionCents?: number;
   isLicense: boolean;
   paidCents: number;
