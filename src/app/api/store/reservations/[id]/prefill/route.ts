@@ -3,10 +3,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
+import { OperationalOverrideAction, OperationalOverrideTarget } from "@prisma/client";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { getReservationWorkflowState } from "@/lib/reservation-workflow";
 import { getReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
+import { resolveReadyContractCountWithManualAttachments } from "@/lib/manual-contract-attachments";
 
 export const runtime = "nodejs";
 
@@ -83,7 +86,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         orderBy: { unitIndex: "asc" },
         take: 20,
         select: {
+          unitIndex: true,
+          logicalUnitIndex: true,
           status: true,
+          supersededAt: true,
+          createdAt: true,
           driverName: true,
           driverPhone: true,
           driverEmail: true,
@@ -196,7 +203,22 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     serviceCategory: r.service?.category ?? null,
     items: r.items ?? [],
   });
-  const readyCount = (r.contracts ?? []).filter((contract) => contract.status === "READY" || contract.status === "SIGNED").length;
+  const manualAttachmentCount =
+    requiredUnits > 0
+      ? await prisma.operationalOverrideLog.count({
+          where: {
+            targetType: OperationalOverrideTarget.RESERVATION,
+            action: OperationalOverrideAction.MANUAL_RESERVATION_CREATE,
+            targetId: r.id,
+            reason: "Adjunto contrato manual",
+          },
+        })
+      : 0;
+  const readyCount = resolveReadyContractCountWithManualAttachments({
+    requiredUnits,
+    readyContractsCount: countReadyVisibleContracts(r.contracts ?? [], requiredUnits),
+    manualAttachmentCount,
+  });
   const signedCount = (r.contracts ?? []).filter((contract) => contract.status === "SIGNED").length;
   const workflow = getReservationWorkflowState({
     reservationId: r.id,

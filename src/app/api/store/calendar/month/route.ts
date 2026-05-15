@@ -3,11 +3,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
+import { OperationalOverrideAction, OperationalOverrideTarget } from "@prisma/client";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { BUSINESS_TZ, tzLocalToUtcDate, todayYmdInTz } from "@/lib/tz-business";
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
+import { resolveReadyContractCountWithManualAttachments } from "@/lib/manual-contract-attachments";
 import { buildStoreCalendarWhere } from "@/lib/store-reservation-visibility";
 
 export const runtime = "nodejs";
@@ -97,6 +99,24 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, month, days: {}, totalCount: 0 });
   }
 
+  const manualContractLogs = await prisma.operationalOverrideLog.findMany({
+    where: {
+      targetType: OperationalOverrideTarget.RESERVATION,
+      action: OperationalOverrideAction.MANUAL_RESERVATION_CREATE,
+      reason: "Adjunto contrato manual",
+      targetId: { in: ids },
+    },
+    select: { targetId: true },
+  });
+
+  const manualAttachmentCountByReservation = new Map<string, number>();
+  for (const log of manualContractLogs) {
+    manualAttachmentCountByReservation.set(
+      log.targetId,
+      Number(manualAttachmentCountByReservation.get(log.targetId) ?? 0) + 1
+    );
+  }
+
   // 2) Pagos agrupados por reserva (neto IN/OUT) + separar fianza/servicio
   const payments = await prisma.payment.findMany({
     where: {
@@ -164,7 +184,11 @@ export async function GET(req: Request) {
         service: item.service ? { category: item.service.category ?? null } : null,
       })),
     });
-    const contractsReadyCount = countReadyVisibleContracts(r.contracts ?? [], contractsRequiredUnits);
+    const contractsReadyCount = resolveReadyContractCountWithManualAttachments({
+      requiredUnits: contractsRequiredUnits,
+      readyContractsCount: countReadyVisibleContracts(r.contracts ?? [], contractsRequiredUnits),
+      manualAttachmentCount: manualAttachmentCountByReservation.get(r.id) ?? 0,
+    });
 
     days[k] ??= { count: 0, rows: [] };
     days[k].rows.push({

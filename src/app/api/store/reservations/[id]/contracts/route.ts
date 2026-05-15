@@ -3,9 +3,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
+import { OperationalOverrideAction, OperationalOverrideTarget } from "@prisma/client";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { countReadyVisibleContracts, pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
+import { resolveReadyContractCountWithManualAttachments } from "@/lib/manual-contract-attachments";
 
 export const runtime = "nodejs";
 
@@ -158,7 +160,22 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   // Solo contamos contratos de 1..requiredUnits (ignora legacy unitIndex 0 y sobrantes).
   const contracts = pickVisibleContractsByLogicalUnit(res.contracts ?? [], requiredUnits);
-  const readyCount = countReadyVisibleContracts(res.contracts ?? [], requiredUnits);
+  const manualAttachmentCount =
+    requiredUnits > 0
+      ? await prisma.operationalOverrideLog.count({
+          where: {
+            targetType: OperationalOverrideTarget.RESERVATION,
+            action: OperationalOverrideAction.MANUAL_RESERVATION_CREATE,
+            targetId: res.id,
+            reason: "Adjunto contrato manual",
+          },
+        })
+      : 0;
+  const readyCount = resolveReadyContractCountWithManualAttachments({
+    requiredUnits,
+    readyContractsCount: countReadyVisibleContracts(res.contracts ?? [], requiredUnits),
+    manualAttachmentCount,
+  });
 
   const needsContracts = requiredUnits > 0 && readyCount < requiredUnits;
 
