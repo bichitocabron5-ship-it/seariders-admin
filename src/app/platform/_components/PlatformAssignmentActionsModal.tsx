@@ -15,6 +15,7 @@ export default function PlatformAssignmentActionsModal({
   onClose,
   onFinishWithoutIncident,
   onFinishWithIncident,
+  extraOptions,
   onExtend,
 }: {
   open: boolean;
@@ -25,6 +26,12 @@ export default function PlatformAssignmentActionsModal({
   onClose: () => void;
   onFinishWithoutIncident: () => void;
   onFinishWithIncident: () => void;
+  extraOptions: Array<{
+    serviceCode: string;
+    serviceName: string;
+    extraMinutes: number;
+    target: "JETSKI" | "BOAT";
+  }>;
   onExtend: (extraMinutes: number, serviceCode: string) => void;
 }) {
   if (!open || !assignment) {
@@ -59,21 +66,17 @@ export default function PlatformAssignmentActionsModal({
             Finalizar (con incidencia)
           </button>
 
-          <button type="button" disabled={busy} onClick={() => onExtend(20, "JETSKI_EXTRA_20")} style={secondaryActionBtnStyle}>
-            +20 (jetski)
-          </button>
-
-          <button type="button" disabled={busy} onClick={() => onExtend(40, "JETSKI_EXTRA_40")} style={secondaryActionBtnStyle}>
-            +40 (jetski)
-          </button>
-
-          <button type="button" disabled={busy} onClick={() => onExtend(60, "BOAT_EXTRA_60")} style={secondaryActionBtnStyle}>
-            +60 (boat)
-          </button>
-
-          <button type="button" disabled={busy} onClick={() => onExtend(120, "BOAT_EXTRA_120")} style={secondaryActionBtnStyle}>
-            +120 (boat)
-          </button>
+          {extraOptions.map((extra) => (
+            <button
+              key={extra.serviceCode}
+              type="button"
+              disabled={busy}
+              onClick={() => onExtend(extra.extraMinutes, extra.serviceCode)}
+              style={secondaryActionBtnStyle}
+            >
+              {extra.serviceName}
+            </button>
+          ))}
         </div>
 
         {error ? <div style={errorBoxStyle}>{error}</div> : null}

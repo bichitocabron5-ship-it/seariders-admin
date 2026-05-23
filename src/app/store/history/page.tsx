@@ -135,6 +135,7 @@ type HistoryRow = {
   serviceName: string | null;
   serviceCategory: string | null;
   durationMinutes: number | null;
+  extrasSummary?: Array<{ serviceName: string; quantity: number }>;
   paidCents: number;
   paymentStatus?: string | null;
   paymentStatusLabel?: string | null;

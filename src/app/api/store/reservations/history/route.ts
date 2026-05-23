@@ -315,6 +315,12 @@ export async function GET(req: Request) {
     const displayDurationMinutes = shouldUseParentService
       ? reservation.parentReservation?.option?.durationMinutes ?? reservation.option?.durationMinutes ?? null
       : mainItem?.option?.durationMinutes ?? reservation.option?.durationMinutes ?? null;
+    const extrasSummary = reservation.items
+      .filter((item) => item.isExtra)
+      .map((item) => ({
+        serviceName: item.service?.name ?? "Extra",
+        quantity: Number(item.quantity ?? 0),
+      }));
 
     const paymentStatus = resolveReservationPaymentStatus({
       reservationStatus: reservation.status,
@@ -422,6 +428,7 @@ export async function GET(req: Request) {
       serviceName: displayService?.name ?? null,
       serviceCategory: displayService?.category ?? null,
       durationMinutes: displayDurationMinutes,
+      extrasSummary,
       paidCents,
       paymentStatus: paymentStatus.state,
       paymentStatusLabel: paymentStatus.label,

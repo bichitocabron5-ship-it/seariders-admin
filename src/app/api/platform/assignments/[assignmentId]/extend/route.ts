@@ -1,17 +1,16 @@
-// src/app/api/platform/assignments/[assignmentId]/extend/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { z } from "zod";
 import { ExtraTimeStatus, MonitorRunStatus, RunAssignmentStatus } from "@prisma/client";
+import { z } from "zod";
+
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
+import { prisma } from "@/lib/prisma";
+import { getPlatformExtraByServiceCodeTx } from "@/lib/platform-extras";
+import { applyPlatformExtraEventsTx } from "@/lib/reservation-platform-extras";
 
 export const runtime = "nodejs";
 
-const ServiceCode = z.enum(["JETSKI_EXTRA_20", "JETSKI_EXTRA_40", "BOAT_EXTRA_60", "BOAT_EXTRA_120"]);
-
 const Body = z.object({
-  serviceCode: ServiceCode,
-  // opcional si prefieres, pero yo lo derivaría de serviceCode:
+  serviceCode: z.string().trim().min(1),
   extraMinutes: z.number().int().min(5).max(240).optional(),
 });
 
@@ -20,18 +19,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ assignmentId: 
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { assignmentId } = await ctx.params;
-
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
   if (!parsed.success) return new NextResponse("Body inválido", { status: 400 });
 
-  const b = parsed.data;
+  const body = parsed.data;
 
   try {
     const out = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "MonitorRunAssignment" WHERE "id" = ${assignmentId} FOR UPDATE`;
 
-      const a = await tx.monitorRunAssignment.findUnique({
+      const assignment = await tx.monitorRunAssignment.findUnique({
         where: { id: assignmentId },
         select: {
           id: true,
@@ -39,45 +37,63 @@ export async function POST(req: Request, ctx: { params: Promise<{ assignmentId: 
           startedAt: true,
           expectedEndAt: true,
           durationMinutesSnapshot: true,
-
-          reservationId: true, // ✅
-          runId: true,         // ✅
-          jetskiId: true,      // ✅
+          reservationId: true,
+          runId: true,
+          jetskiId: true,
           reservationUnitId: true,
-
-          run: { select: { id: true, status: true } },
+          run: {
+            select: {
+              id: true,
+              status: true,
+              kind: true,
+            },
+          },
         },
       });
 
-      if (!a) throw new Error("Assignment no existe");
-      if (a.status !== RunAssignmentStatus.ACTIVE) throw new Error(`Solo se puede extender si está ACTIVE (ahora: ${a.status})`);
-      if (a.run.status !== MonitorRunStatus.READY &&
-          a.run.status !== MonitorRunStatus.IN_SEA) {
-      throw new Error(`La salida no está abierta (${a.run.status})`);
+      if (!assignment) throw new Error("Assignment no existe");
+      if (assignment.status !== RunAssignmentStatus.ACTIVE) {
+        throw new Error(`Solo se puede extender si está ACTIVE (ahora: ${assignment.status})`);
+      }
+      if (
+        assignment.run.status !== MonitorRunStatus.READY &&
+        assignment.run.status !== MonitorRunStatus.IN_SEA
+      ) {
+        throw new Error(`La salida no está abierta (${assignment.run.status})`);
       }
 
-      const minutesByCode: Record<string, number> = {
-        JETSKI_EXTRA_20: 20,
-        JETSKI_EXTRA_40: 40,
-        BOAT_EXTRA_60: 60,
-        BOAT_EXTRA_120: 120,
-      };
+      const catalogExtra = await getPlatformExtraByServiceCodeTx(tx, body.serviceCode);
+      if (!catalogExtra) {
+        throw new Error(`El extra ${body.serviceCode} no existe en catálogo o no está normalizado para Platform`);
+      }
 
-      const extraMinutes = b.extraMinutes ?? minutesByCode[b.serviceCode];
-      if (!extraMinutes) throw new Error("serviceCode inválido");
-      const serviceCode = b.serviceCode; // ✅ ahora sí existe
-      
-      // base para extender: si expectedEndAt existe, desde ahí; si no, calcula desde startedAt
-      if (!a.expectedEndAt && !a.startedAt) throw new Error("Assignment sin startedAt");
+      const expectedTarget = assignment.run.kind === "JETSKI" ? "JETSKI" : "BOAT";
+      if (catalogExtra.target !== expectedTarget) {
+        throw new Error(`El extra ${catalogExtra.serviceCode} no es válido para ${assignment.run.kind}`);
+      }
+
+      const extraMinutes = Number(body.extraMinutes ?? catalogExtra.extraMinutes);
+      if (extraMinutes !== Number(catalogExtra.extraMinutes)) {
+        throw new Error(`El catálogo define ${catalogExtra.extraMinutes} min para ${catalogExtra.serviceCode}`);
+      }
+
+      if (!assignment.expectedEndAt && !assignment.startedAt) {
+        throw new Error("Assignment sin startedAt");
+      }
+
       const baseExpected =
-        a.expectedEndAt ?? new Date(a.startedAt!.getTime() + Number(a.durationMinutesSnapshot ?? 0) * 60000);
-      const newExpected = new Date(baseExpected.getTime() + extraMinutes * 60000);
+        assignment.expectedEndAt ??
+        new Date(
+          assignment.startedAt!.getTime() +
+            Number(assignment.durationMinutesSnapshot ?? 0) * 60_000
+        );
+      const newExpected = new Date(baseExpected.getTime() + extraMinutes * 60_000);
 
       const updated = await tx.monitorRunAssignment.update({
-        where: { id: a.id },
+        where: { id: assignment.id },
         data: {
           expectedEndAt: newExpected,
-          durationMinutesSnapshot: Number(a.durationMinutesSnapshot ?? 0) + extraMinutes,
+          durationMinutesSnapshot: Number(assignment.durationMinutesSnapshot ?? 0) + extraMinutes,
         },
         select: {
           id: true,
@@ -86,28 +102,34 @@ export async function POST(req: Request, ctx: { params: Promise<{ assignmentId: 
         },
       });
 
-      await tx.extraTimeEvent.create({
+      const event = await tx.extraTimeEvent.create({
         data: {
-          reservationId: a.reservationId,
-          assignmentId: a.id,
-          runId: a.runId,
-          jetskiId: a.jetskiId!,
-          reservationUnitId: a.reservationUnitId ?? null,
-
-          serviceCode,
+          reservationId: assignment.reservationId,
+          assignmentId: assignment.id,
+          runId: assignment.runId,
+          jetskiId: assignment.jetskiId!,
+          reservationUnitId: assignment.reservationUnitId ?? null,
+          serviceCode: catalogExtra.serviceCode,
           extraMinutes,
-
           status: ExtraTimeStatus.PENDING,
           createdByUserId: session.userId!,
         },
+        select: { id: true },
       });
-      
-      return { ok: true, assignmentId: updated.id, expectedEndAt: updated.expectedEndAt, durationMinutesSnapshot: updated.durationMinutesSnapshot };
+
+      await applyPlatformExtraEventsTx(tx, assignment.reservationId, [event.id]);
+
+      return {
+        ok: true,
+        assignmentId: updated.id,
+        expectedEndAt: updated.expectedEndAt,
+        durationMinutesSnapshot: updated.durationMinutesSnapshot,
+      };
     });
 
     return NextResponse.json(out);
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "Error";
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Error";
     return new NextResponse(message, { status: 400 });
   }
 }

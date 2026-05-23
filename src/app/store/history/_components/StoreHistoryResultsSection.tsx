@@ -131,6 +131,7 @@ type HistoryRow = {
   serviceName: string | null;
   serviceCategory: string | null;
   durationMinutes: number | null;
+  extrasSummary?: Array<{ serviceName: string; quantity: number }>;
   paidCents: number;
   paymentStatus?: string | null;
   paymentStatusLabel?: string | null;
@@ -396,6 +397,13 @@ export default function StoreHistoryResultsSection({
                             <Pill>PAX {row.commercial?.pax ?? row.pax ?? 0}</Pill>
                             {(row.commercial?.isLicense ?? row.isLicense) ? <Pill>Licencia</Pill> : null}
                           </div>
+                          {row.extrasSummary && row.extrasSummary.length > 0 ? (
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              {row.extrasSummary.map((extra, index) => (
+                                <Pill key={`${row.id}-extra-${index}`}>{`${extra.serviceName} x${extra.quantity}`}</Pill>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       </td>
 

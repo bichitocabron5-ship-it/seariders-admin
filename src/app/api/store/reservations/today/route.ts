@@ -323,6 +323,7 @@ export async function GET() {
       boothCode: r.boothCode,
       boothNote: r.boothNote,
       arrivedStoreAt: r.arrivedStoreAt,
+      platformExtrasPendingCount: r.extraTimeEvents?.length ?? 0,
 
       taxiboatTripId: r.taxiboatTripId,
       taxiboatBoat: r.taxiboatTrip?.boat ?? null,
