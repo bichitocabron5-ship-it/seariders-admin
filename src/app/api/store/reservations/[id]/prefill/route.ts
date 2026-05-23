@@ -8,7 +8,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { getReservationWorkflowState } from "@/lib/reservation-workflow";
 import { getReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
-import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
+import { countReadyVisibleContracts, pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
 import { resolveReadyContractCountWithManualAttachments } from "@/lib/manual-contract-attachments";
 
 export const runtime = "nodejs";
@@ -100,6 +100,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           driverBirthDate: true,
           driverDocType: true,
           driverDocNumber: true,
+          licenseSchool: true,
+          licenseType: true,
+          licenseNumber: true,
         },
       },
       giftVoucherId: true,
@@ -156,7 +159,21 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   if (!r) return NextResponse.json({ error: "No existe" }, { status: 404 });
 
-  const primaryContract = r.contracts[0] ?? null;
+  const requiredUnits = computeRequiredContractUnits({
+    quantity: r.quantity ?? 0,
+    isLicense: Boolean(r.isLicense),
+    serviceCategory: r.service?.category ?? null,
+    items: r.items ?? [],
+  });
+  const visibleContracts = pickVisibleContractsByLogicalUnit(r.contracts ?? [], requiredUnits);
+  const completeLicenseContract =
+    visibleContracts.find(
+      (contract) =>
+        Boolean(String(contract.licenseSchool ?? "").trim()) &&
+        Boolean(String(contract.licenseType ?? "").trim()) &&
+        Boolean(String(contract.licenseNumber ?? "").trim())
+    ) ?? null;
+  const primaryContract = visibleContracts[0] ?? r.contracts[0] ?? null;
   const contractCompatibilityFallback = !r.formalizedAt ? primaryContract : null;
   const reservation = {
     ...r,
@@ -177,6 +194,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     customerBirthDate: r.customerBirthDate ?? contractCompatibilityFallback?.driverBirthDate ?? null,
     customerDocType: fallbackOptionalString(r.customerDocType, contractCompatibilityFallback?.driverDocType),
     customerDocNumber: fallbackOptionalString(r.customerDocNumber, contractCompatibilityFallback?.driverDocNumber),
+    licenseSchool: fallbackOptionalString(r.licenseSchool, completeLicenseContract?.licenseSchool),
+    licenseType: fallbackOptionalString(r.licenseType, completeLicenseContract?.licenseType),
+    licenseNumber: fallbackOptionalString(r.licenseNumber, completeLicenseContract?.licenseNumber),
   };
 
   const isPast = r.activityDate < startOfToday();
@@ -197,12 +217,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const paidServiceCents = paymentStatus.paidServiceCents;
   const pendingServiceCents = paymentStatus.pendingServiceCents;
   const pendingDepositCents = paymentStatus.pendingDepositCents;
-  const requiredUnits = computeRequiredContractUnits({
-    quantity: r.quantity ?? 0,
-    isLicense: Boolean(r.isLicense),
-    serviceCategory: r.service?.category ?? null,
-    items: r.items ?? [],
-  });
   const manualAttachmentCount =
     requiredUnits > 0
       ? await prisma.operationalOverrideLog.count({

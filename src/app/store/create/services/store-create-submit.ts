@@ -162,9 +162,13 @@ export function buildFormalizeBody(args: {
   if (args.pricingTier !== undefined) body.pricingTier = args.pricingTier;
 
   if (args.isLicense) {
-    body.licenseSchool = args.licenseSchool?.trim() || null;
-    body.licenseType = args.licenseType?.trim() || null;
-    body.licenseNumber = args.licenseNumber?.trim() || null;
+    const licenseSchool = args.licenseSchool?.trim() || "";
+    const licenseType = args.licenseType?.trim() || "";
+    const licenseNumber = args.licenseNumber?.trim() || "";
+
+    if (licenseSchool) body.licenseSchool = licenseSchool;
+    if (licenseType) body.licenseType = licenseType;
+    if (licenseNumber) body.licenseNumber = licenseNumber;
   } else if (args.isLicense !== undefined) {
     body.licenseSchool = null;
     body.licenseType = null;

@@ -221,6 +221,20 @@ function buildMissingLicenseError(contract: ReservationContractSnapshot) {
   return `Faltan datos de licencia en el contrato de la unidad ${unit}${driverSuffix}: ${missing.join(", ")}.`;
 }
 
+function resolveLicenseValue(args: {
+  bodyValue: string | null | undefined;
+  currentValue: string | null | undefined;
+  contractValue: string | null | undefined;
+}) {
+  const fromBody = normalizeOptionalString(args.bodyValue);
+  if (fromBody) return fromBody;
+
+  const fromCurrent = normalizeOptionalString(args.currentValue);
+  if (fromCurrent) return fromCurrent;
+
+  return normalizeOptionalString(args.contractValue);
+}
+
 async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: string) {
   const res = await tx.reservation.findUnique({
     where: { id: reservationId },
@@ -736,21 +750,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         primaryContract ??
         null;
 
-      const finalLicenseSchool = normalizeOptionalString(
-        b.licenseSchool !== undefined
-          ? b.licenseSchool
-          : (current.licenseSchool ?? completeLicenseContract?.licenseSchool ?? null)
-      );
-      const finalLicenseType = normalizeOptionalString(
-        b.licenseType !== undefined
-          ? b.licenseType
-          : (current.licenseType ?? completeLicenseContract?.licenseType ?? null)
-      );
-      const finalLicenseNumber = normalizeOptionalString(
-        b.licenseNumber !== undefined
-          ? b.licenseNumber
-          : (current.licenseNumber ?? completeLicenseContract?.licenseNumber ?? null)
-      );
+      const finalLicenseSchool = resolveLicenseValue({
+        bodyValue: b.licenseSchool,
+        currentValue: current.licenseSchool,
+        contractValue: completeLicenseContract?.licenseSchool ?? null,
+      });
+      const finalLicenseType = resolveLicenseValue({
+        bodyValue: b.licenseType,
+        currentValue: current.licenseType,
+        contractValue: completeLicenseContract?.licenseType ?? null,
+      });
+      const finalLicenseNumber = resolveLicenseValue({
+        bodyValue: b.licenseNumber,
+        currentValue: current.licenseNumber,
+        contractValue: completeLicenseContract?.licenseNumber ?? null,
+      });
       if (reservationState.isLicense) {
         const contractMissingLicense = visibleContracts
           .map((contract) => buildMissingLicenseError(contract))
