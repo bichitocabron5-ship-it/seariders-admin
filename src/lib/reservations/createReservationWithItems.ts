@@ -241,6 +241,10 @@ export async function createReservationWithItems(params: {
       ? resolvePricingTierForJetskiMode(jetskiLicenseMode)
       : (input.pricingTier ?? PricingTier.STANDARD);
 
+  if (shouldFormalize && isLicense && (!licenseSchool || !licenseType || !licenseNumber)) {
+    throw new Error("Faltan datos de licencia (escuela, tipo y numero).");
+  }
+
   let basePriceCents = 0;
   let totalBeforeDiscounts = 0;
 

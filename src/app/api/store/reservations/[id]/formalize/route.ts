@@ -9,7 +9,11 @@ import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { validateReusableAssetsAvailability } from "@/lib/store-rental-assets";
 import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
-import { countReadyVisibleContracts, listMissingLogicalUnits } from "@/lib/contracts/active-contracts";
+import {
+  countReadyVisibleContracts,
+  listMissingLogicalUnits,
+  pickVisibleContractsByLogicalUnit,
+} from "@/lib/contracts/active-contracts";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
@@ -143,6 +147,78 @@ function deriveCommercialReservationState(args: {
       : (args.pricingTier ?? PricingTier.STANDARD);
 
   return { jetskiLicenseMode, isLicense, pricingTier };
+}
+
+type ReservationContractSnapshot = {
+  id: string;
+  unitIndex: number | null;
+  logicalUnitIndex: number | null;
+  status: string | null;
+  supersededAt: Date | null;
+  createdAt: Date;
+  driverName: string | null;
+  driverPhone: string | null;
+  driverEmail: string | null;
+  driverCountry: string | null;
+  driverAddress: string | null;
+  driverPostalCode: string | null;
+  driverBirthDate: Date | null;
+  driverDocType: string | null;
+  driverDocNumber: string | null;
+  licenseSchool: string | null;
+  licenseType: string | null;
+  licenseNumber: string | null;
+};
+
+function hasCompleteLicense(args: {
+  licenseSchool?: string | null;
+  licenseType?: string | null;
+  licenseNumber?: string | null;
+}) {
+  return Boolean(
+    normalizeOptionalString(args.licenseSchool) &&
+      normalizeOptionalString(args.licenseType) &&
+      normalizeOptionalString(args.licenseNumber)
+  );
+}
+
+function computeContractProgress(args: {
+  quantity: number | null | undefined;
+  isLicense: boolean;
+  serviceCategory?: string | null;
+  items: Array<{
+    quantity: number | null | undefined;
+    isExtra?: boolean | null;
+    service?: { category?: string | null } | null;
+  }>;
+  contracts: ReservationContractSnapshot[];
+}) {
+  const requiredUnits = computeRequiredContractUnits({
+    quantity: args.quantity ?? 0,
+    isLicense: args.isLicense,
+    serviceCategory: args.serviceCategory ?? null,
+    items: args.items.map((item) => ({
+      quantity: item.quantity ?? null,
+      isExtra: item.isExtra ?? false,
+      service: item.service ? { category: item.service.category ?? null } : null,
+    })),
+  });
+  const readyCount = countReadyVisibleContracts(args.contracts, requiredUnits);
+  const visibleContracts = pickVisibleContractsByLogicalUnit(args.contracts, requiredUnits);
+  return { requiredUnits, readyCount, visibleContracts };
+}
+
+function buildMissingLicenseError(contract: ReservationContractSnapshot) {
+  const missing: string[] = [];
+  if (!normalizeOptionalString(contract.licenseSchool)) missing.push("escuela");
+  if (!normalizeOptionalString(contract.licenseType)) missing.push("tipo");
+  if (!normalizeOptionalString(contract.licenseNumber)) missing.push("numero");
+  if (!missing.length) return null;
+
+  const unit = Number(contract.logicalUnitIndex ?? contract.unitIndex ?? 0) || 1;
+  const driver = normalizeOptionalString(contract.driverName);
+  const driverSuffix = driver ? ` (${driver})` : "";
+  return `Faltan datos de licencia en el contrato de la unidad ${unit}${driverSuffix}: ${missing.join(", ")}.`;
 }
 
 async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: string) {
@@ -295,6 +371,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             orderBy: { unitIndex: "asc" },
             select: {
               id: true,
+              unitIndex: true,
+              logicalUnitIndex: true,
+              status: true,
+              supersededAt: true,
+              createdAt: true,
               driverName: true,
               driverPhone: true,
               driverEmail: true,
@@ -314,19 +395,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       if (!current) throw new Error("Reserva no existe");
 
-      if (current.giftVoucherId) {
-        await tx.giftVoucher.updateMany({
-          where: { id: current.giftVoucherId, redeemedAt: null },
-          data: {
-            redeemedAt: new Date(),
-            redeemedByUserId: session.userId,
-            redeemedReservationId: current.id,
-          },
-        });
-      }
-
       if (current.status === ReservationStatus.COMPLETED || current.status === ReservationStatus.CANCELED) {
         return { ok: false as const, id, isHistorical: true };
+      }
+
+      const currentContractProgress = computeContractProgress({
+        quantity: current.quantity,
+        isLicense: Boolean(current.isLicense),
+        serviceCategory: current.service?.category ?? null,
+        items: current.items ?? [],
+        contracts: current.contracts,
+      });
+
+      if (current.formalizedAt) {
+        return {
+          ok: true as const,
+          id,
+          requiredUnits: currentContractProgress.requiredUnits,
+          readyCount: currentContractProgress.readyCount,
+          alreadyFormalized: true as const,
+        };
       }
 
       const tz = BUSINESS_TZ;
@@ -344,7 +432,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         normalizeOptionalString(b.customerName) ??
         normalizeOptionalString(current.customerName) ??
         "";
-      const primaryContract = current.contracts[0] ?? null;
+      const primaryContract =
+        currentContractProgress.visibleContracts[0] ??
+        current.contracts[0] ??
+        null;
       const contractCompatibilityFallback = !current.formalizedAt ? primaryContract : null;
       const customerPhone =
         b.customerPhone !== undefined
@@ -629,25 +720,125 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         isLicense: b.isLicense ?? current.isLicense,
         pricingTier: b.pricingTier ?? current.pricingTier,
       });
-      const contractLicenseFallback = primaryContract ?? contractCompatibilityFallback;
+      const requiredUnits = computeRequiredContractUnits({
+        quantity: totalMainQuantity,
+        isLicense: reservationState.isLicense,
+        serviceCategory: mainLine.category,
+        items: lineCreates.map((line) => ({
+          quantity: line.quantity,
+          isExtra: false,
+          service: { category: line.category },
+        })),
+      });
+      const visibleContracts = pickVisibleContractsByLogicalUnit(current.contracts, requiredUnits);
+      const completeLicenseContract =
+        visibleContracts.find((contract) => hasCompleteLicense(contract)) ??
+        primaryContract ??
+        null;
 
       const finalLicenseSchool = normalizeOptionalString(
         b.licenseSchool !== undefined
           ? b.licenseSchool
-          : (current.licenseSchool ?? contractLicenseFallback?.licenseSchool ?? null)
+          : (current.licenseSchool ?? completeLicenseContract?.licenseSchool ?? null)
       );
       const finalLicenseType = normalizeOptionalString(
         b.licenseType !== undefined
           ? b.licenseType
-          : (current.licenseType ?? contractLicenseFallback?.licenseType ?? null)
+          : (current.licenseType ?? completeLicenseContract?.licenseType ?? null)
       );
       const finalLicenseNumber = normalizeOptionalString(
         b.licenseNumber !== undefined
           ? b.licenseNumber
-          : (current.licenseNumber ?? contractLicenseFallback?.licenseNumber ?? null)
+          : (current.licenseNumber ?? completeLicenseContract?.licenseNumber ?? null)
       );
-      if (reservationState.isLicense && (!finalLicenseSchool || !finalLicenseType || !finalLicenseNumber)) {
-        throw new Error("Faltan datos de licencia (escuela, tipo y número).");
+      if (reservationState.isLicense) {
+        const contractMissingLicense = visibleContracts
+          .map((contract) => buildMissingLicenseError(contract))
+          .find((message): message is string => Boolean(message));
+        if (contractMissingLicense) throw new Error(contractMissingLicense);
+        if (!finalLicenseSchool || !finalLicenseType || !finalLicenseNumber) {
+          throw new Error("Faltan datos de licencia en la reserva. Completa escuela, tipo y numero.");
+        }
+      }
+
+      const claimFormalization = await tx.reservation.updateMany({
+        where: {
+          id,
+          formalizedAt: null,
+        },
+        data: {
+          formalizedAt: new Date(),
+          formalizedByUserId: session.userId,
+        },
+      });
+
+      if (claimFormalization.count === 0) {
+        const latest = await tx.reservation.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            quantity: true,
+            isLicense: true,
+            service: { select: { category: true } },
+            items: {
+              select: {
+                quantity: true,
+                isExtra: true,
+                service: { select: { category: true } },
+              },
+            },
+            contracts: {
+              select: {
+                id: true,
+                unitIndex: true,
+                logicalUnitIndex: true,
+                status: true,
+                supersededAt: true,
+                createdAt: true,
+                driverName: true,
+                driverPhone: true,
+                driverEmail: true,
+                driverCountry: true,
+                driverAddress: true,
+                driverPostalCode: true,
+                driverBirthDate: true,
+                driverDocType: true,
+                driverDocNumber: true,
+                licenseSchool: true,
+                licenseType: true,
+                licenseNumber: true,
+              },
+            },
+          },
+        });
+        if (!latest) throw new Error("Reserva no existe");
+
+        const latestProgress = computeContractProgress({
+          quantity: latest.quantity,
+          isLicense: Boolean(latest.isLicense),
+          serviceCategory: latest.service?.category ?? null,
+          items: latest.items ?? [],
+          contracts: latest.contracts,
+        });
+
+        return {
+          ok: true as const,
+          id,
+          requiredUnits: latestProgress.requiredUnits,
+          readyCount: latestProgress.readyCount,
+          alreadyFormalized: true as const,
+        };
+      }
+
+      if (current.giftVoucherId) {
+        await tx.giftVoucher.updateMany({
+          where: { id: current.giftVoucherId, redeemedAt: null },
+          data: {
+            redeemedAt: new Date(),
+            redeemedByUserId: session.userId,
+            redeemedReservationId: current.id,
+          },
+        });
       }
 
       const depositCents = computeDepositFromResolvedItems({
@@ -710,8 +901,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           companyDiscountCents: commercial.companyDiscountCents,
           promoCode: commercial.promoCode,
           totalPriceCents: commercial.finalTotalCents,
-          formalizedAt: new Date(),
-          formalizedByUserId: session.userId,
         },
         select: { id: true },
       });

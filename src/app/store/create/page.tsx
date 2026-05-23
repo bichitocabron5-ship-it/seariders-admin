@@ -151,6 +151,7 @@ function StoreCreatePageInner() {
   const [scheduleInvalidationMessage, setScheduleInvalidationMessage] = useState<string | null>(null);
   const skipNextTimeResetRef = useRef(false);
   const scheduleContextRef = useRef<{ serviceId: string; category: string; optionId: string } | null>(null);
+  const submitInFlightRef = useRef(false);
 
   const applyPrefillReservation = useCallback(
     (res: {
@@ -1253,10 +1254,12 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
   async function createReservation(e: FormEvent) {
     e.preventDefault();
+    if (submitInFlightRef.current || submitBusy) return;
     setSubmitAttempted(true);
     setError(null);
     setSubmitSuccess(null);
     if (primaryDisabledReason) return;
+    submitInFlightRef.current = true;
     setSubmitBusy(true);
     setAvailabilityTick((x) => x + 1);
 
@@ -1447,6 +1450,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       });
       setError(msg);
     } finally {
+      submitInFlightRef.current = false;
       setSubmitBusy(false);
     }
   }
