@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEven
 import { useRouter, useSearchParams } from "next/navigation";
 import { getCountryOptionsEs } from "@/lib/countries";
 import { BUSINESS_TZ, shouldAutoFormalize } from "@/lib/tz-business";
-import { needsContractForCategory } from "@/lib/reservation-rules";
+import { computeRequiredContractUnits, needsContractForCategory } from "@/lib/reservation-rules";
 import { getReservationWorkflowState, type ReservationWorkflowResult } from "@/lib/reservation-workflow";
 import { opsStyles } from "@/components/ops-ui";
 import {
@@ -815,6 +815,39 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   // (si quieres incluir edit, usa: Boolean(migrateReservationId || editReservationId))
   const hasReadyContracts = contracts.some((contract) => contract.status === "READY");
   const hasSignedContracts = contracts.some((contract) => contract.status === "SIGNED");
+  const submitItemsForContractSync = useMemo(
+    () =>
+      (cartItems.length > 0
+        ? cartItems
+        : [
+            {
+              serviceId,
+              optionId,
+              quantity: Number(quantity),
+              pax: Number(pax),
+            },
+          ]).filter((item) => item.serviceId && item.optionId && Number(item.quantity ?? 0) > 0),
+    [cartItems, optionId, pax, quantity, serviceId]
+  );
+  const nextRequiredContractUnits = useMemo(
+    () =>
+      computeRequiredContractUnits({
+        quantity: Number(quantity ?? 0),
+        isLicense: Boolean(isLicense),
+        serviceCategory: selectedCategory || null,
+        items: submitItemsForContractSync.map((item) => ({
+          quantity: Number(item.quantity ?? 0),
+          isExtra: false,
+          service: {
+            category:
+              servicesMain.find((service) => service.id === item.serviceId)?.category ??
+              (item.serviceId === serviceId ? selectedCategory : null) ??
+              null,
+          },
+        })),
+      }),
+    [isLicense, quantity, selectedCategory, serviceId, servicesMain, submitItemsForContractSync]
+  );
 
   const formalizeNeedsFullData = useMemo(() => {
     return needsContractForCategory(selectedCategory, false);
@@ -1252,6 +1285,18 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     setCartItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
+  function needsSignedContractReductionConfirmation() {
+    return (isEditMode || isMigrateMode || shouldForceFormalizeBooth) &&
+      hasSignedContracts &&
+      nextRequiredContractUnits < requiredUnits;
+  }
+
+  function requestSignedContractReductionConfirmation() {
+    return window.confirm(
+      "Vas a retirar una unidad con contrato firmado. La firma y el PDF histórico se conservarán, pero esa unidad dejará de contar para la operativa y el importe se recalculará. ¿Confirmas la retirada?"
+    );
+  }
+
   async function createReservation(e: FormEvent) {
     e.preventDefault();
     if (submitInFlightRef.current || submitBusy) return;
@@ -1264,6 +1309,10 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     setAvailabilityTick((x) => x + 1);
 
     try {
+      const confirmSignedContractReduction =
+        !needsSignedContractReductionConfirmation() || requestSignedContractReductionConfirmation();
+      if (!confirmSignedContractReduction) return;
+
       if (isReadOnlyReservation) {
         setError(
           migrateFlags?.isCanceled
@@ -1306,6 +1355,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           licenseSchool,
           licenseType,
           licenseNumber,
+          confirmSignedContractReduction,
           promoCode: applyPromo ? selectedPromoCode || null : null,
           router,
         });
@@ -1345,6 +1395,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           licenseSchool,
           licenseType,
           licenseNumber,
+          confirmSignedContractReduction,
           promoCode: applyPromo ? selectedPromoCode || null : null,
         });
         router.push("/store");
@@ -1389,6 +1440,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           licenseSchool,
           licenseType,
           licenseNumber,
+          confirmSignedContractReduction,
           promoCode: applyPromo ? selectedPromoCode || null : null,
           router,
         });
@@ -1668,7 +1720,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
                   ? "Reserva cancelada en modo consulta. Puedes revisar datos, pero no modificarla."
                   : "Reserva histórica en modo consulta. Se muestran los datos guardados sin permitir edición."
                 : uiMode === "EDIT"
-                ? "Puedes editar la reserva. Si ya existen contratos listos o firmados, solo se permite reagendar fecha/hora sin tocar pax, datos legales ni composición."
+                ? "Puedes editar la reserva y ajustar unidades. Las firmas existentes se conservan como histórico y cualquier retirada firmada requiere confirmación explícita."
                 : uiMode === "FORMALIZE"
                   ? "Completa los datos mínimos, valida contratos y deja la reserva lista para la operativa de tienda."
                   : "Prepara la reserva, revisa precio y disponibilidad y continúa después con el cobro y la operación."}
@@ -1732,7 +1784,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             Esta reserva ya tiene contratos firmados.
           </div>
           <div style={{ fontSize: 13, color: "#475569" }}>
-            Puedes cambiar solo fecha y hora sin perder contratos ni firmas. Si cambias actividad, duración, cantidad, pax o datos legales, se mantiene la protección contractual existente.
+            Puedes añadir unidades pendientes y reducir unidades. Si retiras una unidad firmada, se pedirá confirmación fuerte y la firma quedará conservada como histórico.
           </div>
         </section>
       ) : null}
@@ -1753,7 +1805,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             Esta reserva ya tiene contratos en estado READY.
           </div>
           <div style={{ fontSize: 13, color: "#92400e" }}>
-            Puedes cambiar solo fecha y hora sin regenerar contratos. Si cambias la duración dentro de la misma actividad, los contratos READY volverán a DRAFT para regenerarse.
+            Puedes ajustar cantidad y composición sin borrar historial firmado. Si reduces unidades, se retirarán primero los contratos no firmados.
           </div>
         </section>
       ) : null}

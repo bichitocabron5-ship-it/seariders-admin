@@ -23,6 +23,8 @@ import {
   resolveDiscountPolicy,
 } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
+import { syncReservationContractsTx } from "@/lib/reservation-contract-sync";
+import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 
 export const runtime = "nodejs";
@@ -75,6 +77,7 @@ const Body = z.object({
   time: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
   companionsCount: z.number().int().min(0).max(20).optional(),
   items: z.array(ItemBody).optional(),
+  confirmSignedContractReduction: z.boolean().optional(),
 });
 
 function normalizeOptionalString(v: string | null | undefined) {
@@ -147,6 +150,14 @@ function deriveCommercialReservationState(args: {
       : (args.pricingTier ?? PricingTier.STANDARD);
 
   return { jetskiLicenseMode, isLicense, pricingTier };
+}
+
+function toRouteErrorResponse(error: unknown) {
+  const message = error instanceof Error ? error.message : "Error";
+  return new NextResponse(
+    message.replace(/^CONFIRM_SIGNED_CONTRACT_REDUCTION:\s*/, ""),
+    { status: message.startsWith("CONFIRM_SIGNED_CONTRACT_REDUCTION:") ? 409 : 400 }
+  );
 }
 
 type ReservationContractSnapshot = {
@@ -335,6 +346,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           formalizedAt: true,
           giftVoucherId: true,
           passVoucherId: true,
+          isPackParent: true,
+          parentReservationId: true,
           customerName: true,
           customerPhone: true,
           customerEmail: true,
@@ -862,6 +875,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: line.quantity,
         })),
       });
+      const nextRequiredContractUnits = computeRequiredContractUnits({
+        quantity: totalMainQuantity,
+        isLicense: reservationState.isLicense,
+        serviceCategory: mainLine.category,
+        items: lineCreates.map((line) => ({
+          quantity: line.quantity,
+          isExtra: false,
+          service: { category: line.category },
+        })),
+      });
       const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
         channelId: effectiveChannelId,
         serviceId: mainLine.serviceId,
@@ -937,6 +960,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         })),
       });
 
+      await syncReservationContractsTx(tx, {
+        reservationId: id,
+        requiredUnits: nextRequiredContractUnits,
+        confirmSignedReduction: Boolean(b.confirmSignedContractReduction),
+      });
+      await syncReservationPlatformUnitsTx(tx, {
+        id,
+        quantity: totalMainQuantity,
+        isPackParent: current.isPackParent,
+        parentReservationId: current.parentReservationId,
+        serviceCategory: mainLine.category,
+        items: lineCreates.map((line) => ({
+          quantity: line.quantity,
+          isExtra: false,
+          service: { category: line.category },
+        })),
+      });
       const contracts = await ensureContractsTx(tx, id);
 
       if (contracts.requiredUnits > 0 && contracts.readyCount < contracts.requiredUnits) {
@@ -954,6 +994,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     return NextResponse.json(result);
   } catch (e: unknown) {
-    return new NextResponse(e instanceof Error ? e.message : "Error", { status: 400 });
+    return toRouteErrorResponse(e);
   }
 }

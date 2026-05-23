@@ -55,6 +55,7 @@ export function buildEditUpdateBody(args: {
   licenseSchool: string;
   licenseType: string;
   licenseNumber: string;
+  confirmSignedContractReduction?: boolean;
 }) {
   const body: Record<string, unknown> = {
     pax: Number(args.pax),
@@ -104,6 +105,10 @@ export function buildEditUpdateBody(args: {
     body.licenseNumber = null;
   }
 
+  if (args.confirmSignedContractReduction) {
+    body.confirmSignedContractReduction = true;
+  }
+
   return body;
 }
 
@@ -135,6 +140,7 @@ export function buildFormalizeBody(args: {
   licenseNumber?: string;
   cartItems?: SubmitCartItem[];
   promoCode?: string | null;
+  confirmSignedContractReduction?: boolean;
 }) {
   const body: Record<string, unknown> = {
     customerName: args.customerName.trim(),
@@ -193,6 +199,10 @@ export function buildFormalizeBody(args: {
       pax: Number(ci.pax),
       promoCode: ci.promoCode ?? null,
     }));
+  }
+
+  if (args.confirmSignedContractReduction) {
+    body.confirmSignedContractReduction = true;
   }
 
   return body;

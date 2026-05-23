@@ -47,6 +47,7 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
   licenseSchool: string;
   licenseType: string;
   licenseNumber: string;
+  confirmSignedContractReduction?: boolean;
   promoCode?: string | null;
 }) {
   validateBeforeSubmit({
@@ -96,6 +97,7 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
     licenseSchool: args.licenseSchool,
     licenseType: args.licenseType,
     licenseNumber: args.licenseNumber,
+    confirmSignedContractReduction: args.confirmSignedContractReduction,
   });
 
   const res = await fetch(`/api/store/reservations/${args.editReservationId}/update`, {
@@ -129,6 +131,7 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
   licenseSchool?: string;
   licenseType?: string;
   licenseNumber?: string;
+  confirmSignedContractReduction?: boolean;
   promoCode?: string | null;
   router: AppRouterInstance;
 }) {
@@ -179,6 +182,7 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
     licenseSchool: args.licenseSchool,
     licenseType: args.licenseType,
     licenseNumber: args.licenseNumber,
+    confirmSignedContractReduction: args.confirmSignedContractReduction,
     cartItems: args.cartItems,
     promoCode: args.promoCode ?? null,
   });
