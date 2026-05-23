@@ -7,7 +7,7 @@ import { OperationalOverrideAction, OperationalOverrideTarget } from "@prisma/cl
 
 import { prisma } from "@/lib/prisma";
 import { type AppSession, sessionOptions } from "@/lib/session";
-import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { resolveDepositStatus } from "@/lib/reservation-deposits";
 import { getPassVoucherPaidCents, getSignedPaymentCents } from "@/lib/pass-vouchers";
 import { summarizeReservationContracts } from "@/lib/reservation-parties";
 import { buildStoreHistoryWhere } from "@/lib/store-reservation-visibility";
@@ -15,6 +15,8 @@ import { deriveStoreHistoryMeta, storeHistoryReasonLabel } from "@/lib/store-his
 import { buildReservationJetskiAssignments } from "@/lib/jetski-assignment-history";
 import { resolveCommissionForReporting } from "@/lib/commission-reporting";
 import { getBusinessDayRange } from "@/lib/business-day";
+import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
+import { resolveReservationOperationalStatus } from "@/lib/reservation-operational-status";
 
 export const runtime = "nodejs";
 
@@ -314,42 +316,34 @@ export async function GET(req: Request) {
       ? reservation.parentReservation?.option?.durationMinutes ?? reservation.option?.durationMinutes ?? null
       : mainItem?.option?.durationMinutes ?? reservation.option?.durationMinutes ?? null;
 
-    const paidCents = reservation.payments.reduce((sum, payment) => {
-      const sign = payment.direction === "OUT" ? -1 : 1;
-      return sum + sign * payment.amountCents;
-    }, 0);
-
-    const depositCollectedCents = reservation.payments
-      .filter((payment) => payment.isDeposit && payment.direction === "IN")
-      .reduce((sum, payment) => sum + payment.amountCents, 0);
-
-    const depositReturnedCents = reservation.payments
-      .filter((payment) => payment.isDeposit && payment.direction === "OUT")
-      .reduce((sum, payment) => sum + payment.amountCents, 0);
-
-    const paidDepositCents = reservation.payments
-      .filter((payment) => payment.isDeposit)
-      .reduce((sum, payment) => {
-        const sign = payment.direction === "OUT" ? -1 : 1;
-        return sum + sign * payment.amountCents;
-      }, 0);
-
-    const depositPlannedCents = computeReservationDepositCents({
-      storedDepositCents: reservation.depositCents,
+    const paymentStatus = resolveReservationPaymentStatus({
+      reservationStatus: reservation.status,
+      totalPriceCents: reservation.totalPriceCents,
+      depositCents: reservation.depositCents,
       quantity: reservation.quantity,
       isLicense: Boolean(reservation.isLicense),
       serviceCategory: reservation.service?.category ?? null,
       items: reservation.items ?? [],
+      payments: reservation.payments,
     });
-    const servicePaidCents = Math.max(0, Number(paidCents ?? 0) - Number(paidDepositCents ?? 0));
-    const servicePendingCents =
-      reservation.status === "CANCELED"
-        ? 0
-        : Math.max(0, Number(reservation.totalPriceCents ?? 0) - servicePaidCents);
-    const depositPendingCents =
-      reservation.status === "CANCELED"
-        ? 0
-        : Math.max(0, Number(depositPlannedCents ?? 0) - Number(depositCollectedCents ?? 0));
+    const paidCents = paymentStatus.paidServiceCents + paymentStatus.paidDepositCents;
+    const depositCollectedCents = reservation.payments
+      .filter((payment) => payment.isDeposit && payment.direction === "IN")
+      .reduce((sum, payment) => sum + payment.amountCents, 0);
+    const depositReturnedCents = reservation.payments
+      .filter((payment) => payment.isDeposit && payment.direction === "OUT")
+      .reduce((sum, payment) => sum + payment.amountCents, 0);
+    const paidDepositCents = paymentStatus.paidDepositCents;
+    const depositPlannedCents = paymentStatus.depositDueCents;
+    const servicePaidCents = Math.max(0, paymentStatus.paidServiceCents);
+    const servicePendingCents = paymentStatus.displayPendingServiceCents;
+    const depositPendingCents = paymentStatus.displayPendingDepositCents;
+    const depositStatus = resolveDepositStatus({
+      depositCents: depositPlannedCents,
+      depositHeld: reservation.depositHeld,
+      payments: reservation.payments,
+      paidDepositCents,
+    });
     const historyMeta = deriveStoreHistoryMeta({
       status: reservation.status,
       activityDate: reservation.activityDate,
@@ -383,11 +377,18 @@ export async function GET(req: Request) {
       assignments: reservation.monitorRunAssignments,
       units: reservation.units,
     });
+    const operationalStatus = resolveReservationOperationalStatus({
+      status: reservation.status,
+      arrivalAt: reservation.arrivalAt,
+      storeFlowStage: historyMeta.storeFlowStage,
+    });
 
     return {
       id: reservation.id,
       status: reservation.status,
       storeFlowStage: historyMeta.storeFlowStage,
+      operationalStatus: operationalStatus.code,
+      operationalStatusLabel: operationalStatus.label,
       activityDate: reservation.activityDate,
       scheduledTime: reservation.scheduledTime,
       arrivalAt: reservation.arrivalAt,
@@ -422,9 +423,13 @@ export async function GET(req: Request) {
       serviceCategory: displayService?.category ?? null,
       durationMinutes: displayDurationMinutes,
       paidCents,
+      paymentStatus: paymentStatus.state,
+      paymentStatusLabel: paymentStatus.label,
       servicePaidCents,
       servicePendingCents,
       paidDepositCents,
+      depositStatus: depositStatus.code,
+      depositStatusLabel: depositStatus.label,
       depositPendingCents,
       depositCollectedCents,
       depositReturnedCents,

@@ -3,8 +3,9 @@
 import type React from "react";
 
 import { ActionButton, AlertBanner, StatusBadge } from "@/components/seariders-ui";
+import { getDepositStatusLabel } from "@/lib/reservation-deposits";
 import type { ReservationRow } from "../types";
-import { euros, hhmm, statusColor } from "../utils";
+import { euros, hhmm, statusColor, statusLabel } from "../utils";
 
 type ContractsState = "OK" | "PARTIAL" | "MISSING" | null;
 type DepositStatus = "NO_APLICA" | "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA";
@@ -56,14 +57,6 @@ function precheckinTone(readyCount: number, requiredUnits: number) {
   return { tone: "danger" as const, label: "Pendiente de firma" };
 }
 
-function depositLabel(depositStatus: DepositStatus) {
-  if (depositStatus === "NO_APLICA") return "Sin fianza";
-  if (depositStatus === "PENDIENTE") return "Fianza pendiente";
-  if (depositStatus === "LIBERABLE") return "Fianza liberable";
-  if (depositStatus === "DEVUELTA") return "Fianza devuelta";
-  return "Fianza retenida";
-}
-
 function depositTone(depositStatus: DepositStatus) {
   if (depositStatus === "NO_APLICA") return "neutral" as const;
   if (depositStatus === "PENDIENTE") return "danger" as const;
@@ -73,9 +66,8 @@ function depositTone(depositStatus: DepositStatus) {
 }
 
 function flowStageLabel(reservation: ReservationRow) {
-  if (reservation.storeFlowStage === "RETURN_PENDING_CLOSE") return "Devuelta";
-  if (reservation.storeFlowStage === "QUEUE") return "Pendiente";
-  return reservation.status;
+  const stage = reservation.operationalStatus ?? reservation.storeFlowStage ?? reservation.status;
+  return reservation.operationalStatusLabel ?? statusLabel(stage);
 }
 
 function flowStageTone(reservation: ReservationRow) {
@@ -225,7 +217,7 @@ export function StoreReservationCardSummary({
       <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
         <StatusBadge tone="info">Servicio {euros(servicePaid)}</StatusBadge>
         {showDeposit ? <StatusBadge tone="warning">Fianza {euros(depositPaid)}</StatusBadge> : null}
-        {showDeposit ? <StatusBadge tone={depositTone(depositStatus)}>{depositLabel(depositStatus)}</StatusBadge> : null}
+        {showDeposit ? <StatusBadge tone={depositTone(depositStatus)}>{reservation.depositStatusLabel ?? getDepositStatusLabel(depositStatus)}</StatusBadge> : null}
         {pendingCents > 0 ? <StatusBadge tone="danger">Pendiente {euros(pendingCents)}</StatusBadge> : <StatusBadge tone="success">Todo cobrado</StatusBadge>}
         {waitMeta ? <StatusBadge tone={waitTone(waitMeta.bg)}>{waitMeta.label}</StatusBadge> : null}
       </div>

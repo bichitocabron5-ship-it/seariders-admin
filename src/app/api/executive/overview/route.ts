@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AppSession, sessionOptions } from "@/lib/session";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
 
 export const runtime = "nodejs";
 
@@ -274,28 +275,6 @@ function tzMonthRangeUtc(tz: string, date: Date) {
   };
 }
 
-function sumSignedPayments(
-  payments: Array<{
-    amountCents: number;
-    direction: "IN" | "OUT";
-    isDeposit: boolean;
-  }>,
-  opts?: { includeDeposits?: boolean }
-) {
-  const includeDeposits = opts?.includeDeposits ?? true;
-
-  return payments
-    .filter((payment) => (includeDeposits ? true : !payment.isDeposit))
-    .reduce(
-      (sum, payment) =>
-        sum +
-        (payment.direction === "OUT"
-          ? -payment.amountCents
-          : payment.amountCents),
-      0
-    );
-}
-
 function buildReservationMetrics(rows: ReservationMetricInput[]) {
   const mapped = rows.map((reservation) => {
     const serviceTotalCents = reservation.items
@@ -317,16 +296,22 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
           )
         : Number(reservation.totalPriceCents ?? 0);
 
-    const collectedCents = sumSignedPayments(reservation.payments, {
-      includeDeposits: true,
+    const paymentStatus = resolveReservationPaymentStatus({
+      reservationStatus: reservation.status,
+      totalPriceCents: soldTotalCents,
+      depositCents: reservation.depositCents,
+      quantity: reservation.quantity ?? null,
+      isLicense: Boolean(reservation.isLicense),
+      serviceCategory: reservation.service?.category ?? null,
+      items: reservation.items.map((item) => ({
+        quantity: item.quantity ?? 0,
+        isExtra: item.isExtra,
+        service: { category: item.service?.category ?? null },
+      })),
+      payments: reservation.payments,
     });
-    const collectedServiceCents = sumSignedPayments(reservation.payments, {
-      includeDeposits: false,
-    });
-    const pendingServiceCents = Math.max(
-      0,
-      soldTotalCents - collectedServiceCents
-    );
+    const collectedCents = paymentStatus.paidServiceCents + paymentStatus.paidDepositCents;
+    const pendingServiceCents = paymentStatus.displayPendingServiceCents;
 
     return {
       id: reservation.id,
@@ -1465,16 +1450,20 @@ export async function GET() {
       ),
       depositsLiberableCents: reservationsToday.reduce(
         (sum, reservation) => {
-          const paidDeposit = reservation.payments
-            .filter((payment) => payment.isDeposit)
-            .reduce(
-              (acc, payment) =>
-                acc +
-                (payment.direction === "OUT"
-                  ? -payment.amountCents
-                  : payment.amountCents),
-              0
-            );
+          const paidDeposit = resolveReservationPaymentStatus({
+            reservationStatus: reservation.status,
+            totalPriceCents: reservation.totalPriceCents,
+            depositCents: reservation.depositCents,
+            quantity: reservation.quantity ?? null,
+            isLicense: Boolean(reservation.isLicense),
+            serviceCategory: reservation.service?.category ?? null,
+            items: reservation.items.map((item) => ({
+              quantity: item.quantity ?? 0,
+              isExtra: item.isExtra,
+              service: { category: item.service?.category ?? null },
+            })),
+            payments: reservation.payments,
+          }).paidDepositCents;
 
           return sum + (reservation.depositHeld ? 0 : Math.max(0, paidDeposit));
         },
@@ -1483,45 +1472,51 @@ export async function GET() {
       depositsRetainedNetCents: reservationsToday.reduce((sum, reservation) => {
         if (!reservation.depositHeld) return sum;
 
-        const netDeposit = reservation.payments
-          .filter((payment) => payment.isDeposit)
-          .reduce(
-            (acc, payment) =>
-              acc +
-              (payment.direction === "OUT"
-                ? -payment.amountCents
-                : payment.amountCents),
-            0
-          );
+        const netDeposit = resolveReservationPaymentStatus({
+          reservationStatus: reservation.status,
+          totalPriceCents: reservation.totalPriceCents,
+          depositCents: reservation.depositCents,
+          quantity: reservation.quantity ?? null,
+          isLicense: Boolean(reservation.isLicense),
+          serviceCategory: reservation.service?.category ?? null,
+          items: reservation.items.map((item) => ({
+            quantity: item.quantity ?? 0,
+            isExtra: item.isExtra,
+            service: { category: item.service?.category ?? null },
+          })),
+          payments: reservation.payments,
+        }).paidDepositCents;
 
         return sum + Math.max(0, netDeposit);
       }, 0),
       reservationsWithDebt: reservationsToday.filter((reservation) => {
-        const sold =
-          reservation.items.length > 0
-            ? Math.max(
-                0,
-                reservation.items.reduce(
-                  (sum, item) => sum + Number(item.totalPriceCents ?? 0),
-                  0
-                ) -
-                  Number(reservation.autoDiscountCents ?? 0) -
-                  Number(reservation.manualDiscountCents ?? 0)
-              )
-            : Number(reservation.totalPriceCents ?? 0);
-
-        const collectedService = reservation.payments
-          .filter((payment) => !payment.isDeposit)
-          .reduce(
-            (acc, payment) =>
-              acc +
-              (payment.direction === "OUT"
-                ? -payment.amountCents
-                : payment.amountCents),
-            0
-          );
-
-        return Math.max(0, sold - collectedService) > 0;
+        return (
+          resolveReservationPaymentStatus({
+            reservationStatus: reservation.status,
+            totalPriceCents:
+              reservation.items.length > 0
+                ? Math.max(
+                    0,
+                    reservation.items.reduce(
+                      (sum, item) => sum + Number(item.totalPriceCents ?? 0),
+                      0
+                    ) -
+                      Number(reservation.autoDiscountCents ?? 0) -
+                      Number(reservation.manualDiscountCents ?? 0)
+                  )
+                : Number(reservation.totalPriceCents ?? 0),
+            depositCents: reservation.depositCents,
+            quantity: reservation.quantity ?? null,
+            isLicense: Boolean(reservation.isLicense),
+            serviceCategory: reservation.service?.category ?? null,
+            items: reservation.items.map((item) => ({
+              quantity: item.quantity ?? 0,
+              isExtra: item.isExtra,
+              service: { category: item.service?.category ?? null },
+            })),
+            payments: reservation.payments,
+          }).displayPendingServiceCents > 0
+        );
       }).length,
     },
     trends,

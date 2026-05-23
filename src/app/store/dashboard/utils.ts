@@ -1,3 +1,5 @@
+import { getReservationOperationalStatusLabel } from "@/lib/reservation-operational-status";
+
 export function errorMessage(e: unknown, fallback: string) {
   return e instanceof Error ? e.message : fallback;
 }
@@ -45,6 +47,10 @@ export function statusColor(status: string) {
     default:
       return "#f3f4f6";
   }
+}
+
+export function statusLabel(status: string) {
+  return getReservationOperationalStatusLabel(status);
 }
 
 export function hhmm(iso?: string | null) {

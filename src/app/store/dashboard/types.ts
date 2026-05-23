@@ -34,6 +34,8 @@ export type ReservationRow = {
   id: string;
   formalizedAt?: string | null;
   storeFlowStage?: string | null;
+  operationalStatus?: string | null;
+  operationalStatusLabel?: string | null;
   source: "STORE" | "BOOTH" | "WEB";
   boothCode?: string | null;
   boothNote?: string | null;
@@ -56,9 +58,12 @@ export type ReservationRow = {
   appliedCommissionCents?: number;
   isLicense: boolean;
   paidCents: number;
+  paymentStatus?: "PENDING" | "PARTIAL" | "PAID" | "CANCELED" | "REFUNDED";
+  paymentStatusLabel?: string;
   paidDepositCents?: number;
   depositCents: number;
   depositStatus?: "NO_APLICA" | "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA";
+  depositStatusLabel?: string;
   totalToChargeCents: number;
   channelName: string | null;
   serviceName?: string | null;

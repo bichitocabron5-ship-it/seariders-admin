@@ -5,12 +5,13 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
-import { deriveReservationDepositStatus } from "@/lib/reservation-deposits";
+import { resolveDepositStatus } from "@/lib/reservation-deposits";
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { buildStoreTodayWhere } from "@/lib/store-reservation-visibility";
 import { buildReservationJetskiAssignments } from "@/lib/jetski-assignment-history";
-import { getReservationPaymentStatus } from "@/lib/reservation-payment-status";
+import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
+import { resolveReservationOperationalStatus } from "@/lib/reservation-operational-status";
 import { getBusinessDayRange } from "@/lib/business-day";
 
 export const runtime = "nodejs";
@@ -147,7 +148,8 @@ export async function GET() {
       return sum + sign * p.amountCents;
     }, 0);
 
-    const paymentStatus = getReservationPaymentStatus({
+    const paymentStatus = resolveReservationPaymentStatus({
+      reservationStatus: r.status,
       totalPriceCents: r.totalPriceCents,
       depositCents: r.depositCents,
       quantity: r.quantity,
@@ -194,8 +196,8 @@ export async function GET() {
     const soldTotalCents = Math.max(0, Number(r.totalPriceCents ?? Math.max(0, grossCents - totalDiscountCents)));
  
     // pendientes separados (✅ servicio basado en items)
-    const pendingServiceCents = paymentStatus.pendingServiceCents;
-    const pendingDepositCents = paymentStatus.pendingDepositCents;
+    const pendingServiceCents = paymentStatus.displayPendingServiceCents;
+    const pendingDepositCents = paymentStatus.displayPendingDepositCents;
     const pendingCents = pendingServiceCents + pendingDepositCents;
 
     const requiredUnits = computeRequiredContractUnits({
@@ -215,11 +217,17 @@ export async function GET() {
       requiredUnits > 0 ? { requiredUnits, readyCount } : null;
 
     // estado fianza
-    const depositStatus = deriveReservationDepositStatus({
+    const depositStatus = resolveDepositStatus({
       depositCents,
       depositHeld: r.depositHeld,
       paidDepositCents,
       payments: r.payments,
+    });
+    const storeFlowStage = deriveStoreFlowStage(r.status, r.arrivalAt);
+    const operationalStatus = resolveReservationOperationalStatus({
+      status: r.status,
+      arrivalAt: r.arrivalAt,
+      storeFlowStage,
     });
 
     // nombres para UI (main item o fallback legacy)
@@ -240,7 +248,6 @@ export async function GET() {
 
     const finalTotalCents = Number(r.totalPriceCents ?? Math.max(0, pvpTotalCents - totalDiscountCents));
     const totalToChargeCents = finalTotalCents + depositCents;
-    const storeFlowStage = deriveStoreFlowStage(r.status, r.arrivalAt);
     const jetskiAssignments = buildReservationJetskiAssignments({
       reservationId: r.id,
       assignments: r.monitorRunAssignments,
@@ -251,6 +258,8 @@ export async function GET() {
       id: r.id,
       status: r.status,
       storeFlowStage,
+      operationalStatus: operationalStatus.code,
+      operationalStatusLabel: operationalStatus.label,
       arrivalAt: r.arrivalAt,
       formalizedAt: r.formalizedAt,
       activityDate: r.activityDate,
@@ -303,7 +312,10 @@ export async function GET() {
       pendingServiceCents,
       pendingDepositCents,
 
-      depositStatus,
+      paymentStatus: paymentStatus.state,
+      paymentStatusLabel: paymentStatus.label,
+      depositStatus: depositStatus.code,
+      depositStatusLabel: depositStatus.label,
       depositHeld: r.depositHeld,
       depositHoldReason: r.depositHoldReason ?? null,
 

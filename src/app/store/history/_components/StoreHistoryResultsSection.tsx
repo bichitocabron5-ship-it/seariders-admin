@@ -96,6 +96,8 @@ type HistoryRow = {
   id: string;
   status: string;
   storeFlowStage: string | null;
+  operationalStatus?: string | null;
+  operationalStatusLabel?: string | null;
   activityDate: string;
   scheduledTime: string | null;
   arrivalAt: string | null;
@@ -130,7 +132,11 @@ type HistoryRow = {
   serviceCategory: string | null;
   durationMinutes: number | null;
   paidCents: number;
+  paymentStatus?: string | null;
+  paymentStatusLabel?: string | null;
   paidDepositCents: number;
+  depositStatus?: string | null;
+  depositStatusLabel?: string | null;
   depositCollectedCents: number;
   depositReturnedCents: number;
   depositRetainedCents: number;
@@ -275,13 +281,9 @@ export default function StoreHistoryResultsSection({
                 const canUploadMoreManualContracts =
                   (row.adjustments?.isManualEntry ?? row.isManualEntry) && manualContractsCount < maxManualContracts;
                 const jetskiAssignments = row.jetskiAssignments ?? [];
-                const holdStatus = row.depositHeld
-                  ? row.depositReturnedCents > 0
-                    ? "Retenida parcial"
-                    : "Retenida"
-                  : row.depositReturnedCents > 0
-                    ? "Devuelta"
-                    : "Sin bloqueo";
+                const holdStatus = row.depositHeld && row.depositReturnedCents > 0
+                  ? "Retenida parcial"
+                  : row.depositStatusLabel || "Sin fianza";
 
                 return (
                   <Fragment key={row.id}>
@@ -407,10 +409,13 @@ export default function StoreHistoryResultsSection({
                               color: statusUi.color,
                             }}
                           >
-                            {statusLabel(row.storeFlowStage ?? row.status)}
+                            {row.operationalStatusLabel || statusLabel(row.storeFlowStage ?? row.status)}
                           </span>
                           <div style={mutedText}>
                             Formalizada: {row.commercial?.formalizedAt ? dt(row.commercial.formalizedAt) : row.formalizedAt ? dt(row.formalizedAt) : "No"}
+                          </div>
+                          <div style={mutedText}>
+                            Cobro: {row.paymentStatusLabel || "Sin dato"}
                           </div>
                           {row.adjustments?.financialAdjustedAt || row.financialAdjustedAt ? (
                             <div style={mutedText}>

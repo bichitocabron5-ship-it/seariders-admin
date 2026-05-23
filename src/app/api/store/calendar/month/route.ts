@@ -11,6 +11,7 @@ import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { resolveReadyContractCountWithManualAttachments } from "@/lib/manual-contract-attachments";
 import { buildStoreCalendarWhere } from "@/lib/store-reservation-visibility";
+import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
 
 export const runtime = "nodejs";
 
@@ -164,16 +165,23 @@ export async function GET(req: Request) {
     const k = dayKeyMadridFromUtcDate(when);
 
     const paid = payByRes[r.id] ?? { serviceNet: 0, depositNet: 0 };
+    const paymentStatus = resolveReservationPaymentStatus({
+      reservationStatus: r.status,
+      totalPriceCents: r.totalPriceCents,
+      depositCents: r.depositCents,
+      quantity: r.quantity,
+      isLicense: Boolean(r.isLicense),
+      serviceCategory: r.service?.category ?? null,
+      items: r.items,
+      payments: [
+        { amountCents: paid.serviceNet, direction: "IN", isDeposit: false },
+        { amountCents: paid.depositNet, direction: "IN", isDeposit: true },
+      ],
+    });
 
-    const serviceDue = Number(r.totalPriceCents ?? 0);
-    const depositDue = Number(r.depositCents ?? 0);
-
-    const pendingServiceCents = Math.max(0, serviceDue - paid.serviceNet);
-    const pendingDepositCents = Math.max(0, depositDue - paid.depositNet);
-    const pendingCents = pendingServiceCents + pendingDepositCents;
-    const paidCents = Math.max(0, paid.serviceNet + paid.depositNet);
-
-    const totalCents = serviceDue; // y la fianza ya la tienes en depositDue si quieres mostrarla luego
+    const pendingCents = paymentStatus.displayPendingCents;
+    const paidCents = Math.max(0, paymentStatus.paidServiceCents + paymentStatus.paidDepositCents);
+    const totalCents = paymentStatus.serviceDueCents;
     const contractsRequiredUnits = computeRequiredContractUnits({
       quantity: r.quantity ?? 0,
       isLicense: Boolean(r.isLicense),

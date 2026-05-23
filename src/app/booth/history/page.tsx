@@ -5,11 +5,14 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "r
 
 import { Alert, Button, Card, Input, Select, styles } from "@/components/ui";
 import { opsStyles } from "@/components/ops-ui";
+import { getReservationOperationalStatusLabel } from "@/lib/reservation-operational-status";
 
 type HistoryRow = {
   id: string;
   boothCode: string | null;
   status: string;
+  operationalStatus?: string | null;
+  operationalStatusLabel?: string | null;
   rowKind: "RESERVATION" | "EXTERNAL_PAYMENT";
   activityDate: string;
   scheduledTime: string | null;
@@ -20,6 +23,8 @@ type HistoryRow = {
   quantity: number | null;
   pax: number | null;
   totalPriceCents: number;
+  paymentStatus?: string | null;
+  paymentStatusLabel?: string | null;
   serviceName: string | null;
   serviceCategory: string | null;
   durationMinutes: number | null;
@@ -95,7 +100,7 @@ function statusLabel(status: string) {
     case "EXTERNAL_CANCELED":
       return "Venta externa anulada";
     default:
-      return status;
+      return getReservationOperationalStatusLabel(status);
   }
 }
 
@@ -367,7 +372,7 @@ export default function BoothHistoryPage() {
                             fontSize: 12,
                           }}
                         >
-                          {statusLabel(row.status)}
+                          {row.operationalStatusLabel || statusLabel(row.operationalStatus ?? row.status)}
                         </span>
                       </td>
                       <td style={styles.td}>
@@ -385,6 +390,7 @@ export default function BoothHistoryPage() {
                         <div style={{ fontWeight: 900, color: pendingCents > 0 ? "#b45309" : "#166534" }}>
                           {euros(pendingCents)}
                         </div>
+                        <div style={mutedStyle}>{row.paymentStatusLabel || "Sin estado de cobro"}</div>
                       </td>
                       <td style={styles.td}>
                         <div style={{ display: "grid", gap: 6 }}>

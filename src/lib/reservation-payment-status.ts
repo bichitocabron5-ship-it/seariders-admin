@@ -1,12 +1,21 @@
-import { computeReservationDepositCents } from "@/lib/reservation-deposits";
+import { computeReservationDepositCents } from "./reservation-deposits";
 
 type PaymentLike = {
   amountCents: number | null | undefined;
   isDeposit: boolean | null | undefined;
   direction: string | null | undefined;
+  method?: string | null | undefined;
 };
 
+export type ReservationPaymentState =
+  | "PENDING"
+  | "PARTIAL"
+  | "PAID"
+  | "CANCELED"
+  | "REFUNDED";
+
 type ReservationPaymentStatusArgs = {
+  reservationStatus?: string | null | undefined;
   totalPriceCents: number | null | undefined;
   depositCents: number | null | undefined;
   quantity: number | null | undefined;
@@ -25,7 +34,41 @@ function signedAmount(amountCents: number | null | undefined, direction: string 
   return direction === "OUT" ? -amount : amount;
 }
 
-export function getReservationPaymentStatus(args: ReservationPaymentStatusArgs) {
+export function getReservationPaymentMethodLabel(method: string | null | undefined) {
+  switch (String(method ?? "").toUpperCase()) {
+    case "CASH":
+      return "Efectivo";
+    case "CARD":
+      return "Tarjeta";
+    case "TRANSFER":
+      return "Transferencia";
+    case "BIZUM":
+      return "Bizum";
+    case "VOUCHER":
+      return "Voucher";
+    default:
+      return "Sin metodo";
+  }
+}
+
+export function getReservationPaymentStateLabel(state: ReservationPaymentState) {
+  switch (state) {
+    case "PENDING":
+      return "Pendiente";
+    case "PARTIAL":
+      return "Pago parcial";
+    case "PAID":
+      return "Pagado";
+    case "CANCELED":
+      return "Anulado";
+    case "REFUNDED":
+      return "Devuelto";
+    default:
+      return state;
+  }
+}
+
+export function resolveReservationPaymentStatus(args: ReservationPaymentStatusArgs) {
   const serviceDueCents = Math.max(0, Number(args.totalPriceCents ?? 0));
   const depositDueCents = computeReservationDepositCents({
     storedDepositCents: args.depositCents,
@@ -50,14 +93,68 @@ export function getReservationPaymentStatus(args: ReservationPaymentStatusArgs) 
 
   const pendingServiceCents = Math.max(0, serviceDueCents - paidServiceCents);
   const pendingDepositCents = Math.max(0, depositDueCents - paidDepositCents);
+  const status = String(args.reservationStatus ?? "").toUpperCase();
+  const isCanceled = status === "CANCELED";
+  const servicePayments = (args.payments ?? []).filter((payment) => !payment.isDeposit);
+  const hadServiceRefund = servicePayments.some((payment) => payment.direction === "OUT");
+  const displayPendingServiceCents = isCanceled ? 0 : pendingServiceCents;
+  const displayPendingDepositCents = isCanceled ? 0 : pendingDepositCents;
+  const displayPendingCents = displayPendingServiceCents + displayPendingDepositCents;
+
+  let state: ReservationPaymentState;
+  if (isCanceled) {
+    state = "CANCELED";
+  } else if (hadServiceRefund && paidServiceCents <= 0 && serviceDueCents > 0) {
+    state = "REFUNDED";
+  } else if (displayPendingCents === 0) {
+    state = "PAID";
+  } else if (paidServiceCents > 0 || paidDepositCents > 0) {
+    state = "PARTIAL";
+  } else {
+    state = "PENDING";
+  }
+
+  const collectedByMethodMap = new Map<
+    string,
+    { method: string; label: string; serviceCents: number; depositCents: number; totalCents: number }
+  >();
+
+  for (const payment of args.payments ?? []) {
+    const method = String(payment.method ?? "UNKNOWN").toUpperCase();
+    const current =
+      collectedByMethodMap.get(method) ??
+      {
+        method,
+        label: getReservationPaymentMethodLabel(method),
+        serviceCents: 0,
+        depositCents: 0,
+        totalCents: 0,
+      };
+    const amount = signedAmount(payment.amountCents, payment.direction);
+    if (payment.isDeposit) {
+      current.depositCents += amount;
+    } else {
+      current.serviceCents += amount;
+    }
+    current.totalCents += amount;
+    collectedByMethodMap.set(method, current);
+  }
 
   return {
+    state,
+    label: getReservationPaymentStateLabel(state),
     serviceDueCents,
     depositDueCents,
     paidServiceCents,
     paidDepositCents,
     pendingServiceCents,
     pendingDepositCents,
+    displayPendingServiceCents,
+    displayPendingDepositCents,
+    displayPendingCents,
+    collectedByMethod: Array.from(collectedByMethodMap.values()).filter((entry) => entry.totalCents !== 0),
     fullyPaid: pendingServiceCents === 0 && pendingDepositCents === 0,
   };
 }
+
+export const getReservationPaymentStatus = resolveReservationPaymentStatus;

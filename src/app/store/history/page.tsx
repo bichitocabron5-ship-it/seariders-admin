@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "r
 import { opsStyles } from "@/components/ops-ui";
 import { StoreMetricCard, StoreMetricGrid, storeStyles } from "@/components/store-ui";
 import { Button, Card, Input, Pill, Select, styles } from "@/components/ui";
+import { getReservationOperationalStatusLabel } from "@/lib/reservation-operational-status";
 import StoreHistoryResultsSection from "./_components/StoreHistoryResultsSection";
 
 type HistoryIncident = {
@@ -99,6 +100,8 @@ type HistoryRow = {
   id: string;
   status: string;
   storeFlowStage: string | null;
+  operationalStatus?: string | null;
+  operationalStatusLabel?: string | null;
   activityDate: string;
   scheduledTime: string | null;
   arrivalAt: string | null;
@@ -133,7 +136,11 @@ type HistoryRow = {
   serviceCategory: string | null;
   durationMinutes: number | null;
   paidCents: number;
+  paymentStatus?: string | null;
+  paymentStatusLabel?: string | null;
   paidDepositCents: number;
+  depositStatus?: string | null;
+  depositStatusLabel?: string | null;
   depositCollectedCents: number;
   depositReturnedCents: number;
   depositRetainedCents: number;
@@ -302,8 +309,7 @@ function countPendingServiceCents(row: HistoryRow) {
   return Math.max(
     0,
     Number(
-      row.commercial?.servicePendingCents ??
-        (row.status === "CANCELED" ? 0 : Math.max(0, Number(row.totalPriceCents ?? 0) - countPaidServiceCents(row)))
+      row.commercial?.servicePendingCents ?? 0
     )
   );
 }
@@ -312,33 +318,13 @@ function countPendingDepositCents(row: HistoryRow) {
   return Math.max(
     0,
     Number(
-      row.commercial?.depositPendingCents ??
-        (row.status === "CANCELED" ? 0 : Math.max(0, Number(row.depositCents ?? 0) - Number(row.depositCollectedCents ?? 0)))
+      row.commercial?.depositPendingCents ?? 0
     )
   );
 }
 
 function statusLabel(stageOrStatus: string | null | undefined) {
-  switch (stageOrStatus) {
-    case "SCHEDULED":
-      return "Programada";
-    case "QUEUE":
-      return "Pendiente de salida";
-    case "RETURN_PENDING_CLOSE":
-      return "Devuelta pendiente de cierre";
-    case "WAITING":
-      return "En espera";
-    case "READY_FOR_PLATFORM":
-      return "Lista para platform";
-    case "IN_SEA":
-      return "En mar";
-    case "COMPLETED":
-      return "Completada";
-    case "CANCELED":
-      return "Cancelada";
-    default:
-      return status;
-  }
+  return getReservationOperationalStatusLabel(stageOrStatus);
 }
 
 export default function StoreHistoryPage() {

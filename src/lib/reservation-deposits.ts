@@ -17,6 +17,23 @@ export type ReservationDepositStatus =
   | "LIBERABLE"
   | "DEVUELTA";
 
+export function getDepositStatusLabel(status: ReservationDepositStatus) {
+  switch (status) {
+    case "NO_APLICA":
+      return "Sin fianza";
+    case "RETENIDA":
+      return "Fianza retenida";
+    case "PENDIENTE":
+      return "Fianza pendiente";
+    case "LIBERABLE":
+      return "Fianza liberable";
+    case "DEVUELTA":
+      return "Fianza devuelta";
+    default:
+      return status;
+  }
+}
+
 function countJetskiUnits(items: ReservationDepositItem[]) {
   return items
     .filter((item) => !item.isExtra && String(item.service?.category ?? "").toUpperCase() === "JETSKI")
@@ -78,6 +95,19 @@ export function deriveReservationDepositStatus(params: {
   }
 
   return "LIBERABLE" as const;
+}
+
+export function resolveDepositStatus(params: {
+  depositCents: number | null;
+  depositHeld?: boolean | null;
+  payments?: ReservationDepositPayment[];
+  paidDepositCents?: number | null;
+}) {
+  const code = deriveReservationDepositStatus(params);
+  return {
+    code,
+    label: getDepositStatusLabel(code),
+  };
 }
 
 export function computeDepositFromResolvedItems(params: {

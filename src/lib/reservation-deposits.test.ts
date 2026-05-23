@@ -46,3 +46,16 @@ test("deriveReservationDepositStatus keeps LIBERABLE when deposit was actually c
 
   assert.equal(status, "LIBERABLE");
 });
+
+test("deriveReservationDepositStatus returns DEVUELTA when the deposit was collected and later returned", () => {
+  const status = deriveReservationDepositStatus({
+    depositCents: 10_000,
+    depositHeld: false,
+    payments: [
+      { amountCents: 10_000, isDeposit: true, direction: "IN" },
+      { amountCents: 10_000, isDeposit: true, direction: "OUT" },
+    ],
+  });
+
+  assert.equal(status, "DEVUELTA");
+});

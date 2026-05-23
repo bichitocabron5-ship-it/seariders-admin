@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type React from "react";
 
 import { ActionButton, AlertBanner, StatusBadge } from "@/components/seariders-ui";
+import { getDepositStatusLabel } from "@/lib/reservation-deposits";
 import type {
   CompleteReturnInput,
   ExtraUiMap,
@@ -14,7 +15,7 @@ import type {
   ReturnSettlementMode,
   Service,
 } from "../types";
-import { euros, hhmm, statusColor } from "../utils";
+import { euros, hhmm, statusColor, statusLabel } from "../utils";
 import { ReservationOpsPanel } from "./ReservationOpsPanel";
 import { StoreReservationPaymentsHistory } from "./StoreReservationPaymentsHistory";
 
@@ -63,14 +64,6 @@ function toneFromStatus(r: ReservationRow) {
   if (color === "#ffedd5") return "warning" as const;
   if (color === "#e5e7eb") return "neutral" as const;
   return "info" as const;
-}
-
-function depositLabel(depositStatus: "NO_APLICA" | "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA") {
-  if (depositStatus === "NO_APLICA") return "Sin fianza";
-  if (depositStatus === "PENDIENTE") return "Fianza pendiente";
-  if (depositStatus === "LIBERABLE") return "Fianza liberable";
-  if (depositStatus === "DEVUELTA") return "Fianza devuelta";
-  return "Fianza retenida";
 }
 
 function depositTone(depositStatus: "NO_APLICA" | "RETENIDA" | "PENDIENTE" | "LIBERABLE" | "DEVUELTA") {
@@ -195,7 +188,9 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
           <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
             <strong>{r.customerName || "Sin nombre"}</strong>
             <span style={{ fontSize: 12, opacity: 0.7 }}>{hhmm(r.scheduledTime) || "sin hora"}</span>
-            <StatusBadge tone={toneFromStatus(r)}>{r.storeFlowStage === "RETURN_PENDING_CLOSE" ? "Devuelta" : r.status}</StatusBadge>
+            <StatusBadge tone={toneFromStatus(r)}>
+              {r.operationalStatusLabel ?? statusLabel(r.operationalStatus ?? r.storeFlowStage ?? r.status)}
+            </StatusBadge>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <ActionButton type="button" onClick={() => router.push(`/store/create?editFrom=${r.id}`)} variant="secondary">
@@ -263,8 +258,9 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
 
       <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
         {showDeposit ? <StatusBadge tone="warning">Fianza {euros(Math.max(0, paidDepositCents))}</StatusBadge> : null}
-        {showDeposit ? <StatusBadge tone={depositTone(depositStatus)}>{depositLabel(depositStatus)}</StatusBadge> : null}
+        {showDeposit ? <StatusBadge tone={depositTone(depositStatus)}>{r.depositStatusLabel ?? getDepositStatusLabel(depositStatus)}</StatusBadge> : null}
         {pendingTotal > 0 ? <StatusBadge tone="danger">Pendiente {euros(pendingTotal)}</StatusBadge> : <StatusBadge tone="success">Todo cobrado</StatusBadge>}
+        {r.paymentStatusLabel ? <StatusBadge tone={pendingTotal > 0 ? "warning" : "success"}>{r.paymentStatusLabel}</StatusBadge> : null}
       </div>
 
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed #ddd" }}>

@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { type AppSession, sessionOptions } from "@/lib/session";
 import { resolveCommissionForReporting } from "@/lib/commission-reporting";
 import { getBusinessDayRange } from "@/lib/business-day";
+import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
+import { resolveReservationOperationalStatus } from "@/lib/reservation-operational-status";
 
 export const runtime = "nodejs";
 
@@ -233,28 +235,28 @@ export async function GET(req: Request) {
       serviceId: reservation.serviceId,
       quantity: reservation.quantity,
     });
-    const servicePaidCents = reservation.payments
-      .filter((payment) => payment.origin === "BOOTH" && !payment.isDeposit)
-      .reduce((sum, payment) => {
-        const sign = payment.direction === "OUT" ? -1 : 1;
-        return sum + sign * Number(payment.amountCents ?? 0);
-      }, 0);
-
-    const depositPaidCents = reservation.payments
-      .filter((payment) => payment.origin === "BOOTH" && payment.isDeposit)
-      .reduce((sum, payment) => {
-        const sign = payment.direction === "OUT" ? -1 : 1;
-        return sum + sign * Number(payment.amountCents ?? 0);
-      }, 0);
-
     const boothPayments = reservation.payments.filter((payment) => payment.origin === "BOOTH");
+    const paymentStatus = resolveReservationPaymentStatus({
+      reservationStatus: reservation.status,
+      totalPriceCents: reservation.totalPriceCents,
+      depositCents: 0,
+      quantity: reservation.quantity,
+      isLicense: false,
+      serviceCategory: reservation.service?.category ?? null,
+      payments: boothPayments,
+    });
     const lastBoothPaymentAt = boothPayments[boothPayments.length - 1]?.createdAt ?? null;
+    const operationalStatus = resolveReservationOperationalStatus({
+      status: reservation.status,
+    });
 
     return {
       id: reservation.id,
       boothCode: reservation.boothCode,
       boothNote: reservation.boothNote,
       status: reservation.status,
+      operationalStatus: operationalStatus.code,
+      operationalStatusLabel: operationalStatus.label,
       activityDate: reservation.activityDate,
       scheduledTime: reservation.scheduledTime,
       arrivedStoreAt: reservation.arrivedStoreAt,
@@ -267,9 +269,11 @@ export async function GET(req: Request) {
       serviceName: reservation.service?.name ?? null,
       serviceCategory: reservation.service?.category ?? null,
       durationMinutes: reservation.option?.durationMinutes ?? null,
-      servicePaidCents,
-      servicePendingCents: Math.max(0, Number(reservation.totalPriceCents ?? 0) - servicePaidCents),
-      depositPaidCents,
+      paymentStatus: paymentStatus.state,
+      paymentStatusLabel: paymentStatus.label,
+      servicePaidCents: paymentStatus.paidServiceCents,
+      servicePendingCents: paymentStatus.displayPendingServiceCents,
+      depositPaidCents: paymentStatus.paidDepositCents,
       paymentsCount: boothPayments.length,
       lastPaymentAt: lastBoothPaymentAt,
       rowKind: "RESERVATION" as const,
@@ -317,6 +321,8 @@ export async function GET(req: Request) {
       boothCode: null,
       boothNote: null,
       status: signedAmount <= 0 ? "EXTERNAL_CANCELED" : "EXTERNAL_PAYMENT",
+      operationalStatus: signedAmount <= 0 ? "EXTERNAL_CANCELED" : "EXTERNAL_PAYMENT",
+      operationalStatusLabel: signedAmount <= 0 ? "Venta externa anulada" : "Venta externa",
       activityDate: payment.createdAt,
       scheduledTime: null,
       arrivedStoreAt: null,
@@ -326,6 +332,8 @@ export async function GET(req: Request) {
       quantity: null,
       pax: null,
       totalPriceCents: grossExternalAmountCents ?? Math.abs(signedAmount),
+      paymentStatus: signedAmount <= 0 ? "REFUNDED" : "PAID",
+      paymentStatusLabel: signedAmount <= 0 ? "Devuelto" : "Pagado",
       serviceName: payment.service?.name ?? payment.description ?? "Venta externa",
       serviceCategory: payment.service?.category ?? "Canal externo",
       durationMinutes: null,
