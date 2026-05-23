@@ -13,11 +13,11 @@ export function operabilityLabel(
   const map: Record<string, string> = {
     OPERATIONAL: "Operativa",
     MAINTENANCE: "Mantenimiento",
-    DAMAGED: "Dañada",
+    DAMAGED: "Da\u00f1ada",
     OUT_OF_SERVICE: "Fuera de servicio",
   };
 
-  if (!status) return "—";
+  if (!status) return "\u2014";
   return map[String(status)] ?? String(status);
 }
 
@@ -27,18 +27,18 @@ export function operabilityBlockingReason(
   if (!status || status === PlatformOperabilityStatus.OPERATIONAL) return null;
 
   if (status === PlatformOperabilityStatus.MAINTENANCE) {
-    return "La unidad está en mantenimiento y no puede asignarse.";
+    return "La unidad est\u00e1 en mantenimiento y no puede asignarse.";
   }
 
   if (status === PlatformOperabilityStatus.DAMAGED) {
-    return "La unidad está marcada como dañada y no puede asignarse.";
+    return "La unidad est\u00e1 marcada como da\u00f1ada y no puede asignarse.";
   }
 
   if (status === PlatformOperabilityStatus.OUT_OF_SERVICE) {
-    return "La unidad está fuera de servicio y no puede asignarse.";
+    return "La unidad est\u00e1 fuera de servicio y no puede asignarse.";
   }
 
-  return "La unidad no está operativa.";
+  return "La unidad no est\u00e1 operativa.";
 }
 
 export function platformAssignmentBlockingReason(params: {
@@ -46,13 +46,18 @@ export function platformAssignmentBlockingReason(params: {
   hasOpenMaintenanceEvent?: boolean;
   hasOpenIncident?: boolean;
 }) {
-  if (params.hasOpenMaintenanceEvent) {
-    return "Tiene un evento mecánico abierto y no puede asignarse.";
+  const operabilityReason = operabilityBlockingReason(params.operabilityStatus);
+  if (operabilityReason) {
+    return operabilityReason;
   }
 
-  if (params.hasOpenIncident) {
+  if (!params.operabilityStatus && params.hasOpenMaintenanceEvent) {
+    return "Tiene un evento mec\u00e1nico abierto y no puede asignarse.";
+  }
+
+  if (!params.operabilityStatus && params.hasOpenIncident) {
     return "Tiene una incidencia abierta de plataforma y no puede asignarse.";
   }
 
-  return operabilityBlockingReason(params.operabilityStatus);
+  return null;
 }
