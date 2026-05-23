@@ -96,6 +96,10 @@ export default function AdminCatalogServicesSection({
                     </Link>
                   )}
 
+                  <Link href={`/admin/catalog/${service.id}/allowed-channels`} style={ghostBtn}>
+                    Canales permitidos
+                  </Link>
+
                   <button type="button" disabled={busy} onClick={() => onRename(service)} style={ghostButtonElement}>
                     Renombrar
                   </button>

@@ -170,6 +170,7 @@ model Channel {
   commissionBps              Int                     @default(0)
   commissionAppliesToDeposit Boolean                 @default(false)
   commissionRules            ChannelCommissionRule[]
+  allowedServices            ServiceAllowedChannel[]
   optionPrices               ChannelOptionPrice[]
 
   reservations Reservation[]
@@ -216,6 +217,7 @@ model Service {
   reservations     Reservation[]
   reservationItems ReservationItem[]
   commissionRules  ChannelCommissionRule[]
+  allowedChannels  ServiceAllowedChannel[]
   payments         Payment[]
   packItems        PackItem[]
   giftProducts     GiftProduct[]           @relation("GiftProductService")
@@ -223,6 +225,22 @@ model Service {
 
   // ✅ opposite del service principal del pack
   packAsMain Pack? @relation("PackMainService")
+}
+
+model ServiceAllowedChannel {
+  id        String   @id @default(cuid())
+  serviceId String
+  channelId String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, channelId])
+  @@index([serviceId])
+  @@index([channelId])
 }
 
 model ServiceOption {

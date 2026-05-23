@@ -333,6 +333,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
           <label style={labelStyle}>
             <span>Canal</span>
             <select value={values.channelId} onChange={(e) => handlers.onChannelChange(e.target.value)} style={inputStyle}>
+              {!lists.channels.length ? <option value="">Sin canales compatibles</option> : null}
               {lists.channels.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}

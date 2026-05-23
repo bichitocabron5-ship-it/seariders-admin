@@ -26,6 +26,7 @@ import {
 import { syncReservationContractsTx } from "@/lib/reservation-contract-sync";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
+import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
 
 export const runtime = "nodejs";
 
@@ -348,6 +349,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       : undefined;
 const hasProItems = Array.isArray(b.items) && b.items.length > 0;
 const isBoothReservation = existing.source === "BOOTH";
+const compatibilityOrigin = isBoothReservation ? "BOOTH" : "STORE";
 const boothUnitDiscountCents = getBoothUnitDiscountCents({
   source: existing.source,
   matchingQuantity: existing.quantity,
@@ -669,6 +671,14 @@ if (hasProItems) {
       })),
     });
 
+    if (compositionChanged || (b.channelId !== undefined && (b.channelId ?? null) !== (existing.channelId ?? null))) {
+      await assertServiceChannelCompatibilityTx(tx, {
+        origin: compatibilityOrigin,
+        serviceIds: Array.from(new Set(lineCreates.map((line) => line.serviceId))),
+        channelId: b.channelId ?? existing.channelId ?? null,
+      });
+    }
+
     // Totales
     const serviceSubtotal = lineCreates.reduce((s, l) => s + l.totalPriceCents, 0);
 
@@ -896,6 +906,22 @@ if (hasProItems) {
       );
     }
 
+    const nextChannelId = b.channelId !== undefined ? b.channelId ?? null : existing.channelId ?? null;
+    const currentChannelId = existing.channelId ?? null;
+    if (nextChannelId !== currentChannelId) {
+      await assertServiceChannelCompatibilityTx(prisma, {
+        origin: compatibilityOrigin,
+        serviceIds: Array.from(
+          new Set(
+            (existing.items ?? [])
+              .filter((item) => !item.isExtra)
+              .map((item) => item.serviceId)
+          )
+        ),
+        channelId: nextChannelId,
+      });
+    }
+
     const data: Prisma.ReservationUncheckedUpdateInput = {
       pax: b.pax,
       channelId: b.channelId ?? null,
@@ -979,6 +1005,17 @@ if (hasProItems) {
     isLicense: b.isLicense,
     pricingTier: b.pricingTier ?? existing.pricingTier,
   });
+
+  if (
+    (b.serviceId !== undefined && b.serviceId !== existing.serviceId) ||
+    (b.channelId !== undefined && (b.channelId ?? null) !== (existing.channelId ?? null))
+  ) {
+    await assertServiceChannelCompatibilityTx(prisma, {
+      origin: compatibilityOrigin,
+      serviceIds: [svc.id],
+      channelId: b.channelId ?? existing.channelId ?? null,
+    });
+  }
 
   const price = await findActiveServicePrice(prisma, {
     serviceId: svc.id,

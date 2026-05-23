@@ -11,6 +11,7 @@ import {
   resolveAppliedCommercialSnapshot,
   resolveDiscountPolicy,
 } from "@/lib/commission";
+import { buildServiceAllowedChannelIndex, filterChannelsForServices } from "@/lib/service-channel-availability";
 import { finalizeReservationCommercialBreakdown } from "@/lib/reservation-commercial-breakdown";
 import { AvailabilitySection, FutureReservationPaymentsSection, PricingSection, SubmitSection } from "./components/form-sections";
 import { ReservationBasicsSection } from "./components/reservation-basics-section";
@@ -147,6 +148,7 @@ function StoreCreatePageInner() {
     paidServiceCents: 0,
     pendingServiceCents: 0,
   });
+  const [channelCompatibilityNotice, setChannelCompatibilityNotice] = useState<string | null>(null);
   const [draftRecoveredAt, setDraftRecoveredAt] = useState<number | null>(null);
   const [scheduleInvalidationMessage, setScheduleInvalidationMessage] = useState<string | null>(null);
   const skipNextTimeResetRef = useRef(false);
@@ -522,6 +524,72 @@ function StoreCreatePageInner() {
   const selectedServiceLabel = selectedService?.name ?? "";
   const selectedOptionLabel = selectedOpt?.displayLabel ?? (selectedOpt?.durationMinutes ? `${selectedOpt.durationMinutes} min` : "");
   const selectedOptionSecondaryLabel = selectedOpt?.secondaryLabel ?? null;
+  const channelRulesIndex = useMemo(() => {
+    const activeRules = channels.flatMap((channel) =>
+      (channel.allowedServiceIds ?? []).map((allowedServiceId) => ({
+        serviceId: allowedServiceId,
+        channelId: channel.id,
+        active: true,
+      }))
+    );
+    const restrictedWithoutVisibleChannel = servicesMain
+      .filter((service) => service.hasAllowedChannelRules)
+      .filter((service) => !activeRules.some((rule) => rule.serviceId === service.id))
+      .map((service) => ({
+        serviceId: service.id,
+        channelId: `__hidden__:${service.id}`,
+        active: false,
+      }));
+
+    return buildServiceAllowedChannelIndex([...activeRules, ...restrictedWithoutVisibleChannel]);
+  }, [channels, servicesMain]);
+  const channelCompatibleServiceIds = useMemo(() => {
+    const ids = cartItems.length > 0 ? cartItems.map((item) => item.serviceId) : serviceId ? [serviceId] : [];
+    return Array.from(new Set(ids.filter(Boolean)));
+  }, [cartItems, serviceId]);
+  const compatibleChannels = useMemo(
+    () =>
+      filterChannelsForServices({
+        channels: channelsWithFallback,
+        index: channelRulesIndex,
+        serviceIds: channelCompatibleServiceIds,
+      }),
+    [channelCompatibleServiceIds, channelRulesIndex, channelsWithFallback]
+  );
+  const displayChannels = useMemo(() => {
+    if (!channelId) return compatibleChannels;
+    const selected = channelsWithFallback.find((channel) => channel.id === channelId);
+    if (!selected || compatibleChannels.some((channel) => channel.id === selected.id)) return compatibleChannels;
+    return [selected, ...compatibleChannels];
+  }, [channelId, channelsWithFallback, compatibleChannels]);
+  const previousServiceIdRef = useRef<string>("");
+
+  useEffect(() => {
+    const previousServiceId = previousServiceIdRef.current;
+    if (!serviceId) {
+      previousServiceIdRef.current = serviceId;
+      return;
+    }
+    if (!previousServiceId) {
+      previousServiceIdRef.current = serviceId;
+      return;
+    }
+    if (previousServiceId === serviceId) return;
+
+    if (channelId && !compatibleChannels.some((channel) => channel.id === channelId)) {
+      setChannelId("");
+      setChannelCompatibilityNotice("El canal seleccionado no está disponible para este servicio.");
+    }
+
+    previousServiceIdRef.current = serviceId;
+  }, [channelId, compatibleChannels, serviceId]);
+
+  useEffect(() => {
+    if (!channelId) return;
+    if (compatibleChannels.some((channel) => channel.id === channelId)) {
+      setChannelCompatibilityNotice(null);
+    }
+  }, [channelId, compatibleChannels]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -687,8 +755,8 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   }, [discountPreview?.availablePromos, selectedPromoCode]);
 
   const selectedChannel = useMemo(
-    () => channels.find((ch) => ch.id === channelId) ?? null,
-    [channels, channelId]
+    () => channelsWithFallback.find((ch) => ch.id === channelId) ?? null,
+    [channelsWithFallback, channelId]
   );
 
   useEffect(() => {
@@ -1618,7 +1686,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       packPreview,
       filteredOptions,
       selectedOpt,
-      channels: channelsWithFallback,
+      channels: displayChannels,
     },
     handlers: {
       onFirstNameChange: handleFirstNameChange,
@@ -1922,6 +1990,12 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               <ReservationBasicsSection {...reservationBasicsSectionProps} />
             </div>
           )}
+
+          {channelCompatibilityNotice ? (
+            <div style={{ padding: 12, border: "1px solid #fdba74", background: "#fff7ed", borderRadius: 14, color: "#c2410c", fontWeight: 700 }}>
+              {channelCompatibilityNotice}
+            </div>
+          ) : null}
 
           <div style={{ opacity: canEditReservationForm ? 1 : 0.72, pointerEvents: canEditReservationForm ? "auto" : "none" }}>
             <AvailabilitySection

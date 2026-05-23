@@ -21,6 +21,7 @@ import {
 import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business";
 import { findCurrentShiftSession } from "@/lib/shiftSessions";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
+import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
 
 const BodySchema = z.object({
   customerName: z.string().min(1),
@@ -99,6 +100,12 @@ export async function POST(req: Request) {
   const optionIds = Array.from(
     new Set(itemsInput.map((item) => item.optionId).filter((value): value is string => Boolean(value)))
   );
+
+  await assertServiceChannelCompatibilityTx(prisma, {
+    origin: "BOOTH",
+    serviceIds,
+    channelId: parsed.data.channelId ?? null,
+  });
 
   const [services, options, channel] = await Promise.all([
     prisma.service.findMany({

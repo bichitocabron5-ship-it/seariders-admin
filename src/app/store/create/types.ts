@@ -1,5 +1,12 @@
 // src/app/store/create/types.ts
-export type ServiceMain = { id: string; name: string; category?: string | null; code?: string | null; isLicense?: boolean | null };
+export type ServiceMain = {
+  id: string;
+  name: string;
+  category?: string | null;
+  code?: string | null;
+  isLicense?: boolean | null;
+  hasAllowedChannelRules?: boolean;
+};
 export type JetskiLicenseMode = "NONE" | "GREEN_LIMITED" | "YELLOW_UNLIMITED";
 export type PricingTier = "STANDARD" | "RESIDENT";
 
@@ -36,6 +43,7 @@ export type Channel = {
   promoterCommissionCents?: number | null;
   discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED" | null;
   promoterDiscountShareBps?: number | null;
+  allowedServiceIds?: string[] | null;
   commissionRules?: Array<{
     serviceId: string;
     commissionPct?: number | null;

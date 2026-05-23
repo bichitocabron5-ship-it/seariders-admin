@@ -26,6 +26,7 @@ import { computeReservationCommercialBreakdown } from "@/lib/reservation-commerc
 import { syncReservationContractsTx } from "@/lib/reservation-contract-sync";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
+import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
 
 export const runtime = "nodejs";
 
@@ -426,6 +427,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         return { ok: false as const, id, isHistorical: true };
       }
 
+      const compatibilityOrigin = current.source === "BOOTH" ? "BOOTH" : "STORE";
+
       const currentContractProgress = computeContractProgress({
         quantity: current.quantity,
         isLicense: Boolean(current.isLicense),
@@ -631,6 +634,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           category: String(service.category ?? "").toUpperCase(),
           serviceName: service.name ?? null,
           serviceCode: service.code ?? null,
+        });
+      }
+
+      const nextServiceIds = Array.from(new Set(lineCreates.map((line) => line.serviceId))).sort();
+      const currentMainServiceIdsSource = (current.items ?? [])
+        .filter((item) => !item.isExtra)
+        .map((item) => item.serviceId);
+      const currentServiceIds = Array.from(
+        new Set(currentMainServiceIdsSource.length > 0 ? currentMainServiceIdsSource : [current.serviceId])
+      ).sort();
+      const shouldValidateCompatibility =
+        JSON.stringify(nextServiceIds) !== JSON.stringify(currentServiceIds) ||
+        (b.channelId !== undefined && (b.channelId ?? null) !== (current.channelId ?? null));
+
+      if (shouldValidateCompatibility) {
+        await assertServiceChannelCompatibilityTx(tx, {
+          origin: compatibilityOrigin,
+          serviceIds: nextServiceIds,
+          channelId: b.channelId !== undefined ? b.channelId ?? null : current.channelId ?? null,
         });
       }
 

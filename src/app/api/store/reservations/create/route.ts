@@ -8,6 +8,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { createReservationWithItems } from "@/lib/reservations/createReservationWithItems";
 import { validateReusableAssetsAvailability } from "@/lib/store-rental-assets";
 import { JetskiLicenseMode, PricingTier } from "@prisma/client";
+import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
 
 export const runtime = "nodejs";
 
@@ -161,6 +162,12 @@ export async function POST(req: Request) {
       // ===== VALIDACIÓN INVENTARIO REAL (ANTES DE CREAR) =====
 
       const serviceIds = Array.from(new Set(items.map((i) => i.serviceIdOrCode)));
+
+      await assertServiceChannelCompatibilityTx(tx, {
+        origin: "STORE",
+        serviceIds,
+        channelId: b.channelId,
+      });
 
       const services = await tx.service.findMany({
         where: { id: { in: serviceIds } },

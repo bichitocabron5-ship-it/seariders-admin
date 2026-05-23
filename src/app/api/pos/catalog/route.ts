@@ -7,6 +7,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { PricingTier } from "@prisma/client";
 import { annotateServiceOptions } from "@/lib/service-option-labels";
+import { buildServiceAllowedChannelIndex, serviceHasAllowedChannelRules } from "@/lib/service-channel-availability";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,7 @@ type ServiceLite = {
   isLicense: boolean;
   isActive: boolean;
   visibleInBooth: boolean;
+  hasAllowedChannelRules?: boolean;
 };
 
 function normalize(s: string) {
@@ -63,7 +65,7 @@ export async function GET(req: Request) {
     return c === "acompanante" || n.includes("acompan");
   };
 
-  const [servicesAll, optionsRaw, prices, channelsAll] = await Promise.all([
+  const [servicesAll, optionsRaw, prices, channelsAll, serviceAllowedChannelRules] = await Promise.all([
     prisma.service.findMany({
       where: { isActive: true },
       select: {
@@ -145,7 +147,17 @@ export async function GET(req: Request) {
       },
       orderBy: { name: "asc" },
     }),
+
+    prisma.serviceAllowedChannel.findMany({
+      select: {
+        serviceId: true,
+        channelId: true,
+        active: true,
+      },
+    }),
   ]);
+
+  const allowedChannelIndex = buildServiceAllowedChannelIndex(serviceAllowedChannelRules);
 
   let servicesVisible = servicesAll.slice();
 
@@ -157,10 +169,27 @@ export async function GET(req: Request) {
 
   const servicesMain = servicesVisible.filter((s) => !isExtra(s));
   const servicesExtra = servicesVisible.filter((s) => isExtra(s));
+  const servicesMainWithAvailability = servicesMain.map((service) => ({
+    ...service,
+    hasAllowedChannelRules: serviceHasAllowedChannelRules(allowedChannelIndex, service.id),
+  }));
+  const servicesExtraWithAvailability = servicesExtra.map((service) => ({
+    ...service,
+    hasAllowedChannelRules: serviceHasAllowedChannelRules(allowedChannelIndex, service.id),
+  }));
 
   let channels = channelsAll.slice();
   if (origin === "BOOTH") channels = channels.filter((c) => c.visibleInBooth);
   else channels = channels.filter((c) => c.visibleInStore);
+  const channelsWithAvailability = channels.map((channel) => ({
+    ...channel,
+    allowedServiceIds: servicesVisible
+      .filter((service) =>
+        serviceHasAllowedChannelRules(allowedChannelIndex, service.id) &&
+        (allowedChannelIndex.activeChannelIdsByServiceId.get(service.id)?.has(channel.id) ?? false)
+      )
+      .map((service) => service.id),
+  }));
 
   const standardPriceMap = new Map<string, number>();
   const residentPriceMap = new Map<string, number>();
@@ -175,7 +204,7 @@ export async function GET(req: Request) {
     }
   }
 
-  const visibleMainIds = new Set(servicesMain.map((s) => s.id));
+  const visibleMainIds = new Set(servicesMainWithAvailability.map((s) => s.id));
 
   const options = annotateServiceOptions(
     optionsRaw
@@ -203,17 +232,17 @@ export async function GET(req: Request) {
     extraPriceByServiceId[s.id] = standardPriceMap.get(key) ?? null;
   }
 
-  const categoriesMain = uniqSorted(servicesMain.map((s) => String(s.category ?? "")).filter(Boolean));
-  const categoriesExtra = uniqSorted(servicesExtra.map((s) => String(s.category ?? "")).filter(Boolean));
+  const categoriesMain = uniqSorted(servicesMainWithAvailability.map((s) => String(s.category ?? "")).filter(Boolean));
+  const categoriesExtra = uniqSorted(servicesExtraWithAvailability.map((s) => String(s.category ?? "")).filter(Boolean));
 
   return NextResponse.json({
     origin,
-    servicesMain,
-    servicesExtra,
+    servicesMain: servicesMainWithAvailability,
+    servicesExtra: servicesExtraWithAvailability,
     categories: { main: categoriesMain, extra: categoriesExtra },
     options,
     extraPriceByServiceId,
-    channels,
-    services: servicesMain,
+    channels: channelsWithAvailability,
+    services: servicesMainWithAvailability,
   });
 }

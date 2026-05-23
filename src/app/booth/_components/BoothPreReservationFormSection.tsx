@@ -76,6 +76,7 @@ type Props = {
   companyDiscountCents: number;
   commissionBaseCents: number;
   discountResponsibility: "COMPANY" | "PROMOTER" | "SHARED";
+  channelCompatibilityNotice: string | null;
   cartItems: CartItem[];
   extraServiceId: string;
   extraQuantity: number;
@@ -143,6 +144,7 @@ export default function BoothPreReservationFormSection({
   companyDiscountCents,
   commissionBaseCents,
   discountResponsibility,
+  channelCompatibilityNotice,
   cartItems,
   extraServiceId,
   extraQuantity,
@@ -458,6 +460,12 @@ export default function BoothPreReservationFormSection({
             ))}
           </select>
         </label>
+
+        {channelCompatibilityNotice ? (
+          <AlertBanner tone="warning" title="Canal no disponible">
+            {channelCompatibilityNotice}
+          </AlertBanner>
+        ) : null}
 
         {isExternalCharge ? (
           <label>

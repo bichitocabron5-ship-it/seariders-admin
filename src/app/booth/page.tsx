@@ -6,6 +6,7 @@ import { AlertBanner } from "@/components/seariders-ui";
 import { getCountryOptionsEs } from "@/lib/countries";
 import { opsStyles } from "@/components/ops-ui";
 import { resolveAppliedCommercialSnapshot, resolveCustomerDiscountSnapshot, resolveDiscountPolicy } from "@/lib/commission";
+import { buildServiceAllowedChannelIndex, filterChannelsForServices } from "@/lib/service-channel-availability";
 import { useLiveRefresh } from "@/hooks/use-live-refresh";
 import { finalizeReservationCommercialBreakdown } from "@/lib/reservation-commercial-breakdown";
 import BoothOverviewSection from "./_components/BoothOverviewSection";
@@ -13,7 +14,14 @@ import BoothPreReservationFormSection from "./_components/BoothPreReservationFor
 import BoothPreReservationsSection from "./_components/BoothPreReservationsSection";
 import BoothTripsSection from "./_components/BoothTripsSection";
 
-type Service = { id: string; name: string; category: string; code?: string | null; isExternalActivity?: boolean | null };
+type Service = {
+  id: string;
+  name: string;
+  category: string;
+  code?: string | null;
+  isExternalActivity?: boolean | null;
+  hasAllowedChannelRules?: boolean;
+};
 type Option = {
   id: string;
   serviceId: string;
@@ -36,6 +44,7 @@ type Channel = {
   id: string;
   name: string;
   kind?: "STANDARD" | "EXTERNAL_ACTIVITY" | null;
+  allowedServiceIds?: string[] | null;
   commissionEnabled?: boolean | null;
   commissionBps?: number | null;
   customerDiscountMode?: "PERCENT" | "FIXED" | null;
@@ -255,6 +264,7 @@ export default function Booth() {
   const [reservationActionId, setReservationActionId] = useState<string | null>(null);
   const [tripActionId, setTripActionId] = useState<string | null>(null);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [channelCompatibilityNotice, setChannelCompatibilityNotice] = useState<string | null>(null);
 
   // form
   const [firstName, setFirstName] = useState("");
@@ -303,13 +313,43 @@ const selectedService = useMemo(() => {
   return services.find((s) => s.id === serviceId) ?? null;
 }, [services, serviceId]);
 
+const channelRulesIndex = useMemo(() => {
+  const allServices = [...services, ...servicesExtra];
+  const activeRules = channels.flatMap((channel) =>
+    (channel.allowedServiceIds ?? []).map((allowedServiceId) => ({
+      serviceId: allowedServiceId,
+      channelId: channel.id,
+      active: true,
+    }))
+  );
+  const restrictedWithoutVisibleChannel = allServices
+    .filter((service) => service.hasAllowedChannelRules)
+    .filter((service) => !activeRules.some((rule) => rule.serviceId === service.id))
+    .map((service) => ({
+      serviceId: service.id,
+      channelId: `__hidden__:${service.id}`,
+      active: false,
+    }));
+  return buildServiceAllowedChannelIndex([...activeRules, ...restrictedWithoutVisibleChannel]);
+}, [channels, services, servicesExtra]);
+
+const compatibleServiceIds = useMemo(() => {
+  const ids = cartItems.length > 0 ? cartItems.map((item) => item.serviceId) : serviceId ? [serviceId] : [];
+  return Array.from(new Set(ids.filter(Boolean)));
+}, [cartItems, serviceId]);
+
 const filteredChannels = useMemo(() => {
+  const compatibilityFiltered = filterChannelsForServices({
+    channels,
+    index: channelRulesIndex,
+    serviceIds: compatibleServiceIds,
+  });
   const wantsExternalChannel = selectedService?.isExternalActivity === true;
-  const preferred = channels.filter((channel) =>
+  const preferred = compatibilityFiltered.filter((channel) =>
     wantsExternalChannel ? channel.kind === "EXTERNAL_ACTIVITY" : channel.kind !== "EXTERNAL_ACTIVITY"
   );
-  return preferred.length > 0 ? preferred : channels;
-}, [channels, selectedService]);
+  return preferred.length > 0 ? preferred : compatibilityFiltered;
+}, [channels, channelRulesIndex, compatibleServiceIds, selectedService]);
 
 const selectedChannel = useMemo(() => {
   return filteredChannels.find((channel) => channel.id === channelId) ?? channels.find((channel) => channel.id === channelId) ?? null;
@@ -703,8 +743,12 @@ function boatLabel(boat?: string | null) {
 
 useEffect(() => {
   if (!channelId) return;
-  if (filteredChannels.some((channel) => channel.id === channelId)) return;
+  if (filteredChannels.some((channel) => channel.id === channelId)) {
+    setChannelCompatibilityNotice(null);
+    return;
+  }
   setChannelId("");
+  setChannelCompatibilityNotice("El canal seleccionado no está disponible para este servicio.");
 }, [channelId, filteredChannels]);
 
   async function createPre(e: React.FormEvent) {
@@ -1060,6 +1104,7 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             companyDiscountCents={commissionBreakdown.companyDiscountCents}
             commissionBaseCents={commissionBreakdown.commissionBaseCents}
             discountResponsibility={discountResponsibility}
+            channelCompatibilityNotice={channelCompatibilityNotice}
             cartItems={cartItems}
             extraServiceId={extraServiceId}
             extraQuantity={extraQuantity}

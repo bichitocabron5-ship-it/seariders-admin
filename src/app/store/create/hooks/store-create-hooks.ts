@@ -22,6 +22,7 @@ import type {
 import { errorMessage, isAbortError } from "../utils/errors";
 import { ensureContracts as ensureContractsRequest, fetchContracts, patchContract } from "../services/contracts";
 import { getAssetAvailability, type AssetAvailability } from "../../services/assets";
+import { buildServiceAllowedChannelIndex, filterChannelsForServices } from "@/lib/service-channel-availability";
 
 export function useContractsState(args: {
   enabled: boolean;
@@ -675,9 +676,32 @@ export function useStoreCreateCatalog(args: {
         if (!migrateReservationId) {
           const main0 = sm[0] ?? null;
           const firstOpt = main0 ? op.find((o) => o.serviceId === main0.id) ?? null : null;
+          const activeRules = ch.flatMap((channel) =>
+            (channel.allowedServiceIds ?? []).map((allowedServiceId) => ({
+              serviceId: allowedServiceId,
+              channelId: channel.id,
+              active: true,
+            }))
+          );
+          const restrictedWithoutVisibleChannel = sm
+            .filter((service) => service.hasAllowedChannelRules)
+            .filter((service) => !activeRules.some((rule) => rule.serviceId === service.id))
+            .map((service) => ({
+              serviceId: service.id,
+              channelId: `__hidden__:${service.id}`,
+              active: false,
+            }));
+          const compatibilityIndex = buildServiceAllowedChannelIndex([...activeRules, ...restrictedWithoutVisibleChannel]);
+          const compatibleChannels = main0
+            ? filterChannelsForServices({
+                channels: ch,
+                index: compatibilityIndex,
+                serviceIds: [main0.id],
+              })
+            : ch;
           const ch0 =
-            ch.find((channel) => String(channel.name ?? "").trim().toLowerCase() === "directo") ??
-            ch[0] ??
+            compatibleChannels.find((channel) => String(channel.name ?? "").trim().toLowerCase() === "directo") ??
+            compatibleChannels[0] ??
             null;
 
           setInitialDefaults({
