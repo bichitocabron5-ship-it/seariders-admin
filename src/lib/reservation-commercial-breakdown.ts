@@ -38,10 +38,10 @@ export function finalizeReservationCommercialBreakdown(
   );
   const totalDiscountCents = customerDiscountCents + autoDiscountCents + manualDiscountCents;
 
-  // Discount responsibility applies only to the manual discount entered by staff.
+  // The commissionable base only drops by the portion of discount assumed by the promoter.
   const commissionBreakdown = computeCommissionableBase({
     grossBaseCents: totalBeforeDiscountsCents,
-    totalDiscountCents: manualDiscountCents,
+    totalDiscountCents,
     responsibility: args.discountResponsibility,
     promoterDiscountShareBps: args.promoterDiscountShareBps ?? null,
   });

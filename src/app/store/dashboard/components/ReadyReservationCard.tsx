@@ -118,6 +118,12 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
   const totalDiscount = customerDisc + autoDisc + manualDisc;
   const pvpTotal = Number(r.pvpTotalCents ?? 0);
   const finalTotal = Number(r.finalTotalCents ?? r.totalPriceCents ?? Math.max(0, pvpTotal - totalDiscount));
+  const promoterDisc = Number(r.promoterDiscountCents ?? 0);
+  const companyDisc = Number(r.companyDiscountCents ?? 0);
+  const appliedCommissionMode = r.appliedCommissionMode ?? "PERCENT";
+  const appliedCommissionValue = Number(r.appliedCommissionValue ?? 0);
+  const appliedCommissionPct = r.appliedCommissionPct != null ? Number(r.appliedCommissionPct) : null;
+  const appliedCommissionCents = Number(r.appliedCommissionCents ?? 0);
   const depositHeld = r.depositHeld === true;
   const paid = Number(r.paidCents ?? 0);
   const refundableDepositCents = Math.max(0, paidDepositCents);
@@ -287,6 +293,24 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
           </div>
           {isFullyPaid ? <StatusBadge tone="success">Pagado</StatusBadge> : null}
         </div>
+        {(appliedCommissionCents > 0 || customerDisc > 0 || promoterDisc > 0 || companyDisc > 0) ? (
+          <div style={{ marginTop: 10, display: "grid", gap: 4, opacity: 0.85 }}>
+            <div>Base comisionable: {euros(Number(r.commissionBaseCents ?? 0))}</div>
+            {appliedCommissionCents > 0 ? (
+              <div>
+                Comisión canal:{" "}
+                {appliedCommissionMode === "FIXED"
+                  ? `${appliedCommissionValue.toFixed(2)} EUR`
+                  : `${Number(appliedCommissionPct ?? appliedCommissionValue).toFixed(2)}%`}{" "}
+                · {euros(appliedCommissionCents)}
+              </div>
+            ) : null}
+            {customerDisc > 0 ? <div>Descuento cliente canal: {euros(customerDisc)}</div> : null}
+            {promoterDisc > 0 || companyDisc > 0 ? (
+              <div>Descuento asumido · promotor {euros(promoterDisc)} · empresa {euros(companyDisc)}</div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {r.depositHeld ? (

@@ -23,7 +23,7 @@ test("no discount keeps final total and commission base on the gross price", () 
   assert.equal(result.companyDiscountCents, 0);
 });
 
-test("manual discount with COMPANY responsibility does not reduce promoter commission base", async () => {
+test("manual discount with COMPANY responsibility keeps promoter commission on the gross price", async () => {
   const result = await computeReservationCommercialBreakdown({
     when: new Date("2026-05-12T10:00:00Z"),
     discountLines: [],
@@ -80,7 +80,24 @@ test("manual discount with SHARED responsibility reduces only promoter share fro
   assert.equal(result.companyDiscountCents, 900);
 });
 
-test("channel or automatic discounts do not reduce promoter commission base by themselves", () => {
+test("channel or automatic discounts keep promoter commission on gross when company assumes them", () => {
+  const result = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    customerDiscountCents: 1_500,
+    autoDiscountCents: 500,
+    manualDiscountCents: 0,
+    discountResponsibility: "COMPANY",
+    promoterDiscountShareBps: 0,
+  });
+
+  assert.equal(result.finalTotalCents, 8_000);
+  assert.equal(result.totalDiscountCents, 2_000);
+  assert.equal(result.commissionBaseCents, 10_000);
+  assert.equal(result.promoterDiscountCents, 0);
+  assert.equal(result.companyDiscountCents, 2_000);
+});
+
+test("channel or automatic discounts reduce promoter commission base when promoter assumes them", () => {
   const result = finalizeReservationCommercialBreakdown({
     totalBeforeDiscountsCents: 10_000,
     customerDiscountCents: 1_500,
@@ -92,7 +109,7 @@ test("channel or automatic discounts do not reduce promoter commission base by t
 
   assert.equal(result.finalTotalCents, 8_000);
   assert.equal(result.totalDiscountCents, 2_000);
-  assert.equal(result.commissionBaseCents, 10_000);
-  assert.equal(result.promoterDiscountCents, 0);
+  assert.equal(result.commissionBaseCents, 8_000);
+  assert.equal(result.promoterDiscountCents, 2_000);
   assert.equal(result.companyDiscountCents, 0);
 });

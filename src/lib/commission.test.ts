@@ -129,7 +129,7 @@ test("fixed commission keeps the configured amount even when the promoter discou
   assert.equal(snapshot.appliedCommissionCents, 1_500);
 });
 
-test("fixed customer discount does not reduce a fixed promoter commission base or amount", () => {
+test("fixed customer discount does not change the fixed promoter commission amount", () => {
   const commercial = finalizeReservationCommercialBreakdown({
     totalBeforeDiscountsCents: 10_000,
     customerDiscountCents: 2_000,
@@ -152,9 +152,58 @@ test("fixed customer discount does not reduce a fixed promoter commission base o
   });
 
   assert.equal(commercial.finalTotalCents, 8_000);
-  assert.equal(commercial.commissionBaseCents, 10_000);
-  assert.equal(commercial.promoterDiscountCents, 0);
+  assert.equal(commercial.commissionBaseCents, 8_000);
+  assert.equal(commercial.promoterDiscountCents, 2_000);
+  assert.equal(commercial.companyDiscountCents, 0);
   assert.equal(snapshot.appliedCommissionMode, "FIXED");
   assert.equal(snapshot.appliedCommissionCents, 1_250);
   assert.equal(Math.max(0, commercial.finalTotalCents - snapshot.appliedCommissionCents), 6_750);
+});
+
+test("percentage commission keeps gross base when company assumes the discount", () => {
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    customerDiscountCents: 1_000,
+    manualDiscountCents: 0,
+    discountResponsibility: "COMPANY",
+  });
+
+  const snapshot = resolveAppliedCommercialSnapshot({
+    channel: {
+      commissionEnabled: true,
+      commissionPct: 10,
+    },
+    serviceId: "svc-1",
+    commissionBaseCents: commercial.commissionBaseCents,
+    customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
+    quantity: 1,
+  });
+
+  assert.equal(commercial.commissionBaseCents, 10_000);
+  assert.equal(snapshot.appliedCommissionMode, "PERCENT");
+  assert.equal(snapshot.appliedCommissionCents, 1_000);
+});
+
+test("percentage commission drops to final charged amount when promoter assumes the discount", () => {
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    customerDiscountCents: 1_000,
+    manualDiscountCents: 0,
+    discountResponsibility: "PROMOTER",
+  });
+
+  const snapshot = resolveAppliedCommercialSnapshot({
+    channel: {
+      commissionEnabled: true,
+      commissionPct: 10,
+    },
+    serviceId: "svc-1",
+    commissionBaseCents: commercial.commissionBaseCents,
+    customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
+    quantity: 1,
+  });
+
+  assert.equal(commercial.commissionBaseCents, 9_000);
+  assert.equal(snapshot.appliedCommissionMode, "PERCENT");
+  assert.equal(snapshot.appliedCommissionCents, 900);
 });

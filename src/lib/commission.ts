@@ -441,8 +441,9 @@ export function computeCommissionableBase(args: {
   promoterDiscountShareBps?: number | null;
 }) {
   const grossBaseCents = Math.max(0, roundCents(args.grossBaseCents));
+  const totalDiscountCents = Math.max(0, roundCents(args.totalDiscountCents ?? 0));
   const split = splitDiscountByResponsibility({
-    discountCents: args.totalDiscountCents ?? 0,
+    discountCents: totalDiscountCents,
     responsibility: args.responsibility ?? "COMPANY",
     promoterDiscountShareBps: args.promoterDiscountShareBps ?? null,
   });
