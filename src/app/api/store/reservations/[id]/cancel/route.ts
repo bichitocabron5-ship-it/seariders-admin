@@ -61,6 +61,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           arrivedStoreAt: true,
           depositHeld: true,
           depositHoldReason: true,
+          contracts: {
+            select: {
+              id: true,
+              status: true,
+              driverName: true,
+              logicalUnitIndex: true,
+              unitIndex: true,
+            },
+          },
           payments: {
             select: {
               amountCents: true,
@@ -91,6 +100,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (reservation.status === ReservationStatus.IN_SEA) {
         throw Object.assign(
           new Error("Una reserva en el mar no se puede cancelar ni devolver desde tienda"),
+          { status: 409 }
+        );
+      }
+
+      const signedContracts = (reservation.contracts ?? []).filter(
+        (contract) => contract.status === "SIGNED"
+      );
+      if (signedContracts.length > 0) {
+        const firstSigned = signedContracts[0];
+        const unitLabel = Number(firstSigned?.logicalUnitIndex ?? firstSigned?.unitIndex ?? 1);
+        const driverLabel = String(firstSigned?.driverName ?? "").trim();
+        throw Object.assign(
+          new Error(
+            `No se puede cancelar una reserva con contratos firmados. Contrato bloqueante: unidad ${unitLabel}${driverLabel ? ` (${driverLabel})` : ""}.`
+          ),
           { status: 409 }
         );
       }
