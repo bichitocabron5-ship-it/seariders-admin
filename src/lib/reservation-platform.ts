@@ -149,7 +149,9 @@ async function syncReservationPlatformUnitsInternalTx(
       where: { id: existing.id },
       data: {
         ...data,
-        ...(existing.status === ReservationUnitStatus.CANCELED
+        ...((readyAt &&
+          existing.status === ReservationUnitStatus.WAITING) ||
+        existing.status === ReservationUnitStatus.CANCELED
           ? {
               status: readyAt ? ReservationUnitStatus.READY_FOR_PLATFORM : ReservationUnitStatus.WAITING,
             }
