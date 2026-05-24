@@ -241,6 +241,15 @@ function formatReservationLine(r: ReservationLike, opts?: { showCountry?: boolea
   return parts.join(" · ");
 }
 
+function isOlympicChannelName(name: string | null | undefined) {
+  const normalized = String(name ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+  return normalized === "OLYMPIC" || normalized === "OLIMPICO";
+}
+
 export default function Booth() {
   const [services, setServices] = useState<Service[]>([]);
   const [servicesExtra, setServicesExtra] = useState<Service[]>([]);
@@ -348,7 +357,10 @@ const filteredChannels = useMemo(() => {
   const preferred = compatibilityFiltered.filter((channel) =>
     wantsExternalChannel ? channel.kind === "EXTERNAL_ACTIVITY" : channel.kind !== "EXTERNAL_ACTIVITY"
   );
-  return preferred.length > 0 ? preferred : compatibilityFiltered;
+  const result = preferred.length > 0 ? preferred : compatibilityFiltered;
+  const olympicChannel = result.find((channel) => isOlympicChannelName(channel.name));
+  if (!olympicChannel) return result;
+  return [olympicChannel, ...result.filter((channel) => channel.id !== olympicChannel.id)];
 }, [channels, channelRulesIndex, compatibleServiceIds, selectedService]);
 
 const selectedChannel = useMemo(() => {
@@ -742,11 +754,27 @@ function boatLabel(boat?: string | null) {
   }, [optionId, options, serviceId]);
 
 useEffect(() => {
-  if (!channelId) return;
+  const olympicChannel = filteredChannels.find((channel) => isOlympicChannelName(channel.name));
+
+  if (!channelId) {
+    if (olympicChannel) {
+      setChannelId(olympicChannel.id);
+      setChannelCompatibilityNotice(null);
+    }
+    return;
+  }
+
   if (filteredChannels.some((channel) => channel.id === channelId)) {
     setChannelCompatibilityNotice(null);
     return;
   }
+
+  if (olympicChannel) {
+    setChannelId(olympicChannel.id);
+    setChannelCompatibilityNotice(null);
+    return;
+  }
+
   setChannelId("");
   setChannelCompatibilityNotice("El canal seleccionado no está disponible para este servicio.");
 }, [channelId, filteredChannels]);
