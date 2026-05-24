@@ -92,15 +92,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           status: true,
           reservationId: true,
           jetskiId: true,
+          serviceCategory: true,
+          serviceName: true,
+          durationMinutesSnapshot: true,
+          quantitySnapshot: true,
+          paxSnapshot: true,
           reservation: {
             select: {
               id: true,
               status: true,
               isLicense: true,
-              quantity: true,
-              option: { select: { durationMinutes: true } },
-              pax: true,
-              service: { select: { category: true, name: true } },
             },
           },
         },
@@ -120,9 +121,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
 
       // 3) Validación recurso según kind
       const duration = getOperationalDurationMinutes({
-        category: unit.reservation.service?.category ?? null,
-        durationMinutes: unit.reservation.option?.durationMinutes ?? 0,
-        quantity: unit.reservation.quantity ?? 1,
+        category: unit.serviceCategory ?? null,
+        durationMinutes: unit.durationMinutesSnapshot ?? 0,
+        quantity: unit.quantitySnapshot ?? 1,
       });
 
       // Exclusividad global (recurso no puede estar QUEUED/ACTIVE en otro run)
@@ -267,12 +268,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
         if (
           !isAssetCompatibleWithServiceCategory({
             assetType: asset.type,
-            serviceCategory: unit.reservation.service?.category ?? null,
+            serviceCategory: unit.serviceCategory ?? null,
           })
         ) {
           throw new Error(
-            assetCompatibilityReason(unit.reservation.service?.category ?? null) ??
-              `El recurso no es compatible con ${unit.reservation.service?.name ?? "este servicio"}.`
+            assetCompatibilityReason(unit.serviceCategory ?? null) ??
+              `El recurso no es compatible con ${unit.serviceName ?? "este servicio"}.`
           );
         }
 
@@ -291,7 +292,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           canShareMonitorAssetWithReservation({
             runKind: run.kind,
             runMode: run.mode,
-            serviceCategory: unit.reservation.service?.category ?? null,
+            serviceCategory: unit.serviceCategory ?? null,
             isLicense: unit.reservation.isLicense,
           });
 

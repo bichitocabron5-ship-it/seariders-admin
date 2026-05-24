@@ -9,6 +9,11 @@ import {
   getOperationalDurationMinutes,
 } from "@/lib/reservation-operations";
 import {
+  CAPACITY_BLOCKING_RESERVATION_SOURCES,
+  CAPACITY_BLOCKING_RESERVATION_STATUSES,
+} from "@/lib/reservation-capacity";
+import { getSlotConfigOrThrow } from "@/lib/slot-config";
+import {
   BUSINESS_TZ,
   utcDateFromYmdInTz,
   utcDateTimeFromYmdHmInTz,
@@ -67,52 +72,23 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "date requerido (YYYY-MM-DD)" }, { status: 400 });
   }
 
-  // 1) SlotPolicy (seed si falta)
-  let policy = await prisma.slotPolicy.findFirst();
-  if (!policy) {
-    policy = await prisma.slotPolicy.create({
-      data: {
-        intervalMinutes: 30,
-        openTime: "09:00",
-        closeTime: "20:00",
-      },
-    });
-  }
+  // 1) SlotPolicy
+  const policy = await getSlotConfigOrThrow(prisma);
 
   const interval = policy.intervalMinutes ?? 30;
   const openTime = policy.openTime ?? "09:00";
   const closeTime = policy.closeTime ?? "20:00";
 
-  // 2) SlotLimit (auto-seed por categorías existentes)
-  const serviceCats = await prisma.service.findMany({
-    where: { isActive: true },
-    select: { category: true },
-  });
-
-  const allCats = Array.from(
-    new Set(serviceCats.map((s) => String(s.category ?? "").toUpperCase()).filter(Boolean))
-  );
-
-  const existingLimits = await prisma.slotLimit.findMany({
-    select: { category: true, maxUnits: true },
-  });
-
-  const existingSet = new Set(existingLimits.map((r) => String(r.category).toUpperCase()));
-
-  const missing = allCats.filter((c) => !existingSet.has(c));
-  if (missing.length > 0) {
-    await prisma.slotLimit.createMany({
-      data: missing.map((c) => ({
-        category: c,
-        maxUnits: c === "JETSKI" ? 10 : 1, // defaults iniciales
-      })),
-      skipDuplicates: true,
-    });
-  }
-
+  // 2) SlotLimit
   const limitsRows = await prisma.slotLimit.findMany({
     select: { category: true, maxUnits: true },
   });
+  if (limitsRows.length === 0) {
+    return NextResponse.json(
+      { error: "CONFIGURATION_REQUIRED", message: "SlotLimit no configurado." },
+      { status: 409 }
+    );
+  }
 
   const limits: Record<string, number> = {};
   for (const r of limitsRows) limits[String(r.category).toUpperCase()] = r.maxUnits;
@@ -140,9 +116,9 @@ export async function GET(req: Request) {
     where: {
       isExtra: false, // actividades reales
       reservation: {
-        source: "STORE",
+        source: { in: CAPACITY_BLOCKING_RESERVATION_SOURCES },
         activityDate: { gte: dayStartUtc, lt: dayEndExclusiveUtc },
-        status: { not: "CANCELED" },
+        status: { in: CAPACITY_BLOCKING_RESERVATION_STATUSES },
       },
     },
     select: {

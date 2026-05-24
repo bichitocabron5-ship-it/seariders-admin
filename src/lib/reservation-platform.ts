@@ -1,80 +1,94 @@
 import type { Prisma } from "@prisma/client";
 import { ReservationUnitStatus } from "@prisma/client";
 
-import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
+import { buildOperationalUnitSnapshots } from "@/lib/reservation-operational-units";
 
 export type ReservationPlatformUnitsInput = {
   id: string;
-  quantity: number | null;
-  isPackParent: boolean | null;
-  parentReservationId: string | null;
+  quantity?: number | null;
+  isPackParent?: boolean | null;
+  parentReservationId?: string | null;
   serviceCategory?: string | null;
-  items: Array<{
-    quantity: number | null;
-    isExtra: boolean;
-    service: { category: string | null } | null;
-  }>;
+  items?: Array<unknown>;
 };
 
-export async function ensureReservationPlatformUnitsTx(
+async function loadReservationOperationalUnitsTx(
   tx: Prisma.TransactionClient,
-  reservation: ReservationPlatformUnitsInput,
-  readyAt?: Date
+  reservationId: string
 ) {
-  if (reservation.isPackParent && !reservation.parentReservationId) return;
-
-  const requiredUnits = computeRequiredPlatformUnits({
-    quantity: reservation.quantity,
-    serviceCategory: reservation.serviceCategory ?? null,
-    items: reservation.items ?? [],
+  const reservation = await tx.reservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      id: true,
+      quantity: true,
+      pax: true,
+      isPackParent: true,
+      parentReservationId: true,
+      service: {
+        select: {
+          id: true,
+          name: true,
+          category: true,
+        },
+      },
+      option: {
+        select: {
+          id: true,
+          durationMinutes: true,
+        },
+      },
+      items: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          quantity: true,
+          pax: true,
+          isExtra: true,
+          service: {
+            select: {
+              id: true,
+              name: true,
+              category: true,
+            },
+          },
+          option: {
+            select: {
+              id: true,
+              durationMinutes: true,
+            },
+          },
+        },
+      },
+    },
   });
-  if (requiredUnits <= 0) return;
 
-  const existing = await tx.reservationUnit.findMany({
-    where: { reservationId: reservation.id },
-    select: { unitIndex: true },
-  });
-  const existingIndexes = new Set(existing.map((unit) => Number(unit.unitIndex)));
-
-  const toCreate: Array<{
-    reservationId: string;
-    unitIndex: number;
-    readyForPlatformAt?: Date;
-  }> = [];
-
-  for (let index = 1; index <= requiredUnits; index++) {
-    if (!existingIndexes.has(index)) {
-      toCreate.push({
-        reservationId: reservation.id,
-        unitIndex: index,
-        ...(readyAt ? { readyForPlatformAt: readyAt } : {}),
-      });
-    }
+  if (!reservation) {
+    throw new Error("Reserva no existe");
   }
 
-  if (toCreate.length > 0) {
-    await tx.reservationUnit.createMany({
-      data: toCreate,
-      skipDuplicates: true,
-    });
-  }
+  return reservation;
 }
 
-export async function syncReservationPlatformUnitsTx(
+async function syncReservationPlatformUnitsInternalTx(
   tx: Prisma.TransactionClient,
-  reservation: ReservationPlatformUnitsInput,
+  reservationId: string,
   readyAt?: Date
 ) {
+  const reservation = await loadReservationOperationalUnitsTx(tx, reservationId);
   if (reservation.isPackParent && !reservation.parentReservationId) return;
 
-  const requiredUnits = computeRequiredPlatformUnits({
-    quantity: reservation.quantity,
-    serviceCategory: reservation.serviceCategory ?? null,
+  const requiredUnits = buildOperationalUnitSnapshots({
     items: reservation.items ?? [],
+    fallback: {
+      quantity: reservation.quantity,
+      pax: reservation.pax,
+      service: reservation.service,
+      option: reservation.option,
+    },
   });
 
   const existingUnits = await tx.reservationUnit.findMany({
-    where: { reservationId: reservation.id },
+    where: { reservationId },
     select: {
       id: true,
       unitIndex: true,
@@ -83,8 +97,15 @@ export async function syncReservationPlatformUnitsTx(
     orderBy: { unitIndex: "asc" },
   });
 
+  const byIndex = new Map(existingUnits.map((unit) => [Number(unit.unitIndex ?? 0), unit]));
+  const requiredIndexes = new Set(requiredUnits.map((unit) => unit.unitIndex));
+
   const extraUnitIds = existingUnits
-    .filter((unit) => Number(unit.unitIndex ?? 0) > requiredUnits && unit.status !== ReservationUnitStatus.CANCELED)
+    .filter(
+      (unit) =>
+        !requiredIndexes.has(Number(unit.unitIndex ?? 0)) &&
+        unit.status !== ReservationUnitStatus.CANCELED
+    )
     .map((unit) => unit.id);
 
   if (extraUnitIds.length > 0) {
@@ -98,46 +119,58 @@ export async function syncReservationPlatformUnitsTx(
     });
   }
 
-  const byIndex = new Map(existingUnits.map((unit) => [Number(unit.unitIndex ?? 0), unit]));
-  const toCreate: Array<{
-    reservationId: string;
-    unitIndex: number;
-    status: ReservationUnitStatus;
-    readyForPlatformAt?: Date;
-  }> = [];
-  const toReactivateIds: string[] = [];
+  for (const snapshot of requiredUnits) {
+    const existing = byIndex.get(snapshot.unitIndex);
+    const data = {
+      reservationItemId: snapshot.reservationItemId,
+      serviceId: snapshot.serviceId,
+      optionId: snapshot.optionId,
+      serviceCategory: snapshot.serviceCategory,
+      serviceName: snapshot.serviceName,
+      durationMinutesSnapshot: snapshot.durationMinutesSnapshot,
+      quantitySnapshot: snapshot.quantitySnapshot,
+      paxSnapshot: snapshot.paxSnapshot,
+      ...(readyAt ? { readyForPlatformAt: readyAt } : {}),
+    };
 
-  for (let index = 1; index <= requiredUnits; index++) {
-    const existing = byIndex.get(index);
     if (!existing) {
-      toCreate.push({
-        reservationId: reservation.id,
-        unitIndex: index,
-        status: readyAt ? ReservationUnitStatus.READY_FOR_PLATFORM : ReservationUnitStatus.WAITING,
-        ...(readyAt ? { readyForPlatformAt: readyAt } : {}),
+      await tx.reservationUnit.create({
+        data: {
+          reservationId,
+          unitIndex: snapshot.unitIndex,
+          status: readyAt ? ReservationUnitStatus.READY_FOR_PLATFORM : ReservationUnitStatus.WAITING,
+          ...data,
+        },
       });
       continue;
     }
 
-    if (existing.status === ReservationUnitStatus.CANCELED) {
-      toReactivateIds.push(existing.id);
-    }
-  }
-
-  if (toCreate.length > 0) {
-    await tx.reservationUnit.createMany({
-      data: toCreate,
-      skipDuplicates: true,
-    });
-  }
-
-  if (toReactivateIds.length > 0) {
-    await tx.reservationUnit.updateMany({
-      where: { id: { in: toReactivateIds } },
+    await tx.reservationUnit.update({
+      where: { id: existing.id },
       data: {
-        status: readyAt ? ReservationUnitStatus.READY_FOR_PLATFORM : ReservationUnitStatus.WAITING,
-        readyForPlatformAt: readyAt ?? null,
+        ...data,
+        ...(existing.status === ReservationUnitStatus.CANCELED
+          ? {
+              status: readyAt ? ReservationUnitStatus.READY_FOR_PLATFORM : ReservationUnitStatus.WAITING,
+            }
+          : {}),
       },
     });
   }
+}
+
+export async function ensureReservationPlatformUnitsTx(
+  tx: Prisma.TransactionClient,
+  reservation: ReservationPlatformUnitsInput,
+  readyAt?: Date
+) {
+  await syncReservationPlatformUnitsInternalTx(tx, reservation.id, readyAt);
+}
+
+export async function syncReservationPlatformUnitsTx(
+  tx: Prisma.TransactionClient,
+  reservation: ReservationPlatformUnitsInput,
+  readyAt?: Date
+) {
+  await syncReservationPlatformUnitsInternalTx(tx, reservation.id, readyAt);
 }

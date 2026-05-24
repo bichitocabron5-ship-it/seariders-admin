@@ -1,11 +1,11 @@
-// src/app/api/store/reservations/[id]/units/ensure/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { ReservationUnitStatus, type ReservationUnit } from "@prisma/client";
-import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
+import { buildOperationalUnitSnapshots } from "@/lib/reservation-operational-units";
+import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 
 export const runtime = "nodejs";
 
@@ -30,17 +30,22 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
         select: {
           id: true,
           quantity: true,
+          pax: true,
           status: true,
           readyForPlatformAt: true,
           parentReservationId: true,
           isPackParent: true,
-          isLicense: true,
-          service: { select: { category: true } },
+          service: { select: { id: true, name: true, category: true } },
+          option: { select: { id: true, durationMinutes: true } },
           items: {
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
             select: {
+              id: true,
               quantity: true,
+              pax: true,
               isExtra: true,
-              service: { select: { category: true } },
+              service: { select: { id: true, name: true, category: true } },
+              option: { select: { id: true, durationMinutes: true } },
             },
           },
         },
@@ -48,48 +53,35 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
       if (!r) throw new Error("Reserva no existe");
 
-      // Regla PRO:
-      // - si es pack padre => la operativa vive en hijas => no generamos units aquí
       if (r.isPackParent && !r.parentReservationId) {
-        return { reservationId: id, requiredUnits: 0, readyCount: 0, units: [] as ReservationUnit[], hint: "Pack padre: generar units en hijas" };
+        return {
+          reservationId: id,
+          requiredUnits: 0,
+          readyCount: 0,
+          units: [] as ReservationUnit[],
+          hint: "Pack padre: generar units en hijas",
+        };
       }
 
-      const requiredUnits = computeRequiredPlatformUnits({
-        quantity: r.quantity,
-        serviceCategory: r.service?.category ?? null,
-        items: (r.items ?? []).map((it) => ({
-          quantity: it.quantity ?? 0,
-          isExtra: Boolean(it.isExtra),
-          service: it.service ? { category: it.service.category ?? null } : null,
-        })),
-      });
+      const requiredUnits = buildOperationalUnitSnapshots({
+        items: r.items ?? [],
+        fallback: {
+          quantity: r.quantity,
+          pax: r.pax,
+          service: r.service,
+          option: r.option,
+        },
+      }).length;
 
       if (requiredUnits <= 0) {
         return { reservationId: id, requiredUnits: 0, readyCount: 0, units: [] as ReservationUnit[] };
       }
 
-      const existing = await tx.reservationUnit.findMany({
-        where: { reservationId: id },
-        select: { unitIndex: true },
-      });
-      const set = new Set(existing.map((x) => Number(x.unitIndex)));
-
-      const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
-      for (let i = 1; i <= requiredUnits; i++) {
-        if (!set.has(i)) {
-          toCreate.push({
-            reservationId: id,
-            unitIndex: i,
-            ...(r.status === "READY_FOR_PLATFORM"
-              ? { readyForPlatformAt: r.readyForPlatformAt ?? new Date() }
-              : {}),
-          });
-        }
-      }
-
-      if (toCreate.length) {
-        await tx.reservationUnit.createMany({ data: toCreate, skipDuplicates: true });
-      }
+      await syncReservationPlatformUnitsTx(
+        tx,
+        { id },
+        r.status === "READY_FOR_PLATFORM" ? (r.readyForPlatformAt ?? new Date()) : undefined
+      );
 
       const units = await tx.reservationUnit.findMany({
         where: { reservationId: id },
@@ -99,6 +91,9 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
           unitIndex: true,
           status: true,
           jetskiId: true,
+          serviceCategory: true,
+          serviceName: true,
+          quantitySnapshot: true,
         },
       });
 

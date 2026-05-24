@@ -3,6 +3,8 @@ import {
   getOperationalCapacityUnits,
   getOperationalDurationMinutes,
 } from "@/lib/reservation-operations";
+import { buildCapacityBlockingReservationWhere } from "@/lib/reservation-capacity";
+import { getSlotConfigOrThrow, getSlotLimitOrThrow } from "@/lib/slot-config";
 
 type SlotPolicy = {
   intervalMinutes: number;
@@ -20,20 +22,12 @@ function ceilDiv(a: number, b: number) {
 }
 
 export async function getSlotPolicy(tx = prisma): Promise<SlotPolicy> {
-  const policy = await tx.slotPolicy.findFirst({ orderBy: { createdAt: "desc" } });
-  return {
-    intervalMinutes: policy?.intervalMinutes ?? 30,
-    openTime: policy?.openTime ?? "09:00",
-    closeTime: policy?.closeTime ?? "20:00",
-  };
+  return await getSlotConfigOrThrow(tx);
 }
 
 export async function getCategoryCapacity(category: string, tx = prisma): Promise<number> {
-  const row = await tx.slotLimit.findUnique({ where: { category } });
-  if (row?.maxUnits != null) return row.maxUnits;
-
-  if (String(category).toUpperCase() === "JETSKI") return 10;
-  return 1;
+  const row = await getSlotLimitOrThrow(tx, category);
+  return row.maxUnits;
 }
 
 export function computeSlotsNeeded(durationMin: number, intervalMin: number) {
@@ -84,7 +78,7 @@ export async function assertCapacityOrThrow(args: {
 
   const existing = await tx.reservation.findMany({
     where: {
-      status: { notIn: ["CANCELED", "COMPLETED"] },
+      ...buildCapacityBlockingReservationWhere(),
       scheduledTime: { not: null, gte: windowStart, lte: windowEnd },
       service: { category: args.category },
     },

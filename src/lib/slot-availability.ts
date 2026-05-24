@@ -3,6 +3,8 @@ import {
   getOperationalCapacityUnits,
   getOperationalDurationMinutes,
 } from "@/lib/reservation-operations";
+import { buildCapacityBlockingReservationWhere } from "@/lib/reservation-capacity";
+import { getSlotConfigOrThrow, getSlotLimitOrThrow } from "@/lib/slot-config";
 import { BUSINESS_TZ, utcDateFromYmdInTz } from "@/lib/tz-business";
 
 function hmToMinutes(hm: string) {
@@ -19,18 +21,12 @@ export async function checkSlotCapacity(params: {
 }) {
   const { date, time, category, quantity, durationMinutes } = params;
 
-  const policy = await prisma.slotPolicy.findFirst();
-  if (!policy) throw new Error("SlotPolicy no configurado");
-
+  const policy = await getSlotConfigOrThrow(prisma);
   const interval = policy.intervalMinutes;
   const openTime = policy.openTime;
   const closeTime = policy.closeTime;
 
-  const limitRow = await prisma.slotLimit.findUnique({
-    where: { category },
-  });
-
-  if (!limitRow) throw new Error(`SlotLimit no configurado para ${category}`);
+  const limitRow = await getSlotLimitOrThrow(prisma, category);
 
   const maxUnits = limitRow.maxUnits;
   const startMin = hmToMinutes(openTime);
@@ -54,9 +50,8 @@ export async function checkSlotCapacity(params: {
 
   const reservations = await prisma.reservation.findMany({
     where: {
-      source: "STORE",
+      ...buildCapacityBlockingReservationWhere(),
       activityDate: { gte: dayStartUtc, lt: nextDay },
-      status: { not: "CANCELED" },
     },
     select: {
       scheduledTime: true,

@@ -4,6 +4,8 @@ import {
   getOperationalCapacityUnits,
   getOperationalDurationMinutes,
 } from "@/lib/reservation-operations";
+import { buildCapacityBlockingReservationWhere } from "@/lib/reservation-capacity";
+import { getSlotConfigOrThrow, getSlotLimitOrThrow } from "@/lib/slot-config";
 import { BUSINESS_TZ } from "@/lib/tz-business";
 
 function hhmmToMinutes(hhmm: string) {
@@ -37,17 +39,11 @@ export async function assertSlotCapacityOrThrow(args: {
   const { tx, dateStartUtc, dateEndExclusiveUtc, scheduledStartUtc } = args;
   const category = String(args.category ?? "").toUpperCase();
 
-  const limit = await tx.slotLimit.findUnique({
-    where: { category },
-    select: { maxUnits: true },
-  });
-
-  if (!limit) return;
-
-  const policy = await tx.slotPolicy.findFirst({ orderBy: { createdAt: "desc" } });
-  const interval = policy?.intervalMinutes ?? 30;
-  const openTime = policy?.openTime ?? "09:00";
-  const closeTime = policy?.closeTime ?? "20:00";
+  const limit = await getSlotLimitOrThrow(tx, category);
+  const policy = await getSlotConfigOrThrow(tx);
+  const interval = policy.intervalMinutes ?? 30;
+  const openTime = policy.openTime ?? "09:00";
+  const closeTime = policy.closeTime ?? "20:00";
 
   const openMin = hhmmToMinutes(openTime);
   const closeMin = hhmmToMinutes(closeTime);
@@ -76,9 +72,7 @@ export async function assertSlotCapacityOrThrow(args: {
 
   const existing = await tx.reservation.findMany({
     where: {
-      source: "STORE",
-      status: { not: "CANCELED" },
-      scheduledTime: { not: null },
+      ...buildCapacityBlockingReservationWhere(),
       activityDate: { gte: dateStartUtc, lt: dateEndExclusiveUtc },
       service: { category },
       ...(args.excludeReservationId ? { id: { not: args.excludeReservationId } } : {}),

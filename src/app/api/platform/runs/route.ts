@@ -69,6 +69,15 @@ export async function GET(req: Request) {
           id: true,
           reservationId: true,
           reservationUnitId: true,
+          reservationUnit: {
+            select: {
+              serviceName: true,
+              serviceCategory: true,
+              durationMinutesSnapshot: true,
+              quantitySnapshot: true,
+              paxSnapshot: true,
+            },
+          },
 
           // jetski
           jetskiId: true,
@@ -87,10 +96,6 @@ export async function GET(req: Request) {
             select: {
               id: true,
               customerName: true,
-              pax: true,
-              quantity: true,
-              service: { select: { name: true, category: true } },
-              option: { select: { durationMinutes: true } },
             },
           },
         },

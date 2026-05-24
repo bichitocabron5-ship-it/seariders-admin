@@ -119,13 +119,16 @@ export type RunOpen = {
     startedAt?: string | null;
     expectedEndAt?: string | null;
     durationMinutesSnapshot: number;
+    reservationUnit?: {
+      serviceName?: string | null;
+      serviceCategory?: string | null;
+      durationMinutesSnapshot?: number | null;
+      quantitySnapshot?: number | null;
+      paxSnapshot?: number | null;
+    } | null;
     reservation?: {
       id?: string;
       customerName?: string | null;
-      pax?: number | null;
-      quantity?: number | null;
-      service?: { name?: string | null; category?: string | null } | null;
-      option?: { durationMinutes?: number | null } | null;
     } | null;
   }>;
 };

@@ -11,11 +11,11 @@ import {
 } from "@prisma/client";
 import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
-import { computeRequiredPlatformUnits } from "@/lib/reservation-rules";
 import {
   getOperationalBlockLabel,
   getOperationalDurationMinutes,
 } from "@/lib/reservation-operations";
+import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 
 export const runtime = "nodejs";
 
@@ -130,37 +130,9 @@ async function repairMissingReadyPlatformUnits(params: {
 
   for (const reservation of reservations) {
     if (reservation.isPackParent && !reservation.parentReservationId) continue;
-
-    const requiredUnits = computeRequiredPlatformUnits({
-      quantity: reservation.quantity,
-      serviceCategory: reservation.service?.category ?? null,
-      items: (reservation.items ?? []).map((item) => ({
-        quantity: item.quantity ?? 0,
-        isExtra: Boolean(item.isExtra),
-        service: item.service ? { category: item.service.category ?? null } : null,
-      })),
+    await prisma.$transaction(async (tx) => {
+      await syncReservationPlatformUnitsTx(tx, { id: reservation.id }, reservation.readyForPlatformAt ?? undefined);
     });
-    if (requiredUnits <= 0) continue;
-
-    const existing = new Set((reservation.units ?? []).map((unit) => Number(unit.unitIndex)));
-    const toCreate: Array<{ reservationId: string; unitIndex: number; readyForPlatformAt?: Date }> = [];
-
-    for (let i = 1; i <= requiredUnits; i++) {
-      if (!existing.has(i)) {
-        toCreate.push({
-          reservationId: reservation.id,
-          unitIndex: i,
-          ...(reservation.readyForPlatformAt ? { readyForPlatformAt: reservation.readyForPlatformAt } : {}),
-        });
-      }
-    }
-
-    if (toCreate.length > 0) {
-      await prisma.reservationUnit.createMany({
-        data: toCreate,
-        skipDuplicates: true,
-      });
-    }
   }
 }
 
@@ -187,24 +159,20 @@ export async function GET(req: Request) {
       },
       reservation: {
         status: { notIn: [ReservationStatus.CANCELED, ReservationStatus.COMPLETED] },
-        service: categories
-          ? {
-              category: { in: categories as unknown as string[] },
-            }
-          : kind === "JETSKI"
-            ? {
-                category: "JETSKI",
-              }
-            : kind === "NAUTICA"
-              ? {
-                  category: { not: "JETSKI" },
-                }
-              : undefined,
         OR: [
           { scheduledTime: { gte: start, lt: endExclusive } },
           { scheduledTime: null, activityDate: { gte: start, lt: endExclusive } },
         ],
       },
+      ...(categories
+        ? {
+            serviceCategory: { in: categories as unknown as string[] },
+          }
+        : kind === "JETSKI"
+          ? { serviceCategory: "JETSKI" }
+          : kind === "NAUTICA"
+            ? { serviceCategory: { not: "JETSKI" } }
+            : {}),
     },
     orderBy: [{ reservation: { scheduledTime: "asc" } }, { unitIndex: "asc" }],
     select: {
@@ -213,6 +181,13 @@ export async function GET(req: Request) {
       status: true,
       jetskiId: true,
       readyForPlatformAt: true,
+      serviceId: true,
+      optionId: true,
+      serviceCategory: true,
+      serviceName: true,
+      durationMinutesSnapshot: true,
+      quantitySnapshot: true,
+      paxSnapshot: true,
       reservation: {
         select: {
           id: true,
@@ -221,10 +196,6 @@ export async function GET(req: Request) {
           scheduledTime: true,
           isLicense: true,
           status: true,
-          pax: true,
-          service: { select: { id: true, name: true, category: true } },
-          option: { select: { id: true, durationMinutes: true } },
-          quantity: true,
           parentReservationId: true,
         },
       },
@@ -236,22 +207,22 @@ export async function GET(req: Request) {
     reservationUnitId: u.id,
     queueEnteredAt: u.readyForPlatformAt,
     customerName: u.reservation.customerName,
-    serviceName: u.reservation.service?.name ?? null,
-    category: u.reservation.service?.category ?? null,
+    serviceName: u.serviceName ?? null,
+    category: u.serviceCategory ?? null,
     durationMinutes: getOperationalDurationMinutes({
-      category: u.reservation.service?.category ?? null,
-      durationMinutes: u.reservation.option?.durationMinutes ?? null,
-      quantity: u.reservation.quantity ?? null,
+      category: u.serviceCategory ?? null,
+      durationMinutes: u.durationMinutesSnapshot ?? null,
+      quantity: u.quantitySnapshot ?? null,
     }),
-    pax: u.reservation.pax ?? null,
-    quantity: u.reservation.quantity ?? null,
+    pax: u.paxSnapshot ?? null,
+    quantity: u.quantitySnapshot ?? null,
     isLicense: Boolean(u.reservation.isLicense),
     label: getOperationalBlockLabel({
-      serviceName: u.reservation.service?.name ?? null,
-      quantity: u.reservation.quantity ?? null,
-      pax: u.reservation.pax ?? null,
-      durationMinutes: u.reservation.option?.durationMinutes ?? null,
-      category: u.reservation.service?.category ?? null,
+      serviceName: u.serviceName ?? null,
+      quantity: u.quantitySnapshot ?? null,
+      pax: u.paxSnapshot ?? null,
+      durationMinutes: u.durationMinutesSnapshot ?? null,
+      category: u.serviceCategory ?? null,
     }),
   }));
 

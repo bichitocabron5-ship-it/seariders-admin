@@ -217,11 +217,11 @@ export default function PlatformRunCard({
             run.monitorAssetId === assignment.assetId;
           const mins = assignment.durationMinutesSnapshot || null;
           const operationalLabel = getOperationalBlockLabel({
-            serviceName: assignment.reservation?.service?.name ?? null,
-            quantity: assignment.reservation?.quantity ?? null,
-            pax: assignment.reservation?.pax ?? null,
-            durationMinutes: assignment.reservation?.option?.durationMinutes ?? mins,
-            category: assignment.reservation?.service?.category ?? null,
+            serviceName: assignment.reservationUnit?.serviceName ?? null,
+            quantity: assignment.reservationUnit?.quantitySnapshot ?? null,
+            pax: assignment.reservationUnit?.paxSnapshot ?? null,
+            durationMinutes: assignment.reservationUnit?.durationMinutesSnapshot ?? mins,
+            category: assignment.reservationUnit?.serviceCategory ?? null,
           });
 
           return (

@@ -504,6 +504,14 @@ model ReservationUnit {
 
   unitIndex Int // 1..N
   status    ReservationUnitStatus @default(READY_FOR_PLATFORM)
+  reservationItemId       String?
+  serviceId               String?
+  optionId                String?
+  serviceCategory         String?
+  serviceName             String?   @db.VarChar(120)
+  durationMinutesSnapshot Int?
+  quantitySnapshot        Int       @default(1)
+  paxSnapshot             Int       @default(1)
 
   // Asignación física (puede ser null hasta asignar)
   jetskiId String?
