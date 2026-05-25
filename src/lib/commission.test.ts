@@ -104,6 +104,28 @@ test("percentage commission uses the persisted commissionable base without disco
   assert.equal(snapshot.appliedCommissionCents, 2_000);
 });
 
+test("regresion comercial: PVP 100 con comision 10% sin descuento deja comision 10", () => {
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    manualDiscountCents: 0,
+    discountResponsibility: "COMPANY",
+  });
+
+  const snapshot = resolveAppliedCommercialSnapshot({
+    channel: {
+      commissionEnabled: true,
+      commissionPct: 10,
+    },
+    serviceId: "svc-1",
+    commissionBaseCents: commercial.commissionBaseCents,
+    customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
+    quantity: 1,
+  });
+
+  assert.equal(commercial.finalTotalCents, 10_000);
+  assert.equal(snapshot.appliedCommissionCents, 1_000);
+});
+
 test("fixed commission keeps the configured amount even when the promoter discount changes the base", () => {
   const commercial = finalizeReservationCommercialBreakdown({
     totalBeforeDiscountsCents: 10_000,
@@ -206,4 +228,30 @@ test("percentage commission drops to final charged amount when promoter assumes 
   assert.equal(commercial.commissionBaseCents, 9_000);
   assert.equal(snapshot.appliedCommissionMode, "PERCENT");
   assert.equal(snapshot.appliedCommissionCents, 900);
+});
+
+test("regresion comercial: descuento compartido al 50% deja base 95 y comision 9.5", () => {
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    customerDiscountCents: 1_000,
+    manualDiscountCents: 0,
+    discountResponsibility: "SHARED",
+    promoterDiscountShareBps: 5_000,
+  });
+
+  const snapshot = resolveAppliedCommercialSnapshot({
+    channel: {
+      commissionEnabled: true,
+      commissionPct: 10,
+    },
+    serviceId: "svc-1",
+    commissionBaseCents: commercial.commissionBaseCents,
+    customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
+    quantity: 1,
+  });
+
+  assert.equal(commercial.finalTotalCents, 9_000);
+  assert.equal(commercial.promoterDiscountCents, 500);
+  assert.equal(commercial.commissionBaseCents, 9_500);
+  assert.equal(snapshot.appliedCommissionCents, 950);
 });

@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { ReservationUnitStatus } from "@prisma/client";
 
 import { buildOperationalUnitSnapshots } from "@/lib/reservation-operational-units";
+import { computeReservationUnitSyncPlan } from "@/lib/reservation-platform-sync";
 
 export type ReservationPlatformUnitsInput = {
   id: string;
@@ -96,21 +97,15 @@ async function syncReservationPlatformUnitsInternalTx(
     },
     orderBy: { unitIndex: "asc" },
   });
+  const syncPlan = computeReservationUnitSyncPlan({
+    requiredUnits,
+    existingUnits,
+    readyAt,
+  });
 
-  const byIndex = new Map(existingUnits.map((unit) => [Number(unit.unitIndex ?? 0), unit]));
-  const requiredIndexes = new Set(requiredUnits.map((unit) => unit.unitIndex));
-
-  const extraUnitIds = existingUnits
-    .filter(
-      (unit) =>
-        !requiredIndexes.has(Number(unit.unitIndex ?? 0)) &&
-        unit.status !== ReservationUnitStatus.CANCELED
-    )
-    .map((unit) => unit.id);
-
-  if (extraUnitIds.length > 0) {
+  if (syncPlan.extraUnitIds.length > 0) {
     await tx.reservationUnit.updateMany({
-      where: { id: { in: extraUnitIds } },
+      where: { id: { in: syncPlan.extraUnitIds } },
       data: {
         status: ReservationUnitStatus.CANCELED,
         jetskiId: null,
@@ -119,44 +114,21 @@ async function syncReservationPlatformUnitsInternalTx(
     });
   }
 
-  for (const snapshot of requiredUnits) {
-    const existing = byIndex.get(snapshot.unitIndex);
-    const data = {
-      reservationItemId: snapshot.reservationItemId,
-      serviceId: snapshot.serviceId,
-      optionId: snapshot.optionId,
-      serviceCategory: snapshot.serviceCategory,
-      serviceName: snapshot.serviceName,
-      durationMinutesSnapshot: snapshot.durationMinutesSnapshot,
-      quantitySnapshot: snapshot.quantitySnapshot,
-      paxSnapshot: snapshot.paxSnapshot,
-      ...(readyAt ? { readyForPlatformAt: readyAt } : {}),
-    };
-
-    if (!existing) {
-      await tx.reservationUnit.create({
-        data: {
-          reservationId,
-          unitIndex: snapshot.unitIndex,
-          status: readyAt ? ReservationUnitStatus.READY_FOR_PLATFORM : ReservationUnitStatus.WAITING,
-          ...data,
-        },
-      });
-      continue;
-    }
-
-    await tx.reservationUnit.update({
-      where: { id: existing.id },
+  for (const create of syncPlan.creates) {
+    await tx.reservationUnit.create({
       data: {
-        ...data,
-        ...((readyAt &&
-          existing.status === ReservationUnitStatus.WAITING) ||
-        existing.status === ReservationUnitStatus.CANCELED
-          ? {
-              status: readyAt ? ReservationUnitStatus.READY_FOR_PLATFORM : ReservationUnitStatus.WAITING,
-            }
-          : {}),
+        reservationId,
+        unitIndex: create.unitIndex,
+        status: create.status,
+        ...create.data,
       },
+    });
+  }
+
+  for (const update of syncPlan.updates) {
+    await tx.reservationUnit.update({
+      where: { id: update.id },
+      data: update.data,
     });
   }
 }

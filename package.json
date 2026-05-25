@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --loader ./scripts/ts-test-loader.mjs ./scripts/test-runner.mjs",
     "start": "next start",
     "seed:dev": "tsx prisma/seed.ts",
     "seed:admin": "tsx scripts/seed-admin.ts",

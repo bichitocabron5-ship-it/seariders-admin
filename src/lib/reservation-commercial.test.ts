@@ -80,6 +80,63 @@ test("manual discount with SHARED responsibility reduces only promoter share fro
   assert.equal(result.companyDiscountCents, 900);
 });
 
+test("regresion comercial: descuento COMPANY de 10 mantiene la comision del promotor sobre 100", async () => {
+  const result = await computeReservationCommercialBreakdown({
+    when: new Date("2026-05-12T10:00:00Z"),
+    discountLines: [],
+    customerCountry: "ES",
+    promotionsEnabled: false,
+    totalBeforeDiscountsCents: 10_000,
+    customerDiscountCents: 1_000,
+    manualDiscountCents: 0,
+    discountResponsibility: "COMPANY",
+    promoterDiscountShareBps: 0,
+  });
+
+  assert.equal(result.finalTotalCents, 9_000);
+  assert.equal(result.commissionBaseCents, 10_000);
+  assert.equal(result.promoterDiscountCents, 0);
+  assert.equal(result.companyDiscountCents, 1_000);
+});
+
+test("regresion comercial: descuento PROMOTER de 10 baja la base comisionable a 90", async () => {
+  const result = await computeReservationCommercialBreakdown({
+    when: new Date("2026-05-12T10:00:00Z"),
+    discountLines: [],
+    customerCountry: "ES",
+    promotionsEnabled: false,
+    totalBeforeDiscountsCents: 10_000,
+    customerDiscountCents: 1_000,
+    manualDiscountCents: 0,
+    discountResponsibility: "PROMOTER",
+    promoterDiscountShareBps: 0,
+  });
+
+  assert.equal(result.finalTotalCents, 9_000);
+  assert.equal(result.commissionBaseCents, 9_000);
+  assert.equal(result.promoterDiscountCents, 1_000);
+  assert.equal(result.companyDiscountCents, 0);
+});
+
+test("regresion comercial: descuento SHARED de 10 al 50% deja base comisionable 95", async () => {
+  const result = await computeReservationCommercialBreakdown({
+    when: new Date("2026-05-12T10:00:00Z"),
+    discountLines: [],
+    customerCountry: "ES",
+    promotionsEnabled: false,
+    totalBeforeDiscountsCents: 10_000,
+    customerDiscountCents: 1_000,
+    manualDiscountCents: 0,
+    discountResponsibility: "SHARED",
+    promoterDiscountShareBps: 5_000,
+  });
+
+  assert.equal(result.finalTotalCents, 9_000);
+  assert.equal(result.commissionBaseCents, 9_500);
+  assert.equal(result.promoterDiscountCents, 500);
+  assert.equal(result.companyDiscountCents, 500);
+});
+
 test("channel or automatic discounts keep promoter commission on gross when company assumes them", () => {
   const result = finalizeReservationCommercialBreakdown({
     totalBeforeDiscountsCents: 10_000,

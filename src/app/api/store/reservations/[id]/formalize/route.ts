@@ -14,6 +14,10 @@ import {
   listMissingLogicalUnits,
   pickVisibleContractsByLogicalUnit,
 } from "@/lib/contracts/active-contracts";
+import {
+  resolveReservationLicenseDetails,
+  type ReservationLicenseContractLike,
+} from "@/lib/reservation-formalization";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
@@ -182,18 +186,6 @@ type ReservationContractSnapshot = {
   licenseNumber: string | null;
 };
 
-function hasCompleteLicense(args: {
-  licenseSchool?: string | null;
-  licenseType?: string | null;
-  licenseNumber?: string | null;
-}) {
-  return Boolean(
-    normalizeOptionalString(args.licenseSchool) &&
-      normalizeOptionalString(args.licenseType) &&
-      normalizeOptionalString(args.licenseNumber)
-  );
-}
-
 function computeContractProgress(args: {
   quantity: number | null | undefined;
   isLicense: boolean;
@@ -218,33 +210,6 @@ function computeContractProgress(args: {
   const readyCount = countReadyVisibleContracts(args.contracts, requiredUnits);
   const visibleContracts = pickVisibleContractsByLogicalUnit(args.contracts, requiredUnits);
   return { requiredUnits, readyCount, visibleContracts };
-}
-
-function buildMissingLicenseError(contract: ReservationContractSnapshot) {
-  const missing: string[] = [];
-  if (!normalizeOptionalString(contract.licenseSchool)) missing.push("escuela");
-  if (!normalizeOptionalString(contract.licenseType)) missing.push("tipo");
-  if (!normalizeOptionalString(contract.licenseNumber)) missing.push("numero");
-  if (!missing.length) return null;
-
-  const unit = Number(contract.logicalUnitIndex ?? contract.unitIndex ?? 0) || 1;
-  const driver = normalizeOptionalString(contract.driverName);
-  const driverSuffix = driver ? ` (${driver})` : "";
-  return `Faltan datos de licencia en el contrato de la unidad ${unit}${driverSuffix}: ${missing.join(", ")}.`;
-}
-
-function resolveLicenseValue(args: {
-  bodyValue: string | null | undefined;
-  currentValue: string | null | undefined;
-  contractValue: string | null | undefined;
-}) {
-  const fromBody = normalizeOptionalString(args.bodyValue);
-  if (fromBody) return fromBody;
-
-  const fromCurrent = normalizeOptionalString(args.currentValue);
-  if (fromCurrent) return fromCurrent;
-
-  return normalizeOptionalString(args.contractValue);
 }
 
 async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: string) {
@@ -780,31 +745,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         })),
       });
       const visibleContracts = pickVisibleContractsByLogicalUnit(current.contracts, requiredUnits);
-      const completeLicenseContract =
-        visibleContracts.find((contract) => hasCompleteLicense(contract)) ??
-        primaryContract ??
-        null;
-
-      const finalLicenseSchool = resolveLicenseValue({
-        bodyValue: b.licenseSchool,
-        currentValue: current.licenseSchool,
-        contractValue: completeLicenseContract?.licenseSchool ?? null,
+      const resolvedLicense = resolveReservationLicenseDetails({
+        isLicense: reservationState.isLicense,
+        body: {
+          licenseSchool: b.licenseSchool,
+          licenseType: b.licenseType,
+          licenseNumber: b.licenseNumber,
+        },
+        current: {
+          licenseSchool: current.licenseSchool,
+          licenseType: current.licenseType,
+          licenseNumber: current.licenseNumber,
+        },
+        visibleContracts: visibleContracts as ReservationLicenseContractLike[],
+        primaryContract: primaryContract as ReservationLicenseContractLike | null,
       });
-      const finalLicenseType = resolveLicenseValue({
-        bodyValue: b.licenseType,
-        currentValue: current.licenseType,
-        contractValue: completeLicenseContract?.licenseType ?? null,
-      });
-      const finalLicenseNumber = resolveLicenseValue({
-        bodyValue: b.licenseNumber,
-        currentValue: current.licenseNumber,
-        contractValue: completeLicenseContract?.licenseNumber ?? null,
-      });
+      const finalLicenseSchool = resolvedLicense.licenseSchool;
+      const finalLicenseType = resolvedLicense.licenseType;
+      const finalLicenseNumber = resolvedLicense.licenseNumber;
       if (reservationState.isLicense) {
-        const contractMissingLicense = visibleContracts
-          .map((contract) => buildMissingLicenseError(contract))
-          .find((message): message is string => Boolean(message));
-        if (contractMissingLicense) throw new Error(contractMissingLicense);
+        if (resolvedLicense.missingContractMessage) {
+          throw new Error(resolvedLicense.missingContractMessage);
+        }
         if (!finalLicenseSchool || !finalLicenseType || !finalLicenseNumber) {
           throw new Error("Faltan datos de licencia en la reserva. Completa escuela, tipo y numero.");
         }
