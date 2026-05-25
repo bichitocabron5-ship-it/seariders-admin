@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/seariders_admin_ci
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/seariders_admin_ci
+      SESSION_PASSWORD: ci-session-password-ci-session-password
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      BUSINESS_TZ: Europe/Madrid
+      S3_PUBLIC_BASE_URL: http://localhost:9000/seariders-admin-ci
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: ci-access-key
+      S3_SECRET_ACCESS_KEY: ci-secret-key
+      S3_BUCKET: seariders-admin-ci
+      CONTRACT_SIGNATURE_LINK_SECRET: ci-contract-signature-secret
+      RESERVATION_CHECKIN_LINK_SECRET: ci-reservation-checkin-secret
+      PASS_PORTAL_LINK_SECRET: ci-pass-portal-secret
+      WHATSAPP_PROVIDER: NONE
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Detect test script
+        id: test-script
+        shell: bash
+        run: |
+          if npm pkg get scripts.test | grep -qv null; then
+            echo "has_test=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_test=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Run unit tests
+        if: steps.test-script.outputs.has_test == 'true'
+        run: npm test
