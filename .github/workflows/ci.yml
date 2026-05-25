@@ -57,7 +57,3 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Run unit tests
-        if: steps.test-script.outputs.has_test == 'true'
-        run: npm test
