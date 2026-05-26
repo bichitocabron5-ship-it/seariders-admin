@@ -4,7 +4,7 @@ import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { PublicBrandHeader } from "@/components/brand";
-import { BirthDateField, PhoneWithCountryField } from "@/components/customer-inputs";
+import { BirthDateField } from "@/components/customer-inputs";
 import { ActionButton, AlertBanner, SectionCard, StatusBadge as BrandStatusBadge } from "@/components/seariders-ui";
 import { brand } from "@/lib/brand";
 import { getCountryOptionsEs } from "@/lib/countries";
@@ -35,6 +35,8 @@ type ReservationView = {
   serviceName: string;
   serviceCategory: string | null;
   durationMinutes: number | null;
+  quantity: number | null;
+  pax: number | null;
   requiredUnits: number;
   readyCount: number;
   signedCount: number;
@@ -93,6 +95,7 @@ type DraftContract = {
 type ContractFieldErrors = {
   driverName?: string | null;
   driverPhone?: string | null;
+  driverCountry?: string | null;
   driverAddress?: string | null;
   driverBirthDate?: string | null;
   driverDocType?: string | null;
@@ -105,11 +108,16 @@ type ContractFieldErrors = {
   action?: string | null;
 };
 
+type WizardStep = "personal" | "license" | "conditions" | "signature";
+
+const WIZARD_STEPS: WizardStep[] = ["personal", "license", "conditions", "signature"];
+
 function getCheckinValidationText(language: PublicLanguage) {
   if (language === "en") {
     return {
       driverName: "Enter the driver's full name.",
       driverPhone: "Enter the driver's phone number.",
+      driverCountry: "Select the driver's country.",
       driverAddress: "Enter the driver's address.",
       driverBirthDate: "Enter the driver's birth date.",
       driverDocType: "Select the document type.",
@@ -127,6 +135,7 @@ function getCheckinValidationText(language: PublicLanguage) {
   return {
     driverName: "Indica el nombre completo del conductor.",
     driverPhone: "Indica el telefono del conductor.",
+    driverCountry: "Selecciona el pais del conductor.",
     driverAddress: "Indica la direccion del conductor.",
     driverBirthDate: "Indica la fecha de nacimiento del conductor.",
     driverDocType: "Selecciona el tipo de documento.",
@@ -171,6 +180,7 @@ function getContractFieldErrors({
   const errors: ContractFieldErrors = {
     driverName: draft.driverName.trim() ? null : text.driverName,
     driverPhone: null,
+    driverCountry: draft.driverCountry.trim() ? null : text.driverCountry,
     driverAddress: draft.driverAddress.trim() ? null : text.driverAddress,
     driverBirthDate: draft.driverBirthDate.trim() ? null : text.driverBirthDate,
     driverDocType: draft.driverDocType.trim() ? null : text.driverDocType,
@@ -206,16 +216,83 @@ function autosaveBadgeTone(state: "idle" | "saving" | "saved" | "error") {
   return "neutral" as const;
 }
 
-function getContractStatusBadge(status: string, language: PublicLanguage) {
-  if (language === "en") {
-    if (status === "SIGNED") return { tone: "success" as const, label: "Signed" };
-    if (status === "READY") return { tone: "info" as const, label: "Ready" };
-    return { tone: "warning" as const, label: "Pending" };
-  }
+function contractRequiresLicense(isReservationLicense: boolean, contract: ContractView, draft?: DraftContract) {
+  return (
+    isReservationLicense ||
+    Boolean(contract.licenseSchool?.trim()) ||
+    Boolean(contract.licenseType?.trim()) ||
+    Boolean(contract.licenseNumber?.trim()) ||
+    Boolean(draft?.licenseSchool.trim()) ||
+    Boolean(draft?.licenseType.trim()) ||
+    Boolean(draft?.licenseNumber.trim())
+  );
+}
 
-  if (status === "SIGNED") return { tone: "success" as const, label: "Firmado" };
-  if (status === "READY") return { tone: "info" as const, label: "Listo" };
-  return { tone: "warning" as const, label: "Pendiente" };
+function getVisibleWizardSteps(requiresLicense: boolean) {
+  return requiresLicense ? WIZARD_STEPS : WIZARD_STEPS.filter((step) => step !== "license");
+}
+
+function hasPersonalErrors(errors: ContractFieldErrors) {
+  return Boolean(
+    errors.driverName ||
+      errors.driverCountry ||
+      errors.driverAddress ||
+      errors.driverBirthDate ||
+      errors.driverDocType ||
+      errors.driverDocNumber ||
+      errors.action
+  );
+}
+
+function hasLicenseErrors(errors: ContractFieldErrors) {
+  return Boolean(errors.licenseSchool || errors.licenseType || errors.licenseNumber);
+}
+
+function hasConditionErrors(errors: ContractFieldErrors, confirmedRead: boolean) {
+  return Boolean(!confirmedRead || errors.minorAuthorizationProvided || errors.minorAuthorizationFile);
+}
+
+function hasStepErrors(step: WizardStep, errors: ContractFieldErrors, confirmedRead: boolean) {
+  if (step === "personal") return hasPersonalErrors(errors);
+  if (step === "license") return hasLicenseErrors(errors);
+  if (step === "conditions") return hasConditionErrors(errors, confirmedRead);
+  return false;
+}
+
+function firstBlockingStep(errors: ContractFieldErrors, requiresLicense: boolean, confirmedRead: boolean): WizardStep | null {
+  if (hasPersonalErrors(errors)) return "personal";
+  if (requiresLicense && hasLicenseErrors(errors)) return "license";
+  if (hasConditionErrors(errors, confirmedRead)) return "conditions";
+  return null;
+}
+
+function getStepErrorMessage({
+  step,
+  errors,
+  confirmedRead,
+  copy,
+}: {
+  step: WizardStep;
+  errors: ContractFieldErrors;
+  confirmedRead: boolean;
+  copy: ReturnType<typeof getPublicCopy>;
+}) {
+  if (step === "personal" && errors.action) return errors.action;
+  if (step === "conditions" && !confirmedRead) return copy.signPage.errors.mustRead;
+  if (hasStepErrors(step, errors, confirmedRead)) return copy.checkinPage.wizard.completeStep;
+  return null;
+}
+
+function getNextWizardStep(currentStep: WizardStep, requiresLicense: boolean) {
+  const steps = getVisibleWizardSteps(requiresLicense);
+  const currentIndex = Math.max(0, steps.indexOf(currentStep));
+  return steps[Math.min(currentIndex + 1, steps.length - 1)];
+}
+
+function getPreviousWizardStep(currentStep: WizardStep, requiresLicense: boolean) {
+  const steps = getVisibleWizardSteps(requiresLicense);
+  const currentIndex = Math.max(0, steps.indexOf(currentStep));
+  return steps[Math.max(currentIndex - 1, 0)];
 }
 
 export function ReservationCheckinPageClient({
@@ -227,7 +304,7 @@ export function ReservationCheckinPageClient({
 }) {
   const copy = getPublicCopy(language);
   const sigRefs = useRef<Record<string, SignatureCanvas | null>>({});
-  const contractRefs = useRef<Record<string, HTMLDetailsElement | null>>({});
+  const contractRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const pendingScrollContractIdRef = useRef<string | null>(null);
   const lastSavedPayloadRef = useRef<string>("");
   const autosaveTimerRef = useRef<number | null>(null);
@@ -252,10 +329,13 @@ export function ReservationCheckinPageClient({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [viewportWidth, setViewportWidth] = useState<number>(typeof window === "undefined" ? 1280 : window.innerWidth);
-  const [attemptedSignContracts, setAttemptedSignContracts] = useState<Record<string, boolean>>({});
+  const [attemptedWizardSteps, setAttemptedWizardSteps] = useState<Record<string, Partial<Record<WizardStep, boolean>>>>({});
   const [contractActionErrors, setContractActionErrors] = useState<Record<string, string | null>>({});
   const [autosaveState, setAutosaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [expandedContractId, setExpandedContractId] = useState<string | null>(null);
+  const [wizardStepByContract, setWizardStepByContract] = useState<Record<string, WizardStep>>({});
+  const [readConfirmedContracts, setReadConfirmedContracts] = useState<Record<string, boolean>>({});
+  const [documentOpenContracts, setDocumentOpenContracts] = useState<Record<string, boolean>>({});
   const [reservationDraft, setReservationDraft] = useState({
     customerName: "",
     customerPhone: "",
@@ -300,20 +380,18 @@ export function ReservationCheckinPageClient({
     currentExpandedId: string | null,
     preferredExpandedId?: string | null,
   ) => {
+    const pendingContracts = contracts.filter((contract) => contract.status !== "SIGNED");
+
     if (preferredExpandedId !== undefined) {
       if (preferredExpandedId === null) return null;
-      if (contracts.some((contract) => contract.id === preferredExpandedId)) return preferredExpandedId;
+      if (pendingContracts.some((contract) => contract.id === preferredExpandedId)) return preferredExpandedId;
     }
 
-    if (currentExpandedId && contracts.some((contract) => contract.id === currentExpandedId)) {
+    if (currentExpandedId && pendingContracts.some((contract) => contract.id === currentExpandedId)) {
       return currentExpandedId;
     }
 
-    if (contracts.length === 1) {
-      return contracts[0]?.id ?? null;
-    }
-
-    return contracts.find((contract) => contract.status !== "SIGNED")?.id ?? null;
+    return pendingContracts[0]?.id ?? null;
   }, []);
 
   const getNextPendingContractId = useCallback((contracts: ContractView[], signedContractId: string) => {
@@ -364,8 +442,13 @@ export function ReservationCheckinPageClient({
       };
     }
     setContractDrafts(nextDrafts);
-    setAttemptedSignContracts({});
-    setContractActionErrors({});
+    setReadConfirmedContracts((current) => {
+      const next = { ...current };
+      for (const contract of data.contracts) {
+        if (contract.status === "SIGNED") next[contract.id] = true;
+      }
+      return next;
+    });
     reservationDraftRef.current = nextReservationDraft;
     contractDraftsRef.current = nextDrafts;
     lastSavedPayloadRef.current = serializePayload(nextReservationDraft, nextDrafts);
@@ -445,8 +528,6 @@ export function ReservationCheckinPageClient({
     }
   }, [contractDrafts, copy.checkinPage.loadFailed, copy.checkinPage.saved, hydrate, language, reservationDraft, serializePayload, token]);
 
-  const saveAll = useCallback(async () => await persistAll("manual"), [persistAll]);
-
   async function signContract(contractId: string) {
     const signature = sigRefs.current[contractId];
     const draft = contractDrafts[contractId];
@@ -457,17 +538,38 @@ export function ReservationCheckinPageClient({
       setSigningId(contractId);
       setError(null);
       setSuccess(null);
-      setAttemptedSignContracts((current) => ({ ...current, [contractId]: true }));
 
       if (contract) {
+        const requiresLicense = contractRequiresLicense(snapshot?.reservation.isLicense ?? false, contract, draft);
+        const confirmedRead = Boolean(readConfirmedContracts[contractId]);
         const fieldErrors = getContractFieldErrors({
           contract,
           draft,
-          isLicense: snapshot?.reservation.isLicense ?? false,
+          isLicense: requiresLicense,
           language,
         });
-        if (fieldErrors.action) {
-          setContractActionErrors((current) => ({ ...current, [contractId]: fieldErrors.action ?? null }));
+        const blockingStep = firstBlockingStep(fieldErrors, requiresLicense, confirmedRead);
+
+        if (blockingStep) {
+          setAttemptedWizardSteps((current) => ({
+            ...current,
+            [contractId]: {
+              ...current[contractId],
+              [blockingStep]: true,
+            },
+          }));
+          setWizardStepByContract((current) => ({ ...current, [contractId]: blockingStep }));
+          pendingScrollContractIdRef.current = contractId;
+          setContractActionErrors((current) => ({
+            ...current,
+            [contractId]: getStepErrorMessage({
+              step: blockingStep,
+              errors: fieldErrors,
+              confirmedRead,
+              copy,
+            }),
+          }));
+          focusContractWizard(contractId);
           return;
         }
       }
@@ -495,6 +597,11 @@ export function ReservationCheckinPageClient({
       const data = (await refresh.json()) as Snapshot;
       const nextPendingContractId = getNextPendingContractId(data.contracts, contractId);
       pendingScrollContractIdRef.current = nextPendingContractId;
+      if (nextPendingContractId) {
+        setWizardStepByContract((current) => ({ ...current, [nextPendingContractId]: "personal" }));
+      } else if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+      }
       hydrate(data, { preferredExpandedId: nextPendingContractId });
       signature.clear();
       setContractActionErrors((current) => ({ ...current, [contractId]: null }));
@@ -510,30 +617,6 @@ export function ReservationCheckinPageClient({
     }
   }
 
-  function copyHolderToContract(contractId: string) {
-    setContractActionErrors((current) => ({ ...current, [contractId]: null }));
-    setContractDrafts((current) => {
-      const draft = current[contractId];
-      if (!draft) return current;
-
-      return {
-        ...current,
-        [contractId]: {
-          ...draft,
-          driverName: reservationDraft.customerName,
-          driverPhone: reservationDraft.customerPhone,
-          driverEmail: reservationDraft.customerEmail,
-          driverCountry: reservationDraft.customerCountry,
-          driverAddress: reservationDraft.customerAddress,
-          driverPostalCode: reservationDraft.customerPostalCode,
-          driverDocType: reservationDraft.customerDocType,
-          driverDocNumber: reservationDraft.customerDocNumber,
-          driverBirthDate: reservationDraft.customerBirthDate,
-        },
-      };
-    });
-  }
-
   function updateContractDraft(contractId: string, patch: Partial<DraftContract>) {
     setContractActionErrors((current) => ({ ...current, [contractId]: null }));
     setContractDrafts((current) => {
@@ -547,6 +630,57 @@ export function ReservationCheckinPageClient({
         },
       };
     });
+  }
+
+  function markWizardStepAttempted(contractId: string, step: WizardStep) {
+    setAttemptedWizardSteps((current) => ({
+      ...current,
+      [contractId]: {
+        ...current[contractId],
+        [step]: true,
+      },
+    }));
+  }
+
+  function focusContractWizard(contractId: string) {
+    pendingScrollContractIdRef.current = contractId;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const contractNode = contractRefs.current[contractId];
+        contractNode?.scrollIntoView({ behavior: "smooth", block: "start" });
+        contractNode?.focus({ preventScroll: true });
+      });
+    });
+  }
+
+  function goToWizardStep(contractId: string, step: WizardStep) {
+    setWizardStepByContract((current) => ({ ...current, [contractId]: step }));
+    setContractActionErrors((current) => ({ ...current, [contractId]: null }));
+    focusContractWizard(contractId);
+  }
+
+  function continueWizard(args: {
+    contractId: string;
+    currentStep: WizardStep;
+    requiresLicense: boolean;
+    fieldErrors: ContractFieldErrors;
+    confirmedRead: boolean;
+  }) {
+    markWizardStepAttempted(args.contractId, args.currentStep);
+    const message = getStepErrorMessage({
+      step: args.currentStep,
+      errors: args.fieldErrors,
+      confirmedRead: args.confirmedRead,
+      copy,
+    });
+
+    if (message) {
+      setContractActionErrors((current) => ({ ...current, [args.contractId]: message }));
+      focusContractWizard(args.contractId);
+      return;
+    }
+
+    goToWizardStep(args.contractId, getNextWizardStep(args.currentStep, args.requiresLicense));
   }
 
   useEffect(() => {
@@ -596,10 +730,18 @@ export function ReservationCheckinPageClient({
   const isMobile = viewportWidth < 640;
   const signatureCanvasWidth = Math.max(280, Math.min(900, viewportWidth - (isMobile ? 48 : 120)));
   const signatureCanvasHeight = isMobile ? 220 : 260;
-  const holderSummary = [
-    snapshot.reservation.customerName,
-    snapshot.reservation.customerPhone,
-    snapshot.reservation.customerEmail,
+  const countryOptions = [
+    { value: "", label: copy.checkinPage.wizard.selectCountry },
+    ...COUNTRY_OPTIONS,
+  ];
+  const activeContract =
+    snapshot.contracts.find((contract) => contract.id === expandedContractId && contract.status !== "SIGNED") ??
+    snapshot.contracts.find((contract) => contract.status !== "SIGNED") ??
+    null;
+  const activeDraft = activeContract ? contractDrafts[activeContract.id] : null;
+  const summaryParticipants = [
+    snapshot.reservation.pax ? copy.checkinPage.summaryParticipants(snapshot.reservation.pax) : null,
+    snapshot.reservation.quantity ? copy.checkinPage.summaryQuantity(snapshot.reservation.quantity) : null,
   ]
     .filter(Boolean)
     .join(" | ");
@@ -623,277 +765,356 @@ export function ReservationCheckinPageClient({
         <PublicBrandHeader
           eyebrow={copy.checkinPage.eyebrow}
           title={copy.checkinPage.title}
-          subtitle="Revision de datos, pre-checkin y firma de contratos dentro del ecosistema SeaRiders."
+          subtitle={copy.checkinPage.subtitle}
         />
         <SectionCard
-          eyebrow="Pre-checkin"
-          title={copy.checkinPage.title}
+          eyebrow={copy.checkinPage.bookingSummary}
+          title={snapshot.reservation.serviceName}
           action={<BrandStatusBadge tone={autosaveBadgeTone(autosaveState)}>{autosave.label}</BrandStatusBadge>}
         >
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ color: "#475569", fontSize: 14 }}>
-              {snapshot.reservation.serviceName}
-              {snapshot.reservation.durationMinutes ? ` | ${snapshot.reservation.durationMinutes} min` : ""}
-              {` | ${formatPublicDate(snapshot.reservation.activityDate, language)} | ${formatPublicTime(snapshot.reservation.scheduledTime, language)}`}
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <BrandStatusBadge tone="neutral">{snapshot.reservation.serviceName}</BrandStatusBadge>
-              {snapshot.reservation.durationMinutes ? <BrandStatusBadge tone="neutral">{snapshot.reservation.durationMinutes} min</BrandStatusBadge> : null}
-              <BrandStatusBadge tone="neutral">{formatPublicDate(snapshot.reservation.activityDate, language)}</BrandStatusBadge>
-            </div>
+          <div style={summaryGridStyle}>
+            <SummaryItem label={copy.checkinPage.summaryActivity} value={snapshot.reservation.serviceName} />
+            <SummaryItem label={copy.checkinPage.summaryDate} value={formatPublicDate(snapshot.reservation.activityDate, language)} />
+            <SummaryItem label={copy.checkinPage.summaryTime} value={formatPublicTime(snapshot.reservation.scheduledTime, language)} />
+            <SummaryItem
+              label={copy.checkinPage.summaryDuration}
+              value={snapshot.reservation.durationMinutes ? `${snapshot.reservation.durationMinutes} min` : copy.checkinPage.accordingToReservation}
+            />
+            {summaryParticipants ? (
+              <SummaryItem label={copy.checkinPage.summaryPeople} value={summaryParticipants} />
+            ) : null}
           </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-            <MetricCard label={copy.checkinPage.metrics.contracts} value={`${snapshot.reservation.signedCount}/${snapshot.reservation.requiredUnits}`} description={copy.checkinPage.metrics.signed} />
-            <MetricCard label={copy.checkinPage.metrics.ready} value={`${snapshot.reservation.readyCount}/${snapshot.reservation.requiredUnits}`} description={copy.checkinPage.metrics.prepared} />
-            <MetricCard label={copy.checkinPage.metrics.holder} value={snapshot.reservation.customerName || copy.checkinPage.metrics.pending} description={copy.checkinPage.metrics.holder} />
-          </div>
-
-          <AlertBanner tone="info">{copy.checkinPage.intro}</AlertBanner>
-
-          {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
-          {success ? <AlertBanner tone="success">{success}</AlertBanner> : null}
-
-          <section style={{ display: "grid", gap: 12 }}>
-            <h2 style={{ margin: 0, fontSize: 20 }}>{copy.checkinPage.holderTitle}</h2>
-            <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
-              {copy.checkinPage.holderHelp}
-            </div>
-            {holderSummary ? <ReadOnlyField label={copy.checkinPage.bookingSummary} value={holderSummary} /> : null}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-              <SelectField label={copy.common.marketingLabel} value={reservationDraft.marketing} options={copy.common.marketingOptions} onChange={(value) => setReservationDraft((current) => ({ ...current, marketing: value }))} />
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
-              <ActionButton onClick={() => void saveAll()} disabled={saving} style={saving ? { opacity: 0.7 } : undefined}>
-                {saving ? copy.checkinPage.saving : copy.checkinPage.save}
-              </ActionButton>
-            </div>
-          </section>
         </SectionCard>
 
-        {snapshot.contracts.map((contract) => {
-          const draft = contractDrafts[contract.id];
-          const disabled = contract.status === "SIGNED";
-          const isExpanded = expandedContractId === contract.id;
-          const statusBadge = getContractStatusBadge(contract.status, language);
-          const fieldErrors = draft
-            ? getContractFieldErrors({
-                contract,
-                draft,
-                isLicense: snapshot.reservation.isLicense,
-                language,
-              })
-            : {};
-          const showFieldErrors = Boolean(attemptedSignContracts[contract.id]) && !disabled;
-          const actionError = contractActionErrors[contract.id] ?? (showFieldErrors ? fieldErrors.action ?? null : null);
+        {error ? <AlertBanner tone="danger">{error}</AlertBanner> : null}
+        {success && activeContract ? <AlertBanner tone="success">{success}</AlertBanner> : null}
+
+        {activeContract && activeDraft ? (() => {
+          const requiresLicense = contractRequiresLicense(snapshot.reservation.isLicense, activeContract, activeDraft);
+          const storedStep = wizardStepByContract[activeContract.id] ?? "personal";
+          const currentStep = !requiresLicense && storedStep === "license" ? "conditions" : storedStep;
+          const visibleSteps = getVisibleWizardSteps(requiresLicense);
+          const stepIndex = Math.max(0, visibleSteps.indexOf(currentStep));
+          const fieldErrors = getContractFieldErrors({
+            contract: activeContract,
+            draft: activeDraft,
+            isLicense: requiresLicense,
+            language,
+          });
+          const confirmedRead = Boolean(readConfirmedContracts[activeContract.id]);
+          const showStepErrors = Boolean(attemptedWizardSteps[activeContract.id]?.[currentStep]);
+          const actionError =
+            contractActionErrors[activeContract.id] ??
+            (showStepErrors
+              ? getStepErrorMessage({
+                  step: currentStep,
+                  errors: fieldErrors,
+                  confirmedRead,
+                  copy,
+                })
+              : null);
+          const minor = getAgeFlagsFromBirthDate(activeDraft.driverBirthDate);
+          const showTutorAuthorization =
+            minor.needsAuthorization ||
+            activeContract.minorNeedsAuthorization ||
+            activeDraft.minorAuthorizationProvided;
+          const isDocumentOpen = Boolean(documentOpenContracts[activeContract.id]);
+
           return (
-            <details
-              key={contract.id}
+            <div
               ref={(instance) => {
-                contractRefs.current[contract.id] = instance;
+                contractRefs.current[activeContract.id] = instance;
               }}
-              open={isExpanded}
-              style={{
-                background: "#fff",
-                borderRadius: 22,
-                border: "1px solid #e2e8f0",
-                boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
-                overflow: "hidden",
-              }}
+              tabIndex={-1}
+              style={{ outline: "none" }}
             >
-              <summary
-                onClick={(event) => {
-                  event.preventDefault();
-                  setExpandedContractId((current) => (current === contract.id ? null : contract.id));
-                }}
-                style={{
-                  listStyle: "none",
-                  cursor: "pointer",
-                  padding: 18,
-                  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 12,
-                }}
+              <SectionCard
+                eyebrow={copy.checkinPage.wizard.contractProgress(activeContract.unitIndex, snapshot.reservation.requiredUnits)}
+                title={copy.checkinPage.wizard.steps[currentStep]}
+                action={<BrandStatusBadge tone="info">{`${stepIndex + 1}/${visibleSteps.length}`}</BrandStatusBadge>}
               >
-                <div style={{ display: "grid", gap: 4 }}>
-                  <div style={{ fontWeight: 900, fontSize: 20 }}>{copy.checkinPage.unitTitle(contract.unitIndex)}</div>
-                  <div style={{ fontSize: 13, color: "#64748b" }}>
-                    {draft?.driverName || copy.checkinPage.pendingDriver}
-                    {contract.signedAt ? ` | ${copy.checkinPage.signedOn(formatPublicDate(contract.signedAt, language))}` : ""}
-                  </div>
-                </div>
-                <BrandStatusBadge tone={statusBadge.tone}>{statusBadge.label}</BrandStatusBadge>
-              </summary>
-
-              <div style={{ display: "grid", gap: 16, padding: "0 18px 18px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <ActionButton onClick={() => copyHolderToContract(contract.id)} disabled={disabled} variant="secondary">
-                    {copy.checkinPage.useHolder}
-                  </ActionButton>
-                  <ActionButton
-                    href={`/api/public/checkin/${encodeURIComponent(token)}/contracts/${contract.id}/pdf?lang=${encodeURIComponent(language)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    variant="secondary"
-                  >
-                    {copy.checkinPage.printable}
-                  </ActionButton>
-                </div>
-
-                <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
-                  {copy.checkinPage.contractHelp}
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-                  <ReadOnlyField label={copy.checkinPage.scheduledTime} value={formatPublicTime(snapshot.reservation.scheduledTime, language)} />
-                  <ReadOnlyField label={copy.checkinPage.duration} value={snapshot.reservation.durationMinutes ? `${snapshot.reservation.durationMinutes} min` : copy.checkinPage.accordingToReservation} />
-                  <ReadOnlyField label={copy.checkinPage.assignedResource} value={contract.preparedResourceLabel} />
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-                  <Field label={copy.checkinPage.driverName} value={draft?.driverName ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.driverName : null} onChange={(value) => updateContractDraft(contract.id, { driverName: value })} />
-                  <PhoneWithCountryField
-                    label={copy.checkinPage.driverPhone}
-                    country={draft?.driverCountry ?? ""}
-                    phone={draft?.driverPhone ?? ""}
-                    disabled={disabled}
-                    onCountryChange={(value) => updateContractDraft(contract.id, { driverCountry: value })}
-                    onPhoneChange={(value) => updateContractDraft(contract.id, { driverPhone: value })}
-                    countryOptions={COUNTRY_OPTIONS}
-                    inputStyle={showFieldErrors && fieldErrors.driverPhone ? errorInputStyle : inputStyle}
-                    phonePlaceholder="Ej: 612345678"
-                    error={showFieldErrors ? fieldErrors.driverPhone : null}
+                <div style={{ display: "grid", gap: 16 }}>
+                  <WizardStepper
+                    steps={visibleSteps}
+                    currentStep={currentStep}
+                    labels={copy.checkinPage.wizard.steps}
                   />
-                  <Field label={copy.checkinPage.driverEmail} value={draft?.driverEmail ?? ""} disabled={disabled} onChange={(value) => updateContractDraft(contract.id, { driverEmail: value })} />
-                  <Field label={copy.checkinPage.driverAddress} value={draft?.driverAddress ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.driverAddress : null} onChange={(value) => updateContractDraft(contract.id, { driverAddress: value })} />
-                  <Field label={copy.checkinPage.driverPostalCode} value={draft?.driverPostalCode ?? ""} disabled={disabled} onChange={(value) => updateContractDraft(contract.id, { driverPostalCode: value })} />
-                  <BirthDateField label={copy.checkinPage.driverBirthDate} value={draft?.driverBirthDate ?? ""} disabled={disabled} onChange={(value) => updateContractDraft(contract.id, { driverBirthDate: value })} style={showFieldErrors && fieldErrors.driverBirthDate ? errorInputStyle : inputStyle} error={showFieldErrors ? fieldErrors.driverBirthDate : null} />
-                  <SelectField label={`${copy.common.documentTypeLabel} *`} value={draft?.driverDocType ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.driverDocType : null} options={copy.common.documentTypeOptions} onChange={(value) => updateContractDraft(contract.id, { driverDocType: value })} />
-                  <Field label={`${copy.common.documentNumberLabel} *`} value={draft?.driverDocNumber ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.driverDocNumber : null} onChange={(value) => updateContractDraft(contract.id, { driverDocNumber: value })} />
-                  {snapshot.reservation.isLicense ? (
+
+                  {currentStep === "personal" ? (
                     <>
-                      <Field label={copy.checkinPage.licenseSchool} value={draft?.licenseSchool ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.licenseSchool : null} onChange={(value) => updateContractDraft(contract.id, { licenseSchool: value })} />
-                      <Field label={copy.checkinPage.licenseType} value={draft?.licenseType ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.licenseType : null} onChange={(value) => updateContractDraft(contract.id, { licenseType: value })} />
-                      <Field label={copy.checkinPage.licenseNumber} value={draft?.licenseNumber ?? ""} disabled={disabled} error={showFieldErrors ? fieldErrors.licenseNumber : null} onChange={(value) => updateContractDraft(contract.id, { licenseNumber: value })} />
+                      <div style={stepHelpStyle}>{copy.checkinPage.wizard.personalHelp}</div>
+                      <div style={wizardFieldsGridStyle}>
+                        <Field
+                          label={copy.checkinPage.driverName}
+                          value={activeDraft.driverName}
+                          error={showStepErrors ? fieldErrors.driverName : null}
+                          onChange={(value) => updateContractDraft(activeContract.id, { driverName: value })}
+                        />
+                        <SelectField
+                          label={copy.checkinPage.driverCountry}
+                          value={activeDraft.driverCountry}
+                          error={showStepErrors ? fieldErrors.driverCountry : null}
+                          options={countryOptions}
+                          onChange={(value) => updateContractDraft(activeContract.id, { driverCountry: value })}
+                        />
+                        <Field
+                          label={copy.checkinPage.driverAddress}
+                          value={activeDraft.driverAddress}
+                          error={showStepErrors ? fieldErrors.driverAddress : null}
+                          onChange={(value) => updateContractDraft(activeContract.id, { driverAddress: value })}
+                        />
+                        <BirthDateField
+                          label={copy.checkinPage.driverBirthDate}
+                          value={activeDraft.driverBirthDate}
+                          onChange={(value) => updateContractDraft(activeContract.id, { driverBirthDate: value })}
+                          style={showStepErrors && fieldErrors.driverBirthDate ? errorInputStyle : inputStyle}
+                          error={showStepErrors ? fieldErrors.driverBirthDate : null}
+                        />
+                        <SelectField
+                          label={`${copy.common.documentTypeLabel} *`}
+                          value={activeDraft.driverDocType}
+                          error={showStepErrors ? fieldErrors.driverDocType : null}
+                          options={copy.common.documentTypeOptions}
+                          onChange={(value) => updateContractDraft(activeContract.id, { driverDocType: value })}
+                        />
+                        <Field
+                          label={`${copy.common.documentNumberLabel} *`}
+                          value={activeDraft.driverDocNumber}
+                          error={showStepErrors ? fieldErrors.driverDocNumber : null}
+                          onChange={(value) => updateContractDraft(activeContract.id, { driverDocNumber: value })}
+                        />
+                      </div>
                     </>
                   ) : null}
-                </div>
 
-                <label style={checkboxLabelStyle}>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(draft?.imageConsentAccepted)}
-                    disabled={disabled}
-                    onChange={(e) => updateContractDraft(contract.id, { imageConsentAccepted: e.target.checked })}
-                    style={{ marginTop: 2 }}
-                  />
-                  <span>{copy.checkinPage.imageConsent}</span>
-                </label>
-
-                {contract.minorNeedsAuthorization || draft?.minorAuthorizationProvided ? (
-                  <label
-                    style={{
-                      ...checkboxLabelStyle,
-                      border: showFieldErrors && (fieldErrors.minorAuthorizationProvided || fieldErrors.minorAuthorizationFile) ? "1px solid #ef4444" : "1px solid #fde68a",
-                      background: showFieldErrors && (fieldErrors.minorAuthorizationProvided || fieldErrors.minorAuthorizationFile) ? "#fff5f5" : "#fffbeb",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(draft?.minorAuthorizationProvided)}
-                      disabled={disabled}
-                      onChange={(e) => updateContractDraft(contract.id, { minorAuthorizationProvided: e.target.checked })}
-                      style={{ marginTop: 2 }}
-                    />
-                    <span>{copy.checkinPage.tutorAuthorization(contract.minorAuthorizationFileName)}</span>
-                  </label>
-                ) : null}
-                {showFieldErrors && fieldErrors.minorAuthorizationProvided ? <div style={inlineErrorStyle}>{fieldErrors.minorAuthorizationProvided}</div> : null}
-                {showFieldErrors && fieldErrors.minorAuthorizationFile ? <div style={inlineErrorStyle}>{fieldErrors.minorAuthorizationFile}</div> : null}
-
-                <div style={documentFrameStyle}>
-                  <iframe
-                    title={`Contract ${contract.unitIndex}`}
-                    srcDoc={contract.renderedHtml}
-                    style={{
-                      width: "100%",
-                      height: isMobile ? "58vh" : "min(72vh, 980px)",
-                      border: 0,
-                      display: "block",
-                      background: "#fff",
-                    }}
-                  />
-                </div>
-
-                {!disabled ? (
-                  <>
-                    <div style={{ display: "grid", gap: 8 }}>
-                      <div style={signatureTitleStyle}>{copy.checkinPage.signatureTitle}</div>
-                      <div style={signatureHelpStyle}>
-                        {copy.checkinPage.signatureHelp}
+                  {currentStep === "license" ? (
+                    <>
+                      <div style={stepHelpStyle}>{copy.checkinPage.wizard.licenseHelp}</div>
+                      <div style={wizardFieldsGridStyle}>
+                        <Field
+                          label={copy.checkinPage.licenseSchool}
+                          value={activeDraft.licenseSchool}
+                          error={showStepErrors ? fieldErrors.licenseSchool : null}
+                          onChange={(value) => updateContractDraft(activeContract.id, { licenseSchool: value })}
+                        />
+                        <Field
+                          label={copy.checkinPage.licenseType}
+                          value={activeDraft.licenseType}
+                          error={showStepErrors ? fieldErrors.licenseType : null}
+                          onChange={(value) => updateContractDraft(activeContract.id, { licenseType: value })}
+                        />
+                        <Field
+                          label={copy.checkinPage.licenseNumber}
+                          value={activeDraft.licenseNumber}
+                          error={showStepErrors ? fieldErrors.licenseNumber : null}
+                          onChange={(value) => updateContractDraft(activeContract.id, { licenseNumber: value })}
+                        />
                       </div>
-                    </div>
+                    </>
+                  ) : null}
 
-                    <div style={signatureFrameStyle}>
-                      <SignatureCanvas
-                        ref={(instance) => {
-                          sigRefs.current[contract.id] = instance;
+                  {currentStep === "conditions" ? (
+                    <>
+                      <div style={stepHelpStyle}>{copy.checkinPage.wizard.conditionsHelp}</div>
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <CheckboxRow
+                          checked={confirmedRead}
+                          onChange={(value) => {
+                            setReadConfirmedContracts((current) => ({ ...current, [activeContract.id]: value }));
+                            setContractActionErrors((current) => ({ ...current, [activeContract.id]: null }));
+                          }}
+                          error={showStepErrors && !confirmedRead ? copy.signPage.errors.mustRead : null}
+                        >
+                          {copy.checkinPage.wizard.readAccept}
+                        </CheckboxRow>
+
+                        {showTutorAuthorization ? (
+                          <CheckboxRow
+                            checked={activeDraft.minorAuthorizationProvided}
+                            onChange={(value) => updateContractDraft(activeContract.id, { minorAuthorizationProvided: value })}
+                            error={
+                              showStepErrors
+                                ? fieldErrors.minorAuthorizationProvided ?? fieldErrors.minorAuthorizationFile
+                                : null
+                            }
+                          >
+                            {copy.checkinPage.tutorAuthorization(activeContract.minorAuthorizationFileName)}
+                          </CheckboxRow>
+                        ) : null}
+
+                        <CheckboxRow
+                          checked={activeDraft.imageConsentAccepted}
+                          onChange={(value) => updateContractDraft(activeContract.id, { imageConsentAccepted: value })}
+                        >
+                          {copy.checkinPage.wizard.imageConsentOptional}
+                        </CheckboxRow>
+                      </div>
+
+                      <details
+                        open={isDocumentOpen}
+                        onToggle={(event) => {
+                          setDocumentOpenContracts((current) => ({
+                            ...current,
+                            [activeContract.id]: event.currentTarget.open,
+                          }));
                         }}
-                        penColor="black"
-                        canvasProps={{
-                          width: signatureCanvasWidth,
-                          height: signatureCanvasHeight,
-                          style: {
-                            width: "100%",
+                        style={contractDetailsStyle}
+                      >
+                        <summary style={contractSummaryStyle}>
+                          {isDocumentOpen ? copy.checkinPage.wizard.hideContract : copy.checkinPage.wizard.viewContract}
+                        </summary>
+                        <div style={documentFrameStyle}>
+                          <iframe
+                            title={`Contract ${activeContract.unitIndex}`}
+                            srcDoc={activeContract.renderedHtml}
+                            style={{
+                              width: "100%",
+                              height: isMobile ? "52vh" : "min(68vh, 920px)",
+                              border: 0,
+                              display: "block",
+                              background: "#fff",
+                            }}
+                          />
+                        </div>
+                      </details>
+                    </>
+                  ) : null}
+
+                  {currentStep === "signature" ? (
+                    <>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        <div style={signatureTitleStyle}>{copy.checkinPage.signatureTitle}</div>
+                        <div style={signatureHelpStyle}>{copy.checkinPage.wizard.signatureHelp}</div>
+                      </div>
+
+                      <div style={signatureFrameStyle}>
+                        <SignatureCanvas
+                          ref={(instance) => {
+                            sigRefs.current[activeContract.id] = instance;
+                          }}
+                          penColor="black"
+                          canvasProps={{
+                            width: signatureCanvasWidth,
                             height: signatureCanvasHeight,
-                            display: "block",
-                            background: "#fff",
-                            touchAction: "none",
-                          },
-                        }}
-                      />
-                    </div>
+                            style: {
+                              width: "100%",
+                              height: signatureCanvasHeight,
+                              display: "block",
+                              background: "#fff",
+                              touchAction: "none",
+                            },
+                          }}
+                        />
+                      </div>
+                    </>
+                  ) : null}
 
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+                  {actionError ? <AlertBanner tone="danger">{actionError}</AlertBanner> : null}
+
+                  <div style={wizardButtonGridStyle}>
+                    {currentStep !== "personal" ? (
                       <ActionButton
-                        onClick={() => sigRefs.current[contract.id]?.clear()}
+                        onClick={() => goToWizardStep(activeContract.id, getPreviousWizardStep(currentStep, requiresLicense))}
                         variant="secondary"
+                        style={secondaryWizardButtonStyle}
+                        disabled={saving || signingId === activeContract.id}
                       >
-                        {copy.checkinPage.clearSignature}
+                        {copy.checkinPage.wizard.back}
                       </ActionButton>
+                    ) : null}
+
+                    {currentStep !== "signature" ? (
                       <ActionButton
-                        onClick={() => void signContract(contract.id)}
-                        disabled={signingId === contract.id}
-                        style={signingId === contract.id ? { opacity: 0.7 } : undefined}
+                        onClick={() =>
+                          continueWizard({
+                            contractId: activeContract.id,
+                            currentStep,
+                            requiresLicense,
+                            fieldErrors,
+                            confirmedRead,
+                          })
+                        }
+                        style={primaryWizardButtonStyle}
                       >
-                        {signingId === contract.id ? copy.checkinPage.signing : copy.checkinPage.signContract}
+                        {copy.checkinPage.wizard.next}
                       </ActionButton>
-                    </div>
-                    {actionError ? <AlertBanner tone="danger">{actionError}</AlertBanner> : null}
-                  </>
-                ) : (
-                  <AlertBanner tone="success">
-                    {copy.checkinPage.signedBanner(contract.signatureSignedBy || contract.driverName || "customer", formatPublicDate(contract.signedAt, language))}
-                  </AlertBanner>
-                )}
-              </div>
-            </details>
+                    ) : (
+                      <>
+                        <ActionButton
+                          onClick={() => sigRefs.current[activeContract.id]?.clear()}
+                          variant="secondary"
+                          style={secondaryWizardButtonStyle}
+                          disabled={saving || signingId === activeContract.id}
+                        >
+                          {copy.checkinPage.clearSignature}
+                        </ActionButton>
+                        <ActionButton
+                          onClick={() => void signContract(activeContract.id)}
+                          disabled={saving || signingId === activeContract.id}
+                          style={{
+                            ...primaryWizardButtonStyle,
+                            ...(saving || signingId === activeContract.id ? { opacity: 0.7 } : {}),
+                          }}
+                        >
+                          {signingId === activeContract.id ? copy.checkinPage.signing : copy.checkinPage.wizard.signAndContinue}
+                        </ActionButton>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </SectionCard>
+            </div>
           );
-        })}
+        })() : (
+          <SectionCard
+            eyebrow={copy.checkinPage.eyebrow}
+            title={copy.checkinPage.wizard.completedTitle}
+            action={<BrandStatusBadge tone="success">{copy.checkinPage.wizard.completedBadge}</BrandStatusBadge>}
+          >
+            <AlertBanner tone="success">{copy.checkinPage.wizard.completedBody}</AlertBanner>
+          </SectionCard>
+        )}
       </section>
     </main>
   );
 }
 
-function MetricCard({ label, value, description }: { label: string; value: string; description: string }) {
+function SummaryItem({ label, value }: { label: string; value: string }) {
   return (
-    <div style={metricCardStyle}>
-      <div style={metricLabelStyle}>{label}</div>
-      <div style={metricValueStyle}>{value}</div>
-      <div style={metricDescriptionStyle}>{description}</div>
+    <div style={summaryItemStyle}>
+      <div style={summaryLabelStyle}>{label}</div>
+      <div style={summaryValueStyle}>{value}</div>
+    </div>
+  );
+}
+
+function WizardStepper({
+  steps,
+  currentStep,
+  labels,
+}: {
+  steps: WizardStep[];
+  currentStep: WizardStep;
+  labels: Record<WizardStep, string>;
+}) {
+  return (
+    <div style={stepperStyle}>
+      {steps.map((step) => {
+        const active = step === currentStep;
+        return (
+          <div
+            key={step}
+            style={{
+              ...stepPillStyle,
+              borderColor: active ? brand.colors.primary : brand.colors.border,
+              background: active ? "#eaf6fb" : "#fff",
+              color: active ? brand.colors.primary : "#64748b",
+            }}
+          >
+            {labels[step]}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -950,22 +1171,38 @@ function SelectField({
   );
 }
 
-function ReadOnlyField({ label, value }: { label: string; value: string }) {
+function CheckboxRow({
+  checked,
+  disabled,
+  onChange,
+  error,
+  children,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
+  error?: string | null;
+  children: React.ReactNode;
+}) {
   return (
-    <label style={fieldLabelStyle}>
-      <span>{label}</span>
-      <div
-        style={{
-          ...inputStyle,
-          color: "#475569",
-          background: "#f8fafc",
-          minHeight: 48,
-          display: "flex",
-          alignItems: "center",
-        }}
-      >
-        {value}
-      </div>
+    <label
+      style={{
+        ...checkboxLabelStyle,
+        border: error ? "1px solid #ef4444" : checkboxLabelStyle.border,
+        background: error ? "#fff5f5" : checkboxLabelStyle.background,
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        style={{ marginTop: 2 }}
+      />
+      <span style={{ display: "grid", gap: 4 }}>
+        <span>{children}</span>
+        {error ? <span style={inlineErrorStyle}>{error}</span> : null}
+      </span>
     </label>
   );
 }
@@ -995,12 +1232,13 @@ const checkboxLabelStyle: React.CSSProperties = {
   display: "flex",
   gap: 10,
   alignItems: "flex-start",
-  padding: "12px 14px",
+  padding: "14px 14px",
   borderRadius: 14,
   border: `1px solid ${brand.colors.border}`,
   background: "#f8fbfd",
-  fontSize: 14,
+  fontSize: 15,
   color: "#0f172a",
+  lineHeight: 1.45,
 };
 
 const fieldLabelStyle: React.CSSProperties = {
@@ -1011,34 +1249,95 @@ const fieldLabelStyle: React.CSSProperties = {
   color: brand.colors.primary,
 };
 
-const metricCardStyle: React.CSSProperties = {
-  padding: 16,
-  borderRadius: 18,
-  border: `1px solid ${brand.colors.border}`,
-  background: "linear-gradient(180deg, #fbfdff 0%, #f4f8fb 100%)",
-  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.04)",
+const summaryGridStyle: React.CSSProperties = {
   display: "grid",
-  gap: 4,
+  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+  gap: 12,
 };
 
-const metricLabelStyle: React.CSSProperties = {
+const summaryItemStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 4,
+  minWidth: 0,
+};
+
+const summaryLabelStyle: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 900,
-  letterSpacing: 1,
   textTransform: "uppercase",
   color: "#64748b",
 };
 
-const metricValueStyle: React.CSSProperties = {
-  fontSize: 22,
+const summaryValueStyle: React.CSSProperties = {
+  fontSize: 16,
   fontWeight: 900,
   color: brand.colors.primary,
+  lineHeight: 1.25,
+  overflowWrap: "anywhere",
 };
 
-const metricDescriptionStyle: React.CSSProperties = {
+const stepperStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+};
+
+const stepPillStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 34,
+  padding: "7px 10px",
+  borderRadius: 999,
+  border: `1px solid ${brand.colors.border}`,
   fontSize: 12,
+  fontWeight: 900,
+};
+
+const stepHelpStyle: React.CSSProperties = {
+  fontSize: 14,
   color: "#475569",
-  lineHeight: 1.45,
+  lineHeight: 1.5,
+};
+
+const wizardFieldsGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 12,
+};
+
+const wizardButtonGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 10,
+};
+
+const primaryWizardButtonStyle: React.CSSProperties = {
+  minHeight: 54,
+  width: "100%",
+  fontSize: 15,
+};
+
+const secondaryWizardButtonStyle: React.CSSProperties = {
+  minHeight: 54,
+  width: "100%",
+  fontSize: 15,
+};
+
+const contractDetailsStyle: React.CSSProperties = {
+  border: `1px solid ${brand.colors.border}`,
+  borderRadius: 14,
+  overflow: "hidden",
+  background: "#fff",
+};
+
+const contractSummaryStyle: React.CSSProperties = {
+  cursor: "pointer",
+  padding: "14px 16px",
+  fontSize: 14,
+  fontWeight: 900,
+  color: brand.colors.primary,
+  listStyle: "none",
 };
 
 const documentFrameStyle: React.CSSProperties = {

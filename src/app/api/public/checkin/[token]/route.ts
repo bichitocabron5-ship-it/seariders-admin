@@ -268,6 +268,8 @@ async function getReservationSnapshot(reservationId: string, language: ReturnTyp
       serviceName: reservation.service?.name ?? "",
       serviceCategory: reservation.service?.category ?? null,
       durationMinutes: reservation.option?.durationMinutes ?? null,
+      quantity: reservation.quantity,
+      pax: reservation.pax,
       requiredUnits,
       readyCount,
       signedCount,

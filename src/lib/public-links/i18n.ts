@@ -110,6 +110,7 @@ type PublicCopy = {
     loadFailed: string;
     eyebrow: string;
     title: string;
+    subtitle: string;
     autosaveIdle: string;
     autosaveSaving: string;
     autosaveSaved: string;
@@ -123,6 +124,13 @@ type PublicCopy = {
       pending: string;
     };
     intro: string;
+    summaryActivity: string;
+    summaryDate: string;
+    summaryTime: string;
+    summaryDuration: string;
+    summaryPeople: string;
+    summaryParticipants: (value: number) => string;
+    summaryQuantity: (value: number) => string;
     holderTitle: string;
     holderHelp: string;
     bookingSummary: string;
@@ -160,6 +168,26 @@ type PublicCopy = {
     signContract: string;
     signing: string;
     signedBanner: (name: string, date: string) => string;
+    wizard: {
+      steps: Record<"personal" | "license" | "conditions" | "signature", string>;
+      contractProgress: (current: number, total: number) => string;
+      personalHelp: string;
+      licenseHelp: string;
+      conditionsHelp: string;
+      signatureHelp: string;
+      readAccept: string;
+      imageConsentOptional: string;
+      viewContract: string;
+      hideContract: string;
+      next: string;
+      back: string;
+      signAndContinue: string;
+      completeStep: string;
+      completedTitle: string;
+      completedBody: string;
+      completedBadge: string;
+      selectCountry: string;
+    };
   };
 };
 
@@ -264,6 +292,7 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
         loadFailed: "The link could not be loaded.",
         eyebrow: "Digital pre-check-in",
         title: "Complete your details and sign your booking",
+        subtitle: "A short mobile check-in before your activity.",
         autosaveIdle: "Changes will be saved automatically.",
         autosaveSaving: "Autosaving changes...",
         autosaveSaved: "Changes saved automatically.",
@@ -277,6 +306,13 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
           pending: "Pending",
         },
         intro: "Review each contract, complete the required details and sign at the end of each section. Fields marked with * are required. If the booking includes a minor with authorization, the documents will be validated on site before final payment.",
+        summaryActivity: "Activity",
+        summaryDate: "Date",
+        summaryTime: "Time",
+        summaryDuration: "Duration",
+        summaryPeople: "Participants",
+        summaryParticipants: (value) => `${value} participant${value === 1 ? "" : "s"}`,
+        summaryQuantity: (value) => `${value} unit${value === 1 ? "" : "s"}`,
         holderTitle: "Booking holder details",
         holderHelp: "The booking data is already registered. Here we only ask one short commercial question before you complete the legal details for each contract.",
         bookingSummary: "Booking data already registered",
@@ -315,6 +351,31 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
         signContract: "Sign contract",
         signing: "Signing...",
         signedBanner: (name, date) => `Contract signed by ${name || "the customer"} on ${date}.`,
+        wizard: {
+          steps: {
+            personal: "Your details",
+            license: "License",
+            conditions: "Conditions",
+            signature: "Signature",
+          },
+          contractProgress: (current, total) => `Contract ${current} of ${total}`,
+          personalHelp: "Enter only the required legal details for the person signing this contract.",
+          licenseHelp: "This booking requires license details before signing.",
+          conditionsHelp: "Confirm the contract terms before moving to signature.",
+          signatureHelp: "Sign inside the box. The signed contract will be saved automatically.",
+          readAccept: "I have read and accept the contract terms.",
+          imageConsentOptional: "I agree to image use and the processing required for the activity. Optional.",
+          viewContract: "View full contract",
+          hideContract: "Hide full contract",
+          next: "Continue",
+          back: "Back",
+          signAndContinue: "Sign and continue",
+          completeStep: "Complete the required fields in this step.",
+          completedTitle: "Check-in completed",
+          completedBody: "Your pre-check-in has been completed. You can close this screen.",
+          completedBadge: "Completed",
+          selectCountry: "Select country...",
+        },
       },
     };
   }
@@ -397,6 +458,7 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
       loadFailed: "No se pudo cargar el enlace.",
       eyebrow: "Pre-checkin digital",
       title: "Complete sus datos y firme su reserva",
+      subtitle: "Un check-in movil breve antes de la actividad.",
       autosaveIdle: "Los cambios se guardaran automaticamente.",
       autosaveSaving: "Guardado automatico en curso...",
       autosaveSaved: "Cambios guardados automaticamente.",
@@ -410,6 +472,13 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
         pending: "Pendiente",
       },
       intro: "Revise el contrato de cada unidad, complete los datos obligatorios y firme al final de cada bloque. Los campos marcados con * son obligatorios. Si la reserva incluye un menor con autorizacion, la documentacion debera validarse en tienda antes del cobro definitivo.",
+      summaryActivity: "Actividad",
+      summaryDate: "Fecha",
+      summaryTime: "Hora",
+      summaryDuration: "Duracion",
+      summaryPeople: "Participantes",
+      summaryParticipants: (value) => `${value} participante${value === 1 ? "" : "s"}`,
+      summaryQuantity: (value) => `${value} unidad${value === 1 ? "" : "es"}`,
       holderTitle: "Datos del titular",
       holderHelp: "Los datos de la reserva ya estan registrados. Aqui solo le pedimos una breve pregunta comercial antes de completar los datos legales de cada contrato.",
       bookingSummary: "Datos de reserva ya registrados",
@@ -448,6 +517,31 @@ export function getPublicCopy(language: PublicLanguage): PublicCopy {
       signContract: "Firmar contrato",
       signing: "Firmando...",
       signedBanner: (name, date) => `Contrato firmado por ${name || "el cliente"} el ${date}.`,
+      wizard: {
+        steps: {
+          personal: "Sus datos",
+          license: "Licencia",
+          conditions: "Condiciones",
+          signature: "Firma",
+        },
+        contractProgress: (current, total) => `Contrato ${current} de ${total}`,
+        personalHelp: "Introduzca solo los datos legales obligatorios de la persona que firma este contrato.",
+        licenseHelp: "Esta reserva requiere los datos de licencia antes de firmar.",
+        conditionsHelp: "Confirme las condiciones del contrato antes de pasar a la firma.",
+        signatureHelp: "Firme dentro del recuadro. El contrato firmado se guardara automaticamente.",
+        readAccept: "He leido y acepto las condiciones del contrato.",
+        imageConsentOptional: "Acepto el uso de mi imagen y el tratamiento necesario para la actividad. Opcional.",
+        viewContract: "Ver contrato completo",
+        hideContract: "Ocultar contrato completo",
+        next: "Continuar",
+        back: "Atras",
+        signAndContinue: "Firmar y continuar",
+        completeStep: "Complete los campos obligatorios de este paso.",
+        completedTitle: "Check-in completado",
+        completedBody: "Su pre-checkin se ha completado correctamente. Puede cerrar esta pantalla.",
+        completedBadge: "Completado",
+        selectCountry: "Seleccione pais...",
+      },
     },
   };
 }
