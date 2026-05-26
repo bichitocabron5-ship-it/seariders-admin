@@ -186,7 +186,7 @@ export function PhoneWithCountryField({
     background: String(inputStyle.background ?? "#fff"),
     minHeight: inputStyle.minHeight ?? 48,
     display: "grid",
-    gridTemplateColumns: "minmax(140px, 220px) minmax(0, 1fr)",
+    gridTemplateColumns: "minmax(96px, 132px) minmax(0, 1fr)",
     alignItems: "stretch",
     overflow: "hidden",
   };
@@ -215,6 +215,7 @@ export function PhoneWithCountryField({
             ...innerControlStyle,
             borderRight: "1px solid #e2e8f0",
             fontWeight: 800,
+            padding: "0 10px",
           }}
         >
           {countryOptions.map((option) => {
