@@ -618,6 +618,14 @@ function StoreCreatePageInner() {
   }, [channelId, compatibleChannels]);
 
   useEffect(() => {
+    if (channelId) return;
+    if (channelCompatibilityNotice) return;
+    if (!compatibleChannels.length) return;
+
+    setChannelId(compatibleChannels[0].id);
+  }, [channelCompatibilityNotice, channelId, compatibleChannels]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     if (loadingCatalog || isEditMode || isMigrateMode || draftRecoveredAt) return;
 
