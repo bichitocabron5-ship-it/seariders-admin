@@ -277,6 +277,8 @@ export default function Booth() {
 
   // form
   const [firstName, setFirstName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [phoneCountry, setPhoneCountry] = useState("ES");
   const [customerCountry, setCustomerCountry] = useState("ES");
   const [serviceId, setServiceId] = useState("");
   const [optionId, setOptionId] = useState("");
@@ -780,12 +782,20 @@ useEffect(() => {
   setChannelCompatibilityNotice("El canal seleccionado no está disponible para este servicio.");
 }, [channelId, filteredChannels]);
 
-  async function createPre(e: React.FormEvent) {
+async function createPre(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     const customerName = String(firstName ?? "").trim();
     if (!customerName) {
       setError("Nombre requerido");
+      return;
+    }
+    if (!String(customerPhone ?? "").trim()) {
+      setError("Telefono requerido");
+      return;
+    }
+    if (!String(customerCountry ?? "").trim()) {
+      setError("Pais del cliente requerido");
       return;
     }
     const itemsToSend =
@@ -812,6 +822,7 @@ useEffect(() => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         customerName,
+        customerPhone,
         customerCountry,
         serviceId,
         optionId,
@@ -846,6 +857,7 @@ useEffect(() => {
     }
 
     setFirstName("");
+    setCustomerPhone("");
     setQuantity(1);
     setPax(2);
     setCartItems([]);
@@ -1098,6 +1110,8 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
           <BoothPreReservationFormSection
             fieldStyle={fieldStyle}
             firstName={firstName}
+            customerPhone={customerPhone}
+            phoneCountry={phoneCountry}
             customerCountry={customerCountry}
             serviceId={serviceId}
             optionId={optionId}
@@ -1149,6 +1163,12 @@ async function paySplitNow(reservationId: string, pendingCents: number) {
             onAddExtra={addExtraToCart}
             onRemoveCartItem={removeCartItem}
             setFirstName={setFirstName}
+            setCustomerPhone={setCustomerPhone}
+            setPhoneCountry={(value) => {
+              const nextCountry = String(value ?? "").trim().toUpperCase();
+              setPhoneCountry(nextCountry || "ES");
+              setCustomerCountry((current) => (String(current ?? "").trim() ? current : nextCountry));
+            }}
             setCustomerCountry={setCustomerCountry}
             setServiceId={setServiceId}
             setOptionId={setOptionId}

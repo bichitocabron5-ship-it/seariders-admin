@@ -25,6 +25,7 @@ import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-avail
 
 const BodySchema = z.object({
   customerName: z.string().min(1),
+  customerPhone: z.string().min(1),
   customerCountry: z.string().min(1),
   serviceId: z.string().min(1).optional(),
   optionId: z.string().min(1).optional(),
@@ -428,6 +429,7 @@ export async function POST(req: Request) {
       companyDiscountCents: commercial.companyDiscountCents,
       totalPriceCents: commercial.finalTotalCents,
       customerName: parsed.data.customerName,
+      customerPhone: parsed.data.customerPhone,
       customerCountry: parsed.data.customerCountry,
       customerAddress: "-",
       customerDocType: "-",

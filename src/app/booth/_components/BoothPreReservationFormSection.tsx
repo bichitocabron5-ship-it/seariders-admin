@@ -2,6 +2,7 @@
 
 import type React from "react";
 import Select from "react-select";
+import { PhoneWithCountryField } from "@/components/customer-inputs";
 import { ActionButton, AlertBanner, SectionCard } from "@/components/seariders-ui";
 import type { CountryOption } from "@/lib/countries";
 
@@ -37,6 +38,8 @@ type Channel = {
 type Props = {
   fieldStyle: React.CSSProperties;
   firstName: string;
+  customerPhone: string;
+  phoneCountry: string;
   customerCountry: string;
   serviceId: string;
   optionId: string;
@@ -88,6 +91,8 @@ type Props = {
   onAddExtra: () => void;
   onRemoveCartItem: (id: string) => void;
   setFirstName: (value: string) => void;
+  setCustomerPhone: (value: string) => void;
+  setPhoneCountry: (value: string) => void;
   setCustomerCountry: (value: string) => void;
   setServiceId: (value: string) => void;
   setOptionId: (value: string) => void;
@@ -105,6 +110,8 @@ type Props = {
 export default function BoothPreReservationFormSection({
   fieldStyle,
   firstName,
+  customerPhone,
+  phoneCountry,
   customerCountry,
   serviceId,
   optionId,
@@ -156,6 +163,8 @@ export default function BoothPreReservationFormSection({
   onAddExtra,
   onRemoveCartItem,
   setFirstName,
+  setCustomerPhone,
+  setPhoneCountry,
   setCustomerCountry,
   setServiceId,
   setOptionId,
@@ -183,6 +192,19 @@ export default function BoothPreReservationFormSection({
             Nombre
             <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required style={fieldStyle} />
           </label>
+          <PhoneWithCountryField
+            label="Telefono *"
+            country={customerCountry}
+            dialCountry={phoneCountry}
+            phone={customerPhone}
+            onCountryChange={setCustomerCountry}
+            onDialCountryChange={setPhoneCountry}
+            onPhoneChange={setCustomerPhone}
+            countryOptions={countryOptions}
+            inputStyle={fieldStyle}
+            required
+            phonePlaceholder="Ej: 612345678"
+          />
         </div>
 
         <div style={{ display: "grid", gap: 6 }}>
@@ -192,7 +214,8 @@ export default function BoothPreReservationFormSection({
             inputId="booth-country"
             options={countryOptions}
             value={selectedCountryOpt}
-            onChange={(opt) => setCustomerCountry((opt?.value ?? customerCountry).toUpperCase())}
+            onChange={(opt) => setCustomerCountry((opt?.value ?? "").toUpperCase())}
+            isClearable
             placeholder="Escribe para buscar..."
           />
         </div>

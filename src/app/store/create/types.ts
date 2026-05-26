@@ -117,6 +117,7 @@ export type StoreCreateDraft = {
   firstName: string;
   lastName: string;
   customerPhone: string;
+  phoneCountry: string;
   customerEmail: string;
   customerCountry: string;
   customerAddress: string;

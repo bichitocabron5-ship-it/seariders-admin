@@ -42,6 +42,7 @@ export type ReservationBasicsSectionProps = {
     firstName: string;
     lastName: string;
     customerPhone: string;
+    phoneCountry: string;
     customerEmail: string;
     customerCountry: string;
     customerAddress: string;
@@ -83,6 +84,7 @@ export type ReservationBasicsSectionProps = {
     onFirstNameChange: (value: string) => void;
     onLastNameChange: (value: string) => void;
     onCustomerPhoneChange: (value: string) => void;
+    onPhoneCountryChange: (value: string) => void;
     onCustomerEmailChange: (value: string) => void;
     onCustomerCountryChange: (value: string) => void;
     onCustomerAddressChange: (value: string) => void;
@@ -198,8 +200,10 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
               <PhoneWithCountryField
                 label="Teléfono *"
                 country={values.customerCountry}
+                dialCountry={values.phoneCountry}
                 phone={values.customerPhone}
                 onCountryChange={handlers.onCustomerCountryChange}
+                onDialCountryChange={handlers.onPhoneCountryChange}
                 onPhoneChange={handlers.onCustomerPhoneChange}
                 countryOptions={lists.countryOptions}
                 inputStyle={inputStyle}
@@ -208,6 +212,24 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
                 containerStyle={{ minWidth: 0, gridColumn: "span 2" }}
                 error={validation?.showErrors ? validation?.customerPhone : null}
               />
+
+              <label style={labelStyle}>
+                <span>País del cliente {flags.customerCountryRequired ? "*" : ""}</span>
+                <select
+                  value={(values.customerCountry || "").toUpperCase()}
+                  onChange={(e) => handlers.onCustomerCountryChange(e.target.value)}
+                  required={flags.customerCountryRequired}
+                  style={inputStyle}
+                >
+                  <option value="">Selecciona país...</option>
+                  {lists.countryOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <span style={captionStyle}>Este país se usa para descuentos, promos y residente/no residente.</span>
+              </label>
 
               <label style={labelStyle}>
                 <span>Email</span>

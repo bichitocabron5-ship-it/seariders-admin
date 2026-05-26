@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { CountryOption } from "@/lib/countries";
 import { getDialCodeForCountry } from "@/lib/countries";
+import { buildStoredPhoneNumber, resolvePhoneFieldState } from "@/lib/phone-country";
 
 function digitsOnly(value: string) {
   return String(value ?? "").replace(/\D/g, "");
@@ -143,8 +144,10 @@ export function BirthDateField({
 export function PhoneWithCountryField({
   label,
   country,
+  dialCountry,
   phone,
   onCountryChange,
+  onDialCountryChange,
   onPhoneChange,
   countryOptions,
   inputStyle,
@@ -156,8 +159,10 @@ export function PhoneWithCountryField({
 }: {
   label: string;
   country: string;
+  dialCountry?: string;
   phone: string;
   onCountryChange: (value: string) => void;
+  onDialCountryChange?: (value: string) => void;
   onPhoneChange: (value: string) => void;
   countryOptions: CountryOption[];
   inputStyle: React.CSSProperties;
@@ -167,7 +172,14 @@ export function PhoneWithCountryField({
   containerStyle?: React.CSSProperties;
   error?: string | null;
 }) {
-  const normalizedCountry = String(country ?? "").trim().toUpperCase();
+  const fallbackDialCountry = String(dialCountry ?? country ?? "").trim().toUpperCase();
+  const phoneFieldState = useMemo(
+    () => resolvePhoneFieldState(phone, fallbackDialCountry),
+    [fallbackDialCountry, phone]
+  );
+  const normalizedCountry = String(phoneFieldState.dialCountry || fallbackDialCountry || countryOptions[0]?.value || "")
+    .trim()
+    .toUpperCase();
   const shellStyle: React.CSSProperties = {
     border: String(inputStyle.border ?? "1px solid #d0d9e4"),
     borderRadius: inputStyle.borderRadius ?? 14,
@@ -193,7 +205,11 @@ export function PhoneWithCountryField({
       <div style={shellStyle}>
         <select
           value={normalizedCountry}
-          onChange={(e) => onCountryChange(e.target.value)}
+          onChange={(e) => {
+            const nextDialCountry = e.target.value;
+            (onDialCountryChange ?? onCountryChange)(nextDialCountry);
+            onPhoneChange(buildStoredPhoneNumber(phoneFieldState.localPhone, nextDialCountry));
+          }}
           disabled={disabled}
           style={{
             ...innerControlStyle,
@@ -212,8 +228,8 @@ export function PhoneWithCountryField({
           })}
         </select>
         <input
-          value={phone}
-          onChange={(e) => onPhoneChange(e.target.value)}
+          value={phoneFieldState.localPhone}
+          onChange={(e) => onPhoneChange(buildStoredPhoneNumber(e.target.value, normalizedCountry))}
           disabled={disabled}
           required={required}
           autoComplete="tel"

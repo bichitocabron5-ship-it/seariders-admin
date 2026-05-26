@@ -32,6 +32,7 @@ import { submitStoreCreateCreateFlow, submitStoreCreateEditFlow, submitStoreCrea
 import { errorMessage } from "./utils/errors";
 import type { CartItem, Channel, JetskiLicenseMode, Option, RecoveredContractProfile, ServiceMain, StoreCreateDraft, UIMode } from "./types";
 import type { AssetAvailability } from "../services/assets";
+import { resolvePhoneFieldState } from "@/lib/phone-country";
 
 function todayMadridYMD() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -138,6 +139,7 @@ function StoreCreatePageInner() {
   const [licenseType, setLicenseType] = useState("");
   const [licenseNumber, setLicenseNumber] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [phoneCountry, setPhoneCountry] = useState("ES");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerCountry, setCustomerCountry] = useState("ES");
   const [customerAddress, setCustomerAddress] = useState("");
@@ -239,6 +241,7 @@ function StoreCreatePageInner() {
       setLicenseType(res.licenseType ?? "");
       setLicenseNumber(res.licenseNumber ?? "");
       setCustomerPhone(res.customerPhone ?? "");
+      setPhoneCountry(resolvePhoneFieldState(res.customerPhone ?? "", res.customerCountry ?? "ES").dialCountry || "ES");
       setCustomerEmail(res.customerEmail ?? "");
       setCustomerCountry(res.customerCountry ?? "ES");
       setCustomerAddress(res.customerAddress ?? "");
@@ -347,7 +350,10 @@ function StoreCreatePageInner() {
     onApplyProfile: (p) => {
       if (p.customerName != null) setCustomerName(p.customerName);
       if (p.email != null) setCustomerEmail(p.email);
-      if (p.phone != null) setCustomerPhone(p.phone);
+      if (p.phone != null) {
+        setCustomerPhone(p.phone);
+        setPhoneCountry(resolvePhoneFieldState(p.phone, p.country ?? "ES").dialCountry || "ES");
+      }
       if (p.customerDocType != null) setCustomerDocType(p.customerDocType);
       if (p.customerDocNumber != null) setCustomerDocNumber(p.customerDocNumber);
       if (p.country != null) setCustomerCountry(p.country);
@@ -671,6 +677,7 @@ function StoreCreatePageInner() {
       setFirstName(draft.firstName || "");
       setLastName(draft.lastName || "");
       setCustomerPhone(draft.customerPhone || "");
+      setPhoneCountry(draft.phoneCountry || resolvePhoneFieldState(draft.customerPhone || "", draft.customerCountry || "ES").dialCountry || "ES");
       setCustomerEmail(draft.customerEmail || "");
       setCustomerCountry(draft.customerCountry || "ES");
       setCustomerAddress(draft.customerAddress || "");
@@ -1113,6 +1120,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       firstName,
       lastName,
       customerPhone,
+      phoneCountry,
       customerEmail,
       customerCountry,
       customerAddress,
@@ -1158,6 +1166,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     customerDocNumber,
     customerDocType,
     customerEmail,
+    phoneCountry,
     customerName,
     customerPhone,
     customerPostalCode,
@@ -1760,11 +1769,18 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     handleCategoryChange(next);
   }
 
+  function handlePhoneCountryChange(value: string) {
+    const nextCountry = String(value ?? "").trim().toUpperCase();
+    setPhoneCountry(nextCountry || "ES");
+    setCustomerCountry((current) => (String(current ?? "").trim() ? current : nextCountry));
+  }
+
   const reservationBasicsSectionProps = {
     values: {
       firstName,
       lastName,
       customerPhone,
+      phoneCountry,
       customerEmail,
       customerCountry,
       customerAddress,
@@ -1810,6 +1826,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       onFirstNameChange: handleFirstNameChange,
       onLastNameChange: handleLastNameChange,
       onCustomerPhoneChange: setCustomerPhone,
+      onPhoneCountryChange: handlePhoneCountryChange,
       onCustomerEmailChange: setCustomerEmail,
       onCustomerCountryChange: setCustomerCountry,
       onCustomerAddressChange: setCustomerAddress,
