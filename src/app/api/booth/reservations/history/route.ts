@@ -98,6 +98,9 @@ export async function GET(req: Request) {
             appliedCommissionPct: true,
             appliedCommissionCents: true,
             customerDiscountCents: true,
+            manualDiscountCents: true,
+            promoterDiscountCents: true,
+            companyDiscountCents: true,
             channel: {
               select: {
                 name: true,
@@ -179,6 +182,9 @@ export async function GET(req: Request) {
             appliedCommissionPct: true,
             appliedCommissionCents: true,
             customerDiscountCents: true,
+            externalDiscountCents: true,
+            promoterDiscountCents: true,
+            companyDiscountCents: true,
             direction: true,
             method: true,
             description: true,
@@ -249,6 +255,9 @@ export async function GET(req: Request) {
     const operationalStatus = resolveReservationOperationalStatus({
       status: reservation.status,
     });
+    const appliedCommissionMode = resolvedCommission.appliedCommissionMode;
+    const appliedCommissionValue = resolvedCommission.appliedCommissionValue;
+    const commissionAmountCents = resolvedCommission.appliedCommissionCents;
 
     return {
       id: reservation.id,
@@ -280,12 +289,18 @@ export async function GET(req: Request) {
       channelName: reservation.channel?.name ?? null,
       paymentMethod: null,
       grossExternalAmountCents: null,
+      appliedCommissionMode,
+      appliedCommissionValue,
       effectiveCommissionPct:
         resolvedCommission.appliedCommissionPct != null
           ? Number(resolvedCommission.appliedCommissionPct.toFixed(2))
           : null,
-      commissionAmountCents: resolvedCommission.appliedCommissionCents,
+      commissionBaseCents: resolvedCommission.commissionBaseCents,
+      commissionAmountCents,
       customerDiscountCents: Number(reservation.customerDiscountCents ?? 0),
+      manualDiscountCents: Number(reservation.manualDiscountCents ?? 0),
+      promoterDiscountCents: Number(reservation.promoterDiscountCents ?? 0),
+      companyDiscountCents: Number(reservation.companyDiscountCents ?? 0),
       canCancel: false,
     };
   });
@@ -315,6 +330,18 @@ export async function GET(req: Request) {
           channel: payment.channel,
           serviceId: payment.serviceId,
         });
+    const appliedCommissionMode = payment.isExternalCommissionOnly
+      ? payment.appliedCommissionMode ?? "PERCENT"
+      : resolvedCommission?.appliedCommissionMode ?? (payment.appliedCommissionMode ?? "PERCENT");
+    const appliedCommissionValue = payment.isExternalCommissionOnly
+      ? Number(payment.appliedCommissionValue ?? 0)
+      : resolvedCommission?.appliedCommissionValue ?? Number(payment.appliedCommissionValue ?? 0);
+    const commissionBaseCents = payment.isExternalCommissionOnly
+      ? Number(payment.commissionBaseCents ?? 0)
+      : resolvedCommission?.commissionBaseCents ?? Number(payment.commissionBaseCents ?? 0);
+    const commissionAmountCents = payment.isExternalCommissionOnly
+      ? Math.max(0, signedAmount)
+      : resolvedCommission?.appliedCommissionCents ?? 0;
 
     return {
       id: payment.id,
@@ -346,14 +373,21 @@ export async function GET(req: Request) {
       channelName: payment.channel?.name ?? null,
       paymentMethod: payment.method,
       grossExternalAmountCents,
+      appliedCommissionMode,
+      appliedCommissionValue,
       effectiveCommissionPct:
         resolvedCommission?.appliedCommissionPct != null
           ? Number(resolvedCommission.appliedCommissionPct.toFixed(2))
           : null,
-      commissionAmountCents: payment.isExternalCommissionOnly
-        ? Math.max(0, signedAmount)
-        : resolvedCommission?.appliedCommissionCents ?? 0,
+      commissionBaseCents,
+      commissionAmountCents,
       customerDiscountCents: Number(payment.customerDiscountCents ?? 0),
+      manualDiscountCents: Math.max(
+        0,
+        Number(payment.externalDiscountCents ?? 0) - Number(payment.customerDiscountCents ?? 0)
+      ),
+      promoterDiscountCents: Number(payment.promoterDiscountCents ?? 0),
+      companyDiscountCents: Number(payment.companyDiscountCents ?? 0),
       canCancel: signedAmount > 0,
     };
   });

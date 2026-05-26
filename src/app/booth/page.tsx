@@ -833,8 +833,12 @@ useEffect(() => {
 
     const j = await r.json();
     if (j.mode === "payment") {
+      const commissionDetail =
+        j.commissionMode === "FIXED"
+          ? `${Number(j.commissionValue ?? 0).toFixed(2)} EUR fijos`
+          : `${Number(j.commissionPct ?? 0).toFixed(2)}%`;
       alert(
-        `Comisión registrada: ${euros(j.amountCents ?? j.commissionCents ?? 0)} · Venta externa ${euros(j.grossAmountCents ?? finalTotalCents)} · Comisión Seariders ${Number(j.commissionPct ?? 0).toFixed(2)}%`
+        `Comisión registrada: ${euros(j.amountCents ?? j.commissionCents ?? 0)} · Venta externa ${euros(j.grossAmountCents ?? finalTotalCents)} · Comisión Seariders ${commissionDetail}`
       );
     } else {
       alert(`Creada. Código: ${j.boothCode}`);

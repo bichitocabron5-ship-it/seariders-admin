@@ -35,7 +35,26 @@ export async function POST(req: Request) {
 
   const reservation = await prisma.reservation.findUnique({
     where: { id: reservationId },
-    select: { id: true, source: true, totalPriceCents: true },
+    select: {
+      id: true,
+      source: true,
+      totalPriceCents: true,
+      commissionBaseCents: true,
+      appliedCommissionPct: true,
+      appliedCommissionMode: true,
+      appliedCommissionValue: true,
+      appliedCommissionCents: true,
+      customerDiscountMode: true,
+      customerDiscountValue: true,
+      customerDiscountCents: true,
+      manualDiscountCents: true,
+      autoDiscountCents: true,
+      discountResponsibility: true,
+      promoterDiscountShareBps: true,
+      promoterDiscountCents: true,
+      companyDiscountCents: true,
+      customerName: true,
+    },
   });
 
   if (!reservation) return NextResponse.json({ error: "Reserva no existe" }, { status: 404 });
@@ -84,8 +103,25 @@ export async function POST(req: Request) {
       origin: PaymentOrigin.BOOTH,
       method: method as PaymentMethod,
       amountCents,
+      commissionBaseCents: reservation.commissionBaseCents ?? 0,
+      appliedCommissionPct: reservation.appliedCommissionPct ?? null,
+      appliedCommissionMode: reservation.appliedCommissionMode ?? "PERCENT",
+      appliedCommissionValue: reservation.appliedCommissionValue ?? 0,
+      appliedCommissionCents: reservation.appliedCommissionCents ?? 0,
+      customerDiscountMode: reservation.customerDiscountMode ?? "PERCENT",
+      customerDiscountValue: reservation.customerDiscountValue ?? 0,
+      customerDiscountCents: reservation.customerDiscountCents ?? 0,
+      externalDiscountCents:
+        (reservation.customerDiscountCents ?? 0) +
+        (reservation.manualDiscountCents ?? 0) +
+        (reservation.autoDiscountCents ?? 0),
+      discountResponsibility: reservation.discountResponsibility ?? "COMPANY",
+      promoterDiscountShareBps: reservation.promoterDiscountShareBps ?? 0,
+      promoterDiscountCents: reservation.promoterDiscountCents ?? 0,
+      companyDiscountCents: reservation.companyDiscountCents ?? 0,
       isDeposit: false,
       direction: PaymentDirection.IN,
+      customerName: reservation.customerName ?? null,
       createdByUserId: session.userId,
       shiftSessionId: shiftSession?.id ?? null,
     },

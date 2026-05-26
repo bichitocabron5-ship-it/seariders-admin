@@ -255,3 +255,49 @@ test("regresion comercial: descuento compartido al 50% deja base 95 y comision 9
   assert.equal(commercial.commissionBaseCents, 9_500);
   assert.equal(snapshot.appliedCommissionCents, 950);
 });
+
+test("regresion booth: descuento manual empresa no baja la comision porcentual desde PVP 100", () => {
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    manualDiscountCents: 1_000,
+    discountResponsibility: "COMPANY",
+  });
+
+  const snapshot = resolveAppliedCommercialSnapshot({
+    channel: {
+      commissionEnabled: true,
+      commissionPct: 10,
+    },
+    serviceId: "svc-1",
+    commissionBaseCents: commercial.commissionBaseCents,
+    customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
+    quantity: 1,
+  });
+
+  assert.equal(commercial.finalTotalCents, 9_000);
+  assert.equal(commercial.commissionBaseCents, 10_000);
+  assert.equal(snapshot.appliedCommissionCents, 1_000);
+});
+
+test("regresion booth: descuento manual promotor baja la base y deja comision 9 sobre 100", () => {
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    manualDiscountCents: 1_000,
+    discountResponsibility: "PROMOTER",
+  });
+
+  const snapshot = resolveAppliedCommercialSnapshot({
+    channel: {
+      commissionEnabled: true,
+      commissionPct: 10,
+    },
+    serviceId: "svc-1",
+    commissionBaseCents: commercial.commissionBaseCents,
+    customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
+    quantity: 1,
+  });
+
+  assert.equal(commercial.finalTotalCents, 9_000);
+  assert.equal(commercial.commissionBaseCents, 9_000);
+  assert.equal(snapshot.appliedCommissionCents, 900);
+});

@@ -380,6 +380,8 @@ export async function POST(req: Request) {
       grossAmountCents: grossTotalCents,
       commissionBaseCents: commercial.commissionBaseCents,
       commissionCents,
+      commissionMode: commercialSnapshot.appliedCommissionMode,
+      commissionValue: commercialSnapshot.appliedCommissionValue,
       commissionPct,
     });
   }

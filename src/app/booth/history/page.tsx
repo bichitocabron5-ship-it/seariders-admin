@@ -36,7 +36,15 @@ type HistoryRow = {
   channelName: string | null;
   paymentMethod: string | null;
   grossExternalAmountCents: number | null;
+  appliedCommissionMode?: "PERCENT" | "FIXED" | null;
+  appliedCommissionValue?: number | null;
+  commissionBaseCents?: number | null;
+  commissionAmountCents?: number | null;
   effectiveCommissionPct: number | null;
+  customerDiscountCents?: number | null;
+  manualDiscountCents?: number | null;
+  promoterDiscountCents?: number | null;
+  companyDiscountCents?: number | null;
   canCancel: boolean;
 };
 
@@ -322,6 +330,17 @@ export default function BoothHistoryPage() {
                   const tone = statusTone(row.status);
                   const pendingCents = visiblePendingCents(row);
                   const isExternalPayment = row.rowKind === "EXTERNAL_PAYMENT";
+                  const hasCommercialAdjustments =
+                    Number(row.customerDiscountCents ?? 0) > 0 ||
+                    Number(row.manualDiscountCents ?? 0) > 0 ||
+                    Number(row.promoterDiscountCents ?? 0) > 0 ||
+                    Number(row.companyDiscountCents ?? 0) > 0;
+                  const commissionLabel =
+                    row.appliedCommissionMode === "FIXED"
+                      ? `Comisión fija ${euros(row.commissionAmountCents ?? 0)}`
+                      : row.effectiveCommissionPct != null
+                        ? `${Number(row.effectiveCommissionPct).toFixed(2)}% · comisión ${euros(row.commissionAmountCents ?? 0)}`
+                        : `Comisión ${euros(row.commissionAmountCents ?? 0)}`;
 
                   return (
                     <tr key={row.id}>
@@ -334,9 +353,7 @@ export default function BoothHistoryPage() {
                               : `${row.customerCountry || "-"} · Código ${row.boothCode || "-"}`
                             }
                           </div>
-                          {row.channelName ? (
-                            <div style={mutedStyle}>% efectivo canal: {Number(row.effectiveCommissionPct ?? 0).toFixed(2)}%</div>
-                          ) : null}
+                          {row.channelName ? <div style={mutedStyle}>{commissionLabel}</div> : null}
                           <div style={mutedStyle}>ID {row.id.slice(-6)}</div>
                         </div>
                       </td>
@@ -384,6 +401,16 @@ export default function BoothHistoryPage() {
                               : `Total servicio ${euros(row.totalPriceCents)}`
                             }
                           </div>
+                          {row.channelName ? (
+                            <div style={mutedStyle}>
+                              Base comisionable {euros(row.commissionBaseCents ?? 0)} · {commissionLabel}
+                            </div>
+                          ) : null}
+                          {hasCommercialAdjustments ? (
+                            <div style={mutedStyle}>
+                              Dto cliente {euros(row.customerDiscountCents ?? 0)} · manual {euros(row.manualDiscountCents ?? 0)} · promotor {euros(row.promoterDiscountCents ?? 0)} · empresa {euros(row.companyDiscountCents ?? 0)}
+                            </div>
+                          ) : null}
                         </div>
                       </td>
                       <td style={styles.td}>
