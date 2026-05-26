@@ -21,7 +21,6 @@ import { AvailabilitySection, FutureReservationPaymentsSection, PricingSection, 
 import { ReservationBasicsSection } from "./components/reservation-basics-section";
 import { CartSection, ContractsSection } from "./components/store-sections";
 import {
-  StoreCreateCommercialSummarySection,
   StoreCreateCustomerProfileSection,
   StoreCreateSummaryStrip,
 } from "./components/store-create-overview";
@@ -1951,10 +1950,6 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       ) : null}
 
       <StoreCreateSummaryStrip cards={summaryCards} />
-      <StoreCreateCommercialSummarySection
-        summary={commercialSummary}
-        pendingLabel={isEditMode ? "Pendiente de servicio" : "Pendiente a cobrar"}
-      />
 
       {uiMode === "EDIT" && hasSignedContracts ? (
         <section

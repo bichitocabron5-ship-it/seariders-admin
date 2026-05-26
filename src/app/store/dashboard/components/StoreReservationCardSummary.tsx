@@ -2,8 +2,6 @@
 
 import type React from "react";
 
-import { StoreCommercialSummaryBlock } from "@/app/store/components/StoreCommercialSummaryBlock";
-import { normalizeCommercialSummary } from "@/app/store/shared/commercial-summary";
 import { ActionButton, AlertBanner, StatusBadge } from "@/components/seariders-ui";
 import { getDepositStatusLabel } from "@/lib/reservation-deposits";
 import type { ReservationRow } from "../types";
@@ -128,21 +126,11 @@ export function StoreReservationCardSummary({
   const appliedCommissionValue = Number(reservation.appliedCommissionValue ?? 0);
   const appliedCommissionPct = reservation.appliedCommissionPct != null ? Number(reservation.appliedCommissionPct) : null;
   const appliedCommissionCents = Number(reservation.appliedCommissionCents ?? 0);
-  const commercialSummary = normalizeCommercialSummary({
-    pvpOriginalCents: pvpTotal,
-    customerDiscountCents: customerDisc,
-    autoDiscountCents: autoDisc,
-    manualDiscountCents: manualDisc,
-    promoterDiscountCents: promoterDisc,
-    companyDiscountCents: companyDisc,
-    finalTotalCents: finalTotal,
-    commissionBaseCents: Number(reservation.commissionBaseCents ?? 0),
-    appliedCommissionCents,
-    appliedCommissionMode,
-    appliedCommissionValue,
-    appliedCommissionPct,
-    pendingToChargeCents: pendingCents,
-  });
+  const hasCommercialSummary =
+    appliedCommissionCents > 0 ||
+    customerDisc > 0 ||
+    promoterDisc > 0 ||
+    companyDisc > 0;
 
   return (
     <>
@@ -231,15 +219,34 @@ export function StoreReservationCardSummary({
       </div>
 
       <div style={{ opacity: 0.85, marginTop: 6 }}>
+        <div>PVP original: {euros(pvpTotal)}</div>
+        <div>Descuento aplicado: -{euros(totalDiscount)}</div>
+        <div>Total final: {euros(finalTotal)}</div>
         <div>Servicio: {euros(serviceTotal)}</div>
         <div>Extras: {euros(extrasTotal)}</div>
         {showDeposit ? <div>Fianza: {euros(deposit)}</div> : null}
         <div>
+          <strong>Pendiente real a cobrar:</strong> {euros(pendingCents)}
+        </div>
+        <div>
           <strong>Total a cobrar hoy:</strong> {euros(totalToChargeCents)}
         </div>
+        {hasCommercialSummary ? (
+          <>
+            <div style={{ opacity: 0.8 }}>Base comisionable: {euros(Number(reservation.commissionBaseCents ?? 0))}</div>
+            {appliedCommissionCents > 0 ? (
+              <div style={{ opacity: 0.8 }}>
+                Comisión canal:{" "}
+                {appliedCommissionMode === "FIXED"
+                  ? `${appliedCommissionValue.toFixed(2)} EUR`
+                  : `${Number(appliedCommissionPct ?? appliedCommissionValue).toFixed(2)}%`}{" "}
+                · {euros(appliedCommissionCents)}
+              </div>
+            ) : null}
+            {customerDisc > 0 ? <div style={{ opacity: 0.8 }}>Descuento cliente canal: {euros(customerDisc)}</div> : null}
+          </>
+        ) : null}
       </div>
-
-      <StoreCommercialSummaryBlock summary={commercialSummary} pendingLabel="Pendiente real a cobrar" />
 
       {reservation.depositHeld ? (
         <div style={{ marginTop: 8 }}>
