@@ -8,6 +8,7 @@ export function proxy(req: NextRequest) {
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/login") ||
+    pathname.startsWith("/api/public/v1/") ||
     pathname.startsWith("/api/webhooks/meta/whatsapp") ||
     pathname.startsWith("/checkin/") ||
     pathname.startsWith("/api/public/checkin/") ||
