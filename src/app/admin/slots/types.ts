@@ -1,6 +1,8 @@
 export type ApiGet = {
   ok: true;
-  policy: { id: string; intervalMinutes: number; openTime: string; closeTime: string };
+  policy: { intervalMinutes: number; openTime: string; closeTime: string } | null;
   categories: string[];
   limits: { category: string; maxUnits: number }[];
+  configurationRequired: boolean;
+  configurationErrors: string[];
 };

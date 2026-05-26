@@ -33,10 +33,14 @@ export function doesReservationBlockCapacity(args: {
   );
 }
 
-export function buildCapacityBlockingReservationWhere(): Prisma.ReservationWhereInput {
+export function buildCapacityBlockingReservationWhere(args?: {
+  requireScheduledTime?: boolean;
+}): Prisma.ReservationWhereInput {
+  const requireScheduledTime = args?.requireScheduledTime ?? true;
+
   return {
     source: { in: CAPACITY_BLOCKING_RESERVATION_SOURCES },
     status: { in: CAPACITY_BLOCKING_RESERVATION_STATUSES },
-    scheduledTime: { not: null },
+    ...(requireScheduledTime ? { scheduledTime: { not: null } } : {}),
   };
 }

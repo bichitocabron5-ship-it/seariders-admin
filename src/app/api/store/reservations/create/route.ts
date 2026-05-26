@@ -12,6 +12,10 @@ import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-avail
 
 export const runtime = "nodejs";
 
+function isConfigurationRequiredError(message: string) {
+  return message.startsWith("CONFIGURATION_REQUIRED:");
+}
+
 async function requireStore(): Promise<{ userId: string; role: "STORE" | "ADMIN" } | null> {
   const cookieStore = await cookies();
   const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
@@ -230,6 +234,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, ...result });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Error interno";
+    if (isConfigurationRequiredError(msg)) {
+      return NextResponse.json(
+        { error: "CONFIGURATION_REQUIRED", message: msg.replace(/^CONFIGURATION_REQUIRED:\s*/, "") },
+        { status: 409 }
+      );
+    }
     if (msg.includes("Slot completo") || msg.includes("Sin disponibilidad")) {
       return new NextResponse(msg, { status: 409 });
     }

@@ -57,9 +57,9 @@ export default function AdminSlotsPage() {
       if (!response.ok) throw new Error(await response.text());
       const json = (await response.json()) as ApiGet;
       setData(json);
-      setIntervalMinutes(json.policy.intervalMinutes ?? 30);
-      setOpenTime(json.policy.openTime ?? "09:00");
-      setCloseTime(json.policy.closeTime ?? "20:00");
+      setIntervalMinutes(json.policy?.intervalMinutes ?? 30);
+      setOpenTime(json.policy?.openTime ?? "09:00");
+      setCloseTime(json.policy?.closeTime ?? "20:00");
       const nextMap: Record<string, number> = {};
       for (const row of json.limits) nextMap[String(row.category).toUpperCase()] = Number(row.maxUnits ?? 0);
       for (const category of json.categories) {
@@ -108,9 +108,9 @@ export default function AdminSlotsPage() {
       if (!response.ok) throw new Error(await response.text());
       const json = (await response.json()) as ApiGet;
       setData(json);
-      setIntervalMinutes(json.policy.intervalMinutes ?? 30);
-      setOpenTime(json.policy.openTime ?? "09:00");
-      setCloseTime(json.policy.closeTime ?? "20:00");
+      setIntervalMinutes(json.policy?.intervalMinutes ?? 30);
+      setOpenTime(json.policy?.openTime ?? "09:00");
+      setCloseTime(json.policy?.closeTime ?? "20:00");
       const nextMap: Record<string, number> = {};
       for (const row of json.limits) nextMap[String(row.category).toUpperCase()] = Number(row.maxUnits ?? 0);
       for (const category of json.categories) {
@@ -172,6 +172,13 @@ export default function AdminSlotsPage() {
       </section>
 
       {err ? <div style={errorBox}>{err}</div> : null}
+      {!err && data?.configurationRequired ? (
+        <div style={warningBox}>
+          {data.configurationErrors.length > 0
+            ? data.configurationErrors.join(" · ")
+            : "Falta configurar SlotPolicy o SlotLimit."}
+        </div>
+      ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <MetricCard title="Intervalo" value={`${intervalMinutes} min`} tone="info" />
@@ -208,7 +215,7 @@ export default function AdminSlotsPage() {
       />
 
       <div style={{ fontSize: 12, color: "#64748b" }}>
-        Nota: si añades una categoría nueva en Catálogo, aparecerá aquí automáticamente con un límite inicial por defecto.
+        Nota: si añades una categoría nueva en Catálogo, aparecerá aquí para que definas su límite antes de usarla en producción.
       </div>
     </div>
   );
@@ -263,5 +270,14 @@ const errorBox: React.CSSProperties = {
   border: "1px solid #fecaca",
   background: "#fff1f2",
   color: "#991b1b",
+  fontWeight: 900,
+};
+
+const warningBox: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 14,
+  border: "1px solid #fde68a",
+  background: "#fffbeb",
+  color: "#92400e",
   fontWeight: 900,
 };

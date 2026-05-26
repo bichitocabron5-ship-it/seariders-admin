@@ -9,8 +9,7 @@ import {
   getOperationalDurationMinutes,
 } from "@/lib/reservation-operations";
 import {
-  CAPACITY_BLOCKING_RESERVATION_SOURCES,
-  CAPACITY_BLOCKING_RESERVATION_STATUSES,
+  buildCapacityBlockingReservationWhere,
 } from "@/lib/reservation-capacity";
 import { getSlotConfigOrThrow } from "@/lib/slot-config";
 import {
@@ -60,74 +59,73 @@ function addDaysYmd(ymd: string, days: number) {
 }
 
 export async function GET(req: Request) {
-  const session = await requireStoreOrAdmin();
-  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  try {
+    const session = await requireStoreOrAdmin();
+    if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const url = new URL(req.url);
-  const date = url.searchParams.get("date");
-  const selectedCategory = String(url.searchParams.get("category") ?? "").trim().toUpperCase() || null;
-  const selectedDurationMinutes = Number(url.searchParams.get("durationMinutes") ?? 0);
-  const selectedQuantity = Number(url.searchParams.get("quantity") ?? 0);
-  if (!date || date.length !== 10) {
-    return NextResponse.json({ error: "date requerido (YYYY-MM-DD)" }, { status: 400 });
-  }
+    const url = new URL(req.url);
+    const date = url.searchParams.get("date");
+    const selectedCategory = String(url.searchParams.get("category") ?? "").trim().toUpperCase() || null;
+    const selectedDurationMinutes = Number(url.searchParams.get("durationMinutes") ?? 0);
+    const selectedQuantity = Number(url.searchParams.get("quantity") ?? 0);
+    if (!date || date.length !== 10) {
+      return NextResponse.json({ error: "date requerido (YYYY-MM-DD)" }, { status: 400 });
+    }
 
-  // 1) SlotPolicy
-  const policy = await getSlotConfigOrThrow(prisma);
+    // 1) SlotPolicy
+    const policy = await getSlotConfigOrThrow(prisma);
 
-  const interval = policy.intervalMinutes ?? 30;
-  const openTime = policy.openTime ?? "09:00";
-  const closeTime = policy.closeTime ?? "20:00";
+    const interval = policy.intervalMinutes ?? 30;
+    const openTime = policy.openTime ?? "09:00";
+    const closeTime = policy.closeTime ?? "20:00";
 
-  // 2) SlotLimit
-  const limitsRows = await prisma.slotLimit.findMany({
-    select: { category: true, maxUnits: true },
-  });
-  if (limitsRows.length === 0) {
-    return NextResponse.json(
-      { error: "CONFIGURATION_REQUIRED", message: "SlotLimit no configurado." },
-      { status: 409 }
-    );
-  }
+    // 2) SlotLimit
+    const limitsRows = await prisma.slotLimit.findMany({
+      select: { category: true, maxUnits: true },
+    });
+    if (limitsRows.length === 0) {
+      return NextResponse.json(
+        { error: "CONFIGURATION_REQUIRED", message: "SlotLimit no configurado." },
+        { status: 409 }
+      );
+    }
 
-  const limits: Record<string, number> = {};
-  for (const r of limitsRows) limits[String(r.category).toUpperCase()] = r.maxUnits;
+    const limits: Record<string, number> = {};
+    for (const r of limitsRows) limits[String(r.category).toUpperCase()] = r.maxUnits;
 
+    // 3) Generar slots en horario Madrid
+    const startMin = hmToMinutes(openTime);
+    const endMin = hmToMinutes(closeTime);
 
-  // 3) Generar slots en horario Madrid
-  const startMin = hmToMinutes(openTime);
-  const endMin = hmToMinutes(closeTime);
+    const slotTimes: string[] = [];
+    for (let t = startMin; t < endMin; t += interval) slotTimes.push(minutesToHm(t));
 
-  const slotTimes: string[] = [];
-  for (let t = startMin; t < endMin; t += interval) slotTimes.push(minutesToHm(t));
+    const usedBySlot: Array<Record<string, number>> = slotTimes.map(() => ({}));
+    const noTime: Record<string, number> = {};
 
-  const usedBySlot: Array<Record<string, number>> = slotTimes.map(() => ({}));
-  const noTime: Record<string, number> = {};
+    // 4) Rango del día en UTC (según Madrid)
+    const dayStartUtc = utcDateFromYmdInTz(BUSINESS_TZ, date);
+    const nextDate = addDaysYmd(date, 1);
+    const dayEndExclusiveUtc =
+      utcDateTimeFromYmdHmInTz(BUSINESS_TZ, nextDate, "00:00") ??
+      new Date(dayStartUtc.getTime() + 24 * 60 * 60 * 1000);
 
-  // 4) Rango del día en UTC (según Madrid)
-  const dayStartUtc = utcDateFromYmdInTz(BUSINESS_TZ, date);
-  const nextDate = addDaysYmd(date, 1);
-  const dayEndExclusiveUtc =
-    utcDateTimeFromYmdHmInTz(BUSINESS_TZ, nextDate, "00:00") ??
-    new Date(dayStartUtc.getTime() + 24 * 60 * 60 * 1000);
-
-  // 5) Items del día (unificado: quick + pack + futuro carrito)
-  const items = await prisma.reservationItem.findMany({
-    where: {
-      isExtra: false, // actividades reales
-      reservation: {
-        source: { in: CAPACITY_BLOCKING_RESERVATION_SOURCES },
-        activityDate: { gte: dayStartUtc, lt: dayEndExclusiveUtc },
-        status: { in: CAPACITY_BLOCKING_RESERVATION_STATUSES },
+    // 5) Items del día (unificado: quick + pack + futuro carrito)
+    const items = await prisma.reservationItem.findMany({
+      where: {
+        isExtra: false, // actividades reales
+        reservation: {
+          ...buildCapacityBlockingReservationWhere({ requireScheduledTime: false }),
+          activityDate: { gte: dayStartUtc, lt: dayEndExclusiveUtc },
+        },
       },
-    },
-    select: {
-      quantity: true,
-      service: { select: { category: true } },
-      option: { select: { durationMinutes: true } },
-      reservation: { select: { scheduledTime: true } },
-    },
-  });
+      select: {
+        quantity: true,
+        service: { select: { category: true } },
+        option: { select: { durationMinutes: true } },
+        reservation: { select: { scheduledTime: true } },
+      },
+    });
 
   function pushUsage(params: { scheduledTime: Date | null; category: string; qty: number; durMinutes: number }) {
     const category = String(params.category ?? "UNKNOWN").toUpperCase();
@@ -160,15 +158,15 @@ export async function GET(req: Request) {
     }
   }
 
-  // 6) Contabilizar por slots a partir de ITEMS
-  for (const it of items) {
-    pushUsage({
-      scheduledTime: it.reservation?.scheduledTime ?? null,
-      category: it.service?.category ?? "UNKNOWN",
-      qty: Number(it.quantity ?? 1),
-      durMinutes: Number(it.option?.durationMinutes ?? interval),
-    });
-  }
+    // 6) Contabilizar por slots a partir de ITEMS
+    for (const it of items) {
+      pushUsage({
+        scheduledTime: it.reservation?.scheduledTime ?? null,
+        category: it.service?.category ?? "UNKNOWN",
+        qty: Number(it.quantity ?? 1),
+        durMinutes: Number(it.option?.durationMinutes ?? interval),
+      });
+    }
 
   // 7) Construir free + isFull
   const requestedOperationalDuration =
@@ -187,7 +185,7 @@ export async function GET(req: Request) {
         })
       : null;
 
-  const slots = slotTimes.map((time, idx) => {
+    const slots = slotTimes.map((time, idx) => {
     const used = usedBySlot[idx];
     const free: Record<string, number> = {};
     const isFull: Record<string, boolean> = {};
@@ -228,15 +226,25 @@ export async function GET(req: Request) {
     return { time, used, free, isFull, isSelectable };
   });
 
-  return NextResponse.json({
-    ok: true,
-    date,
-    intervalMinutes: interval,
-    openTime,
-    closeTime,
-    limits,
-    slots,
-    noTime,
-  });
+    return NextResponse.json({
+      ok: true,
+      date,
+      intervalMinutes: interval,
+      openTime,
+      closeTime,
+      limits,
+      slots,
+      noTime,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Error interno";
+    if (message.startsWith("CONFIGURATION_REQUIRED:")) {
+      return NextResponse.json(
+        { error: "CONFIGURATION_REQUIRED", message: message.replace(/^CONFIGURATION_REQUIRED:\s*/, "") },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 

@@ -50,7 +50,7 @@ export async function checkSlotCapacity(params: {
 
   const reservations = await prisma.reservation.findMany({
     where: {
-      ...buildCapacityBlockingReservationWhere(),
+      ...buildCapacityBlockingReservationWhere({ requireScheduledTime: true }),
       activityDate: { gte: dayStartUtc, lt: nextDay },
     },
     select: {

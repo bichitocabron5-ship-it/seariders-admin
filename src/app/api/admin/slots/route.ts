@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
+import { buildConfigurationRequiredError, getSlotConfigOrThrow } from "@/lib/slot-config";
 
 export const runtime = "nodejs";
 
@@ -43,17 +44,7 @@ const PostBody = z.object({
   ),
 });
 
-async function seedPolicyIfMissing() {
-  let policy = await prisma.slotPolicy.findFirst();
-  if (!policy) {
-    policy = await prisma.slotPolicy.create({
-      data: { intervalMinutes: 30, openTime: "09:00", closeTime: "20:00" },
-    });
-  }
-  return policy;
-}
-
-async function seedLimitsForAllCategories() {
+async function listSlotCategoriesAndLimits() {
   const cats = await prisma.service.findMany({
     where: { isActive: true },
     select: { category: true },
@@ -70,33 +61,49 @@ async function seedLimitsForAllCategories() {
   const existingSet = new Set(existing.map((r) => String(r.category).toUpperCase()));
   const missing = allCats.filter((c) => !existingSet.has(c));
 
-  if (missing.length > 0) {
-    await prisma.slotLimit.createMany({
-      data: missing.map((c) => ({ category: c, maxUnits: c === "JETSKI" ? 10 : 1 })),
-      skipDuplicates: true,
-    });
-  }
-
   const limitsRows = await prisma.slotLimit.findMany({
     select: { category: true, maxUnits: true, updatedAt: true },
     orderBy: { category: "asc" },
   });
 
-  return { allCats, limitsRows };
+  return { allCats, limitsRows, missingCategories: missing };
 }
 
 export async function GET() {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const policy = await seedPolicyIfMissing();
-  const { allCats, limitsRows } = await seedLimitsForAllCategories();
+  const [policyResult, catalog] = await Promise.allSettled([
+    getSlotConfigOrThrow(prisma),
+    listSlotCategoriesAndLimits(),
+  ]);
+  const policy =
+    policyResult.status === "fulfilled"
+      ? policyResult.value
+      : null;
+  const {
+    allCats,
+    limitsRows,
+    missingCategories,
+  } = catalog.status === "fulfilled"
+    ? catalog.value
+    : { allCats: [] as string[], limitsRows: [] as Array<{ category: string; maxUnits: number }>, missingCategories: [] as string[] };
+  const configurationErrors: string[] = [];
+
+  if (!policy) {
+    configurationErrors.push("SlotPolicy no configurado.");
+  }
+  if (missingCategories.length > 0) {
+    configurationErrors.push(`Faltan SlotLimit para: ${missingCategories.join(", ")}`);
+  }
 
   return NextResponse.json({
     ok: true,
     policy,
     categories: allCats.sort((a, b) => a.localeCompare(b, "es")),
     limits: limitsRows,
+    configurationRequired: configurationErrors.length > 0,
+    configurationErrors,
   });
 }
 
@@ -153,14 +160,20 @@ export async function POST(req: Request) {
     }
   });
 
-  // refresca (y seed por si en paralelo hay categorias nuevas)
-  const policy2 = await seedPolicyIfMissing();
-  const { allCats, limitsRows } = await seedLimitsForAllCategories();
+  const policy2 = await getSlotConfigOrThrow(prisma).catch(() => {
+    throw buildConfigurationRequiredError("SlotPolicy no configurado.");
+  });
+  const { allCats, limitsRows, missingCategories } = await listSlotCategoriesAndLimits();
 
   return NextResponse.json({
     ok: true,
     policy: policy2,
     categories: allCats.sort((a, b) => a.localeCompare(b, "es")),
     limits: limitsRows,
+    configurationRequired: missingCategories.length > 0,
+    configurationErrors:
+      missingCategories.length > 0
+        ? [`Faltan SlotLimit para: ${missingCategories.join(", ")}`]
+        : [],
   });
 }

@@ -72,7 +72,7 @@ export async function assertSlotCapacityOrThrow(args: {
 
   const existing = await tx.reservation.findMany({
     where: {
-      ...buildCapacityBlockingReservationWhere(),
+      ...buildCapacityBlockingReservationWhere({ requireScheduledTime: true }),
       activityDate: { gte: dateStartUtc, lt: dateEndExclusiveUtc },
       service: { category },
       ...(args.excludeReservationId ? { id: { not: args.excludeReservationId } } : {}),

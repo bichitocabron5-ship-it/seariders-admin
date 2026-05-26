@@ -78,7 +78,7 @@ export async function assertCapacityOrThrow(args: {
 
   const existing = await tx.reservation.findMany({
     where: {
-      ...buildCapacityBlockingReservationWhere(),
+      ...buildCapacityBlockingReservationWhere({ requireScheduledTime: true }),
       scheduledTime: { not: null, gte: windowStart, lte: windowEnd },
       service: { category: args.category },
     },

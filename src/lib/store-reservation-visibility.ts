@@ -1,4 +1,5 @@
 import type { Prisma, ReservationStatus } from "@prisma/client";
+import { CAPACITY_BLOCKING_RESERVATION_SOURCES } from "@/lib/reservation-capacity";
 
 type ReservationDayRange = {
   start: Date;
@@ -62,7 +63,7 @@ export function buildStoreCalendarWhere(
   range: ReservationDayRange
 ): Prisma.ReservationWhereInput {
   return {
-    source: { in: ["STORE", "BOOTH"] },
+    source: { in: CAPACITY_BLOCKING_RESERVATION_SOURCES },
     AND: [buildReservationOccursInRangeWhere(range)],
   };
 }

@@ -160,6 +160,12 @@ function deriveCommercialReservationState(args: {
 
 function toRouteErrorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Error";
+  if (message.startsWith("CONFIGURATION_REQUIRED:")) {
+    return NextResponse.json(
+      { error: "CONFIGURATION_REQUIRED", message: message.replace(/^CONFIGURATION_REQUIRED:\s*/, "") },
+      { status: 409 }
+    );
+  }
   return new NextResponse(
     message.replace(/^CONFIRM_SIGNED_CONTRACT_REDUCTION:\s*/, ""),
     { status: message.startsWith("CONFIRM_SIGNED_CONTRACT_REDUCTION:") ? 409 : 400 }
