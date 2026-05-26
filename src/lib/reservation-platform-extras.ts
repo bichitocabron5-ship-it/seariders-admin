@@ -194,6 +194,7 @@ export async function applyPlatformExtraEventsTx(
     channelId: reservation.channelId,
     serviceId: reservation.serviceId,
     commissionBaseCents: commercial.commissionBaseCents,
+    finalTotalCents: commercial.finalTotalCents,
     customerDiscountBaseCents: newTotal,
     quantity: reservation.quantity,
   });

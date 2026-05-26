@@ -233,6 +233,7 @@ export function resolveAppliedCommercialSnapshot(args: {
   channel?: CommissionChannelLike | null;
   serviceId: string;
   commissionBaseCents: number;
+  finalTotalCents?: number | null;
   quantity?: number | null;
   customerDiscountBaseCents: number;
   rulePct?: number | null;
@@ -266,15 +267,21 @@ export function resolveAppliedCommercialSnapshot(args: {
     };
   }
 
+  const configuredRate = pctToRate(resolved.value);
   const appliedCommissionPct = rateToPct(
-    commissionRateForSeariders(pctToRate(resolved.value), channel.kind)
+    commissionRateForSeariders(configuredRate, channel.kind)
   );
+  const finalTotalCents = Math.max(0, roundCents(args.finalTotalCents ?? args.commissionBaseCents));
+  const appliedCommissionCents =
+    channel.kind === "EXTERNAL_ACTIVITY"
+      ? Math.max(0, finalTotalCents - commissionFromBase(args.commissionBaseCents, configuredRate))
+      : commissionFromBase(args.commissionBaseCents, appliedCommissionPct / 100);
 
   return {
     appliedCommissionPct,
     appliedCommissionMode: resolved.mode,
     appliedCommissionValue: resolved.value,
-    appliedCommissionCents: commissionFromBase(args.commissionBaseCents, appliedCommissionPct / 100),
+    appliedCommissionCents,
     ...customerDiscount,
   };
 }
@@ -285,6 +292,7 @@ export async function getAppliedCommercialSnapshotTx(
     channelId?: string | null;
     serviceId?: string | null;
     commissionBaseCents: number;
+    finalTotalCents?: number | null;
     customerDiscountBaseCents: number;
     quantity?: number | null;
   }
@@ -294,6 +302,7 @@ export async function getAppliedCommercialSnapshotTx(
       channel: null,
       serviceId: args.serviceId ?? "",
       commissionBaseCents: args.commissionBaseCents,
+      finalTotalCents: args.finalTotalCents,
       customerDiscountBaseCents: args.customerDiscountBaseCents,
       quantity: args.quantity,
     });
@@ -332,6 +341,7 @@ export async function getAppliedCommercialSnapshotTx(
     channel,
     serviceId: args.serviceId,
     commissionBaseCents: args.commissionBaseCents,
+    finalTotalCents: args.finalTotalCents,
     customerDiscountBaseCents: args.customerDiscountBaseCents,
     quantity: args.quantity,
   });
@@ -347,6 +357,7 @@ export async function getAppliedCommissionPctTx(
     channelId: args.channelId,
     serviceId: args.serviceId,
     commissionBaseCents: 0,
+    finalTotalCents: 0,
     customerDiscountBaseCents: 0,
     quantity: 1,
   });
@@ -447,7 +458,7 @@ export function computeCommissionableBase(args: {
     responsibility: args.responsibility ?? "COMPANY",
     promoterDiscountShareBps: args.promoterDiscountShareBps ?? null,
   });
-  const commissionBaseCents = Math.max(0, grossBaseCents - split.promoterDiscountCents);
+  const commissionBaseCents = Math.max(0, grossBaseCents - totalDiscountCents);
 
   return {
     grossBaseCents,

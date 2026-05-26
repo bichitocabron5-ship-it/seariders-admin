@@ -243,6 +243,7 @@ export async function POST(req: Request) {
         channelId: reservationPricing.channelId,
         serviceId: reservationPricing.serviceId,
         commissionBaseCents: commercial.commissionBaseCents,
+        finalTotalCents: commercial.finalTotalCents,
         customerDiscountBaseCents: newTotal,
         quantity: totalMainQuantity,
       });

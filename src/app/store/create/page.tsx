@@ -1218,6 +1218,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         channel: selectedChannel,
         serviceId: commissionPreviewServiceId ?? "",
         commissionBaseCents: commissionBreakdown.commissionBaseCents,
+        finalTotalCents: shownFinalCentsWithManual,
         customerDiscountBaseCents: shownBaseCents,
         quantity: commissionPreviewQuantity,
       }),
@@ -1227,6 +1228,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       commissionPreviewServiceId,
       selectedChannel,
       shownBaseCents,
+      shownFinalCentsWithManual,
     ]
   );
   const storeCommissionCents = useMemo(

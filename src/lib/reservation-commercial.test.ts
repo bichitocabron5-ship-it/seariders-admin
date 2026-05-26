@@ -23,7 +23,7 @@ test("no discount keeps final total and commission base on the gross price", () 
   assert.equal(result.companyDiscountCents, 0);
 });
 
-test("manual discount with COMPANY responsibility keeps promoter commission on the gross price", async () => {
+test("manual discount with COMPANY responsibility keeps split but commissions on final price", async () => {
   const result = await computeReservationCommercialBreakdown({
     when: new Date("2026-05-12T10:00:00Z"),
     discountLines: [],
@@ -37,7 +37,7 @@ test("manual discount with COMPANY responsibility keeps promoter commission on t
   });
 
   assert.equal(result.finalTotalCents, 8_500);
-  assert.equal(result.commissionBaseCents, 10_000);
+  assert.equal(result.commissionBaseCents, 8_500);
   assert.equal(result.promoterDiscountCents, 0);
   assert.equal(result.companyDiscountCents, 1_500);
 });
@@ -61,7 +61,7 @@ test("manual discount with PROMOTER responsibility reduces promoter commission b
   assert.equal(result.companyDiscountCents, 0);
 });
 
-test("manual discount with SHARED responsibility reduces only promoter share from commission base", async () => {
+test("manual discount with SHARED responsibility keeps split but commissions on final price", async () => {
   const result = await computeReservationCommercialBreakdown({
     when: new Date("2026-05-12T10:00:00Z"),
     discountLines: [],
@@ -75,12 +75,12 @@ test("manual discount with SHARED responsibility reduces only promoter share fro
   });
 
   assert.equal(result.finalTotalCents, 8_500);
-  assert.equal(result.commissionBaseCents, 9_400);
+  assert.equal(result.commissionBaseCents, 8_500);
   assert.equal(result.promoterDiscountCents, 600);
   assert.equal(result.companyDiscountCents, 900);
 });
 
-test("regresion comercial: descuento COMPANY de 10 mantiene la comision del promotor sobre 100", async () => {
+test("regresion comercial: descuento COMPANY de 10 deja base comisionable en 90", async () => {
   const result = await computeReservationCommercialBreakdown({
     when: new Date("2026-05-12T10:00:00Z"),
     discountLines: [],
@@ -94,7 +94,7 @@ test("regresion comercial: descuento COMPANY de 10 mantiene la comision del prom
   });
 
   assert.equal(result.finalTotalCents, 9_000);
-  assert.equal(result.commissionBaseCents, 10_000);
+  assert.equal(result.commissionBaseCents, 9_000);
   assert.equal(result.promoterDiscountCents, 0);
   assert.equal(result.companyDiscountCents, 1_000);
 });
@@ -118,7 +118,7 @@ test("regresion comercial: descuento PROMOTER de 10 baja la base comisionable a 
   assert.equal(result.companyDiscountCents, 0);
 });
 
-test("regresion comercial: descuento SHARED de 10 al 50% deja base comisionable 95", async () => {
+test("regresion comercial: descuento SHARED de 10 al 50% deja base comisionable 90", async () => {
   const result = await computeReservationCommercialBreakdown({
     when: new Date("2026-05-12T10:00:00Z"),
     discountLines: [],
@@ -132,12 +132,12 @@ test("regresion comercial: descuento SHARED de 10 al 50% deja base comisionable 
   });
 
   assert.equal(result.finalTotalCents, 9_000);
-  assert.equal(result.commissionBaseCents, 9_500);
+  assert.equal(result.commissionBaseCents, 9_000);
   assert.equal(result.promoterDiscountCents, 500);
   assert.equal(result.companyDiscountCents, 500);
 });
 
-test("channel or automatic discounts keep promoter commission on gross when company assumes them", () => {
+test("channel or automatic discounts also use final price when company assumes them", () => {
   const result = finalizeReservationCommercialBreakdown({
     totalBeforeDiscountsCents: 10_000,
     customerDiscountCents: 1_500,
@@ -149,7 +149,7 @@ test("channel or automatic discounts keep promoter commission on gross when comp
 
   assert.equal(result.finalTotalCents, 8_000);
   assert.equal(result.totalDiscountCents, 2_000);
-  assert.equal(result.commissionBaseCents, 10_000);
+  assert.equal(result.commissionBaseCents, 8_000);
   assert.equal(result.promoterDiscountCents, 0);
   assert.equal(result.companyDiscountCents, 2_000);
 });

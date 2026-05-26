@@ -873,6 +873,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         channelId: effectiveChannelId,
         serviceId: mainLine.serviceId,
         commissionBaseCents: commercial.commissionBaseCents,
+        finalTotalCents: commercial.finalTotalCents,
         customerDiscountBaseCents: totalBeforeDiscounts,
         quantity: totalMainQuantity,
       });

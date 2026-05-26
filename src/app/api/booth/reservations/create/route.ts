@@ -312,6 +312,7 @@ export async function POST(req: Request) {
     channelId: parsed.data.channelId ?? null,
     serviceId: mainService.id,
     commissionBaseCents: commercial.commissionBaseCents,
+    finalTotalCents: commercial.finalTotalCents,
     customerDiscountBaseCents: grossTotalCents,
     quantity: mainItem.quantity,
   });

@@ -485,10 +485,11 @@ const commercialPreview = useMemo(
       channel: selectedChannel,
       serviceId: commissionServiceId ?? "",
       commissionBaseCents: commissionBreakdown.commissionBaseCents,
+      finalTotalCents,
       customerDiscountBaseCents: baseTotalCents,
       quantity: commissionPreviewQuantity,
     }),
-  [baseTotalCents, commissionPreviewQuantity, commissionServiceId, commissionBreakdown.commissionBaseCents, selectedChannel]
+  [baseTotalCents, commissionPreviewQuantity, commissionServiceId, commissionBreakdown.commissionBaseCents, finalTotalCents, selectedChannel]
 );
 const commissionPct = useMemo(
   () => Number(commercialPreview.appliedCommissionPct ?? 0),

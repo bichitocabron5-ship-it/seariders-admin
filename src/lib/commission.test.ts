@@ -10,14 +10,14 @@ import {
 } from "./commission";
 import { finalizeReservationCommercialBreakdown } from "./reservation-commercial-breakdown";
 
-test("computeCommissionableBase keeps gross commission base when company assumes discount", () => {
+test("computeCommissionableBase uses final charged amount when company assumes discount", () => {
   const result = computeCommissionableBase({
     grossBaseCents: 10_000,
     totalDiscountCents: 1_000,
     responsibility: "COMPANY",
   });
 
-  assert.equal(result.commissionBaseCents, 10_000);
+  assert.equal(result.commissionBaseCents, 9_000);
   assert.equal(result.promoterDiscountCents, 0);
   assert.equal(result.companyDiscountCents, 1_000);
 });
@@ -44,7 +44,7 @@ test("computeCommissionableBase supports shared discount with configurable promo
 
   assert.equal(result.promoterDiscountCents, 250);
   assert.equal(result.companyDiscountCents, 750);
-  assert.equal(result.commissionBaseCents, 9_750);
+  assert.equal(result.commissionBaseCents, 9_000);
 });
 
 test("computeCommissionableBaseFromScopedDiscount allocates only the discount portion tied to the commissionable scope", () => {
@@ -59,14 +59,14 @@ test("computeCommissionableBaseFromScopedDiscount allocates only the discount po
   assert.equal(result.commissionBaseCents, 7_200);
 });
 
-test("proportionalCommissionBaseForCollected preserves company-assumed discount uplift on partial payments", () => {
+test("proportionalCommissionBaseForCollected follows the same final-price ratio on partial payments", () => {
   const base = proportionalCommissionBaseForCollected({
     collectedNetCents: 4_500,
     reservationNetCents: 9_000,
-    reservationCommissionBaseCents: 10_000,
+    reservationCommissionBaseCents: 9_000,
   });
 
-  assert.equal(base, 5_000);
+  assert.equal(base, 4_500);
 });
 
 test("resolveDiscountPolicy falls back to channel defaults", () => {
@@ -182,7 +182,7 @@ test("fixed customer discount does not change the fixed promoter commission amou
   assert.equal(Math.max(0, commercial.finalTotalCents - snapshot.appliedCommissionCents), 6_750);
 });
 
-test("percentage commission keeps gross base when company assumes the discount", () => {
+test("percentage commission uses final price when company assumes the discount", () => {
   const commercial = finalizeReservationCommercialBreakdown({
     totalBeforeDiscountsCents: 10_000,
     customerDiscountCents: 1_000,
@@ -201,9 +201,9 @@ test("percentage commission keeps gross base when company assumes the discount",
     quantity: 1,
   });
 
-  assert.equal(commercial.commissionBaseCents, 10_000);
+  assert.equal(commercial.commissionBaseCents, 9_000);
   assert.equal(snapshot.appliedCommissionMode, "PERCENT");
-  assert.equal(snapshot.appliedCommissionCents, 1_000);
+  assert.equal(snapshot.appliedCommissionCents, 900);
 });
 
 test("percentage commission drops to final charged amount when promoter assumes the discount", () => {
@@ -252,11 +252,11 @@ test("regresion comercial: descuento compartido al 50% deja base 95 y comision 9
 
   assert.equal(commercial.finalTotalCents, 9_000);
   assert.equal(commercial.promoterDiscountCents, 500);
-  assert.equal(commercial.commissionBaseCents, 9_500);
-  assert.equal(snapshot.appliedCommissionCents, 950);
+  assert.equal(commercial.commissionBaseCents, 9_000);
+  assert.equal(snapshot.appliedCommissionCents, 900);
 });
 
-test("regresion booth: descuento manual empresa no baja la comision porcentual desde PVP 100", () => {
+test("regresion booth: descuento manual empresa calcula comision porcentual sobre el precio final", () => {
   const commercial = finalizeReservationCommercialBreakdown({
     totalBeforeDiscountsCents: 10_000,
     manualDiscountCents: 1_000,
@@ -270,16 +270,17 @@ test("regresion booth: descuento manual empresa no baja la comision porcentual d
     },
     serviceId: "svc-1",
     commissionBaseCents: commercial.commissionBaseCents,
+    finalTotalCents: commercial.finalTotalCents,
     customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
     quantity: 1,
   });
 
   assert.equal(commercial.finalTotalCents, 9_000);
-  assert.equal(commercial.commissionBaseCents, 10_000);
-  assert.equal(snapshot.appliedCommissionCents, 1_000);
+  assert.equal(commercial.commissionBaseCents, 9_000);
+  assert.equal(snapshot.appliedCommissionCents, 900);
 });
 
-test("regresion booth: descuento manual promotor baja la base y deja comision 9 sobre 100", () => {
+test("regresion booth: descuento manual promotor mantiene la misma base final cobrada al cliente", () => {
   const commercial = finalizeReservationCommercialBreakdown({
     totalBeforeDiscountsCents: 10_000,
     manualDiscountCents: 1_000,
@@ -293,6 +294,7 @@ test("regresion booth: descuento manual promotor baja la base y deja comision 9 
     },
     serviceId: "svc-1",
     commissionBaseCents: commercial.commissionBaseCents,
+    finalTotalCents: commercial.finalTotalCents,
     customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
     quantity: 1,
   });
@@ -300,4 +302,54 @@ test("regresion booth: descuento manual promotor baja la base y deja comision 9 
   assert.equal(commercial.finalTotalCents, 9_000);
   assert.equal(commercial.commissionBaseCents, 9_000);
   assert.equal(snapshot.appliedCommissionCents, 900);
+});
+
+test("external activity: descuento empresa baja la comision seariders al precio final y mantiene la parte del promotor", () => {
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    manualDiscountCents: 1_000,
+    discountResponsibility: "COMPANY",
+  });
+
+  const snapshot = resolveAppliedCommercialSnapshot({
+    channel: {
+      kind: "EXTERNAL_ACTIVITY",
+      commissionEnabled: true,
+      commissionPct: 10,
+    },
+    serviceId: "svc-ext",
+    commissionBaseCents: commercial.commissionBaseCents,
+    finalTotalCents: commercial.finalTotalCents,
+    customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
+    quantity: 1,
+  });
+
+  assert.equal(commercial.finalTotalCents, 9_000);
+  assert.equal(commercial.commissionBaseCents, 9_000);
+  assert.equal(snapshot.appliedCommissionCents, 8_100);
+});
+
+test("external activity: descuento promotor baja la parte neta de seariders cuando cae la base del promotor", () => {
+  const commercial = finalizeReservationCommercialBreakdown({
+    totalBeforeDiscountsCents: 10_000,
+    manualDiscountCents: 1_000,
+    discountResponsibility: "PROMOTER",
+  });
+
+  const snapshot = resolveAppliedCommercialSnapshot({
+    channel: {
+      kind: "EXTERNAL_ACTIVITY",
+      commissionEnabled: true,
+      commissionPct: 10,
+    },
+    serviceId: "svc-ext",
+    commissionBaseCents: commercial.commissionBaseCents,
+    finalTotalCents: commercial.finalTotalCents,
+    customerDiscountBaseCents: commercial.totalBeforeDiscountsCents,
+    quantity: 1,
+  });
+
+  assert.equal(commercial.finalTotalCents, 9_000);
+  assert.equal(commercial.commissionBaseCents, 9_000);
+  assert.equal(snapshot.appliedCommissionCents, 8_100);
 });

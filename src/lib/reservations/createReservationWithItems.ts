@@ -378,6 +378,7 @@ export async function createReservationWithItems(params: {
         channelId: ch.id,
         serviceId: main.serviceId,
         commissionBaseCents: commercial.commissionBaseCents,
+        finalTotalCents: commercial.finalTotalCents,
         customerDiscountBaseCents: totalBeforeDiscounts,
         quantity: reservationQuantity,
       });

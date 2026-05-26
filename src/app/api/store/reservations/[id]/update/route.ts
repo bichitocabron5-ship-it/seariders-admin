@@ -785,6 +785,7 @@ if (hasProItems) {
       channelId: b.channelId ?? null,
       serviceId: main.serviceId,
       commissionBaseCents: commercial.commissionBaseCents,
+      finalTotalCents: commercial.finalTotalCents,
       customerDiscountBaseCents: totalBeforeDiscounts,
       quantity: totalMainQuantity,
     });
@@ -1174,6 +1175,7 @@ if (hasProItems) {
       channelId: b.channelId ?? existing.channelId ?? null,
       serviceId: svc.id,
       commissionBaseCents: commercial.commissionBaseCents,
+      finalTotalCents: commercial.finalTotalCents,
       customerDiscountBaseCents: totalBeforeDiscounts,
       quantity: Number(b.quantity),
     });

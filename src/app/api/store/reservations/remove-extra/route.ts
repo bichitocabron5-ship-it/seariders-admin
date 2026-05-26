@@ -167,6 +167,7 @@ export async function POST(req: Request) {
         channelId: r.channelId,
         serviceId: mainServiceId,
         commissionBaseCents: commercial.commissionBaseCents,
+        finalTotalCents: commercial.finalTotalCents,
         customerDiscountBaseCents: newTotal,
         quantity: r.quantity,
       });
