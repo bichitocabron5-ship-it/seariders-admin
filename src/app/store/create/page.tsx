@@ -7,16 +7,19 @@ import { BUSINESS_TZ, shouldAutoFormalize } from "@/lib/tz-business";
 import { computeRequiredContractUnits, needsContractForCategory } from "@/lib/reservation-rules";
 import { getReservationWorkflowState, type ReservationWorkflowResult } from "@/lib/reservation-workflow";
 import { opsStyles } from "@/components/ops-ui";
-import {
-  normalizeCommercialSummary,
-  type CommercialSummarySnapshot,
-} from "@/app/store/shared/commercial-summary";
+import { type CommercialSummarySnapshot } from "@/app/store/shared/commercial-summary";
 import {
   resolveAppliedCommercialSnapshot,
   resolveDiscountPolicy,
 } from "@/lib/commission";
 import { buildServiceAllowedChannelIndex, filterChannelsForServices } from "@/lib/service-channel-availability";
 import { finalizeReservationCommercialBreakdown } from "@/lib/reservation-commercial-breakdown";
+import {
+  getDisplayChannels,
+  reconcileChannelSelectionOnServiceChange,
+  resolveCompatibleChannelFallback,
+} from "./store-create-channel";
+import { buildStoreCreateCommercialSummary } from "./store-create-commercial";
 import { AvailabilitySection, FutureReservationPaymentsSection, PricingSection, SubmitSection } from "./components/form-sections";
 import { ReservationBasicsSection } from "./components/reservation-basics-section";
 import { CartSection, ContractsSection } from "./components/store-sections";
@@ -582,12 +585,15 @@ function StoreCreatePageInner() {
       }),
     [channelCompatibleServiceIds, channelRulesIndex, channelsWithFallback]
   );
-  const displayChannels = useMemo(() => {
-    if (!channelId) return compatibleChannels;
-    const selected = channelsWithFallback.find((channel) => channel.id === channelId);
-    if (!selected || compatibleChannels.some((channel) => channel.id === selected.id)) return compatibleChannels;
-    return [selected, ...compatibleChannels];
-  }, [channelId, channelsWithFallback, compatibleChannels]);
+  const displayChannels = useMemo(
+    () =>
+      getDisplayChannels({
+        channelId,
+        channelsWithFallback,
+        compatibleChannels,
+      }),
+    [channelId, channelsWithFallback, compatibleChannels]
+  );
   const previousServiceIdRef = useRef<string>("");
 
   useEffect(() => {
@@ -602,9 +608,18 @@ function StoreCreatePageInner() {
     }
     if (previousServiceId === serviceId) return;
 
-    if (channelId && !compatibleChannels.some((channel) => channel.id === channelId)) {
-      setChannelId("");
-      setChannelCompatibilityNotice("El canal seleccionado no está disponible para este servicio.");
+    const resolved = reconcileChannelSelectionOnServiceChange({
+      previousServiceId,
+      serviceId,
+      channelId,
+      compatibleChannels,
+    });
+
+    if (resolved.nextChannelId !== channelId) {
+      setChannelId(resolved.nextChannelId);
+    }
+    if (resolved.notice) {
+      setChannelCompatibilityNotice(resolved.notice);
     }
 
     previousServiceIdRef.current = serviceId;
@@ -618,11 +633,14 @@ function StoreCreatePageInner() {
   }, [channelId, compatibleChannels]);
 
   useEffect(() => {
-    if (channelId) return;
-    if (channelCompatibilityNotice) return;
-    if (!compatibleChannels.length) return;
+    const nextChannelId = resolveCompatibleChannelFallback({
+      channelId,
+      channelCompatibilityNotice,
+      compatibleChannels,
+    });
+    if (!nextChannelId || nextChannelId === channelId) return;
 
-    setChannelId(compatibleChannels[0].id);
+    setChannelId(nextChannelId);
   }, [channelCompatibilityNotice, channelId, compatibleChannels]);
 
   useEffect(() => {
@@ -1237,46 +1255,21 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   );
   const commercialSummary = useMemo<CommercialSummarySnapshot>(
     () =>
-      normalizeCommercialSummary(
-        hasPersistedCommercialSnapshot
-          ? {
-              pvpOriginalCents: prefillPricing?.basePriceCents ?? 0,
-              customerDiscountCents: prefillPricing?.customerDiscountCents ?? 0,
-              autoDiscountCents: prefillPricing?.autoDiscountCents ?? 0,
-              manualDiscountCents: prefillPricing?.manualDiscountCents ?? 0,
-              promoterDiscountCents: prefillPricing?.promoterDiscountCents ?? 0,
-              companyDiscountCents: prefillPricing?.companyDiscountCents ?? 0,
-              finalTotalCents: prefillPricing?.totalPriceCents ?? 0,
-              commissionBaseCents: prefillPricing?.commissionBaseCents ?? 0,
-              appliedCommissionCents: prefillPricing?.appliedCommissionCents ?? 0,
-              appliedCommissionMode: prefillPricing?.appliedCommissionMode ?? null,
-              appliedCommissionValue: prefillPricing?.appliedCommissionValue ?? 0,
-              appliedCommissionPct: prefillPricing?.appliedCommissionPct ?? null,
-              pendingToChargeCents: paymentSummary.pendingServiceCents || Number(prefillPricing?.totalPriceCents ?? 0),
-            }
-          : {
-              pvpOriginalCents: shownBaseCents,
-              customerDiscountCents: Number(commercialPreview.customerDiscountCents ?? 0),
-              autoDiscountCents: shownDiscountCents,
-              manualDiscountCents,
-              promoterDiscountCents: commissionBreakdown.promoterDiscountCents,
-              companyDiscountCents: commissionBreakdown.companyDiscountCents,
-              finalTotalCents: shownFinalCentsWithManual,
-              commissionBaseCents: commissionBreakdown.commissionBaseCents,
-              appliedCommissionCents: storeCommissionCents,
-              appliedCommissionMode: commercialPreview.appliedCommissionMode,
-              appliedCommissionValue: Number(commercialPreview.appliedCommissionValue ?? 0),
-              appliedCommissionPct: null,
-              pendingToChargeCents: paymentSummary.pendingServiceCents || shownFinalCentsWithManual,
-            }
-      ),
+      buildStoreCreateCommercialSummary({
+        hasPersistedCommercialSnapshot,
+        prefillPricing,
+        paymentPendingServiceCents: paymentSummary.pendingServiceCents,
+        shownBaseCents,
+        shownDiscountCents,
+        manualDiscountCents,
+        shownFinalCentsWithManual,
+        storeCommissionCents,
+        commercialPreview,
+        commissionBreakdown,
+      }),
     [
-      commissionBreakdown.commissionBaseCents,
-      commissionBreakdown.companyDiscountCents,
-      commissionBreakdown.promoterDiscountCents,
-      commercialPreview.appliedCommissionMode,
-      commercialPreview.appliedCommissionValue,
-      commercialPreview.customerDiscountCents,
+      commissionBreakdown,
+      commercialPreview,
       hasPersistedCommercialSnapshot,
       manualDiscountCents,
       paymentSummary.pendingServiceCents,
