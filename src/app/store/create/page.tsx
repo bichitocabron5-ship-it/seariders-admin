@@ -2222,6 +2222,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               promoterEffectivePct={storePromoterEffectivePct}
               pricingMeta={pricingMeta}
               channelPricingSummary={discountPreview?.channelPricingSummary ?? null}
+              commercialSummary={commercialSummary}
               availablePromos={canEditReservationForm && canEditPricing ? (discountPreview?.availablePromos ?? []) : []}
               applyPromo={applyPromo}
               selectedPromoCode={selectedPromoCode}

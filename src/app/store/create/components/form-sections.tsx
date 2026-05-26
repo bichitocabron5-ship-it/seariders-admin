@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { StoreCommercialSummaryBlock } from "@/app/store/components/StoreCommercialSummaryBlock";
+import type { CommercialSummarySnapshot } from "@/app/store/shared/commercial-summary";
 import type { AvailabilityData } from "../types";
 
 function euros(cents: number) {
@@ -179,6 +181,7 @@ export function PricingSection({
   promoterEffectivePct,
   pricingMeta,
   channelPricingSummary,
+  commercialSummary,
   availablePromos,
   applyPromo,
   selectedPromoCode,
@@ -228,6 +231,7 @@ export function PricingSection({
     referencePriceCents: number;
     optionLabel: string;
   } | null;
+  commercialSummary?: CommercialSummarySnapshot | null;
   availablePromos: Array<{ code: string | null; name: string; discountCents: number }>;
   applyPromo: boolean;
   selectedPromoCode: string;
@@ -354,8 +358,13 @@ export function PricingSection({
             </div>
           </>
         ) : (
-          <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", fontSize: 13, color: "#334155" }}>
-            Los ajustes de precio no se editan en esta pantalla. Si la reserva viene de Booth, se conserva el descuento ya aplicado.
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", fontSize: 13, color: "#334155" }}>
+              Los ajustes de precio no se editan en esta pantalla. Se muestra el snapshot comercial ya guardado en la reserva.
+            </div>
+            {commercialSummary ? (
+              <StoreCommercialSummaryBlock summary={commercialSummary} pendingLabel="Pendiente de servicio" />
+            ) : null}
           </div>
         )}
       </div>
