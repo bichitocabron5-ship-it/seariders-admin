@@ -42,12 +42,13 @@ model User {
   passConsumes         PassConsume[] @relation("PassConsumedBy")
   monitorRunsCreated   MonitorRun[]  @relation("MonitorRunCreatedBy")
 
-  maintenanceEventsCreated   MaintenanceEvent[]    @relation("MaintenanceEventCreatedBy")
-  sparePartMovementsCreated  SparePartMovement[]   @relation("SparePartMovementCreatedBy")
-  maintenanceEventLogs       MaintenanceEventLog[] @relation("MaintenanceEventLogCreatedBy")
+  maintenanceEventsCreated   MaintenanceEvent[]       @relation("MaintenanceEventCreatedBy")
+  sparePartMovementsCreated  SparePartMovement[]      @relation("SparePartMovementCreatedBy")
+  maintenanceEventLogs       MaintenanceEventLog[]    @relation("MaintenanceEventLogCreatedBy")
   operationalOverrideLogs    OperationalOverrideLog[] @relation("OperationalOverrideLogCreatedBy")
-  incidentsCreated           Incident[]            @relation("IncidentCreatedBy")
-  openedRentalAssetIncidents RentalAssetIncident[] @relation("RentalAssetIncidentOpenedByUser")
+  operationalLogs            OperationalLog[]         @relation("OperationalLogUser")
+  incidentsCreated           Incident[]               @relation("IncidentCreatedBy")
+  openedRentalAssetIncidents RentalAssetIncident[]    @relation("RentalAssetIncidentOpenedByUser")
 
   workLogsApproved      WorkLog[]      @relation("WorkLogApprovedBy")
   workLogsCreated       WorkLog[]      @relation("WorkLogCreatedBy")
@@ -101,10 +102,10 @@ model Employee {
   userId String? @unique
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  workLogs       WorkLog[]
-  rates          EmployeeRate[]
-  payrollEntries PayrollEntry[]
-  expenses       Expense[]
+  workLogs                  WorkLog[]
+  rates                     EmployeeRate[]
+  payrollEntries            PayrollEntry[]
+  expenses                  Expense[]
   internalUsageReservations Reservation[]
   barStaffSales             BarSale[]
 
@@ -200,28 +201,28 @@ model ChannelCommissionRule {
 }
 
 model Service {
-  id               String                  @id @default(cuid())
-  code             String                  @unique // ✅ estable (ej: JETSKI_TURISTA, BANANA, GOPRO)
-  name             String
-  category         String
-  isExternalActivity Boolean               @default(false)
-  requiresPlatform Boolean                 @default(false)
-  requiresJetski   Boolean                 @default(false)
-  requiresMonitor  Boolean                 @default(false)
-  isLicense        Boolean                 @default(false)
-  isActive         Boolean                 @default(true)
-  visibleInBooth   Boolean                 @default(false)
-  options          ServiceOption[]
-  servicePrices    ServicePrice[]
-  discountRules    DiscountRule[]
-  reservations     Reservation[]
-  reservationItems ReservationItem[]
-  commissionRules  ChannelCommissionRule[]
-  allowedChannels  ServiceAllowedChannel[]
-  payments         Payment[]
-  packItems        PackItem[]
-  giftProducts     GiftProduct[]           @relation("GiftProductService")
-  passProducts     PassProduct[]           @relation("PassProductService")
+  id                 String                  @id @default(cuid())
+  code               String                  @unique // ✅ estable (ej: JETSKI_TURISTA, BANANA, GOPRO)
+  name               String
+  category           String
+  isExternalActivity Boolean                 @default(false)
+  requiresPlatform   Boolean                 @default(false)
+  requiresJetski     Boolean                 @default(false)
+  requiresMonitor    Boolean                 @default(false)
+  isLicense          Boolean                 @default(false)
+  isActive           Boolean                 @default(true)
+  visibleInBooth     Boolean                 @default(false)
+  options            ServiceOption[]
+  servicePrices      ServicePrice[]
+  discountRules      DiscountRule[]
+  reservations       Reservation[]
+  reservationItems   ReservationItem[]
+  commissionRules    ChannelCommissionRule[]
+  allowedChannels    ServiceAllowedChannel[]
+  payments           Payment[]
+  packItems          PackItem[]
+  giftProducts       GiftProduct[]           @relation("GiftProductService")
+  passProducts       PassProduct[]           @relation("PassProductService")
 
   // ✅ opposite del service principal del pack
   packAsMain Pack? @relation("PackMainService")
@@ -244,25 +245,25 @@ model ServiceAllowedChannel {
 }
 
 model ServiceOption {
-  id                String            @id @default(cuid())
+  id                String               @id @default(cuid())
   serviceId         String
-  code              String            @unique // ✅ estable (ej: JETSKI_TURISTA_20_2, JETSKI_60_2, JETSKI_30_2)
+  code              String               @unique // ✅ estable (ej: JETSKI_TURISTA_20_2, JETSKI_60_2, JETSKI_30_2)
   durationMinutes   Int
   paxMax            Int
   contractedMinutes Int
   basePriceCents    Int
-  isActive          Boolean           @default(true)
-  visibleInStore    Boolean           @default(true)
-  visibleInBooth    Boolean           @default(true)
-  service           Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  isActive          Boolean              @default(true)
+  visibleInStore    Boolean              @default(true)
+  visibleInBooth    Boolean              @default(true)
+  service           Service              @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   reservations      Reservation[]
   reservationItems  ReservationItem[]
   discountRules     DiscountRule[]
   packItems         PackItem[]
-  giftProducts      GiftProduct[]     @relation("GiftProductOption")
-  packOptionOf      Pack?             @relation("PackOption")
+  giftProducts      GiftProduct[]        @relation("GiftProductOption")
+  packOptionOf      Pack?                @relation("PackOption")
   servicePrices     ServicePrice[]
-  passProducts      PassProduct[]     @relation("PassProductOption")
+  passProducts      PassProduct[]        @relation("PassProductOption")
   channelPrices     ChannelOptionPrice[]
 
   @@unique([serviceId, durationMinutes, paxMax]) // opcional pero MUY útil
@@ -335,98 +336,98 @@ model PackItem {
 }
 
 model Reservation {
-  id                   String                @id @default(cuid())
-  source               ReservationSource
-  status               ReservationStatus     @default(WAITING)
-  activityDate         DateTime
-  scheduledTime        DateTime?
-  channelId            String?
-  marketing            String?
-  serviceId            String
-  optionId             String
-  quantity             Int                   @default(1)
-  pax                  Int                   @default(1)
-  companionsCount      Int                   @default(0)
-  basePriceCents       Int
-  commissionBaseCents  Int                   @default(0)
-  appliedCommissionPct Float?
-  appliedCommissionMode CommercialValueMode  @default(PERCENT)
-  appliedCommissionValue Float               @default(0)
-  appliedCommissionCents Int                 @default(0)
-  customerDiscountMode CommercialValueMode   @default(PERCENT)
-  customerDiscountValue Float                @default(0)
-  customerDiscountCents Int                  @default(0)
-  manualDiscountCents  Int                   @default(0)
-  autoDiscountCents    Int                   @default(0) // ✅ NUEVO (promo automática o por código)
-  discountResponsibility DiscountResponsibility @default(COMPANY)
-  promoterDiscountShareBps Int               @default(0)
-  promoterDiscountCents Int                  @default(0)
-  companyDiscountCents  Int                  @default(0)
-  manualDiscountReason String?               @db.VarChar(200)
-  promoCode            String? // ✅ NUEVO (si quieres guardar el código aplicado)
-  totalPriceCents      Int
-  customerName         String
-  customerCountry      String
-  customerAddress      String?
-  customerPostalCode   String?               @db.VarChar(20)
-  customerBirthDate    DateTime?
-  customerDocType      String?
-  customerDocNumber    String?
-  customerPhone        String?
-  customerEmail        String?
-  isLicense            Boolean               @default(false)
-  jetskiLicenseMode    JetskiLicenseMode     @default(NONE)
-  pricingTier          PricingTier           @default(STANDARD)
-  licenseSchool        String?
-  licenseType          String?
-  licenseNumber        String?
-  arrivedStoreAt       DateTime?
-  storeQueueStartedAt  DateTime?
-  formalizedAt         DateTime?
-  formalizedByUserId   String?
-  paymentCompletedAt   DateTime?
-  readyForPlatformAt   DateTime?
-  departureAt          DateTime?
-  arrivalAt            DateTime?
-  isManualEntry        Boolean               @default(false)
-  isInternalUsage      Boolean               @default(false)
-  manualEntryNote      String?               @db.VarChar(500)
-  employeeId           String?
-  employee             Employee?             @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  manualEntryCreatedByUserId String?
-  manualEntryCreatedAt DateTime?
-  financialAdjustmentNote String?            @db.VarChar(500)
-  financialAdjustedByUserId String?
-  financialAdjustedAt  DateTime?
-  manualContractFileKey String?
-  manualContractFileName String?
-  manualContractFileUrl String?
-  manualContractUploadedAt DateTime?
+  id                             String                 @id @default(cuid())
+  source                         ReservationSource
+  status                         ReservationStatus      @default(WAITING)
+  activityDate                   DateTime
+  scheduledTime                  DateTime?
+  channelId                      String?
+  marketing                      String?
+  serviceId                      String
+  optionId                       String
+  quantity                       Int                    @default(1)
+  pax                            Int                    @default(1)
+  companionsCount                Int                    @default(0)
+  basePriceCents                 Int
+  commissionBaseCents            Int                    @default(0)
+  appliedCommissionPct           Float?
+  appliedCommissionMode          CommercialValueMode    @default(PERCENT)
+  appliedCommissionValue         Float                  @default(0)
+  appliedCommissionCents         Int                    @default(0)
+  customerDiscountMode           CommercialValueMode    @default(PERCENT)
+  customerDiscountValue          Float                  @default(0)
+  customerDiscountCents          Int                    @default(0)
+  manualDiscountCents            Int                    @default(0)
+  autoDiscountCents              Int                    @default(0) // ✅ NUEVO (promo automática o por código)
+  discountResponsibility         DiscountResponsibility @default(COMPANY)
+  promoterDiscountShareBps       Int                    @default(0)
+  promoterDiscountCents          Int                    @default(0)
+  companyDiscountCents           Int                    @default(0)
+  manualDiscountReason           String?                @db.VarChar(200)
+  promoCode                      String? // ✅ NUEVO (si quieres guardar el código aplicado)
+  totalPriceCents                Int
+  customerName                   String
+  customerCountry                String
+  customerAddress                String?
+  customerPostalCode             String?                @db.VarChar(20)
+  customerBirthDate              DateTime?
+  customerDocType                String?
+  customerDocNumber              String?
+  customerPhone                  String?
+  customerEmail                  String?
+  isLicense                      Boolean                @default(false)
+  jetskiLicenseMode              JetskiLicenseMode      @default(NONE)
+  pricingTier                    PricingTier            @default(STANDARD)
+  licenseSchool                  String?
+  licenseType                    String?
+  licenseNumber                  String?
+  arrivedStoreAt                 DateTime?
+  storeQueueStartedAt            DateTime?
+  formalizedAt                   DateTime?
+  formalizedByUserId             String?
+  paymentCompletedAt             DateTime?
+  readyForPlatformAt             DateTime?
+  departureAt                    DateTime?
+  arrivalAt                      DateTime?
+  isManualEntry                  Boolean                @default(false)
+  isInternalUsage                Boolean                @default(false)
+  manualEntryNote                String?                @db.VarChar(500)
+  employeeId                     String?
+  employee                       Employee?              @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  manualEntryCreatedByUserId     String?
+  manualEntryCreatedAt           DateTime?
+  financialAdjustmentNote        String?                @db.VarChar(500)
+  financialAdjustedByUserId      String?
+  financialAdjustedAt            DateTime?
+  manualContractFileKey          String?
+  manualContractFileName         String?
+  manualContractFileUrl          String?
+  manualContractUploadedAt       DateTime?
   manualContractUploadedByUserId String?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  contracts            ReservationContract[]
-  depositCents         Int                   @default(0)
-  depositHeld          Boolean               @default(false)
-  depositHeldAt        DateTime?
-  depositHeldByUserId  String?
-  depositHoldReason    String?
-  taxiboatTripId       String?
-  taxiboatAssignedAt   DateTime?
-  taxiboatTrip         TaxiboatTrip?         @relation(fields: [taxiboatTripId], references: [id])
-  payments             Payment[]
-  items                ReservationItem[]     @relation("ReservationItems")
-  channel              Channel?              @relation(fields: [channelId], references: [id])
-  option               ServiceOption         @relation(fields: [optionId], references: [id])
-  service              Service               @relation(fields: [serviceId], references: [id])
-  assignedJetskis      ReservationJetski[]
-  boothCode            String?               @unique
-  boothCreatedAt       DateTime?
-  boothCreatedByUserId String?
-  boothNote            String?               @db.VarChar(500)
-  redeemedGiftVoucher  GiftVoucher?          @relation("GiftRedeemedReservation")
-  giftVoucherId        String?               @unique
-  giftVoucher          GiftVoucher?          @relation("GiftVoucherReedem", fields: [giftVoucherId], references: [id])
+  createdAt                      DateTime               @default(now())
+  updatedAt                      DateTime               @updatedAt
+  contracts                      ReservationContract[]
+  depositCents                   Int                    @default(0)
+  depositHeld                    Boolean                @default(false)
+  depositHeldAt                  DateTime?
+  depositHeldByUserId            String?
+  depositHoldReason              String?
+  taxiboatTripId                 String?
+  taxiboatAssignedAt             DateTime?
+  taxiboatTrip                   TaxiboatTrip?          @relation(fields: [taxiboatTripId], references: [id])
+  payments                       Payment[]
+  items                          ReservationItem[]      @relation("ReservationItems")
+  channel                        Channel?               @relation(fields: [channelId], references: [id])
+  option                         ServiceOption          @relation(fields: [optionId], references: [id])
+  service                        Service                @relation(fields: [serviceId], references: [id])
+  assignedJetskis                ReservationJetski[]
+  boothCode                      String?                @unique
+  boothCreatedAt                 DateTime?
+  boothCreatedByUserId           String?
+  boothNote                      String?                @db.VarChar(500)
+  redeemedGiftVoucher            GiftVoucher?           @relation("GiftRedeemedReservation")
+  giftVoucherId                  String?                @unique
+  giftVoucher                    GiftVoucher?           @relation("GiftVoucherReedem", fields: [giftVoucherId], references: [id])
 
   passVoucherId String?
   passVoucher   PassVoucher? @relation(fields: [passVoucherId], references: [id])
@@ -502,16 +503,16 @@ model ReservationUnit {
   reservationId String
   reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
 
-  unitIndex Int // 1..N
-  status    ReservationUnitStatus @default(READY_FOR_PLATFORM)
+  unitIndex               Int // 1..N
+  status                  ReservationUnitStatus @default(READY_FOR_PLATFORM)
   reservationItemId       String?
   serviceId               String?
   optionId                String?
   serviceCategory         String?
-  serviceName             String?   @db.VarChar(120)
+  serviceName             String?               @db.VarChar(120)
   durationMinutesSnapshot Int?
-  quantitySnapshot        Int       @default(1)
-  paxSnapshot             Int       @default(1)
+  quantitySnapshot        Int                   @default(1)
+  paxSnapshot             Int                   @default(1)
 
   // Asignación física (puede ser null hasta asignar)
   jetskiId String?
@@ -550,8 +551,8 @@ model ReservationContract {
 
   unitIndex        Int // identificador físico/versionado
   logicalUnitIndex Int? // slot lógico 1..N que representa la unidad contractual
-  status    ContractStatus @default(DRAFT)
-  supersededAt DateTime?
+  status           ContractStatus @default(DRAFT)
+  supersededAt     DateTime?
 
   // Datos conductor/contrato (pueden ser distintos por unidad)
   driverName       String? @db.VarChar(120)
@@ -611,7 +612,7 @@ model ReservationContract {
   preparedJetski   Jetski? @relation("ReservationContractPreparedJetski", fields: [preparedJetskiId], references: [id], onDelete: SetNull)
 
   preparedAssetId String?
-  preparedAsset   Asset?  @relation("ReservationContractPreparedAsset", fields: [preparedAssetId], references: [id], onDelete: SetNull)
+  preparedAsset   Asset?                 @relation("ReservationContractPreparedAsset", fields: [preparedAssetId], references: [id], onDelete: SetNull)
   notifications   ContractNotification[]
 
   @@unique([reservationId, unitIndex])
@@ -921,12 +922,12 @@ model PassVoucher {
   soldByUserId      String?
   soldByUser        User?   @relation("PassSoldBy", fields: [soldByUserId], references: [id])
 
-  soldPaymentId String?  @unique
-  soldPayment   Payment? @relation("PassSoldPayment", fields: [soldPaymentId], references: [id])
+  soldPaymentId String?   @unique
+  soldPayment   Payment?  @relation("PassSoldPayment", fields: [soldPaymentId], references: [id])
   salePayments  Payment[] @relation("PassVoucherPayments")
 
-  expiresAt DateTime?
-  salePriceCents Int @default(0)
+  expiresAt      DateTime?
+  salePriceCents Int       @default(0)
 
   minutesTotal     Int
   minutesRemaining Int
@@ -935,8 +936,8 @@ model PassVoucher {
   voidedAt   DateTime?
   voidReason String?
 
-  consumes     PassConsume[]
-  reservations Reservation[] // backrelation desde Reservation.passVoucherId
+  consumes      PassConsume[]
+  reservations  Reservation[] // backrelation desde Reservation.passVoucherId
   notifications PassNotification[]
 
   @@index([origin, soldAt])
@@ -963,8 +964,8 @@ model PassConsume {
   pax       Int     @default(1)
 
   // ✅ cada consumo crea 1 reserva (draft) → 1:1
-  reservationId String?      @unique
-  reservation   Reservation? @relation(fields: [reservationId], references: [id])
+  reservationId String?            @unique
+  reservation   Reservation?       @relation(fields: [reservationId], references: [id])
   notifications PassNotification[]
 
   @@index([voucherId, consumedAt])
@@ -1021,54 +1022,54 @@ model TaxiboatTrip {
 }
 
 model TaxiboatOperation {
-  id                String                  @id @default(cuid())
-  boat              TaxiboatBoat            @unique
-  status            TaxiboatOperationStatus @default(AT_BOOTH)
-  departedBoothAt   DateTime?
-  arrivedPlatformAt DateTime?
+  id                 String                  @id @default(cuid())
+  boat               TaxiboatBoat            @unique
+  status             TaxiboatOperationStatus @default(AT_BOOTH)
+  departedBoothAt    DateTime?
+  arrivedPlatformAt  DateTime?
   departedPlatformAt DateTime?
-  arrivedBoothAt    DateTime?
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
+  arrivedBoothAt     DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 }
 
 model Payment {
-  id              String           @id @default(cuid())
-  reservationId   String?
-  passVoucherSaleId String?
-  serviceId       String?
-  channelId       String?
-  origin          PaymentOrigin
-  method          PaymentMethod
-  amountCents     Int
-  commissionBaseCents Int          @default(0)
-  appliedCommissionPct Float?
-  appliedCommissionMode CommercialValueMode @default(PERCENT)
-  appliedCommissionValue Float              @default(0)
-  appliedCommissionCents Int                @default(0)
-  customerDiscountMode CommercialValueMode  @default(PERCENT)
-  customerDiscountValue Float               @default(0)
-  customerDiscountCents Int                 @default(0)
-  externalDiscountCents Int        @default(0)
-  discountResponsibility DiscountResponsibility @default(COMPANY)
-  promoterDiscountShareBps Int     @default(0)
-  promoterDiscountCents Int        @default(0)
-  companyDiscountCents Int         @default(0)
-  isExternalCommissionOnly Boolean @default(false)
+  id                       String                 @id @default(cuid())
+  reservationId            String?
+  passVoucherSaleId        String?
+  serviceId                String?
+  channelId                String?
+  origin                   PaymentOrigin
+  method                   PaymentMethod
+  amountCents              Int
+  commissionBaseCents      Int                    @default(0)
+  appliedCommissionPct     Float?
+  appliedCommissionMode    CommercialValueMode    @default(PERCENT)
+  appliedCommissionValue   Float                  @default(0)
+  appliedCommissionCents   Int                    @default(0)
+  customerDiscountMode     CommercialValueMode    @default(PERCENT)
+  customerDiscountValue    Float                  @default(0)
+  customerDiscountCents    Int                    @default(0)
+  externalDiscountCents    Int                    @default(0)
+  discountResponsibility   DiscountResponsibility @default(COMPANY)
+  promoterDiscountShareBps Int                    @default(0)
+  promoterDiscountCents    Int                    @default(0)
+  companyDiscountCents     Int                    @default(0)
+  isExternalCommissionOnly Boolean                @default(false)
   externalGrossAmountCents Int?
-  reversalOfPaymentId String?
-  isDeposit       Boolean          @default(false)
-  customerName    String?
-  description     String?
-  notes           String?          @db.VarChar(800)
-  createdAt       DateTime         @default(now())
-  createdByUserId String?
-  direction       PaymentDirection @default(IN)
-  reservation     Reservation?     @relation(fields: [reservationId], references: [id])
-  service         Service?         @relation(fields: [serviceId], references: [id])
-  channel         Channel?         @relation(fields: [channelId], references: [id])
-  reversalOf      Payment?         @relation("PaymentReversal", fields: [reversalOfPaymentId], references: [id])
-  reversals       Payment[]        @relation("PaymentReversal")
+  reversalOfPaymentId      String?
+  isDeposit                Boolean                @default(false)
+  customerName             String?
+  description              String?
+  notes                    String?                @db.VarChar(800)
+  createdAt                DateTime               @default(now())
+  createdByUserId          String?
+  direction                PaymentDirection       @default(IN)
+  reservation              Reservation?           @relation(fields: [reservationId], references: [id])
+  service                  Service?               @relation(fields: [serviceId], references: [id])
+  channel                  Channel?               @relation(fields: [channelId], references: [id])
+  reversalOf               Payment?               @relation("PaymentReversal", fields: [reversalOfPaymentId], references: [id])
+  reversals                Payment[]              @relation("PaymentReversal")
 
   // ✅ NUEVO: el pago pertenece a una sesión/turno
   shiftSessionId  String?
@@ -1240,10 +1241,10 @@ model ExtraTimeEvent {
 }
 
 model Asset {
-  id     String      @id @default(cuid())
-  type   AssetType
-  status AssetStatus @default(OPERATIONAL)
-  platformUsage AssetPlatformUsage @default(CUSTOMER_ASSIGNABLE)
+  id                 String                  @id @default(cuid())
+  type               AssetType
+  status             AssetStatus             @default(OPERATIONAL)
+  platformUsage      AssetPlatformUsage      @default(CUSTOMER_ASSIGNABLE)
   maintenanceProfile AssetMaintenanceProfile @default(OPERATIONAL)
   meterType          AssetMeterType          @default(HOURS)
 
@@ -1346,20 +1347,43 @@ model MaintenanceEventLog {
 }
 
 model OperationalOverrideLog {
-  id            String                    @id @default(cuid())
-  targetType    OperationalOverrideTarget
-  action        OperationalOverrideAction
-  targetId      String
-  reason        String                    @db.VarChar(300)
-  payloadJson   Json?
+  id              String                    @id @default(cuid())
+  targetType      OperationalOverrideTarget
+  action          OperationalOverrideAction
+  targetId        String
+  reason          String                    @db.VarChar(300)
+  payloadJson     Json?
   createdByUserId String?
-  createdAt     DateTime                  @default(now())
+  createdAt       DateTime                  @default(now())
 
   createdByUser User? @relation("OperationalOverrideLogCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([targetType, targetId, createdAt])
   @@index([action, createdAt])
   @@index([createdByUserId, createdAt])
+}
+
+model OperationalLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId     String?
+  actorName  String?
+  action     String
+  entityType String
+  entityId   String
+  source     String? @db.VarChar(30)
+  metadata   Json
+  ip         String? @db.VarChar(120)
+  userAgent  String? @db.VarChar(500)
+
+  user User? @relation("OperationalLogUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([source, createdAt])
 }
 
 model Incident {
@@ -1912,23 +1936,23 @@ model BarSale {
   shiftSessionId String?
   shiftSession   ShiftSession? @relation(fields: [shiftSessionId], references: [id], onDelete: SetNull)
 
-  soldAt       DateTime @default(now())
-  soldByUserId String?
-  soldByUser   User?    @relation("BarSaleSoldByUser", fields: [soldByUserId], references: [id], onDelete: SetNull)
-  employeeId   String?
-  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  soldAt                DateTime  @default(now())
+  soldByUserId          String?
+  soldByUser            User?     @relation("BarSaleSoldByUser", fields: [soldByUserId], references: [id], onDelete: SetNull)
+  employeeId            String?
+  employee              Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   staffEmployeeNameSnap String?
 
   staffMode Boolean @default(false)
   note      String?
 
-  totalBaseRevenueCents Int @default(0)
-  autoDiscountCents     Int @default(0)
-  manualDiscountCents   Int @default(0)
+  totalBaseRevenueCents Int     @default(0)
+  autoDiscountCents     Int     @default(0)
+  manualDiscountCents   Int     @default(0)
   manualDiscountReason  String? @db.VarChar(200)
-  totalRevenueCents Int @default(0)
-  totalCostCents    Int @default(0)
-  totalMarginCents  Int @default(0)
+  totalRevenueCents     Int     @default(0)
+  totalCostCents        Int     @default(0)
+  totalMarginCents      Int     @default(0)
 
   items BarSaleItem[]
 
@@ -1952,12 +1976,12 @@ model BarSaleItem {
 
   quantity Decimal @db.Decimal(12, 3)
 
-  baseUnitPriceCents Int?
-  unitPriceCents Int
-  baseRevenueCents   Int @default(0)
-  autoDiscountCents  Int @default(0)
-  manualDiscountCents Int @default(0)
-  revenueCents   Int
+  baseUnitPriceCents  Int?
+  unitPriceCents      Int
+  baseRevenueCents    Int  @default(0)
+  autoDiscountCents   Int  @default(0)
+  manualDiscountCents Int  @default(0)
+  revenueCents        Int
 
   unitCostCents Int?
   costCents     Int?
@@ -2184,15 +2208,15 @@ enum DiscountKind {
 }
 
 model ChannelOptionPrice {
-  id        String        @id @default(cuid())
-  channelId String
-  channel   Channel       @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  optionId  String
-  option    ServiceOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  id         String        @id @default(cuid())
+  channelId  String
+  channel    Channel       @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  optionId   String
+  option     ServiceOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
   priceCents Int
-  isActive   Boolean      @default(true)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   @@unique([channelId, optionId])
   @@index([channelId])

@@ -17,6 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { AppSession, sessionOptions } from "@/lib/session";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
+import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 
 export const runtime = "nodejs";
 
@@ -37,6 +38,8 @@ async function requireStoreOrAdmin() {
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await requireStoreOrAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const requestContext = getRequestOperationalContext(req);
+  const auditSource = session.role === "ADMIN" ? "ADMIN" : "STORE";
 
   const { id } = await Promise.resolve(ctx.params);
   const json = await req.json().catch(() => null);
@@ -244,6 +247,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       });
 
       await syncStoreFulfillmentTasksForReservation(tx, id);
+
+      await writeOperationalLog(
+        {
+          action: "RESERVATION_CANCEL",
+          entityType: "RESERVATION",
+          entityId: id,
+          source: auditSource,
+          actor: { userId: session.userId },
+          request: requestContext,
+          metadata: {
+            reservationSource: reservation.source,
+            statusBefore: reservation.status,
+            refundMode: body.refundMode,
+            refundMethod: body.refundMethod,
+            refundOrigin: body.refundOrigin,
+            refundedServiceCents,
+            refundedDepositCents,
+            depositHeld: reservation.depositHeld,
+          },
+        },
+        tx
+      );
 
       return {
         ok: true as const,

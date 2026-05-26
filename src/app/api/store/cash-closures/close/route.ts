@@ -8,6 +8,7 @@ import { z } from "zod";
 import { PaymentOrigin, ShiftName, RoleName } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { originFromRoleName, getClosureWindow, sumByMethod, diffTotals, emptyMethodMap, METHODS, parseBusinessDate, isOriginSplitByShift, normalizeClosureShift } from "@/lib/cashClosures";
+import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 
 export const runtime = "nodejs";
 
@@ -42,6 +43,7 @@ export async function POST(req: Request) {
   const cookieStore = await cookies();
   const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
   if (!session?.userId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const requestContext = getRequestOperationalContext(req);
 
   const userId = session.userId; // <- ahora es string seguro
 
@@ -52,6 +54,14 @@ export async function POST(req: Request) {
   const origin = parsed.data.origin;
   const shift = normalizeClosureShift(origin, parsed.data.shift);
   const businessDate = parseBusinessDate(parsed.data.date);
+  const auditSource =
+    session.role === "ADMIN"
+      ? "ADMIN"
+      : origin === PaymentOrigin.BOOTH
+        ? "BOOTH"
+        : origin === PaymentOrigin.STORE
+          ? "STORE"
+          : null;
 
   // Permisos: role->origin o ADMIN
   const roleOrigin = originFromRoleName(session.role as RoleName);
@@ -290,6 +300,28 @@ export async function POST(req: Request) {
             },
             select: { id: true },
           });
+
+      if (voidedClosure) {
+        await writeOperationalLog(
+          {
+            action: "CASH_CLOSURE_REOPEN",
+            entityType: "CASH_CLOSURE",
+            entityId: closure.id,
+            source: auditSource,
+            actor: { userId: session.userId },
+            request: requestContext,
+            metadata: {
+              origin,
+              shift,
+              businessDate: businessDate.toISOString(),
+              reusedVoidedClosureId: voidedClosure.id,
+              shiftSessionIds: parsed.data.shiftSessionIds,
+              cashShiftId: cashShift.id,
+            },
+          },
+          tx
+        );
+      }
 
       return { id: closure.id };
     });

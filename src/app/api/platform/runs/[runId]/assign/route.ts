@@ -8,6 +8,7 @@ import { canShareMonitorAssetWithReservation } from "@/lib/platform-shared-resou
 import { deriveReservationStatusFromUnits } from "@/lib/reservation-status";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import { getOperationalDurationMinutes } from "@/lib/reservation-operations";
+import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 import {
   MonitorRunKind,
   MonitorRunMode,
@@ -34,6 +35,8 @@ const Body = z.object({
 export async function POST(req: Request, ctx: { params: Promise<{ runId: string }> }) {
   const session = await requirePlatformOrAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const requestContext = getRequestOperationalContext(req);
+  const auditSource = session.role === "ADMIN" ? "ADMIN" : "PLATFORM";
 
   const { runId } = await ctx.params;
 
@@ -233,6 +236,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           select: { id: true },
         });
 
+        await writeOperationalLog(
+          {
+            action: "PLATFORM_ASSIGN",
+            entityType: "MONITOR_RUN_ASSIGNMENT",
+            entityId: a.id,
+            source: auditSource,
+            actor: { userId: session.userId },
+            request: requestContext,
+            metadata: {
+              runId,
+              runKind: run.kind,
+              reservationId: unit.reservationId,
+              reservationUnitId: unit.id,
+              jetskiId: b.jetskiId,
+              assetId: null,
+              durationMinutes: duration,
+              assignmentStatus: a.status,
+            },
+          },
+          tx
+        );
+
         return { ok: true, assignment: a };
       }
 
@@ -356,6 +381,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           data: { status: newStatus },
           select: { id: true },
         });
+
+        await writeOperationalLog(
+          {
+            action: "PLATFORM_ASSIGN",
+            entityType: "MONITOR_RUN_ASSIGNMENT",
+            entityId: a.id,
+            source: auditSource,
+            actor: { userId: session.userId },
+            request: requestContext,
+            metadata: {
+              runId,
+              runKind: run.kind,
+              reservationId: unit.reservationId,
+              reservationUnitId: unit.id,
+              jetskiId: null,
+              assetId: b.assetId,
+              durationMinutes: duration,
+              assignmentStatus: a.status,
+            },
+          },
+          tx
+        );
 
         return { ok: true, assignment: a };
       }

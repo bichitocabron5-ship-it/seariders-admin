@@ -14,6 +14,7 @@ import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { ensureReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { originFromRoleName } from "@/lib/cashClosures";
+import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 
 export const runtime = "nodejs";
 
@@ -29,6 +30,8 @@ export async function POST(req: Request) {
     const cookieStore = await cookies();
     const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
     if (!session?.userId) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    const requestContext = getRequestOperationalContext(req);
+    const auditSource = session.role === "ADMIN" ? "ADMIN" : "STORE";
 
     const body = await req.json();
 
@@ -415,6 +418,30 @@ export async function POST(req: Request) {
 
         await syncStoreFulfillmentTasksForReservation(tx, reservation.id);
       }
+
+      await writeOperationalLog(
+        {
+          action: "PAYMENT_CREATE",
+          entityType: "PAYMENT",
+          entityId: payment.id,
+          source: auditSource,
+          actor: { userId: session.userId },
+          request: requestContext,
+          metadata: {
+            reservationId,
+            amountCents,
+            method,
+            origin,
+            isDeposit,
+            direction,
+            fullyPaid,
+            statusUpdated,
+            newPendingServiceCents,
+            newPendingDepositCents,
+          },
+        },
+        tx
+      );
 
       return {
         ok: true,

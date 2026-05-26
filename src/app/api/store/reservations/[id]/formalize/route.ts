@@ -31,6 +31,7 @@ import { syncReservationContractsTx } from "@/lib/reservation-contract-sync";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
+import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 
 export const runtime = "nodejs";
 
@@ -292,6 +293,8 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await requireStore();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const requestContext = getRequestOperationalContext(req);
+  const auditSource = session.role === "ADMIN" ? "ADMIN" : "STORE";
 
   const { id } = await Promise.resolve(ctx.params);
 
@@ -969,6 +972,33 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           `Faltan contratos por completar: ${contracts.readyCount}/${contracts.requiredUnits} listos.`
         );
       }
+
+      await writeOperationalLog(
+        {
+          action: "RESERVATION_FORMALIZE",
+          entityType: "RESERVATION",
+          entityId: id,
+          source: auditSource,
+          actor: { userId: session.userId },
+          request: requestContext,
+          metadata: {
+            reservationSource: current.source,
+            serviceId: mainLine.serviceId,
+            optionId: mainLine.optionId,
+            channelId: effectiveChannelId,
+            quantity: totalMainQuantity,
+            pax: Number(b.pax ?? current.pax ?? mainLine.pax),
+            totalPriceCents: commercial.finalTotalCents,
+            depositCents,
+            requiredUnits: contracts.requiredUnits,
+            readyCount: contracts.readyCount,
+            isLicense: reservationState.isLicense,
+            activityDate: activityDate.toISOString(),
+            scheduledTime: scheduledTime?.toISOString() ?? null,
+          },
+        },
+        tx
+      );
 
       return { ok: true as const, id, ...contracts };
     });

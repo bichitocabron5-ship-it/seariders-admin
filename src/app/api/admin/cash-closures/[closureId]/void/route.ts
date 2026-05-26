@@ -5,6 +5,7 @@ import { z } from "zod";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
+import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,7 @@ export async function POST(
 ) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const requestContext = getRequestOperationalContext(req);
 
   const rawParams = await ctx.params;
   const closureId = typeof rawParams?.closureId === "string" ? rawParams.closureId.trim() : "";
@@ -38,24 +40,43 @@ export async function POST(
 
   const closure = await prisma.cashClosure.findUnique({
     where: { id: closureId },
-    select: { id: true, isVoided: true },
+    select: { id: true, isVoided: true, origin: true, shift: true, businessDate: true },
   });
   if (!closure) return new NextResponse("Cierre no existe", { status: 404 });
   if (closure.isVoided) return NextResponse.json({ ok: true, id: closureId }); // idempotente
 
-  await prisma.cashClosure.update({
-    where: { id: closureId },
-    data: {
-      isVoided: true,
-      voidedAt: new Date(),
-      voidReason: reason,
-      voidedByUserId: session.userId,
-      // opcional: si quieres que al reabrir quede "no revisado"
-      reviewedAt: null,
-      reviewedByUserId: null,
-      reviewNote: null,
-    },
-    select: { id: true },
+  await prisma.$transaction(async (tx) => {
+    await tx.cashClosure.update({
+      where: { id: closureId },
+      data: {
+        isVoided: true,
+        voidedAt: new Date(),
+        voidReason: reason,
+        voidedByUserId: session.userId,
+        reviewedAt: null,
+        reviewedByUserId: null,
+        reviewNote: null,
+      },
+      select: { id: true },
+    });
+
+    await writeOperationalLog(
+      {
+        action: "CASH_CLOSURE_VOID",
+        entityType: "CASH_CLOSURE",
+        entityId: closureId,
+        source: "ADMIN",
+        actor: { userId: session.userId },
+        request: requestContext,
+        metadata: {
+          origin: closure.origin,
+          shift: closure.shift,
+          businessDate: closure.businessDate.toISOString(),
+          reason,
+        },
+      },
+      tx
+    );
   });
 
   return NextResponse.json({ ok: true, id: closureId });
