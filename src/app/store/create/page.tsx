@@ -8,6 +8,10 @@ import { computeRequiredContractUnits, needsContractForCategory } from "@/lib/re
 import { getReservationWorkflowState, type ReservationWorkflowResult } from "@/lib/reservation-workflow";
 import { opsStyles } from "@/components/ops-ui";
 import {
+  normalizeCommercialSummary,
+  type CommercialSummarySnapshot,
+} from "@/app/store/shared/commercial-summary";
+import {
   resolveAppliedCommercialSnapshot,
   resolveDiscountPolicy,
 } from "@/lib/commission";
@@ -16,7 +20,11 @@ import { finalizeReservationCommercialBreakdown } from "@/lib/reservation-commer
 import { AvailabilitySection, FutureReservationPaymentsSection, PricingSection, SubmitSection } from "./components/form-sections";
 import { ReservationBasicsSection } from "./components/reservation-basics-section";
 import { CartSection, ContractsSection } from "./components/store-sections";
-import { StoreCreateCustomerProfileSection, StoreCreateSummaryStrip } from "./components/store-create-overview";
+import {
+  StoreCreateCommercialSummarySection,
+  StoreCreateCustomerProfileSection,
+  StoreCreateSummaryStrip,
+} from "./components/store-create-overview";
 import { useAvailability, useContractsState, useCustomerProfileSearch, useDiscountPreview, useReservationPrefill, useStoreCreateCatalog, useStoreCreateSelection } from "./hooks/store-create-hooks";
 import { submitStoreCreateCreateFlow, submitStoreCreateEditFlow, submitStoreCreateMigrateFlow } from "./services/store-create-submit-flow";
 import { errorMessage } from "./utils/errors";
@@ -97,8 +105,15 @@ function StoreCreatePageInner() {
   const [prefillPricing, setPrefillPricing] = useState<{
     basePriceCents: number;
     commissionBaseCents: number;
+    appliedCommissionMode: "PERCENT" | "FIXED" | null;
+    appliedCommissionValue: number;
+    appliedCommissionPct: number | null;
+    appliedCommissionCents: number;
     manualDiscountCents: number;
     autoDiscountCents: number;
+    customerDiscountCents: number;
+    promoterDiscountCents: number;
+    companyDiscountCents: number;
     totalPriceCents: number;
   } | null>(null);
   const [prefillSource, setPrefillSource] = useState<string | null>(null);
@@ -181,8 +196,13 @@ function StoreCreatePageInner() {
       companionsCount?: number | null;
       basePriceCents?: number | null;
       commissionBaseCents?: number | null;
+      appliedCommissionMode?: "PERCENT" | "FIXED" | null;
+      appliedCommissionValue?: number | null;
+      appliedCommissionPct?: number | null;
+      appliedCommissionCents?: number | null;
       manualDiscountCents?: number | null;
       autoDiscountCents?: number | null;
+      customerDiscountCents?: number | null;
       discountResponsibility?: "COMPANY" | "PROMOTER" | "SHARED" | null;
       promoterDiscountShareBps?: number | null;
       promoterDiscountCents?: number | null;
@@ -240,8 +260,15 @@ function StoreCreatePageInner() {
       setPrefillPricing({
         basePriceCents: Number(res.basePriceCents ?? res.option?.basePriceCents ?? 0),
         commissionBaseCents: Number(res.commissionBaseCents ?? 0),
+        appliedCommissionMode: res.appliedCommissionMode ?? null,
+        appliedCommissionValue: Number(res.appliedCommissionValue ?? 0),
+        appliedCommissionPct: res.appliedCommissionPct != null ? Number(res.appliedCommissionPct) : null,
+        appliedCommissionCents: Number(res.appliedCommissionCents ?? 0),
         manualDiscountCents: Number(res.manualDiscountCents ?? 0),
         autoDiscountCents: Number(res.autoDiscountCents ?? 0),
+        customerDiscountCents: Number(res.customerDiscountCents ?? 0),
+        promoterDiscountCents: Number(res.promoterDiscountCents ?? 0),
+        companyDiscountCents: Number(res.companyDiscountCents ?? 0),
         totalPriceCents: Number(res.totalPriceCents ?? 0),
       });
       setDiscountResponsibility(res.discountResponsibility ?? "COMPANY");
@@ -974,18 +1001,35 @@ const { discountPreview, discountLoading } = useDiscountPreview({
   );
   
   const useCart = cartItems.length > 0;
-  
-  const shownBaseCents = useCart
-  ? (cartItems.reduce((sum, item) => sum + Number(cartDiscountPreviews[item.id]?.baseTotalCents ?? 0), 0) || cartSubtotalCents)
-  : (discountPreview?.baseTotalCents ?? (isMigrateMode ? Number(prefillPricing?.basePriceCents ?? cartSubtotalCents) : cartSubtotalCents));
+  const hasPersistedCommercialSnapshot = Boolean(prefillReservationId && prefillPricing);
 
-  const shownDiscountCents = useCart
+  const liveShownBaseCents = useCart
+    ? (cartItems.reduce((sum, item) => sum + Number(cartDiscountPreviews[item.id]?.baseTotalCents ?? 0), 0) || cartSubtotalCents)
+    : (discountPreview?.baseTotalCents ?? cartSubtotalCents);
+
+  const liveShownDiscountCents = useCart
     ? cartItems.reduce((sum, item) => sum + Number(cartDiscountPreviews[item.id]?.autoDiscountCents ?? 0), 0)
-    : (discountPreview?.autoDiscountCents ?? (isMigrateMode ? Number((prefillPricing?.manualDiscountCents ?? 0) + (prefillPricing?.autoDiscountCents ?? 0)) : 0));
+    : Number(discountPreview?.autoDiscountCents ?? 0);
 
-  const shownFinalCents = useCart
+  const liveShownFinalCents = useCart
     ? (cartItems.reduce((sum, item) => sum + Number(cartDiscountPreviews[item.id]?.finalTotalCents ?? 0), 0) || cartSubtotalCents)
-    : (discountPreview?.finalTotalCents ?? (isMigrateMode ? Number(prefillPricing?.totalPriceCents ?? Math.max(0, shownBaseCents - shownDiscountCents)) : Math.max(0, shownBaseCents - shownDiscountCents)));
+    : Number(discountPreview?.finalTotalCents ?? Math.max(0, liveShownBaseCents - liveShownDiscountCents));
+
+  const shownBaseCents = hasPersistedCommercialSnapshot
+    ? Number(prefillPricing?.basePriceCents ?? liveShownBaseCents)
+    : liveShownBaseCents;
+
+  const shownDiscountCents = hasPersistedCommercialSnapshot
+    ? Number(
+        (prefillPricing?.customerDiscountCents ?? 0) +
+          (prefillPricing?.autoDiscountCents ?? 0) +
+          (prefillPricing?.manualDiscountCents ?? 0)
+      )
+    : liveShownDiscountCents;
+
+  const shownFinalCents = hasPersistedCommercialSnapshot
+    ? Number(prefillPricing?.totalPriceCents ?? liveShownFinalCents)
+    : liveShownFinalCents;
 
   const shownReason = discountPreview?.reason ?? (isMigrateMode && shownDiscountCents > 0 ? "Precio heredado de la pre-reserva de carpa." : null);
   const pricingMeta = discountPreview?.pricingMeta ?? (
@@ -1182,21 +1226,93 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     () => Number(commercialPreview.appliedCommissionCents ?? 0),
     [commercialPreview.appliedCommissionCents]
   );
-  const storePromoterNominalPct = useMemo(
+  const commercialSummary = useMemo<CommercialSummarySnapshot>(
     () =>
-      commercialPreview.appliedCommissionMode === "PERCENT"
-        ? clampPct(Number(commercialPreview.appliedCommissionValue ?? 0))
-        : 0,
-    [commercialPreview.appliedCommissionMode, commercialPreview.appliedCommissionValue]
+      normalizeCommercialSummary(
+        hasPersistedCommercialSnapshot
+          ? {
+              pvpOriginalCents: prefillPricing?.basePriceCents ?? 0,
+              customerDiscountCents: prefillPricing?.customerDiscountCents ?? 0,
+              autoDiscountCents: prefillPricing?.autoDiscountCents ?? 0,
+              manualDiscountCents: prefillPricing?.manualDiscountCents ?? 0,
+              promoterDiscountCents: prefillPricing?.promoterDiscountCents ?? 0,
+              companyDiscountCents: prefillPricing?.companyDiscountCents ?? 0,
+              finalTotalCents: prefillPricing?.totalPriceCents ?? 0,
+              commissionBaseCents: prefillPricing?.commissionBaseCents ?? 0,
+              appliedCommissionCents: prefillPricing?.appliedCommissionCents ?? 0,
+              appliedCommissionMode: prefillPricing?.appliedCommissionMode ?? null,
+              appliedCommissionValue: prefillPricing?.appliedCommissionValue ?? 0,
+              appliedCommissionPct: prefillPricing?.appliedCommissionPct ?? null,
+              pendingToChargeCents: paymentSummary.pendingServiceCents || Number(prefillPricing?.totalPriceCents ?? 0),
+            }
+          : {
+              pvpOriginalCents: shownBaseCents,
+              customerDiscountCents: Number(commercialPreview.customerDiscountCents ?? 0),
+              autoDiscountCents: shownDiscountCents,
+              manualDiscountCents,
+              promoterDiscountCents: commissionBreakdown.promoterDiscountCents,
+              companyDiscountCents: commissionBreakdown.companyDiscountCents,
+              finalTotalCents: shownFinalCentsWithManual,
+              commissionBaseCents: commissionBreakdown.commissionBaseCents,
+              appliedCommissionCents: storeCommissionCents,
+              appliedCommissionMode: commercialPreview.appliedCommissionMode,
+              appliedCommissionValue: Number(commercialPreview.appliedCommissionValue ?? 0),
+              appliedCommissionPct: null,
+              pendingToChargeCents: paymentSummary.pendingServiceCents || shownFinalCentsWithManual,
+            }
+      ),
+    [
+      commissionBreakdown.commissionBaseCents,
+      commissionBreakdown.companyDiscountCents,
+      commissionBreakdown.promoterDiscountCents,
+      commercialPreview.appliedCommissionMode,
+      commercialPreview.appliedCommissionValue,
+      commercialPreview.customerDiscountCents,
+      hasPersistedCommercialSnapshot,
+      manualDiscountCents,
+      paymentSummary.pendingServiceCents,
+      prefillPricing,
+      shownBaseCents,
+      shownDiscountCents,
+      shownFinalCentsWithManual,
+      storeCommissionCents,
+    ]
   );
+  const displayCommissionBaseCents = hasPersistedCommercialSnapshot
+    ? Number(prefillPricing?.commissionBaseCents ?? 0)
+    : commissionBreakdown.commissionBaseCents;
+  const displayCommissionMode = hasPersistedCommercialSnapshot
+    ? prefillPricing?.appliedCommissionMode ?? commercialPreview.appliedCommissionMode
+    : commercialPreview.appliedCommissionMode;
+  const displayCommissionValue = hasPersistedCommercialSnapshot
+    ? Number(
+        displayCommissionMode === "FIXED"
+          ? prefillPricing?.appliedCommissionValue ?? 0
+          : prefillPricing?.appliedCommissionPct ?? prefillPricing?.appliedCommissionValue ?? 0
+      )
+    : Number(commercialPreview.appliedCommissionValue ?? 0);
+  const displayCommissionCents = hasPersistedCommercialSnapshot
+    ? Number(prefillPricing?.appliedCommissionCents ?? 0)
+    : storeCommissionCents;
+  const displayCustomerDiscountCents = hasPersistedCommercialSnapshot
+    ? Number(prefillPricing?.customerDiscountCents ?? 0)
+    : Number(commercialPreview.customerDiscountCents ?? 0);
+  const displayPromoterDiscountCents = hasPersistedCommercialSnapshot
+    ? Number(prefillPricing?.promoterDiscountCents ?? 0)
+    : commissionBreakdown.promoterDiscountCents;
+  const displayCompanyDiscountCents = hasPersistedCommercialSnapshot
+    ? Number(prefillPricing?.companyDiscountCents ?? 0)
+    : commissionBreakdown.companyDiscountCents;
+  const displayPromoterNominalPct =
+    displayCommissionMode === "PERCENT" ? clampPct(displayCommissionValue) : 0;
   const storePromoterEffectivePct = useMemo(
     () =>
       shownBaseCents > 0
         ? selectedChannel?.kind === "EXTERNAL_ACTIVITY"
-          ? clampPct(((shownFinalCentsWithManual - storeCommissionCents) / shownBaseCents) * 100)
-          : clampPct((storeCommissionCents / shownBaseCents) * 100)
+          ? clampPct(((shownFinalCentsWithManual - displayCommissionCents) / shownBaseCents) * 100)
+          : clampPct((displayCommissionCents / shownBaseCents) * 100)
         : 0,
-    [selectedChannel?.kind, shownBaseCents, shownFinalCentsWithManual, storeCommissionCents]
+    [displayCommissionCents, selectedChannel?.kind, shownBaseCents, shownFinalCentsWithManual]
   );
   const workflowState = useMemo(() => {
     const current = getReservationWorkflowState({
@@ -1742,7 +1858,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     },
     {
       label: "Precio actual",
-      value: euros(shownFinalCentsWithManual),
+      value: euros(commercialSummary.finalTotalCents),
     },
     {
       label: "Contratos",
@@ -1835,6 +1951,10 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       ) : null}
 
       <StoreCreateSummaryStrip cards={summaryCards} />
+      <StoreCreateCommercialSummarySection
+        summary={commercialSummary}
+        pendingLabel={isEditMode ? "Pendiente de servicio" : "Pendiente a cobrar"}
+      />
 
       {uiMode === "EDIT" && hasSignedContracts ? (
         <section
@@ -2088,17 +2208,17 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               shownDiscountCents={shownDiscountCents}
               shownBaseCents={shownBaseCents}
               shownReason={shownReason ?? ""}
-              commissionBaseCents={commissionBreakdown.commissionBaseCents}
+              commissionBaseCents={displayCommissionBaseCents}
               commissionEnabled={Boolean(selectedChannel?.commissionEnabled)}
-              commissionMode={commercialPreview.appliedCommissionMode}
-              commissionValue={Number(commercialPreview.appliedCommissionValue ?? 0)}
-              commissionCents={storeCommissionCents}
+              commissionMode={displayCommissionMode}
+              commissionValue={displayCommissionValue}
+              commissionCents={displayCommissionCents}
               customerDiscountMode={commercialPreview.customerDiscountMode}
               customerDiscountValue={Number(commercialPreview.customerDiscountValue ?? 0)}
-              customerDiscountCents={Number(commercialPreview.customerDiscountCents ?? 0)}
-              promoterDiscountCents={commissionBreakdown.promoterDiscountCents}
-              companyDiscountCents={commissionBreakdown.companyDiscountCents}
-              promoterNominalPct={storePromoterNominalPct}
+              customerDiscountCents={displayCustomerDiscountCents}
+              promoterDiscountCents={displayPromoterDiscountCents}
+              companyDiscountCents={displayCompanyDiscountCents}
+              promoterNominalPct={displayPromoterNominalPct}
               promoterEffectivePct={storePromoterEffectivePct}
               pricingMeta={pricingMeta}
               channelPricingSummary={discountPreview?.channelPricingSummary ?? null}

@@ -3,6 +3,8 @@
 import type React from "react";
 
 import { opsStyles } from "@/components/ops-ui";
+import { StoreCommercialSummaryBlock } from "@/app/store/components/StoreCommercialSummaryBlock";
+import type { CommercialSummarySnapshot } from "@/app/store/shared/commercial-summary";
 import { StoreMetricCard, StoreMetricGrid } from "@/components/store-ui";
 
 import type { CustomerSearchRow } from "../types";
@@ -25,6 +27,11 @@ type StoreCreateCustomerProfileSectionProps = {
   onCustomerSearchChange: (value: string) => void;
   onSearchSubmit: () => void;
   onApplyCustomerProfile: (reservationId: string) => void;
+};
+
+type StoreCreateCommercialSummarySectionProps = {
+  summary: CommercialSummarySnapshot;
+  pendingLabel?: string;
 };
 
 const customerPanelStyle: React.CSSProperties = {
@@ -56,6 +63,20 @@ export function StoreCreateSummaryStrip({ cards }: StoreCreateSummaryStripProps)
         <StoreMetricCard key={card.label} label={card.label} value={card.value} />
       ))}
     </StoreMetricGrid>
+  );
+}
+
+export function StoreCreateCommercialSummarySection({
+  summary,
+  pendingLabel,
+}: StoreCreateCommercialSummarySectionProps) {
+  return (
+    <StoreCommercialSummaryBlock
+      summary={summary}
+      heading="Snapshot unificado para create, contratos y cobro"
+      pendingLabel={pendingLabel}
+      variant="panel"
+    />
   );
 }
 
