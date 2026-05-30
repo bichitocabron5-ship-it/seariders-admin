@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { MonitorRunStatus, RunAssignmentStatus } from "@prisma/client";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import { platformAssignmentBlockingReason } from "@/lib/operability";
 
@@ -22,36 +21,6 @@ export async function GET(req: NextRequest) {
   if (!parsed.success) return new NextResponse("Query inválida", { status: 400 });
 
   const runId = parsed.data.runId;
-
-  // Jetskis usadas por assignments abiertos (global).
-  const usedByAssignments = (
-    await prisma.monitorRunAssignment.findMany({
-      where: {
-        status: { in: [RunAssignmentStatus.QUEUED, RunAssignmentStatus.ACTIVE] },
-        run: { status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] } },
-        ...(runId ? { runId: { not: runId } } : {}),
-      },
-      select: { jetskiId: true },
-    })
-  )
-    .map((r) => r.jetskiId)
-    .filter((x): x is string => !!x);
-
-  // Jetskis reservadas como moto de monitor en runs abiertos.
-  const usedByMonitorRuns = (
-    await prisma.monitorRun.findMany({
-      where: {
-        status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] },
-        monitorJetskiId: { not: null },
-        ...(runId ? { id: { not: runId } } : {}),
-      },
-      select: { monitorJetskiId: true },
-    })
-  )
-    .map((r) => r.monitorJetskiId)
-    .filter((x): x is string => !!x);
-
-  const usedJetskiIds = Array.from(new Set([...usedByAssignments, ...usedByMonitorRuns]));
 
   const jetskis = await prisma.jetski.findMany({
     where: {
@@ -75,10 +44,6 @@ export async function GET(req: NextRequest) {
         take: 1,
         select: {
           id: true,
-          type: true,
-          status: true,
-          faultCode: true,
-          note: true,
         },
       },
       incidents: {
@@ -89,11 +54,6 @@ export async function GET(req: NextRequest) {
         take: 1,
         select: {
           id: true,
-          type: true,
-          level: true,
-          status: true,
-          description: true,
-          notes: true,
         },
       },
     },
@@ -121,6 +81,5 @@ export async function GET(req: NextRequest) {
     ok: true,
     runId: runId ?? null,
     jetskis: rows,
-    usedJetskiIds,
   });
 }

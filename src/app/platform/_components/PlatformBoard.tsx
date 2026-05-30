@@ -1,4 +1,4 @@
-﻿// src/app/platform/_components/PlatformBoard.tsx
+// src/app/platform/_components/PlatformBoard.tsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -294,20 +294,29 @@ export default function PlatformBoard(props: Props) {
         kind === "NAUTICA"
           ? `/api/platform/assets/available?includeBlocked=true`
           : `/api/platform/jetskis/available?includeBlocked=true`;
-      const [qRes, rRes, xRes, oRes, eRes] = await Promise.all([
+      const [qRes, rRes, xRes, oRes] = await Promise.all([
         fetch(`/api/platform/queue?${queueParams.toString()}`, { cache: "no-store" }),
         fetch(`/api/platform/runs?kind=${kind}`, { cache: "no-store" }),
         fetch(assetsUrl, { cache: "no-store" }),
         fetch(`/api/platform/assets/operability`, { cache: "no-store" }),
-        fetch(`/api/platform/extras?kind=${kind}`, { cache: "no-store" }),
       ]);      
-      if (!qRes.ok) throw new Error(await qRes.text()); if (!rRes.ok) throw new Error(await rRes.text()); if (!xRes.ok) throw new Error(await xRes.text()); if (!oRes.ok) throw new Error(await oRes.text()); if (!eRes.ok) throw new Error(await eRes.text());
-      const q = await qRes.json(); const r = await rRes.json(); const x = await xRes.json(); const o = await oRes.json(); const e = await eRes.json();
+      if (!qRes.ok) throw new Error(await qRes.text()); if (!rRes.ok) throw new Error(await rRes.text()); if (!xRes.ok) throw new Error(await xRes.text()); if (!oRes.ok) throw new Error(await oRes.text());
+      const q = await qRes.json(); const r = await rRes.json(); const x = await xRes.json(); const o = await oRes.json();
       setOperability(o as OperabilitySummary); setQueue(q.queue ?? []); setRuns(r.runs ?? []); setMonitors(r.monitors ?? []);
-      setPlatformExtras(e.extras ?? []);
       if (kind === "JETSKI") { setJetskis(x.jetskis ?? []); setAssets([]); } else { setAssets(x.assets ?? []); setJetskis([]); }
     } catch (e: unknown) { setDepartError(e instanceof Error ? e.message : "Error cargando plataforma"); } finally { if (opts?.showLoading) setLoading(false); }
   }, [kind, categories]);
+
+  const loadPlatformExtras = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/platform/extras?kind=${kind}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setPlatformExtras(data.extras ?? []);
+    } catch (e: unknown) {
+      setDepartError(e instanceof Error ? e.message : "Error cargando extras de plataforma");
+    }
+  }, [kind]);
 
   async function departRun(runId: string) {
     try { setDepartBusyRunId(runId); setDepartError(null); const res = await fetch(`/api/platform/runs/${runId}/depart`, { method: "POST", headers: { "Content-Type": "application/json" } }); if (!res.ok) throw new Error(await res.text()); await loadAll(); } catch (e: unknown) { setDepartError(e instanceof Error ? e.message : "Error iniciando salida"); } finally { setDepartBusyRunId(null); }
@@ -324,6 +333,10 @@ export default function PlatformBoard(props: Props) {
       setCloseBusyRunId(null);
     }
   }
+
+  useEffect(() => {
+    void loadPlatformExtras();
+  }, [loadPlatformExtras]);
 
   useEffect(() => {
     void loadAll({ showLoading: true });

@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { AssetType, MonitorRunStatus, RunAssignmentStatus } from "@prisma/client";
+import { AssetType } from "@prisma/client";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import { platformAssignmentBlockingReason } from "@/lib/operability";
 
@@ -35,37 +35,6 @@ export async function GET(req: NextRequest) {
       ? (typeRaw as AssetType)
       : null;
 
-  // Assets usados por assignments abiertos (global), excluyendo el propio run si viene runId.
-  const usedByAssignments = (
-    await prisma.monitorRunAssignment.findMany({
-      where: {
-        assetId: { not: null },
-        status: { in: [RunAssignmentStatus.QUEUED, RunAssignmentStatus.ACTIVE] },
-        run: { status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] } },
-        ...(runId ? { runId: { not: runId } } : {}),
-      },
-      select: { assetId: true },
-    })
-  )
-    .map((r) => r.assetId)
-    .filter((x): x is string => !!x);
-
-  // Assets reservados como “asset fijo del monitor” en runs abiertos.
-  const usedByMonitorRuns = (
-    await prisma.monitorRun.findMany({
-      where: {
-        status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] },
-        monitorAssetId: { not: null },
-        ...(runId ? { id: { not: runId } } : {}),
-      },
-      select: { monitorAssetId: true },
-    })
-  )
-    .map((r) => r.monitorAssetId)
-    .filter((x): x is string => !!x);
-
-  const usedAssetIds = Array.from(new Set([...usedByAssignments, ...usedByMonitorRuns]));
-
   const assets = await prisma.asset.findMany({
     where: {
       platformUsage: { not: "HIDDEN" },
@@ -94,10 +63,6 @@ export async function GET(req: NextRequest) {
         take: 1,
         select: {
           id: true,
-          type: true,
-          status: true,
-          faultCode: true,
-          note: true,
         },
       },
       incidents: {
@@ -108,11 +73,6 @@ export async function GET(req: NextRequest) {
         take: 1,
         select: {
           id: true,
-          type: true,
-          level: true,
-          status: true,
-          description: true,
-          notes: true,
         },
       },
     },
@@ -141,6 +101,5 @@ export async function GET(req: NextRequest) {
     runId: runId ?? null,
     type,
     assets: rows,
-    usedAssetIds,
   });
 }
