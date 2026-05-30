@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { deriveReservationStatusFromUnits } from "@/lib/reservation-status";
 import {
   ReservationStatus,
-  JetskiStatus,
   MonitorRunStatus,
   ReservationUnitStatus,
   RunAssignmentStatus,
@@ -35,6 +34,25 @@ function parseKind(req: Request): "JETSKI" | "NAUTICA" | null {
   const raw = url.searchParams.get("kind")?.trim().toUpperCase();
   if (raw === "JETSKI" || raw === "NAUTICA") return raw;
   return null;
+}
+
+const PLATFORM_QUEUE_REPAIR_INTERVAL_MS = 30_000;
+const lastPlatformQueueRepairAtByScope = new Map<string, number>();
+
+async function repairPlatformQueueIfDue(params: {
+  start: Date;
+  endExclusive: Date;
+  kind: "JETSKI" | "NAUTICA" | null;
+  categories: string[] | null;
+}) {
+  const now = Date.now();
+  const scope = `${params.kind ?? "ALL"}:${params.categories?.join(",") ?? "ALL"}`;
+  const lastRepairAt = lastPlatformQueueRepairAtByScope.get(scope) ?? 0;
+  if (now - lastRepairAt < PLATFORM_QUEUE_REPAIR_INTERVAL_MS) return;
+
+  lastPlatformQueueRepairAtByScope.set(scope, now);
+  await repairClosedQueuedAssignments();
+  await repairMissingReadyPlatformUnits(params);
 }
 
 async function repairClosedQueuedAssignments() {
@@ -142,11 +160,9 @@ export async function GET(req: Request) {
 
   const kind = parseKind(req);
   const categories = parseCategories(req);
-  await repairClosedQueuedAssignments();
-
   // 1) Units en cola
   const { start, endExclusive } = tzDayRangeUtc(BUSINESS_TZ);
-  await repairMissingReadyPlatformUnits({ start, endExclusive, kind, categories });
+  await repairPlatformQueueIfDue({ start, endExclusive, kind, categories });
   const units = await prisma.reservationUnit.findMany({
     where: {
       status: ReservationUnitStatus.READY_FOR_PLATFORM,
@@ -226,64 +242,5 @@ export async function GET(req: Request) {
     }),
   }));
 
-  // 2) Jetskis activos (disponibles)
-  const jetskis = await prisma.jetski.findMany({
-    where: { status: JetskiStatus.OPERATIONAL },
-    orderBy: [{ number: "asc" }],
-    select: { id: true, number: true, model: true, year: true, status: true },
-  });
-
-  // 3) Monitors
-  const monitors = await prisma.monitor.findMany({
-    where: { isActive: true },
-    orderBy: [{ name: "asc" }],
-    select: { id: true, name: true, maxCapacity: true, isActive: true },
-  });
-
-  // 4) Runs abiertos (tablero)
-  const runs = await prisma.monitorRun.findMany({
-    where: { status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] } },
-    orderBy: [{ startedAt: "desc" }],
-    select: {
-      id: true,
-      kind: true,
-      mode: true,
-      monitorId: true,
-      status: true,
-      startedAt: true,
-      note: true,
-      monitorJetskiId: true,
-      monitorAssetId: true,
-      monitor: { select: { id: true, name: true } },
-      monitorJetski: { select: { id: true, number: true, model: true } },
-      monitorAsset: { select: { id: true, name: true, type: true } },
-      assignments: {
-        where: { status: { in: [RunAssignmentStatus.QUEUED, RunAssignmentStatus.ACTIVE] } },
-        orderBy: [{ status: "asc" }, { createdAt: "asc" }, { startedAt: "asc" }],
-        select: {
-          id: true,
-          reservationId: true,
-          reservationUnitId: true,
-          jetskiId: true,
-          status: true,
-          createdAt: true,
-          expectedEndAt: true,
-          startedAt: true,
-          durationMinutesSnapshot: true,
-          reservation: {
-            select: {
-              customerName: true,
-              pax: true,
-              quantity: true,
-              service: { select: { name: true, category: true } },
-              option: { select: { durationMinutes: true } },
-            },
-          },
-          jetski: { select: { number: true } },
-        },
-      },
-    },
-  });
-
-  return NextResponse.json({ ok: true, queue, units, jetskis, runs, monitors });
+  return NextResponse.json({ ok: true, queue });
 }

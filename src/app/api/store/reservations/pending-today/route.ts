@@ -1,4 +1,4 @@
-﻿// src/app/api/store/reservations/pending-today/route.ts
+// src/app/api/store/reservations/pending-today/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
@@ -22,31 +22,9 @@ export async function GET() {
 
   const { start, endExclusive } = getBusinessDayRange();
 
-  const rows = await prisma.reservation.findMany({
+  const count = await prisma.reservation.count({
     where: buildStorePendingTodayWhere({ start, endExclusive }),
-    orderBy: [{ scheduledTime: "asc" }, { activityDate: "asc" }],
-    select: {
-      id: true,
-      customerName: true,
-      activityDate: true,
-      scheduledTime: true,
-      service: { select: { name: true } },
-      option: { select: { durationMinutes: true } },
-      pax: true,
-      quantity: true,
-      channel: { select: { name: true } },
-    },
   });
 
-  return NextResponse.json({
-    count: rows.length,
-    rows,
-    debug: {
-      tz: process.env.BUSINESS_TZ || "Europe/Madrid",
-      startUtc: start.toISOString(),
-      endUtc: endExclusive.toISOString(),
-    },
-  });
+  return NextResponse.json({ count });
 }
-
-
