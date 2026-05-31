@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Select from "react-select";
 import { StoreHero, StoreMetricCard, StoreMetricGrid, storeStyles } from "@/components/store-ui";
 import { getCountryOptionsEs, type CountryOption } from "@/lib/countries";
+import { normalizePhoneForWhatsApp } from "@/lib/phone-normalization";
 
 type PassProductDto = {
   id: string;
@@ -47,45 +48,6 @@ function hhmmNowRounded(step = 5) {
   const m = Math.round(d.getMinutes() / step) * step;
   d.setMinutes(m, 0, 0);
   return d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-}
-
-function normalizePhoneForManualWhatsapp(phone: string | null | undefined, country?: string | null) {
-  const raw = String(phone ?? "").trim();
-  if (!raw) return null;
-
-  const dialCodes: Record<string, string> = {
-    ES: "34",
-    FR: "33",
-    DE: "49",
-    IT: "39",
-    PT: "351",
-    GB: "44",
-    IE: "353",
-    NL: "31",
-    BE: "32",
-    CH: "41",
-    AT: "43",
-  };
-
-  if (raw.startsWith("+")) {
-    const normalized = raw.slice(1).replace(/\D/g, "");
-    return normalized.length >= 8 ? normalized : null;
-  }
-
-  let digits = raw.replace(/\D/g, "");
-  if (!digits) return null;
-
-  if (digits.startsWith("00")) {
-    digits = digits.slice(2);
-    return digits.length >= 8 ? digits : null;
-  }
-
-  const dialCode = dialCodes[String(country ?? "").trim().toUpperCase()];
-  if (!dialCode) return digits.length >= 8 ? digits : null;
-
-  const localDigits = digits.startsWith("0") ? digits.slice(1) : digits;
-  const normalized = `${dialCode}${localDigits}`;
-  return normalized.length >= 8 ? normalized : null;
 }
 
 function parseMinutesOption(v: string): MinutesOption {
@@ -252,7 +214,7 @@ function ManualPassShareModal({
   message: string;
   onClose: () => void;
 }) {
-  const whatsappPhone = normalizePhoneForManualWhatsapp(recipientPhone, country);
+  const whatsappPhone = normalizePhoneForWhatsApp(recipientPhone, country);
   const whatsappUrl = whatsappPhone
     ? `https://wa.me/${encodeURIComponent(whatsappPhone)}?text=${encodeURIComponent(message)}`
     : null;

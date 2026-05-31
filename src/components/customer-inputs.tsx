@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { CountryDialCodeSelect } from "@/components/country-dial-code-select";
 import type { CountryOption } from "@/lib/countries";
-import { getDialCodeForCountry } from "@/lib/countries";
 import { buildStoredPhoneNumber, resolvePhoneFieldState } from "@/lib/phone-country";
 
 function digitsOnly(value: string) {
@@ -172,6 +172,7 @@ export function PhoneWithCountryField({
   containerStyle?: React.CSSProperties;
   error?: string | null;
 }) {
+  const dialSelectId = React.useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const fallbackDialCountry = String(dialCountry ?? country ?? "").trim().toUpperCase();
   const phoneFieldState = useMemo(
     () => resolvePhoneFieldState(phone, fallbackDialCountry),
@@ -186,7 +187,7 @@ export function PhoneWithCountryField({
     background: String(inputStyle.background ?? "#fff"),
     minHeight: inputStyle.minHeight ?? 48,
     display: "grid",
-    gridTemplateColumns: "minmax(96px, 132px) minmax(0, 1fr)",
+    gridTemplateColumns: "minmax(118px, 168px) minmax(0, 1fr)",
     alignItems: "stretch",
     overflow: "hidden",
   };
@@ -203,31 +204,25 @@ export function PhoneWithCountryField({
     <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700, ...containerStyle }}>
       <span>{label}</span>
       <div style={shellStyle}>
-        <select
-          value={normalizedCountry}
-          onChange={(e) => {
-            const nextDialCountry = e.target.value;
-            (onDialCountryChange ?? onCountryChange)(nextDialCountry);
-            onPhoneChange(buildStoredPhoneNumber(phoneFieldState.localPhone, nextDialCountry));
-          }}
-          disabled={disabled}
+        <div
           style={{
-            ...innerControlStyle,
             borderRight: "1px solid #e2e8f0",
-            fontWeight: 800,
-            padding: "0 10px",
+            minWidth: 0,
           }}
         >
-          {countryOptions.map((option) => {
-            const dialCode = getDialCodeForCountry(option.value);
-            const suffix = dialCode ? ` (+${dialCode})` : "";
-            return (
-              <option key={option.value} value={option.value}>
-                {option.value}{suffix}
-              </option>
-            );
-          })}
-        </select>
+          <CountryDialCodeSelect
+            value={normalizedCountry}
+            onChange={(nextDialCountry) => {
+              (onDialCountryChange ?? onCountryChange)(nextDialCountry);
+              onPhoneChange(buildStoredPhoneNumber(phoneFieldState.localPhone, nextDialCountry));
+            }}
+            countryOptions={countryOptions}
+            inputStyle={inputStyle}
+            disabled={disabled}
+            ariaLabel={`Prefijo telefonico de ${label}`}
+            instanceId={`phone-country-${dialSelectId}`}
+          />
+        </div>
         <input
           value={phoneFieldState.localPhone}
           onChange={(e) => onPhoneChange(buildStoredPhoneNumber(e.target.value, normalizedCountry))}

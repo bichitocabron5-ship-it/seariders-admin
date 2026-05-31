@@ -3,7 +3,8 @@
 import type React from "react";
 import { useMemo, useState } from "react";
 import QRCode from "react-qr-code";
-import { formatLinkExpiry, normalizePhoneForWhatsApp } from "./contract-signer-link-modal";
+import { normalizePhoneForWhatsApp } from "@/lib/phone-normalization";
+import { formatLinkExpiry } from "./contract-signer-link-modal";
 import {
   appendPublicLanguage,
   getDefaultPublicLanguage,
