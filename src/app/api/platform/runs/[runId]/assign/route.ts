@@ -32,6 +32,72 @@ const Body = z.object({
   assetId: z.string().min(1).optional().nullable(),
 });
 
+const OPEN_ASSIGNMENT_STATUSES: RunAssignmentStatus[] = [
+  RunAssignmentStatus.QUEUED,
+  RunAssignmentStatus.ACTIVE,
+];
+const OPEN_RUN_STATUSES: MonitorRunStatus[] = [
+  MonitorRunStatus.READY,
+  MonitorRunStatus.IN_SEA,
+];
+
+type RunConflictInfo = {
+  id: string;
+  status: string;
+  kind?: string | null;
+  mode?: string | null;
+};
+
+type AssignmentConflictInfo = {
+  id: string;
+  status: string;
+  run: RunConflictInfo;
+  reservationUnit?: { unitIndex: number | null; serviceName: string | null } | null;
+  reservation?: { customerName: string | null } | null;
+  jetski?: { number: number | null } | null;
+  asset?: { name: string | null; type: string | null } | null;
+};
+
+function shortId(id: string | null | undefined) {
+  return id ? id.slice(-8) : "-";
+}
+
+function formatRunConflict(run: RunConflictInfo) {
+  return `${shortId(run.id)} (${run.kind ?? "RUN"} ${run.mode ?? ""}, ${run.status})`;
+}
+
+function formatAssignmentResource(assignment: AssignmentConflictInfo) {
+  if (assignment.jetski) return `moto ${assignment.jetski.number ?? shortId(assignment.id)}`;
+  if (assignment.asset) {
+    return `${assignment.asset.name ?? "recurso"}${assignment.asset.type ? ` (${assignment.asset.type})` : ""}`;
+  }
+  return `assignment ${shortId(assignment.id)}`;
+}
+
+function formatAssignmentConflict(assignment: AssignmentConflictInfo) {
+  const customer = assignment.reservation?.customerName?.trim();
+  const service = assignment.reservationUnit?.serviceName?.trim();
+  const unitIndex = assignment.reservationUnit?.unitIndex;
+  const unitLabel = unitIndex ? `unidad ${unitIndex}` : "unidad";
+
+  return [
+    `${unitLabel}: ${formatAssignmentResource(assignment)}`,
+    service ? `servicio ${service}` : null,
+    customer ? `cliente ${customer}` : null,
+    `salida ${formatRunConflict(assignment.run)}`,
+    `assignment ${shortId(assignment.id)} ${assignment.status}`,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function formatMonitorResourceConflict(
+  resourceLabel: string,
+  run: RunConflictInfo
+) {
+  return `${resourceLabel} está como recurso base en salida ${formatRunConflict(run)}`;
+}
+
 export async function POST(req: Request, ctx: { params: Promise<{ runId: string }> }) {
   const session = await requirePlatformOrAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -62,6 +128,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           kind: true,
           mode: true,
           status: true,
+          monitorJetskiId: true,
           monitorAssetId: true,
           monitorId: true,
           monitor: { select: { maxCapacity: true } },
@@ -92,6 +159,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
         where: { id: b.reservationUnitId },
         select: {
           id: true,
+          unitIndex: true,
           status: true,
           reservationId: true,
           jetskiId: true,
@@ -105,6 +173,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
               id: true,
               status: true,
               isLicense: true,
+              customerName: true,
             },
           },
         },
@@ -120,6 +189,39 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
 
       if (unit.status !== ReservationUnitStatus.READY_FOR_PLATFORM) {
         throw new Error(`Unit no está READY_FOR_PLATFORM (está ${unit.status})`);
+      }
+
+      const activeUnitAssignment = await tx.monitorRunAssignment.findFirst({
+        where: {
+          reservationUnitId: unit.id,
+          status: { in: OPEN_ASSIGNMENT_STATUSES },
+          run: { status: { in: OPEN_RUN_STATUSES } },
+          endedAt: null,
+        },
+        select: {
+          id: true,
+          status: true,
+          run: { select: { id: true, kind: true, mode: true, status: true } },
+          reservationUnit: {
+            select: {
+              unitIndex: true,
+              serviceName: true,
+            },
+          },
+          reservation: {
+            select: {
+              customerName: true,
+            },
+          },
+          jetski: { select: { number: true } },
+          asset: { select: { name: true, type: true } },
+        },
+      });
+
+      if (activeUnitAssignment) {
+        throw new Error(
+          `La reserva ya tiene una unidad activa asignada: ${formatAssignmentConflict(activeUnitAssignment)}. Finaliza o desasigna esa salida antes de reasignar.`
+        );
       }
 
       // 3) Validación recurso según kind
@@ -140,6 +242,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           where: { id: b.jetskiId },
           select: {
             id: true,
+            number: true,
             operabilityStatus: true,
             status: true,
             maintenanceEvents: {
@@ -169,20 +272,41 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           throw new Error(blockReason);
         }
 
-        if (unit.jetskiId && unit.jetskiId !== b.jetskiId) {
-          throw new Error("La unidad ya tiene un jetski asignado distinto");
-        }
-
         const dup = await tx.monitorRunAssignment.findFirst({
           where: {
             jetskiId: b.jetskiId,
-            status: { in: [RunAssignmentStatus.QUEUED, RunAssignmentStatus.ACTIVE] },
-            run: { status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] } },
+            status: { in: OPEN_ASSIGNMENT_STATUSES },
+            run: { status: { in: OPEN_RUN_STATUSES } },
             endedAt: null,
           },
-          select: { id: true },
+          select: {
+            id: true,
+            status: true,
+            run: { select: { id: true, kind: true, mode: true, status: true } },
+            reservationUnit: { select: { unitIndex: true, serviceName: true } },
+            reservation: { select: { customerName: true } },
+            jetski: { select: { number: true } },
+            asset: { select: { name: true, type: true } },
+          },
         });
-        if (dup) throw new Error("Esa moto ya está asignada en otra salida (pendiente o en mar)");
+        if (dup) {
+          throw new Error(
+            `Esa moto ya está asignada en una salida abierta: ${formatAssignmentConflict(dup)}`
+          );
+        }
+
+        const busyMonitorRun = await tx.monitorRun.findFirst({
+          where: {
+            monitorJetskiId: b.jetskiId,
+            status: { in: OPEN_RUN_STATUSES },
+          },
+          select: { id: true, kind: true, mode: true, status: true },
+        });
+        if (busyMonitorRun) {
+          throw new Error(
+            formatMonitorResourceConflict(`La moto ${jetski.number ?? shortId(jetski.id)}`, busyMonitorRun)
+          );
+        }
 
         // Crear assignment QUEUED (sin tiempos)
         const a = await tx.monitorRunAssignment.create({
@@ -270,6 +394,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           where: { id: b.assetId },
           select: {
             id: true,
+            name: true,
             type: true,
             operabilityStatus: true,
             status: true,
@@ -324,8 +449,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
         const dup = await tx.monitorRunAssignment.findFirst({
           where: {
             assetId: b.assetId,
-            status: { in: [RunAssignmentStatus.QUEUED, RunAssignmentStatus.ACTIVE] },
-            run: { status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] } },
+            status: { in: OPEN_ASSIGNMENT_STATUSES },
+            run: { status: { in: OPEN_RUN_STATUSES } },
             endedAt: null,
             ...(allowSharedMonitorAsset
               ? {
@@ -333,9 +458,35 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
                 }
               : {}),
           },
-          select: { id: true },
+          select: {
+            id: true,
+            status: true,
+            run: { select: { id: true, kind: true, mode: true, status: true } },
+            reservationUnit: { select: { unitIndex: true, serviceName: true } },
+            reservation: { select: { customerName: true } },
+            jetski: { select: { number: true } },
+            asset: { select: { name: true, type: true } },
+          },
         });
-        if (dup) throw new Error("Ese recurso ya está asignado en otra salida (pendiente o en mar)");
+        if (dup) {
+          throw new Error(
+            `Ese recurso ya está asignado en una salida abierta: ${formatAssignmentConflict(dup)}`
+          );
+        }
+
+        const busyMonitorRun = await tx.monitorRun.findFirst({
+          where: {
+            monitorAssetId: b.assetId,
+            status: { in: OPEN_RUN_STATUSES },
+            ...(allowSharedMonitorAsset ? { id: { not: runId } } : {}),
+          },
+          select: { id: true, kind: true, mode: true, status: true },
+        });
+        if (busyMonitorRun) {
+          throw new Error(
+            formatMonitorResourceConflict(`El recurso ${asset.name ?? shortId(asset.id)}`, busyMonitorRun)
+          );
+        }
 
         const a = await tx.monitorRunAssignment.create({
           data: {

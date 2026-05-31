@@ -9,9 +9,15 @@ export function canShareMonitorAssetWithReservation(input: {
   isLicense: boolean | null | undefined;
 }) {
   if (String(input.runKind ?? "").toUpperCase() !== "NAUTICA") return false;
-  if (String(input.runMode ?? "").toUpperCase() !== "MONITOR") return false;
-  if (Boolean(input.isLicense)) return false;
 
   const category = normalizeCategory(input.serviceCategory);
-  return category === "JETCAR" || category === "BOAT";
+  if (category !== "JETCAR" && category !== "BOAT") return false;
+
+  const mode = String(input.runMode ?? "").toUpperCase();
+
+  if (Boolean(input.isLicense)) {
+    return mode === "SOLO" || mode === "TEST";
+  }
+
+  return mode === "MONITOR";
 }
