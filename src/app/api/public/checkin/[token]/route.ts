@@ -359,6 +359,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
         const evaluation = evaluateContractCheckinState({
           isLicense: Boolean(reservation.isLicense),
           status: current.status,
+          language,
           contract: {
             driverName: norm(contractPatch.driverName),
             driverPhone: norm(contractPatch.driverPhone),

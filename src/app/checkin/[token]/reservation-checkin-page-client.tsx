@@ -7,6 +7,7 @@ import { PublicBrandHeader } from "@/components/brand";
 import { BirthDateField } from "@/components/customer-inputs";
 import { ActionButton, AlertBanner, SectionCard, StatusBadge as BrandStatusBadge } from "@/components/seariders-ui";
 import { brand } from "@/lib/brand";
+import { evaluateContractCheckinState } from "@/lib/contracts/public-checkin";
 import { getCountryOptionsEs } from "@/lib/countries";
 import {
   formatPublicDate,
@@ -177,27 +178,31 @@ function getContractFieldErrors({
 }): ContractFieldErrors {
   const text = getCheckinValidationText(language);
   const minor = getAgeFlagsFromBirthDate(draft.driverBirthDate);
+  const evaluation = evaluateContractCheckinState({
+    isLicense,
+    status: contract.status,
+    language,
+    contract: {
+      ...draft,
+      minorAuthorizationFileKey: contract.minorAuthorizationFileKey,
+    },
+  });
+  const blockingFields = new Set(evaluation.blockingFields);
   const errors: ContractFieldErrors = {
-    driverName: draft.driverName.trim() ? null : text.driverName,
+    driverName: blockingFields.has("driverName") ? text.driverName : null,
     driverPhone: null,
-    driverCountry: draft.driverCountry.trim() ? null : text.driverCountry,
-    driverAddress: draft.driverAddress.trim() ? null : text.driverAddress,
-    driverBirthDate: draft.driverBirthDate.trim() ? null : text.driverBirthDate,
-    driverDocType: draft.driverDocType.trim() ? null : text.driverDocType,
-    driverDocNumber: draft.driverDocNumber.trim() ? null : text.driverDocNumber,
-    minorAuthorizationProvided:
-      minor.needsAuthorization && !draft.minorAuthorizationProvided ? text.minorAuthorizationProvided : null,
-    minorAuthorizationFile:
-      minor.needsAuthorization && !contract.minorAuthorizationFileKey ? text.minorAuthorizationFile : null,
-    licenseSchool: isLicense && !draft.licenseSchool.trim() ? text.licenseSchool : null,
-    licenseType: isLicense && !draft.licenseType.trim() ? text.licenseType : null,
-    licenseNumber: isLicense && !draft.licenseNumber.trim() ? text.licenseNumber : null,
+    driverCountry: blockingFields.has("driverCountry") ? text.driverCountry : null,
+    driverAddress: blockingFields.has("driverAddress") ? text.driverAddress : null,
+    driverBirthDate: blockingFields.has("driverBirthDate") ? text.driverBirthDate : null,
+    driverDocType: blockingFields.has("driverDocType") ? text.driverDocType : null,
+    driverDocNumber: blockingFields.has("driverDocNumber") ? text.driverDocNumber : null,
+    minorAuthorizationProvided: blockingFields.has("minorAuthorizationProvided") ? text.minorAuthorizationProvided : null,
+    minorAuthorizationFile: blockingFields.has("minorAuthorizationFile") ? text.minorAuthorizationFile : null,
+    licenseSchool: blockingFields.has("licenseSchool") ? text.licenseSchool : null,
+    licenseType: blockingFields.has("licenseType") ? text.licenseType : null,
+    licenseNumber: blockingFields.has("licenseNumber") ? text.licenseNumber : null,
     action: minor.isUnder16 ? text.under16 : null,
   };
-
-  if (!errors.action && Object.entries(errors).some(([key, value]) => key !== "action" && Boolean(value))) {
-    errors.action = text.completeBeforeSign;
-  }
 
   return errors;
 }
@@ -252,13 +257,6 @@ function hasConditionErrors(errors: ContractFieldErrors, confirmedRead: boolean)
   return Boolean(!confirmedRead || errors.minorAuthorizationProvided || errors.minorAuthorizationFile);
 }
 
-function hasStepErrors(step: WizardStep, errors: ContractFieldErrors, confirmedRead: boolean) {
-  if (step === "personal") return hasPersonalErrors(errors);
-  if (step === "license") return hasLicenseErrors(errors);
-  if (step === "conditions") return hasConditionErrors(errors, confirmedRead);
-  return false;
-}
-
 function firstBlockingStep(errors: ContractFieldErrors, requiresLicense: boolean, confirmedRead: boolean): WizardStep | null {
   if (hasPersonalErrors(errors)) return "personal";
   if (requiresLicense && hasLicenseErrors(errors)) return "license";
@@ -277,9 +275,32 @@ function getStepErrorMessage({
   confirmedRead: boolean;
   copy: ReturnType<typeof getPublicCopy>;
 }) {
-  if (step === "personal" && errors.action) return errors.action;
-  if (step === "conditions" && !confirmedRead) return copy.signPage.errors.mustRead;
-  if (hasStepErrors(step, errors, confirmedRead)) return copy.checkinPage.wizard.completeStep;
+  if (step === "personal") {
+    return (
+      errors.action ??
+      errors.driverName ??
+      errors.driverCountry ??
+      errors.driverAddress ??
+      errors.driverBirthDate ??
+      errors.driverDocType ??
+      errors.driverDocNumber ??
+      null
+    );
+  }
+
+  if (step === "license") {
+    return errors.licenseSchool ?? errors.licenseType ?? errors.licenseNumber ?? null;
+  }
+
+  if (step === "conditions") {
+    return (
+      (!confirmedRead ? copy.signPage.errors.mustRead : null) ??
+      errors.minorAuthorizationProvided ??
+      errors.minorAuthorizationFile ??
+      null
+    );
+  }
+
   return null;
 }
 

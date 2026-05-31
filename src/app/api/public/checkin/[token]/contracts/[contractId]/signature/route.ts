@@ -54,6 +54,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string;
     const evaluation = evaluateContractCheckinState({
       isLicense: Boolean(contract.reservation.isLicense),
       status: contract.status,
+      language,
       contract,
     });
 
