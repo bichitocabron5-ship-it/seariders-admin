@@ -48,7 +48,6 @@ type ContractView = {
   unitIndex: number;
   status: string;
   driverName: string | null;
-  driverPhone: string | null;
   driverEmail: string | null;
   driverCountry: string | null;
   driverAddress: string | null;
@@ -78,7 +77,6 @@ type Snapshot = {
 type DraftContract = {
   id: string;
   driverName: string;
-  driverPhone: string;
   driverEmail: string;
   driverCountry: string;
   driverAddress: string;
@@ -95,7 +93,6 @@ type DraftContract = {
 
 type ContractFieldErrors = {
   driverName?: string | null;
-  driverPhone?: string | null;
   driverCountry?: string | null;
   driverAddress?: string | null;
   driverBirthDate?: string | null;
@@ -117,7 +114,6 @@ function getCheckinValidationText(language: PublicLanguage) {
   if (language === "en") {
     return {
       driverName: "Enter the driver's full name.",
-      driverPhone: "Enter the driver's phone number.",
       driverCountry: "Select the driver's country.",
       driverAddress: "Enter the driver's address.",
       driverBirthDate: "Enter the driver's birth date.",
@@ -135,7 +131,6 @@ function getCheckinValidationText(language: PublicLanguage) {
 
   return {
     driverName: "Indica el nombre completo del conductor.",
-    driverPhone: "Indica el telefono del conductor.",
     driverCountry: "Selecciona el pais del conductor.",
     driverAddress: "Indica la direccion del conductor.",
     driverBirthDate: "Indica la fecha de nacimiento del conductor.",
@@ -190,7 +185,6 @@ function getContractFieldErrors({
   const blockingFields = new Set(evaluation.blockingFields);
   const errors: ContractFieldErrors = {
     driverName: blockingFields.has("driverName") ? text.driverName : null,
-    driverPhone: null,
     driverCountry: blockingFields.has("driverCountry") ? text.driverCountry : null,
     driverAddress: blockingFields.has("driverAddress") ? text.driverAddress : null,
     driverBirthDate: blockingFields.has("driverBirthDate") ? text.driverBirthDate : null,
@@ -447,7 +441,6 @@ export function ReservationCheckinPageClient({
       nextDrafts[contract.id] = {
         id: contract.id,
         driverName: contract.driverName ?? "",
-        driverPhone: contract.driverPhone ?? "",
         driverEmail: contract.driverEmail ?? "",
         driverCountry: contract.driverCountry ?? data.reservation.customerCountry ?? "ES",
         driverAddress: contract.driverAddress ?? "",

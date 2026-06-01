@@ -36,7 +36,6 @@ const BodySchema = z.object({
     z.object({
       id: z.string().min(1),
       driverName: NullableStr,
-      driverPhone: NullableStr,
       driverEmail: NullableStr,
       driverCountry: NullableStr,
       driverAddress: NullableStr,
@@ -222,7 +221,6 @@ async function getReservationSnapshot(reservationId: string, language: ReturnTyp
       unitIndex: Number(contract.logicalUnitIndex ?? contract.unitIndex),
       status: contract.status,
       driverName: contract.driverName,
-      driverPhone: contract.driverPhone,
       driverEmail: contract.driverEmail,
       driverCountry: contract.driverCountry,
       driverAddress: contract.driverAddress,
@@ -362,7 +360,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
           language,
           contract: {
             driverName: norm(contractPatch.driverName),
-            driverPhone: norm(contractPatch.driverPhone),
             driverCountry: norm(contractPatch.driverCountry),
             driverAddress: norm(contractPatch.driverAddress),
             driverDocType: norm(contractPatch.driverDocType),
@@ -380,7 +377,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
           where: { id: contractPatch.id },
           data: {
             driverName: norm(contractPatch.driverName),
-            driverPhone: norm(contractPatch.driverPhone),
             driverEmail: norm(contractPatch.driverEmail),
             driverCountry: norm(contractPatch.driverCountry),
             driverAddress: norm(contractPatch.driverAddress),

@@ -65,3 +65,19 @@ test("precheckin sin licencia no exige campos de licencia", () => {
   assert.equal(result.nextStatus, "READY");
   assert.deepEqual(result.blockingFields, []);
 });
+
+test("precheckin no exige telefono del conductor para quedar listo", () => {
+  const result = evaluateContractCheckinState({
+    isLicense: false,
+    status: "DRAFT",
+    language: "es",
+    contract: {
+      ...completeBaseContract,
+      driverPhone: "",
+    },
+  });
+
+  assert.equal(result.canBeReady, true);
+  assert.equal(result.nextStatus, "READY");
+  assert.deepEqual(result.blockingFields, []);
+});
