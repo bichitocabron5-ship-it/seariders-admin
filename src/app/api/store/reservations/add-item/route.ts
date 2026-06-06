@@ -14,6 +14,7 @@ import { computeReservationCommercialBreakdown } from "@/lib/reservation-commerc
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { PricingTier } from "@prisma/client";
 import { findActiveServicePrice } from "@/lib/service-pricing";
+import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 
 export const runtime = "nodejs";
 
@@ -272,6 +273,7 @@ export async function POST(req: Request) {
         select: { id: true },
       });
 
+      await syncChannelCommissionLineFromReservationTx(tx, reservationId);
       await syncStoreFulfillmentTasksForReservation(tx, reservationId);
 
       return {

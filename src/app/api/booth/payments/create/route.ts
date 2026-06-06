@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import { findCurrentShiftSession } from "@/lib/shiftSessions";
+import { syncChannelCommissionLineFromPaymentTx } from "@/lib/channel-commission-lines";
 
 const BodySchema = z.object({
   reservationId: z.string().min(1),
@@ -97,35 +98,39 @@ export async function POST(req: Request) {
     shiftSessionId: session.shiftSessionId,
   });
 
-  const payment = await prisma.payment.create({
-    data: {
-      reservationId,
-      origin: PaymentOrigin.BOOTH,
-      method: method as PaymentMethod,
-      amountCents,
-      commissionBaseCents: reservation.commissionBaseCents ?? 0,
-      appliedCommissionPct: reservation.appliedCommissionPct ?? null,
-      appliedCommissionMode: reservation.appliedCommissionMode ?? "PERCENT",
-      appliedCommissionValue: reservation.appliedCommissionValue ?? 0,
-      appliedCommissionCents: reservation.appliedCommissionCents ?? 0,
-      customerDiscountMode: reservation.customerDiscountMode ?? "PERCENT",
-      customerDiscountValue: reservation.customerDiscountValue ?? 0,
-      customerDiscountCents: reservation.customerDiscountCents ?? 0,
-      externalDiscountCents:
-        (reservation.customerDiscountCents ?? 0) +
-        (reservation.manualDiscountCents ?? 0) +
-        (reservation.autoDiscountCents ?? 0),
-      discountResponsibility: reservation.discountResponsibility ?? "COMPANY",
-      promoterDiscountShareBps: reservation.promoterDiscountShareBps ?? 0,
-      promoterDiscountCents: reservation.promoterDiscountCents ?? 0,
-      companyDiscountCents: reservation.companyDiscountCents ?? 0,
-      isDeposit: false,
-      direction: PaymentDirection.IN,
-      customerName: reservation.customerName ?? null,
-      createdByUserId: session.userId,
-      shiftSessionId: shiftSession?.id ?? null,
-    },
-    select: { id: true },
+  const payment = await prisma.$transaction(async (tx) => {
+    const created = await tx.payment.create({
+      data: {
+        reservationId,
+        origin: PaymentOrigin.BOOTH,
+        method: method as PaymentMethod,
+        amountCents,
+        commissionBaseCents: reservation.commissionBaseCents ?? 0,
+        appliedCommissionPct: reservation.appliedCommissionPct ?? null,
+        appliedCommissionMode: reservation.appliedCommissionMode ?? "PERCENT",
+        appliedCommissionValue: reservation.appliedCommissionValue ?? 0,
+        appliedCommissionCents: reservation.appliedCommissionCents ?? 0,
+        customerDiscountMode: reservation.customerDiscountMode ?? "PERCENT",
+        customerDiscountValue: reservation.customerDiscountValue ?? 0,
+        customerDiscountCents: reservation.customerDiscountCents ?? 0,
+        externalDiscountCents:
+          (reservation.customerDiscountCents ?? 0) +
+          (reservation.manualDiscountCents ?? 0) +
+          (reservation.autoDiscountCents ?? 0),
+        discountResponsibility: reservation.discountResponsibility ?? "COMPANY",
+        promoterDiscountShareBps: reservation.promoterDiscountShareBps ?? 0,
+        promoterDiscountCents: reservation.promoterDiscountCents ?? 0,
+        companyDiscountCents: reservation.companyDiscountCents ?? 0,
+        isDeposit: false,
+        direction: PaymentDirection.IN,
+        customerName: reservation.customerName ?? null,
+        createdByUserId: session.userId,
+        shiftSessionId: shiftSession?.id ?? null,
+      },
+      select: { id: true },
+    });
+    await syncChannelCommissionLineFromPaymentTx(tx, created.id);
+    return created;
   });
 
   return NextResponse.json({ ok: true, paymentId: payment.id, paidNowCents: amountCents });

@@ -14,6 +14,7 @@ import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import { findCurrentShiftSession } from "@/lib/shiftSessions";
 import { prisma } from "@/lib/prisma";
 import { AppSession, sessionOptions } from "@/lib/session";
+import { voidPendingChannelCommissionLinesForReservationTx } from "@/lib/channel-commission-lines";
 
 export const runtime = "nodejs";
 
@@ -144,6 +145,8 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
           readyForPlatformAt: null,
         },
       });
+
+      await voidPendingChannelCommissionLinesForReservationTx(tx, id, "Reservation canceled");
 
       return {
         ok: true as const,

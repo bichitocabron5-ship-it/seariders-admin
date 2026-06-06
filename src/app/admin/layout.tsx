@@ -15,6 +15,7 @@ const navItems = [
   { href: "/admin/pricing", label: "Precios" },
   { href: "/admin/pricing/history", label: "Historico" },
   { href: "/admin/channels", label: "Canales y comisiones" },
+  { href: "/admin/commissions", label: "Liquidacion comisiones" },
   { href: "/admin/discounts", label: "Descuentos" },
   { href: "/admin/packs", label: "Packs" },
   { href: "/admin/gifts", label: "Regalos" },

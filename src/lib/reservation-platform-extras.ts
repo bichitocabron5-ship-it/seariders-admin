@@ -7,6 +7,7 @@ import {
   resolveDiscountPolicy,
 } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
+import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 
 export async function applyPlatformExtraEventsTx(
   tx: Prisma.TransactionClient,
@@ -232,6 +233,7 @@ export async function applyPlatformExtraEventsTx(
     },
   });
 
+  await syncChannelCommissionLineFromReservationTx(tx, reservationId);
   await syncStoreFulfillmentTasksForReservation(tx, reservationId);
 
   return {

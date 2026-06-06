@@ -8,6 +8,7 @@ import { type AppSession, sessionOptions } from "@/lib/session";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 import { findCurrentShiftSession } from "@/lib/shiftSessions";
+import { syncChannelCommissionLineFromPaymentTx } from "@/lib/channel-commission-lines";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -86,7 +87,8 @@ export async function POST(_req: Request, { params }: Ctx) {
     shiftSessionId: session.shiftSessionId,
   });
 
-  const reversal = await prisma.payment.create({
+  const reversal = await prisma.$transaction(async (tx) => {
+    const created = await tx.payment.create({
     data: {
       origin: payment.origin,
       method: payment.method,
@@ -104,7 +106,10 @@ export async function POST(_req: Request, { params }: Ctx) {
       description: payment.description,
       notes: [payment.notes?.trim(), `ANULACION ${payment.id}`].filter(Boolean).join(" · "),
     },
-    select: { id: true },
+      select: { id: true },
+    });
+    await syncChannelCommissionLineFromPaymentTx(tx, created.id);
+    return created;
   });
 
   return NextResponse.json({ ok: true, reversalPaymentId: reversal.id });

@@ -12,6 +12,7 @@ import {
   resolveDiscountPolicy,
 } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
+import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 
 type CreateItemInput = {
   serviceIdOrCode: string;
@@ -507,6 +508,8 @@ export async function createReservationWithItems(params: {
         skipDuplicates: true,
       });
     }
+
+    await syncChannelCommissionLineFromReservationTx(tx, reservation.id);
 
     return {
       id: reservation.id,

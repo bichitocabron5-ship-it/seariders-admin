@@ -15,6 +15,7 @@ import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { ensureReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { originFromRoleName } from "@/lib/cashClosures";
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
+import { syncChannelCommissionLineFromPaymentTx } from "@/lib/channel-commission-lines";
 
 export const runtime = "nodejs";
 
@@ -235,6 +236,8 @@ export async function POST(req: Request) {
           customerName: reservation.customerName ?? null,
         },
       });
+
+      await syncChannelCommissionLineFromPaymentTx(tx, payment.id);
 
       // ✅ Recalcular tras el pago (incluyendo ESTE pago)
       const newNetServicePaidCents =

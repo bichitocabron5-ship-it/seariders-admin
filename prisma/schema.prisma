@@ -59,9 +59,10 @@ model User {
   appliedExpenseBarRestocks ExpenseBarRestock[] @relation("ExpenseBarRestockAppliedBy")
   soldBarSales              BarSale[]           @relation("BarSaleSoldByUser")
 
-  returnedFulfillmentTasks  FulfillmentTask[]            @relation("FulfillmentReturnedByUser")
-  assignedFulfillmentAssets FulfillmentAssetAssignment[] @relation("FulfillmentAssignedByUser")
-  returnedFulfillmentAssets FulfillmentAssetAssignment[] @relation("FulfillmentReturnedAssetByUser")
+  returnedFulfillmentTasks   FulfillmentTask[]            @relation("FulfillmentReturnedByUser")
+  assignedFulfillmentAssets  FulfillmentAssetAssignment[] @relation("FulfillmentAssignedByUser")
+  returnedFulfillmentAssets  FulfillmentAssetAssignment[] @relation("FulfillmentReturnedAssetByUser")
+  paidChannelCommissionLines ChannelCommissionLine[]      @relation("ChannelCommissionLinePaidBy")
 }
 
 model Role {
@@ -174,8 +175,9 @@ model Channel {
   allowedServices            ServiceAllowedChannel[]
   optionPrices               ChannelOptionPrice[]
 
-  reservations Reservation[]
-  payments     Payment[]
+  reservations    Reservation[]
+  payments        Payment[]
+  commissionLines ChannelCommissionLine[]
 }
 
 model ChannelCommissionRule {
@@ -220,6 +222,7 @@ model Service {
   commissionRules    ChannelCommissionRule[]
   allowedChannels    ServiceAllowedChannel[]
   payments           Payment[]
+  commissionLines    ChannelCommissionLine[]
   packItems          PackItem[]
   giftProducts       GiftProduct[]           @relation("GiftProductService")
   passProducts       PassProduct[]           @relation("PassProductService")
@@ -336,48 +339,48 @@ model PackItem {
 }
 
 model Reservation {
-  id                             String                 @id @default(cuid())
+  id                             String                  @id @default(cuid())
   source                         ReservationSource
-  status                         ReservationStatus      @default(WAITING)
+  status                         ReservationStatus       @default(WAITING)
   activityDate                   DateTime
   scheduledTime                  DateTime?
   channelId                      String?
   marketing                      String?
   serviceId                      String
   optionId                       String
-  quantity                       Int                    @default(1)
-  pax                            Int                    @default(1)
-  companionsCount                Int                    @default(0)
+  quantity                       Int                     @default(1)
+  pax                            Int                     @default(1)
+  companionsCount                Int                     @default(0)
   basePriceCents                 Int
-  commissionBaseCents            Int                    @default(0)
+  commissionBaseCents            Int                     @default(0)
   appliedCommissionPct           Float?
-  appliedCommissionMode          CommercialValueMode    @default(PERCENT)
-  appliedCommissionValue         Float                  @default(0)
-  appliedCommissionCents         Int                    @default(0)
-  customerDiscountMode           CommercialValueMode    @default(PERCENT)
-  customerDiscountValue          Float                  @default(0)
-  customerDiscountCents          Int                    @default(0)
-  manualDiscountCents            Int                    @default(0)
-  autoDiscountCents              Int                    @default(0) // ✅ NUEVO (promo automática o por código)
-  discountResponsibility         DiscountResponsibility @default(COMPANY)
-  promoterDiscountShareBps       Int                    @default(0)
-  promoterDiscountCents          Int                    @default(0)
-  companyDiscountCents           Int                    @default(0)
-  manualDiscountReason           String?                @db.VarChar(200)
+  appliedCommissionMode          CommercialValueMode     @default(PERCENT)
+  appliedCommissionValue         Float                   @default(0)
+  appliedCommissionCents         Int                     @default(0)
+  customerDiscountMode           CommercialValueMode     @default(PERCENT)
+  customerDiscountValue          Float                   @default(0)
+  customerDiscountCents          Int                     @default(0)
+  manualDiscountCents            Int                     @default(0)
+  autoDiscountCents              Int                     @default(0) // ✅ NUEVO (promo automática o por código)
+  discountResponsibility         DiscountResponsibility  @default(COMPANY)
+  promoterDiscountShareBps       Int                     @default(0)
+  promoterDiscountCents          Int                     @default(0)
+  companyDiscountCents           Int                     @default(0)
+  manualDiscountReason           String?                 @db.VarChar(200)
   promoCode                      String? // ✅ NUEVO (si quieres guardar el código aplicado)
   totalPriceCents                Int
   customerName                   String
   customerCountry                String
   customerAddress                String?
-  customerPostalCode             String?                @db.VarChar(20)
+  customerPostalCode             String?                 @db.VarChar(20)
   customerBirthDate              DateTime?
   customerDocType                String?
   customerDocNumber              String?
   customerPhone                  String?
   customerEmail                  String?
-  isLicense                      Boolean                @default(false)
-  jetskiLicenseMode              JetskiLicenseMode      @default(NONE)
-  pricingTier                    PricingTier            @default(STANDARD)
+  isLicense                      Boolean                 @default(false)
+  jetskiLicenseMode              JetskiLicenseMode       @default(NONE)
+  pricingTier                    PricingTier             @default(STANDARD)
   licenseSchool                  String?
   licenseType                    String?
   licenseNumber                  String?
@@ -389,14 +392,14 @@ model Reservation {
   readyForPlatformAt             DateTime?
   departureAt                    DateTime?
   arrivalAt                      DateTime?
-  isManualEntry                  Boolean                @default(false)
-  isInternalUsage                Boolean                @default(false)
-  manualEntryNote                String?                @db.VarChar(500)
+  isManualEntry                  Boolean                 @default(false)
+  isInternalUsage                Boolean                 @default(false)
+  manualEntryNote                String?                 @db.VarChar(500)
   employeeId                     String?
-  employee                       Employee?              @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  employee                       Employee?               @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   manualEntryCreatedByUserId     String?
   manualEntryCreatedAt           DateTime?
-  financialAdjustmentNote        String?                @db.VarChar(500)
+  financialAdjustmentNote        String?                 @db.VarChar(500)
   financialAdjustedByUserId      String?
   financialAdjustedAt            DateTime?
   manualContractFileKey          String?
@@ -404,30 +407,31 @@ model Reservation {
   manualContractFileUrl          String?
   manualContractUploadedAt       DateTime?
   manualContractUploadedByUserId String?
-  createdAt                      DateTime               @default(now())
-  updatedAt                      DateTime               @updatedAt
+  createdAt                      DateTime                @default(now())
+  updatedAt                      DateTime                @updatedAt
   contracts                      ReservationContract[]
-  depositCents                   Int                    @default(0)
-  depositHeld                    Boolean                @default(false)
+  depositCents                   Int                     @default(0)
+  depositHeld                    Boolean                 @default(false)
   depositHeldAt                  DateTime?
   depositHeldByUserId            String?
   depositHoldReason              String?
   taxiboatTripId                 String?
   taxiboatAssignedAt             DateTime?
-  taxiboatTrip                   TaxiboatTrip?          @relation(fields: [taxiboatTripId], references: [id])
+  taxiboatTrip                   TaxiboatTrip?           @relation(fields: [taxiboatTripId], references: [id])
   payments                       Payment[]
-  items                          ReservationItem[]      @relation("ReservationItems")
-  channel                        Channel?               @relation(fields: [channelId], references: [id])
-  option                         ServiceOption          @relation(fields: [optionId], references: [id])
-  service                        Service                @relation(fields: [serviceId], references: [id])
+  commissionLines                ChannelCommissionLine[]
+  items                          ReservationItem[]       @relation("ReservationItems")
+  channel                        Channel?                @relation(fields: [channelId], references: [id])
+  option                         ServiceOption           @relation(fields: [optionId], references: [id])
+  service                        Service                 @relation(fields: [serviceId], references: [id])
   assignedJetskis                ReservationJetski[]
-  boothCode                      String?                @unique
+  boothCode                      String?                 @unique
   boothCreatedAt                 DateTime?
   boothCreatedByUserId           String?
-  boothNote                      String?                @db.VarChar(500)
-  redeemedGiftVoucher            GiftVoucher?           @relation("GiftRedeemedReservation")
-  giftVoucherId                  String?                @unique
-  giftVoucher                    GiftVoucher?           @relation("GiftVoucherReedem", fields: [giftVoucherId], references: [id])
+  boothNote                      String?                 @db.VarChar(500)
+  redeemedGiftVoucher            GiftVoucher?            @relation("GiftRedeemedReservation")
+  giftVoucherId                  String?                 @unique
+  giftVoucher                    GiftVoucher?            @relation("GiftVoucherReedem", fields: [giftVoucherId], references: [id])
 
   passVoucherId String?
   passVoucher   PassVoucher? @relation(fields: [passVoucherId], references: [id])
@@ -1078,8 +1082,9 @@ model Payment {
   passSoldVoucher PassVoucher?  @relation("PassSoldPayment")
   passVoucherSale PassVoucher?  @relation("PassVoucherPayments", fields: [passVoucherSaleId], references: [id])
 
-  isStaffSale Boolean  @default(false)
-  barSale     BarSale?
+  isStaffSale    Boolean                @default(false)
+  barSale        BarSale?
+  commissionLine ChannelCommissionLine?
 
   @@index([origin, createdAt])
   @@index([passVoucherSaleId, createdAt])
@@ -1087,6 +1092,53 @@ model Payment {
   @@index([channelId])
   @@index([shiftSessionId])
   @@index([reversalOfPaymentId])
+}
+
+model ChannelCommissionLine {
+  id String @id @default(cuid())
+
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Restrict)
+
+  reservationId String?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  sourceOrigin PaymentOrigin
+
+  serviceId String?
+  service   Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  customerName String? @db.VarChar(160)
+
+  commissionBaseCents    Int
+  appliedCommissionMode  CommercialValueMode @default(PERCENT)
+  appliedCommissionValue Float               @default(0)
+  appliedCommissionPct   Float?
+  commissionCents        Int
+
+  generatedAt DateTime  @default(now())
+  dueDate     DateTime?
+
+  status        ChannelCommissionLineStatus @default(PENDING)
+  paidAt        DateTime?
+  paidByUserId  String?
+  paidByUser    User?                       @relation("ChannelCommissionLinePaidBy", fields: [paidByUserId], references: [id], onDelete: SetNull)
+  paymentMethod PaymentMethod?
+  notes         String?                     @db.VarChar(800)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([reservationId, channelId, serviceId])
+  @@index([channelId, status, generatedAt])
+  @@index([sourceOrigin, generatedAt])
+  @@index([serviceId])
+  @@index([reservationId])
+  @@index([paidAt])
+  @@index([dueDate])
 }
 
 model Monitor {
@@ -2405,6 +2457,12 @@ enum PaymentMethod {
 enum PaymentDirection {
   IN
   OUT
+}
+
+enum ChannelCommissionLineStatus {
+  PENDING
+  PAID
+  VOIDED
 }
 
 enum MonitorRunKind {

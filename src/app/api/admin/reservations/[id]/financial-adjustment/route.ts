@@ -13,6 +13,7 @@ import {
 
 import { prisma } from "@/lib/prisma";
 import { AppSession, sessionOptions } from "@/lib/session";
+import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 
 export const runtime = "nodejs";
 
@@ -389,6 +390,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           createdByUserId: session.userId,
         },
       });
+
+      await syncChannelCommissionLineFromReservationTx(tx, id);
 
       return { id };
     });

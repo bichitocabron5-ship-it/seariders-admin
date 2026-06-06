@@ -12,6 +12,7 @@ import {
   resolveDiscountPolicy,
 } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
+import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 
 export const runtime = "nodejs";
 
@@ -196,6 +197,7 @@ export async function POST(req: Request) {
         select: { id: true, totalPriceCents: true },
       });
 
+      await syncChannelCommissionLineFromReservationTx(tx, reservationId);
       await syncStoreFulfillmentTasksForReservation(tx, reservationId);
 
       return { reservation: updated };

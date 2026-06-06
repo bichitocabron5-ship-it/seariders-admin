@@ -27,6 +27,7 @@ import { syncReservationContractsTx } from "@/lib/reservation-contract-sync";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
+import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 
 export const runtime = "nodejs";
 
@@ -861,6 +862,7 @@ if (hasProItems) {
       },
       desiredReadyAt
     );
+    await syncChannelCommissionLineFromReservationTx(tx, id);
     const contracts = await ensureContractsTx(tx, id);
 
       return { id, ...contracts };
@@ -975,6 +977,7 @@ if (hasProItems) {
           data,
           select: { id: true },
         });
+        await syncChannelCommissionLineFromReservationTx(tx, id);
         return await ensureContractsTx(tx, id);
       });
     } catch (error: unknown) {
@@ -1232,6 +1235,7 @@ if (hasProItems) {
       },
       desiredReadyAt
     );
+    await syncChannelCommissionLineFromReservationTx(tx, id);
     const contracts = await ensureContractsTx(tx, id);
 
       return { id, ...contracts };

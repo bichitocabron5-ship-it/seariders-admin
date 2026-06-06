@@ -18,6 +18,7 @@ import { AppSession, sessionOptions } from "@/lib/session";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
+import { voidPendingChannelCommissionLinesForReservationTx } from "@/lib/channel-commission-lines";
 
 export const runtime = "nodejs";
 
@@ -246,6 +247,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         },
       });
 
+      await voidPendingChannelCommissionLinesForReservationTx(tx, id, "Reservation canceled");
       await syncStoreFulfillmentTasksForReservation(tx, id);
 
       await writeOperationalLog(

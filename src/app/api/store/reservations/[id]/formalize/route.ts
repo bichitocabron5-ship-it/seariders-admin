@@ -32,6 +32,7 @@ import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
+import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 
 export const runtime = "nodejs";
 
@@ -978,6 +979,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           `Faltan contratos por completar: ${contracts.readyCount}/${contracts.requiredUnits} listos.`
         );
       }
+
+      await syncChannelCommissionLineFromReservationTx(tx, id);
 
       await writeOperationalLog(
         {

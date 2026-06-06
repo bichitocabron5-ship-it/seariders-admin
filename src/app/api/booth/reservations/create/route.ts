@@ -22,6 +22,10 @@ import { BUSINESS_TZ, todayYmdInTz, utcDateFromYmdInTz } from "@/lib/tz-business
 import { findCurrentShiftSession } from "@/lib/shiftSessions";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
+import {
+  syncChannelCommissionLineFromPaymentTx,
+  syncChannelCommissionLineFromReservationTx,
+} from "@/lib/channel-commission-lines";
 
 const BodySchema = z.object({
   customerName: z.string().min(1),
@@ -330,6 +334,7 @@ export async function POST(req: Request) {
     if (!parsed.data.paymentMethod) {
       return NextResponse.json({ error: "Método de pago requerido para actividad externa." }, { status: 400 });
     }
+    const externalPaymentMethod = parsed.data.paymentMethod;
     await assertCashOpenForUser(session.userId, session.role as RoleName, session.shiftSessionId);
 
     const shiftSession = await findCurrentShiftSession({
@@ -341,10 +346,11 @@ export async function POST(req: Request) {
     const commissionCents = commercialSnapshot.appliedCommissionCents;
     const commissionPct = commercialSnapshot.appliedCommissionPct;
 
-    const payment = await prisma.payment.create({
+    const payment = await prisma.$transaction(async (tx) => {
+      const created = await tx.payment.create({
       data: {
         origin: PaymentOrigin.BOOTH,
-        method: parsed.data.paymentMethod,
+        method: externalPaymentMethod,
         amountCents: commissionCents,
         commissionBaseCents: commercial.commissionBaseCents,
         appliedCommissionPct: commissionPct,
@@ -371,7 +377,10 @@ export async function POST(req: Request) {
         description: `${mainService.name} · ${channel.name}`,
         notes: parsed.data.boothNote?.trim() || null,
       },
-      select: { id: true },
+        select: { id: true },
+      });
+      await syncChannelCommissionLineFromPaymentTx(tx, created.id);
+      return created;
     });
 
     return NextResponse.json({
@@ -401,7 +410,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No se pudo generar un código único para Booth." }, { status: 500 });
   }
 
-  const reservation = await prisma.reservation.create({
+  const reservation = await prisma.$transaction(async (tx) => {
+    const created = await tx.reservation.create({
     data: {
       source: ReservationSource.BOOTH,
       status: ReservationStatus.WAITING,
@@ -451,7 +461,10 @@ export async function POST(req: Request) {
         })),
       },
     },
-    select: { id: true, boothCode: true },
+      select: { id: true, boothCode: true },
+    });
+    await syncChannelCommissionLineFromReservationTx(tx, created.id);
+    return created;
   });
 
   return NextResponse.json({ ok: true, mode: "reservation", reservationId: reservation.id, boothCode: reservation.boothCode });
