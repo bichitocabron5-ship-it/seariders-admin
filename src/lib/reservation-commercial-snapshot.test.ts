@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  commercialPricingStateChanged,
   hasSufficientCommercialSnapshot,
   netPaidServiceCents,
+  normalizeCommercialPricingState,
   shouldPreserveFormalizeCommercialSnapshot,
 } from "./reservation-commercial-snapshot";
 import { resolveReservationPaymentStatus } from "./reservation-payment-status";
@@ -104,6 +106,60 @@ test("fixed commission snapshots are valid and stay preserveable", () => {
       appliedCommissionPct: null,
       appliedCommissionValue: 15,
       appliedCommissionCents: 1_500,
+    }),
+    true
+  );
+});
+
+test("non jetski default tariff fields do not count as a commercial pricing change", () => {
+  assert.deepEqual(
+    normalizeCommercialPricingState({
+      serviceCategory: "TAXIBOAT",
+      isLicense: false,
+      jetskiLicenseMode: null,
+      pricingTier: null,
+    }),
+    {
+      isLicense: false,
+      jetskiLicenseMode: "NONE",
+      pricingTier: "STANDARD",
+    }
+  );
+
+  assert.equal(
+    commercialPricingStateChanged({
+      current: {
+        serviceCategory: "TAXIBOAT",
+        isLicense: false,
+        jetskiLicenseMode: null,
+        pricingTier: null,
+      },
+      requested: {
+        serviceCategory: "TAXIBOAT",
+        isLicense: false,
+        jetskiLicenseMode: "NONE",
+        pricingTier: "STANDARD",
+      },
+    }),
+    false
+  );
+});
+
+test("jetski license mode changes still count as commercial pricing changes", () => {
+  assert.equal(
+    commercialPricingStateChanged({
+      current: {
+        serviceCategory: "JETSKI",
+        isLicense: false,
+        jetskiLicenseMode: "NONE",
+        pricingTier: "STANDARD",
+      },
+      requested: {
+        serviceCategory: "JETSKI",
+        isLicense: true,
+        jetskiLicenseMode: "GREEN_LIMITED",
+        pricingTier: "RESIDENT",
+      },
     }),
     true
   );

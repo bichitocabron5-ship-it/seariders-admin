@@ -25,6 +25,13 @@ export type PaymentSnapshotLike = {
   direction?: string | null;
 };
 
+export type CommercialPricingStateLike = {
+  serviceCategory?: string | null;
+  isLicense?: boolean | null;
+  jetskiLicenseMode?: string | null;
+  pricingTier?: string | null;
+};
+
 function isFiniteCents(value: unknown) {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0;
@@ -82,4 +89,44 @@ export function shouldPreserveFormalizeCommercialSnapshot(args: {
 }) {
   if (args.explicitRecalculate) return false;
   return hasSufficientCommercialSnapshot(args.snapshot) || netPaidServiceCents(args.payments) > 0;
+}
+
+export function normalizeCommercialPricingState(state: CommercialPricingStateLike) {
+  const serviceCategory = String(state.serviceCategory ?? "").trim().toUpperCase();
+  const rawMode = String(state.jetskiLicenseMode ?? "").trim().toUpperCase();
+
+  if (serviceCategory !== "JETSKI") {
+    return {
+      isLicense: Boolean(state.isLicense),
+      jetskiLicenseMode: "NONE",
+      pricingTier: "STANDARD",
+    };
+  }
+
+  const jetskiLicenseMode =
+    rawMode === "GREEN_LIMITED" || rawMode === "YELLOW_UNLIMITED"
+      ? rawMode
+      : state.isLicense
+        ? "YELLOW_UNLIMITED"
+        : "NONE";
+
+  return {
+    isLicense: jetskiLicenseMode !== "NONE",
+    jetskiLicenseMode,
+    pricingTier: jetskiLicenseMode === "GREEN_LIMITED" ? "RESIDENT" : "STANDARD",
+  };
+}
+
+export function commercialPricingStateChanged(args: {
+  current: CommercialPricingStateLike;
+  requested: CommercialPricingStateLike;
+}) {
+  const current = normalizeCommercialPricingState(args.current);
+  const requested = normalizeCommercialPricingState(args.requested);
+
+  return (
+    current.isLicense !== requested.isLicense ||
+    current.jetskiLicenseMode !== requested.jetskiLicenseMode ||
+    current.pricingTier !== requested.pricingTier
+  );
 }
