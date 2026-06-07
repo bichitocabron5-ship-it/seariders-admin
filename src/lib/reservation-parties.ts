@@ -56,9 +56,9 @@ export function resolveContractNotificationRecipient(args: {
 
   return {
     recipientName: contractName ?? holderName ?? "cliente",
-    phone: contractPhone ?? holderPhone,
-    country: contractCountry ?? holderCountry ?? "ES",
-    source: contractName || contractPhone || contractCountry ? "CONTRACT" : "RESERVATION",
+    phone: holderPhone ?? contractPhone,
+    country: holderCountry ?? contractCountry ?? "ES",
+    source: holderPhone || holderCountry ? "RESERVATION" : "CONTRACT",
   } as const;
 }
 

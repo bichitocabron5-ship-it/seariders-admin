@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 
 import { opsStyles } from "@/components/ops-ui";
+import { getCountryLabel } from "@/lib/countries";
 
 import { errorMessage } from "../utils/errors";
 import type { ContractDto, ContractPatch } from "../types";
@@ -224,7 +225,6 @@ export function ContractCard({
   const [birthYmd, setBirthYmd] = React.useState<string>(ymdFromDate(c.driverBirthDate ? new Date(c.driverBirthDate) : null));
   const [minorAuthorizationProvided, setMinorAuthorizationProvided] = React.useState<boolean>(Boolean(c.minorAuthorizationProvided));
   const [driverName, setDriverName] = React.useState<string>(c.driverName ?? "");
-  const [driverPhone, setDriverPhone] = React.useState<string>(c.driverPhone ?? "");
   const [driverEmail, setDriverEmail] = React.useState<string>(c.driverEmail ?? "");
   const [driverCountry, setDriverCountry] = React.useState<string>(c.driverCountry ?? "");
   const [driverAddress, setDriverAddress] = React.useState<string>(c.driverAddress ?? "");
@@ -262,7 +262,7 @@ export function ContractCard({
   const contractFieldErrors = React.useMemo(() => {
     const errors: Record<string, string | null> = {
       driverName: driverName.trim() ? null : "Indica el nombre y apellidos del conductor.",
-      driverPhone: null,
+      driverCountry: driverCountry.trim() ? null : "Selecciona el pais del conductor.",
       driverAddress: driverAddress.trim() ? null : "Indica la direccion del conductor.",
       driverDocType: driverDocType.trim() ? null : "Selecciona el tipo de documento.",
       driverDocNumber: driverDocNumber.trim() ? null : "Indica el numero de documento.",
@@ -280,6 +280,7 @@ export function ContractCard({
     birthYmd,
     c.minorAuthorizationFileKey,
     driverAddress,
+    driverCountry,
     driverDocNumber,
     driverDocType,
     driverName,
@@ -322,7 +323,6 @@ export function ContractCard({
     }
     setMinorAuthorizationProvided(Boolean(c.minorAuthorizationProvided));
     setDriverName(c.driverName ?? "");
-    setDriverPhone(c.driverPhone ?? "");
     setDriverEmail(c.driverEmail ?? "");
     setDriverCountry(c.driverCountry ?? "");
     setDriverAddress(c.driverAddress ?? "");
@@ -335,7 +335,7 @@ export function ContractCard({
     setLicenseNumber(c.licenseNumber ?? "");
     setPreparedJetskiId(c.preparedJetskiId ?? "");
     setPreparedAssetId(c.preparedAssetId ?? "");
-  }, [c.id, c.driverAddress, c.driverBirthDate, c.driverCountry, c.driverDocNumber, c.driverDocType, c.driverEmail, c.driverName, c.driverPhone, c.driverPostalCode, c.imageConsentAccepted, c.licenseNumber, c.licenseSchool, c.licenseType, c.minorAuthorizationProvided, c.preparedAssetId, c.preparedJetskiId]);
+  }, [c.id, c.driverAddress, c.driverBirthDate, c.driverCountry, c.driverDocNumber, c.driverDocType, c.driverEmail, c.driverName, c.driverPostalCode, c.imageConsentAccepted, c.licenseNumber, c.licenseSchool, c.licenseType, c.minorAuthorizationProvided, c.preparedAssetId, c.preparedJetskiId]);
 
   useEffect(() => {
     if (c.status === "SIGNED" || c.status === "VOID") {
@@ -382,7 +382,7 @@ export function ContractCard({
   function buildPayload() {
     return {
       driverName: driverName || null,
-      driverPhone: driverPhone || null,
+      driverPhone: c.driverPhone || null,
       driverEmail: driverEmail || null,
       driverCountry: driverCountry || null,
       driverAddress: driverAddress || null,
@@ -532,26 +532,31 @@ export function ContractCard({
               <div>{displayValue(c.driverName)}</div>
             </div>
             <div style={readonlyFieldStyle}>
-              <div style={sectionEyebrowStyle}>Telefono</div>
-              <div>{displayValue(c.driverPhone)}</div>
-            </div>
-            <div style={readonlyFieldStyle}>
-              <div style={sectionEyebrowStyle}>Email</div>
-              <div>{displayValue(c.driverEmail)}</div>
-            </div>
-            <div style={readonlyFieldStyle}>
               <div style={sectionEyebrowStyle}>Pais</div>
-              <div>{displayValue(c.driverCountry)}</div>
+              <div>{displayValue(getCountryLabel(c.driverCountry, "es"))}</div>
             </div>
             <div style={readonlyFieldStyle}>
               <div style={sectionEyebrowStyle}>Direccion</div>
               <div>{displayValue(c.driverAddress)}</div>
             </div>
-            <div style={readonlyFieldStyle}>
-              <div style={sectionEyebrowStyle}>Codigo postal</div>
-              <div>{displayValue(c.driverPostalCode)}</div>
-            </div>
           </div>
+          {c.driverEmail || c.driverPostalCode ? (
+            <details style={{ border: "1px solid #e2e8f0", borderRadius: 12, background: "#f8fafc", overflow: "hidden" }}>
+              <summary style={{ padding: "10px 12px", cursor: "pointer", fontSize: 12, fontWeight: 900, color: "#0f172a" }}>
+                Ver datos avanzados/opcionales
+              </summary>
+              <div style={{ ...readonlyGridStyle, padding: 12 }}>
+                <div style={readonlyFieldStyle}>
+                  <div style={sectionEyebrowStyle}>Email</div>
+                  <div>{displayValue(c.driverEmail)}</div>
+                </div>
+                <div style={readonlyFieldStyle}>
+                  <div style={sectionEyebrowStyle}>Codigo postal</div>
+                  <div>{displayValue(c.driverPostalCode)}</div>
+                </div>
+              </div>
+            </details>
+          ) : null}
         </div>
 
         <div style={{ ...subCardStyle, gap: 10 }}>
@@ -696,9 +701,9 @@ export function ContractCard({
         inputStyle={inputStyle}
         secondaryButtonStyle={secondaryButtonStyle}
         sectionEyebrowStyle={sectionEyebrowStyle}
+        contractId={c.id}
         customer={customer}
         driverName={driverName}
-        driverPhone={driverPhone}
         driverEmail={driverEmail}
         driverCountry={driverCountry}
         driverAddress={driverAddress}
@@ -709,7 +714,7 @@ export function ContractCard({
           advanceAttempted
             ? {
                 driverName: contractFieldErrors.driverName,
-                driverPhone: contractFieldErrors.driverPhone,
+                driverCountry: contractFieldErrors.driverCountry,
                 driverAddress: contractFieldErrors.driverAddress,
                 driverDocType: contractFieldErrors.driverDocType,
                 driverDocNumber: contractFieldErrors.driverDocNumber,
@@ -717,7 +722,6 @@ export function ContractCard({
             : undefined
         }
         onDriverNameChange={setDriverName}
-        onDriverPhoneChange={setDriverPhone}
         onDriverEmailChange={setDriverEmail}
         onDriverCountryChange={(value) => setDriverCountry(value.toUpperCase())}
         onDriverAddressChange={setDriverAddress}
@@ -726,16 +730,10 @@ export function ContractCard({
         onDriverDocNumberChange={setDriverDocNumber}
         onCopyCustomerData={() => {
           setDriverName(customer.name);
-          setDriverPhone(customer.phone);
-          setDriverEmail(customer.email);
           setDriverCountry(customer.country);
-          setDriverPostalCode(customer.postalCode);
           void savePartial({
             driverName: customer.name || null,
-            driverPhone: customer.phone || null,
-            driverEmail: customer.email || null,
             driverCountry: customer.country || null,
-            driverPostalCode: customer.postalCode || null,
           });
         }}
       />
@@ -858,8 +856,8 @@ export function ContractCard({
           url={signerLinkModal.url}
           expiresInMinutes={signerLinkModal.expiresInMinutes}
           recipientName={driverName.trim() || customer.name.trim() || "cliente"}
-          phone={driverPhone.trim() || customer.phone.trim() || null}
-          country={driverCountry.trim() || customer.country.trim() || null}
+          phone={customer.phone.trim() || null}
+          country={customer.country.trim() || driverCountry.trim() || null}
           unitLabel={`Unidad #${c.logicalUnitIndex ?? c.unitIndex}`}
           manualMessage={signerLinkModal.manualMessage ?? null}
           notificationStatus={signerLinkModal.notificationStatus ?? null}

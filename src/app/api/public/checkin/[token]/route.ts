@@ -14,6 +14,7 @@ import {
   countReadyVisibleContracts,
   pickVisibleContractsByLogicalUnit,
 } from "@/lib/contracts/active-contracts";
+import { resolveCountryIso2 } from "@/lib/countries";
 
 export const runtime = "nodejs";
 
@@ -57,6 +58,12 @@ function norm(value: string | null | undefined) {
   if (value === null) return null;
   const trimmed = String(value).trim();
   return trimmed.length ? trimmed : null;
+}
+
+function normCountry(value: string | null | undefined) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return resolveCountryIso2(value);
 }
 
 async function getReservationSnapshot(reservationId: string, language: ReturnType<typeof normalizePublicLanguage>) {
@@ -222,7 +229,7 @@ async function getReservationSnapshot(reservationId: string, language: ReturnTyp
       status: contract.status,
       driverName: contract.driverName,
       driverEmail: contract.driverEmail,
-      driverCountry: contract.driverCountry,
+      driverCountry: resolveCountryIso2(contract.driverCountry) ?? contract.driverCountry,
       driverAddress: contract.driverAddress,
       driverPostalCode: contract.driverPostalCode,
       driverDocType: contract.driverDocType,
@@ -253,7 +260,7 @@ async function getReservationSnapshot(reservationId: string, language: ReturnTyp
       customerName: reservation.customerName,
       customerPhone: reservation.customerPhone,
       customerEmail: reservation.customerEmail,
-      customerCountry: reservation.customerCountry,
+      customerCountry: resolveCountryIso2(reservation.customerCountry) ?? reservation.customerCountry,
       customerAddress: reservation.customerAddress,
       customerPostalCode: reservation.customerPostalCode,
       customerBirthDate: reservation.customerBirthDate?.toISOString() ?? null,
@@ -319,6 +326,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
       if (!reservation) throw new Error("Reserva no encontrada");
 
       const reservationPatch = parsed.data.reservation;
+      const reservationCountry = normCountry(reservationPatch.customerCountry);
       await tx.reservation.update({
         where: { id: reservation.id },
         data: {
@@ -326,7 +334,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
           customerPhone: norm(reservationPatch.customerPhone),
           customerEmail: norm(reservationPatch.customerEmail),
           marketing: norm(reservationPatch.marketing),
-          customerCountry: norm(reservationPatch.customerCountry) ?? reservation.customerCountry,
+          customerCountry: reservationCountry ?? reservation.customerCountry,
           customerAddress: norm(reservationPatch.customerAddress),
           customerPostalCode: norm(reservationPatch.customerPostalCode),
           customerBirthDate:
@@ -353,6 +361,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
             : contractPatch.driverBirthDate
               ? new Date(contractPatch.driverBirthDate)
               : null;
+        const driverCountry = normCountry(contractPatch.driverCountry);
 
         const evaluation = evaluateContractCheckinState({
           isLicense: Boolean(reservation.isLicense),
@@ -360,7 +369,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
           language,
           contract: {
             driverName: norm(contractPatch.driverName),
-            driverCountry: norm(contractPatch.driverCountry),
+            driverCountry,
             driverAddress: norm(contractPatch.driverAddress),
             driverDocType: norm(contractPatch.driverDocType),
             driverDocNumber: norm(contractPatch.driverDocNumber),
@@ -378,7 +387,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
           data: {
             driverName: norm(contractPatch.driverName),
             driverEmail: norm(contractPatch.driverEmail),
-            driverCountry: norm(contractPatch.driverCountry),
+            driverCountry,
             driverAddress: norm(contractPatch.driverAddress),
             driverPostalCode: norm(contractPatch.driverPostalCode),
             driverDocType: norm(contractPatch.driverDocType),
