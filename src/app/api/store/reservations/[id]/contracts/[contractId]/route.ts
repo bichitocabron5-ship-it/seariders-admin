@@ -7,6 +7,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
 import { ContractStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
+import { resolveCountryIso2 } from "@/lib/countries";
 
 export const runtime = "nodejs";
 
@@ -49,6 +50,12 @@ function norm(v: string | null | undefined) {
   if (v === null) return null; // borrar
   const t = String(v).trim();
   return t.length ? t : null;
+}
+
+function normCountry(v: string | null | undefined) {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  return resolveCountryIso2(v);
 }
 
 function must(s: unknown) {
@@ -117,7 +124,7 @@ export async function PATCH(
       if (driverPhone !== undefined) data.driverPhone = driverPhone;
       const driverEmail = norm(b.driverEmail);
       if (driverEmail !== undefined) data.driverEmail = driverEmail;
-      const driverCountry = norm(b.driverCountry);
+      const driverCountry = normCountry(b.driverCountry);
       if (driverCountry !== undefined) data.driverCountry = driverCountry;
       const driverAddress = norm(b.driverAddress);
       if (driverAddress !== undefined) data.driverAddress = driverAddress;

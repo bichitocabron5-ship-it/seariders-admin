@@ -81,3 +81,19 @@ test("precheckin no exige telefono del conductor para quedar listo", () => {
   assert.equal(result.nextStatus, "READY");
   assert.deepEqual(result.blockingFields, []);
 });
+
+test("precheckin exige pais del conductor para quedar listo", () => {
+  const result = evaluateContractCheckinState({
+    isLicense: false,
+    status: "DRAFT",
+    language: "es",
+    contract: {
+      ...completeBaseContract,
+      driverCountry: "",
+    },
+  });
+
+  assert.equal(result.canBeReady, false);
+  assert.deepEqual(result.blockingFields, ["driverCountry"]);
+  assert.match(result.blockingReason ?? "", /pais del conductor/);
+});

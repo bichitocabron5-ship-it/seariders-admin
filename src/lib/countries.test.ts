@@ -4,8 +4,25 @@ import test from "node:test";
 import {
   getCountryDialCodeOptions,
   getCountryFlagEmoji,
+  getCountryOptions,
   getCountryOptionsEs,
+  resolveCountryIso2,
 } from "./countries";
+
+test("country options localize labels by language", () => {
+  const spainEs = getCountryOptions("es").find((option) => option.value === "ES");
+  const spainEn = getCountryOptions("en").find((option) => option.value === "ES");
+
+  assert.equal(spainEs?.label, "España");
+  assert.equal(spainEn?.label, "Spain");
+});
+
+test("country resolution accepts spanish, english, alias and ISO inputs", () => {
+  assert.equal(resolveCountryIso2("Francia"), "FR");
+  assert.equal(resolveCountryIso2("France"), "FR");
+  assert.equal(resolveCountryIso2("fr"), "FR");
+  assert.equal(resolveCountryIso2("UK"), "GB");
+});
 
 test("phone country options put frequent countries first", () => {
   const options = getCountryDialCodeOptions(getCountryOptionsEs());

@@ -1,22 +1,21 @@
 "use client";
 
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SignatureCanvas from "react-signature-canvas";
 import { PublicBrandHeader } from "@/components/brand";
+import { CountrySelect } from "@/components/country-select";
 import { BirthDateField } from "@/components/customer-inputs";
 import { ActionButton, AlertBanner, SectionCard, StatusBadge as BrandStatusBadge } from "@/components/seariders-ui";
 import { brand } from "@/lib/brand";
 import { evaluateContractCheckinState } from "@/lib/contracts/public-checkin";
-import { getCountryOptionsEs } from "@/lib/countries";
+import { getCountryOptions, type CountryOption } from "@/lib/countries";
 import {
   formatPublicDate,
   formatPublicTime,
   getPublicCopy,
   type PublicLanguage,
 } from "@/lib/public-links/i18n";
-
-const COUNTRY_OPTIONS = getCountryOptionsEs();
 
 type ReservationView = {
   id: string;
@@ -732,6 +731,11 @@ export function ReservationCheckinPageClient({
     });
   }, [expandedContractId, snapshot]);
 
+  const countryOptions = useMemo(
+    () => getCountryOptions(language === "en" ? "en" : "es"),
+    [language]
+  );
+
   if (loading) {
     return <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", color: "#475569" }}>{copy.checkinPage.loading}</main>;
   }
@@ -744,10 +748,6 @@ export function ReservationCheckinPageClient({
   const isMobile = viewportWidth < 640;
   const signatureCanvasWidth = Math.max(280, Math.min(900, viewportWidth - (isMobile ? 48 : 120)));
   const signatureCanvasHeight = isMobile ? 220 : 260;
-  const countryOptions = [
-    { value: "", label: copy.checkinPage.wizard.selectCountry },
-    ...COUNTRY_OPTIONS,
-  ];
   const activeContract =
     snapshot.contracts.find((contract) => contract.id === expandedContractId && contract.status !== "SIGNED") ??
     snapshot.contracts.find((contract) => contract.status !== "SIGNED") ??
@@ -864,11 +864,13 @@ export function ReservationCheckinPageClient({
                           error={showStepErrors ? fieldErrors.driverName : null}
                           onChange={(value) => updateContractDraft(activeContract.id, { driverName: value })}
                         />
-                        <SelectField
+                        <CountrySelectField
                           label={copy.checkinPage.driverCountry}
                           value={activeDraft.driverCountry}
                           error={showStepErrors ? fieldErrors.driverCountry : null}
                           options={countryOptions}
+                          placeholder={copy.checkinPage.wizard.selectCountry}
+                          noOptionsMessage={language === "en" ? "No results" : "Sin resultados"}
                           onChange={(value) => updateContractDraft(activeContract.id, { driverCountry: value })}
                         />
                         <Field
@@ -1180,6 +1182,44 @@ function SelectField({
           </option>
         ))}
       </select>
+      {error ? <div style={inlineErrorStyle}>{error}</div> : null}
+    </label>
+  );
+}
+
+function CountrySelectField({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+  noOptionsMessage,
+  disabled,
+  error,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: CountryOption[];
+  placeholder: string;
+  noOptionsMessage: string;
+  disabled?: boolean;
+  error?: string | null;
+}) {
+  return (
+    <label style={fieldLabelStyle}>
+      <span>{label}</span>
+      <CountrySelect
+        value={value}
+        disabled={disabled}
+        onChange={onChange}
+        countryOptions={options}
+        inputStyle={error ? errorInputStyle : inputStyle}
+        placeholder={placeholder}
+        noOptionsMessage={noOptionsMessage}
+        instanceId={`country-${label.replace(/\W+/g, "-").toLowerCase()}`}
+        ariaLabel={label}
+      />
       {error ? <div style={inlineErrorStyle}>{error}</div> : null}
     </label>
   );

@@ -1,11 +1,12 @@
 "use client";
 
 import type React from "react";
-import { BirthDateField, PhoneWithCountryField } from "@/components/customer-inputs";
-import { getCountryOptionsEs } from "@/lib/countries";
+import { CountrySelect } from "@/components/country-select";
+import { BirthDateField } from "@/components/customer-inputs";
+import { getCountryOptions } from "@/lib/countries";
 import type { ContractDto } from "../types";
 
-const COUNTRY_OPTIONS = getCountryOptionsEs();
+const COUNTRY_OPTIONS = getCountryOptions("es");
 
 type PreparedOptions = {
   jetskis: Array<{ id: string; number: number | null; model: string | null; plate: string | null }>;
@@ -51,9 +52,9 @@ type ContractLegalSectionProps = CommonStyles & {
 };
 
 type ContractDriverSectionProps = CommonStyles & {
+  contractId: string;
   customer: CustomerInfo;
   driverName: string;
-  driverPhone: string;
   driverEmail: string;
   driverCountry: string;
   driverAddress: string;
@@ -62,13 +63,12 @@ type ContractDriverSectionProps = CommonStyles & {
   driverDocNumber: string;
   fieldErrors?: {
     driverName?: string | null;
-    driverPhone?: string | null;
+    driverCountry?: string | null;
     driverAddress?: string | null;
     driverDocType?: string | null;
     driverDocNumber?: string | null;
   };
   onDriverNameChange: (value: string) => void;
-  onDriverPhoneChange: (value: string) => void;
   onDriverEmailChange: (value: string) => void;
   onDriverCountryChange: (value: string) => void;
   onDriverAddressChange: (value: string) => void;
@@ -289,9 +289,9 @@ export function ContractDriverSection({
   inputStyle,
   secondaryButtonStyle,
   sectionEyebrowStyle,
+  contractId,
   customer,
   driverName,
-  driverPhone,
   driverEmail,
   driverCountry,
   driverAddress,
@@ -300,7 +300,6 @@ export function ContractDriverSection({
   driverDocNumber,
   fieldErrors,
   onDriverNameChange,
-  onDriverPhoneChange,
   onDriverEmailChange,
   onDriverCountryChange,
   onDriverAddressChange,
@@ -342,29 +341,24 @@ export function ContractDriverSection({
           />
           {fieldErrors?.driverName ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverName}</div> : null}
         </label>
-        <PhoneWithCountryField
-          label="Telefono"
-          country={driverCountry}
-          phone={driverPhone}
-          onCountryChange={onDriverCountryChange}
-          onPhoneChange={onDriverPhoneChange}
-          countryOptions={COUNTRY_OPTIONS}
-          inputStyle={withErrorStyle(fieldErrors?.driverPhone)}
-          phonePlaceholder="Ej: 612345678"
-          error={fieldErrors?.driverPhone}
-        />
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Email
-          <input value={driverEmail} onChange={(e) => onDriverEmailChange(e.target.value)} style={inputStyle} placeholder="conductor@email.com" />
+          Pais del conductor *
+          <CountrySelect
+            value={driverCountry}
+            onChange={onDriverCountryChange}
+            countryOptions={COUNTRY_OPTIONS}
+            inputStyle={withErrorStyle(fieldErrors?.driverCountry)}
+            placeholder="Selecciona pais..."
+            noOptionsMessage="Sin resultados"
+            instanceId={`contract-driver-country-${contractId}`}
+            ariaLabel="Pais del conductor"
+          />
+          {fieldErrors?.driverCountry ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverCountry}</div> : null}
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Dirección *
           <input value={driverAddress} onChange={(e) => onDriverAddressChange(e.target.value)} style={withErrorStyle(fieldErrors?.driverAddress)} />
           {fieldErrors?.driverAddress ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverAddress}</div> : null}
-        </label>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Código postal
-          <input value={driverPostalCode} onChange={(e) => onDriverPostalCodeChange(e.target.value)} style={inputStyle} placeholder="08303" />
         </label>
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
           Tipo de documento *
@@ -382,6 +376,22 @@ export function ContractDriverSection({
           {fieldErrors?.driverDocNumber ? <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}>{fieldErrors.driverDocNumber}</div> : null}
         </label>
       </div>
+
+      <details style={{ border: "1px solid #e2e8f0", borderRadius: 12, background: "#f8fafc", overflow: "hidden" }}>
+        <summary style={{ padding: "12px 14px", cursor: "pointer", fontSize: 13, fontWeight: 900, color: "#0f172a" }}>
+          Ver datos avanzados/opcionales
+        </summary>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, padding: 12 }}>
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            Email
+            <input value={driverEmail} onChange={(e) => onDriverEmailChange(e.target.value)} style={inputStyle} placeholder="conductor@email.com" />
+          </label>
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            Codigo postal
+            <input value={driverPostalCode} onChange={(e) => onDriverPostalCodeChange(e.target.value)} style={inputStyle} placeholder="08303" />
+          </label>
+        </div>
+      </details>
     </div>
   );
 }
