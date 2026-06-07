@@ -869,6 +869,7 @@ export function ReservationCheckinPageClient({
                           value={activeDraft.driverCountry}
                           error={showStepErrors ? fieldErrors.driverCountry : null}
                           options={countryOptions}
+                          language={language}
                           placeholder={copy.checkinPage.wizard.selectCountry}
                           noOptionsMessage={language === "en" ? "No results" : "Sin resultados"}
                           onChange={(value) => updateContractDraft(activeContract.id, { driverCountry: value })}
@@ -1192,6 +1193,7 @@ function CountrySelectField({
   value,
   onChange,
   options,
+  language,
   placeholder,
   noOptionsMessage,
   disabled,
@@ -1201,6 +1203,7 @@ function CountrySelectField({
   value: string;
   onChange: (value: string) => void;
   options: CountryOption[];
+  language: PublicLanguage;
   placeholder: string;
   noOptionsMessage: string;
   disabled?: boolean;
@@ -1214,6 +1217,7 @@ function CountrySelectField({
         disabled={disabled}
         onChange={onChange}
         countryOptions={options}
+        language={language}
         inputStyle={error ? errorInputStyle : inputStyle}
         placeholder={placeholder}
         noOptionsMessage={noOptionsMessage}

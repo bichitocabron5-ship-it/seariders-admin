@@ -24,7 +24,7 @@ export type CountryDialCodeOption = CountryOption & {
 const FREQUENT_PHONE_COUNTRIES = ["ES", "FR", "DE", "IT", "GB", "NL", "BE"] as const;
 export type CountryLanguage = "es" | "en";
 
-function normalizeCountryLanguage(language: string | null | undefined): CountryLanguage {
+export function normalizeCountryLanguage(language: string | null | undefined): CountryLanguage {
   return language === "en" ? "en" : "es";
 }
 
@@ -93,6 +93,12 @@ export function getCountryOptionsEs(): CountryOption[] {
 
 export function getCountryOptionsEn(): CountryOption[] {
   return getCountryOptions("en");
+}
+
+export function getCountryOptionLabel(option: CountryOption, language: string | null | undefined = "es") {
+  const locale = normalizeCountryLanguage(language);
+  if (locale === "en") return option.labelEn || option.label || option.value;
+  return option.labelEs || option.label || option.value;
 }
 
 export function isValidCountryIso2(code: string) {
