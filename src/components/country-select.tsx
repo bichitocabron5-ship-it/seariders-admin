@@ -3,6 +3,7 @@
 import React, { useMemo } from "react";
 import Select, { type GroupBase, type StylesConfig } from "react-select";
 import {
+  getCountryOptionLabel,
   getCountryFlagEmoji,
   normalizeCountrySearchText,
   type CountryOption,
@@ -23,6 +24,7 @@ type CountrySelectProps = {
   noOptionsMessage?: string;
   instanceId?: string;
   ariaLabel?: string;
+  language?: string | null;
 };
 
 const selectStyles: StylesConfig<CountrySelectOption, false, GroupBase<CountrySelectOption>> = {
@@ -71,8 +73,10 @@ const selectStyles: StylesConfig<CountrySelectOption, false, GroupBase<CountrySe
   }),
 };
 
-function toCountrySelectOption(option: CountryOption): CountrySelectOption {
+function toCountrySelectOption(option: CountryOption, language: string | null | undefined): CountrySelectOption {
+  const label = getCountryOptionLabel(option, language);
   const searchLabels = [
+    label,
     option.label,
     option.labelEn,
     option.labelEs,
@@ -82,6 +86,7 @@ function toCountrySelectOption(option: CountryOption): CountrySelectOption {
 
   return {
     ...option,
+    label,
     flag: getCountryFlagEmoji(option.value),
     searchText: searchLabels.map(normalizeCountrySearchText).join(" "),
   };
@@ -117,10 +122,11 @@ export function CountrySelect({
   noOptionsMessage = "Sin resultados",
   instanceId = "country-select",
   ariaLabel = "Pais",
+  language = "es",
 }: CountrySelectProps) {
   const options = useMemo(
-    () => countryOptions.map(toCountrySelectOption),
-    [countryOptions]
+    () => countryOptions.map((option) => toCountrySelectOption(option, language)),
+    [countryOptions, language]
   );
   const normalizedValue = String(value ?? "").trim().toUpperCase();
   const selectedOption = options.find((option) => option.value === normalizedValue) ?? null;

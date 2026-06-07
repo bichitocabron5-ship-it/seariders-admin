@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   getCountryDialCodeOptions,
   getCountryFlagEmoji,
+  getCountryOptionLabel,
   getCountryOptions,
   getCountryOptionsEs,
   resolveCountryIso2,
@@ -11,15 +12,30 @@ import {
 
 test("country options localize labels by language", () => {
   const spainEs = getCountryOptions("es").find((option) => option.value === "ES");
+  const germanyEs = getCountryOptions("es").find((option) => option.value === "DE");
   const spainEn = getCountryOptions("en").find((option) => option.value === "ES");
+  const germanyEn = getCountryOptions("en").find((option) => option.value === "DE");
 
   assert.equal(spainEs?.label, "España");
+  assert.equal(germanyEs?.label, "Alemania");
   assert.equal(spainEn?.label, "Spain");
+  assert.equal(germanyEn?.label, "Germany");
+});
+
+test("country option labels can be rendered from the requested language", () => {
+  const germany = getCountryOptionsEs().find((option) => option.value === "DE");
+
+  assert.ok(germany);
+  assert.equal(getCountryOptionLabel(germany, "es"), "Alemania");
+  assert.equal(getCountryOptionLabel(germany, "en"), "Germany");
+  assert.equal(getCountryOptionLabel(germany), "Alemania");
 });
 
 test("country resolution accepts spanish, english, alias and ISO inputs", () => {
   assert.equal(resolveCountryIso2("Francia"), "FR");
   assert.equal(resolveCountryIso2("France"), "FR");
+  assert.equal(resolveCountryIso2("Alemania"), "DE");
+  assert.equal(resolveCountryIso2("Germany"), "DE");
   assert.equal(resolveCountryIso2("fr"), "FR");
   assert.equal(resolveCountryIso2("UK"), "GB");
 });
