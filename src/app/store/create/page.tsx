@@ -1982,9 +1982,12 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             gap: 6,
           }}
         >
-          <div style={{ ...badgeStyle, color: "#334155" }}>Nueva versión de contratos</div>
+          <div style={{ ...badgeStyle, color: "#334155" }}>Reagendar con contratos firmados</div>
           <div style={{ fontWeight: 900, color: "#0f172a" }}>
             Esta reserva ya tiene contratos firmados.
+          </div>
+          <div style={{ fontSize: 13, color: "#475569" }}>
+            Esta reserva tiene contratos firmados. Se cambiará la fecha/hora operativa, pero los contratos firmados no se regeneran.
           </div>
           <div style={{ fontSize: 13, color: "#475569" }}>
             Puedes añadir unidades pendientes y reducir unidades. Si retiras una unidad firmada, se pedirá confirmación fuerte y la firma quedará conservada como histórico.

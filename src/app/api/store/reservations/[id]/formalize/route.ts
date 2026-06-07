@@ -33,6 +33,10 @@ import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
+import {
+  netPaidServiceCents,
+  shouldPreserveFormalizeCommercialSnapshot,
+} from "@/lib/reservation-commercial-snapshot";
 
 export const runtime = "nodejs";
 
@@ -85,6 +89,7 @@ const Body = z.object({
   companionsCount: z.number().int().min(0).max(20).optional(),
   items: z.array(ItemBody).optional(),
   confirmSignedContractReduction: z.boolean().optional(),
+  recalculatePricing: z.boolean().optional(),
 });
 
 function normalizeOptionalString(v: string | null | undefined) {
@@ -167,6 +172,13 @@ function toRouteErrorResponse(error: unknown) {
       { status: 409 }
     );
   }
+  if (
+    message.includes("Slot completo") ||
+    message.includes("No caben") ||
+    message.includes("Hora fuera de horario")
+  ) {
+    return new NextResponse(message, { status: 409 });
+  }
   return new NextResponse(
     message.replace(/^CONFIRM_SIGNED_CONTRACT_REDUCTION:\s*/, ""),
     { status: message.startsWith("CONFIRM_SIGNED_CONTRACT_REDUCTION:") ? 409 : 400 }
@@ -218,6 +230,33 @@ function computeContractProgress(args: {
   const readyCount = countReadyVisibleContracts(args.contracts, requiredUnits);
   const visibleContracts = pickVisibleContractsByLogicalUnit(args.contracts, requiredUnits);
   return { requiredUnits, readyCount, visibleContracts };
+}
+
+function buildCommercialShape(
+  items: Array<{
+    serviceId: string;
+    optionId: string | null;
+    quantity: number | null | undefined;
+  }>
+) {
+  return items
+    .map((item) => ({
+      serviceId: item.serviceId,
+      optionId: item.optionId ?? "",
+      quantity: Number(item.quantity ?? 0),
+    }))
+    .sort((a, b) =>
+      a.serviceId.localeCompare(b.serviceId) ||
+      a.optionId.localeCompare(b.optionId) ||
+      a.quantity - b.quantity
+    );
+}
+
+function sameCommercialShape(
+  left: ReturnType<typeof buildCommercialShape>,
+  right: ReturnType<typeof buildCommercialShape>
+) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: string) {
@@ -343,23 +382,39 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           isLicense: true,
           jetskiLicenseMode: true,
           pricingTier: true,
+          basePriceCents: true,
+          totalPriceCents: true,
+          commissionBaseCents: true,
+          appliedCommissionPct: true,
+          appliedCommissionMode: true,
+          appliedCommissionValue: true,
+          appliedCommissionCents: true,
+          customerDiscountMode: true,
+          customerDiscountValue: true,
+          customerDiscountCents: true,
+          autoDiscountCents: true,
           depositCents: true,
           companionsCount: true,
           licenseSchool: true,
           licenseType: true,
           licenseNumber: true,
           manualDiscountCents: true,
+          promoCode: true,
           discountResponsibility: true,
           promoterDiscountShareBps: true,
+          promoterDiscountCents: true,
+          companyDiscountCents: true,
           activityDate: true,
           scheduledTime: true,
           items: {
             select: {
               serviceId: true,
               optionId: true,
+              servicePriceId: true,
               quantity: true,
               pax: true,
               isExtra: true,
+              unitPriceCents: true,
               totalPriceCents: true,
               service: {
                 select: {
@@ -393,6 +448,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
               licenseNumber: true,
             },
           },
+          payments: {
+            select: {
+              amountCents: true,
+              isDeposit: true,
+              direction: true,
+            },
+          },
         },
       });
 
@@ -421,6 +483,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           alreadyFormalized: true as const,
         };
       }
+
+      const explicitRecalculatePricing = Boolean(b.recalculatePricing);
+      if (explicitRecalculatePricing && session.role !== "ADMIN") {
+        throw new Error("Solo un administrador puede recalcular el precio al formalizar.");
+      }
+      const paidServiceCents = netPaidServiceCents(current.payments);
+      const hasCommercialLineSnapshots =
+        (current.items ?? []).length > 0 || Boolean(current.giftVoucherId || current.passVoucherId);
+      const preserveCommercialSnapshot =
+        shouldPreserveFormalizeCommercialSnapshot({
+          snapshot: current,
+          payments: current.payments,
+          explicitRecalculate: explicitRecalculatePricing,
+        }) && (hasCommercialLineSnapshots || paidServiceCents > 0);
 
       const tz = BUSINESS_TZ;
       const activityDateYmd = b.activityDate ?? toYmdInTz(current.activityDate, tz);
@@ -501,6 +577,39 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         });
       }
 
+      const currentCommercialShapeSource = (current.items ?? [])
+        .filter((item) => !item.isExtra)
+        .map((item) => ({
+          serviceId: item.serviceId,
+          optionId: item.optionId ?? current.optionId,
+          quantity: item.quantity,
+        }));
+      const currentCommercialShape = buildCommercialShape(
+        currentCommercialShapeSource.length > 0
+          ? currentCommercialShapeSource
+          : [{ serviceId: current.serviceId, optionId: current.optionId, quantity: current.quantity }]
+      );
+      const requestedCommercialShape = buildCommercialShape(
+        candidateItems.map((item) => ({
+          serviceId: item.serviceId,
+          optionId: item.optionId,
+          quantity: item.quantity,
+        }))
+      );
+      const commercialShapeChanged = !sameCommercialShape(currentCommercialShape, requestedCommercialShape);
+      const channelChanged =
+        b.channelId !== undefined && (b.channelId ?? null) !== (current.channelId ?? null);
+      const licensePricingChanged =
+        (b.isLicense !== undefined && Boolean(b.isLicense) !== Boolean(current.isLicense)) ||
+        (b.jetskiLicenseMode !== undefined && b.jetskiLicenseMode !== current.jetskiLicenseMode) ||
+        (b.pricingTier !== undefined && b.pricingTier !== current.pricingTier);
+
+      if (preserveCommercialSnapshot && (commercialShapeChanged || channelChanged || licensePricingChanged)) {
+        throw new Error(
+          "La reserva tiene snapshot comercial o pagos asociados. Formalizar conserva precio, promoción y comisión; usa una acción explícita de recálculo para cambiar actividad, cantidad, canal o tarifa."
+        );
+      }
+
       if (!customerName) throw new Error("Nombre requerido.");
       if (!customerCountry || customerCountry.trim().length < 2) throw new Error("Pais requerido para formalizar.");
       if (customerEmail && !z.string().email().safeParse(customerEmail).success) {
@@ -541,6 +650,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         serviceCode: string | null;
       }> = [];
 
+      const currentMainItemSnapshots = new Map(
+        (current.items ?? [])
+          .filter((item) => !item.isExtra)
+          .map((item) => [`${item.serviceId}::${item.optionId ?? ""}`, item])
+      );
+
       for (const item of candidateItems) {
         const qty = Number(item.quantity ?? 0);
         const pax = Number(item.pax ?? 0);
@@ -575,6 +690,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             servicePriceId: null,
             unitPriceCents: 0,
             totalPriceCents: 0,
+            category: String(service.category ?? "").toUpperCase(),
+            serviceName: service.name ?? null,
+            serviceCode: service.code ?? null,
+          });
+          continue;
+        }
+
+        if (preserveCommercialSnapshot) {
+          const frozenItem = currentMainItemSnapshots.get(`${service.id}::${option.id}`) ?? null;
+          lineCreates.push({
+            serviceId: service.id,
+            optionId: option.id,
+            durationMinutes: Number(option.durationMinutes ?? 30),
+            quantity: qty,
+            pax,
+            promoCode: item.promoCode ?? null,
+            servicePriceId: frozenItem?.servicePriceId ?? null,
+            unitPriceCents: Number(frozenItem?.unitPriceCents ?? 0),
+            totalPriceCents: Number(frozenItem?.totalPriceCents ?? 0),
             category: String(service.category ?? "").toUpperCase(),
             serviceName: service.name ?? null,
             serviceCode: service.code ?? null,
@@ -666,74 +800,94 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const totalBeforeDiscounts = serviceSubtotal + extrasTotal;
 
       const effectiveChannelId = b.channelId !== undefined ? b.channelId ?? null : current.channelId ?? null;
-      const channel = effectiveChannelId
-        ? await tx.channel.findUnique({
-            where: { id: effectiveChannelId },
-            select: {
-              allowsPromotions: true,
-              customerDiscountMode: true,
-              customerDiscountValue: true,
-              customerDiscountCents: true,
-              discountResponsibility: true,
-              promoterDiscountShareBps: true,
-            },
-          })
-        : null;
-      const promotionsEnabled = current.source === "BOOTH" ? false : (channel ? Boolean(channel.allowsPromotions) : true);
-      const discountPolicy = resolveDiscountPolicy({
-        responsibility: current.discountResponsibility,
-        promoterDiscountShareBps: current.promoterDiscountShareBps,
-        channel,
-      });
-
-      const boothUnitDiscountCents = getBoothUnitDiscountCents({
-        source: current.source,
-        matchingQuantity: current.quantity,
-        manualDiscountCents: current.manualDiscountCents,
-      });
-      const originalLineKey = `${current.serviceId}::${current.optionId}`;
-      const matchingBoothLineQty = lineCreates.reduce(
-        (sum, line) =>
-          `${line.serviceId}::${line.optionId}` === originalLineKey
-            ? sum + Number(line.quantity ?? 0)
-            : sum,
-        0
-      );
-      const incomingManualDiscountCents =
-        current.source === "BOOTH"
-          ? getScaledBoothDiscountCents({
-              boothUnitDiscountCents,
-              nextMatchingQuantity: matchingBoothLineQty,
-            })
-          : Number(current.manualDiscountCents ?? 0);
       const totalMainQuantity = lineCreates.reduce(
         (sum, line) => sum + Number(line.quantity ?? 0),
         0
       );
-      const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
-        channel,
-        quantity: totalMainQuantity,
-        baseCents: totalBeforeDiscounts,
-      });
 
-      const commercial = await computeReservationCommercialBreakdown({
-        when: pricingWhen,
-        discountLines: lineCreates.map((line) => ({
-          serviceId: line.serviceId,
-          optionId: line.optionId,
-          category: line.category,
-          quantity: line.quantity,
-          lineBaseCents: line.totalPriceCents,
-          promoCode: promotionsEnabled ? line.promoCode : null,
-        })),
-        customerCountry: customerCountry.toUpperCase(),
-        promotionsEnabled,
-        totalBeforeDiscountsCents: totalBeforeDiscounts,
-        customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
-        manualDiscountCents: incomingManualDiscountCents,
-        discountResponsibility: discountPolicy.discountResponsibility,
-        promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
-      });
+      let customerDiscountSnapshot = {
+        customerDiscountMode: current.customerDiscountMode,
+        customerDiscountValue: Number(current.customerDiscountValue ?? 0),
+        customerDiscountCents: Number(current.customerDiscountCents ?? 0),
+      };
+      let commercial = {
+        finalTotalCents: Number(current.totalPriceCents ?? 0),
+        commissionBaseCents: Number(current.commissionBaseCents ?? 0),
+        autoDiscountCents: Number(current.autoDiscountCents ?? 0),
+        manualDiscountCents: Number(current.manualDiscountCents ?? 0),
+        discountResponsibility: current.discountResponsibility,
+        promoterDiscountShareBps: Number(current.promoterDiscountShareBps ?? 0),
+        promoterDiscountCents: Number(current.promoterDiscountCents ?? 0),
+        companyDiscountCents: Number(current.companyDiscountCents ?? 0),
+        promoCode: current.promoCode ?? null,
+      };
+
+      if (!preserveCommercialSnapshot) {
+        const channel = effectiveChannelId
+          ? await tx.channel.findUnique({
+              where: { id: effectiveChannelId },
+              select: {
+                allowsPromotions: true,
+                customerDiscountMode: true,
+                customerDiscountValue: true,
+                customerDiscountCents: true,
+                discountResponsibility: true,
+                promoterDiscountShareBps: true,
+              },
+            })
+          : null;
+        const promotionsEnabled = current.source === "BOOTH" ? false : (channel ? Boolean(channel.allowsPromotions) : true);
+        const discountPolicy = resolveDiscountPolicy({
+          responsibility: current.discountResponsibility,
+          promoterDiscountShareBps: current.promoterDiscountShareBps,
+          channel,
+        });
+
+        const boothUnitDiscountCents = getBoothUnitDiscountCents({
+          source: current.source,
+          matchingQuantity: current.quantity,
+          manualDiscountCents: current.manualDiscountCents,
+        });
+        const originalLineKey = `${current.serviceId}::${current.optionId}`;
+        const matchingBoothLineQty = lineCreates.reduce(
+          (sum, line) =>
+            `${line.serviceId}::${line.optionId}` === originalLineKey
+              ? sum + Number(line.quantity ?? 0)
+              : sum,
+          0
+        );
+        const incomingManualDiscountCents =
+          current.source === "BOOTH"
+            ? getScaledBoothDiscountCents({
+                boothUnitDiscountCents,
+                nextMatchingQuantity: matchingBoothLineQty,
+              })
+            : Number(current.manualDiscountCents ?? 0);
+        customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
+          channel,
+          quantity: totalMainQuantity,
+          baseCents: totalBeforeDiscounts,
+        });
+
+        commercial = await computeReservationCommercialBreakdown({
+          when: pricingWhen,
+          discountLines: lineCreates.map((line) => ({
+            serviceId: line.serviceId,
+            optionId: line.optionId,
+            category: line.category,
+            quantity: line.quantity,
+            lineBaseCents: line.totalPriceCents,
+            promoCode: promotionsEnabled ? line.promoCode : null,
+          })),
+          customerCountry: customerCountry.toUpperCase(),
+          promotionsEnabled,
+          totalBeforeDiscountsCents: totalBeforeDiscounts,
+          customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
+          manualDiscountCents: incomingManualDiscountCents,
+          discountResponsibility: discountPolicy.discountResponsibility,
+          promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
+        });
+      }
 
       const mainLine = lineCreates[0];
       if (!mainLine) throw new Error("Servicio y duracion requeridos.");
@@ -879,43 +1033,55 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           service: { category: line.category },
         })),
       });
-      const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
-        channelId: effectiveChannelId,
-        serviceId: mainLine.serviceId,
-        commissionBaseCents: commercial.commissionBaseCents,
-        finalTotalCents: commercial.finalTotalCents,
-        customerDiscountBaseCents: totalBeforeDiscounts,
-        quantity: totalMainQuantity,
-      });
+      const commercialSnapshot = preserveCommercialSnapshot
+        ? {
+            appliedCommissionPct: current.appliedCommissionPct,
+            appliedCommissionMode: current.appliedCommissionMode,
+            appliedCommissionValue: Number(current.appliedCommissionValue ?? 0),
+            appliedCommissionCents: Number(current.appliedCommissionCents ?? 0),
+            customerDiscountMode: current.customerDiscountMode,
+            customerDiscountValue: Number(current.customerDiscountValue ?? 0),
+            customerDiscountCents: Number(current.customerDiscountCents ?? 0),
+          }
+        : await getAppliedCommercialSnapshotTx(tx, {
+            channelId: effectiveChannelId,
+            serviceId: mainLine.serviceId,
+            commissionBaseCents: commercial.commissionBaseCents,
+            finalTotalCents: commercial.finalTotalCents,
+            customerDiscountBaseCents: totalBeforeDiscounts,
+            quantity: totalMainQuantity,
+          });
 
-      await tx.reservation.update({
-        where: { id },
-        data: {
-          customerName,
-          customerPhone: customerPhone ?? null,
-          customerEmail: customerEmail ?? null,
-          customerCountry: customerCountry.toUpperCase(),
-          customerAddress: customerAddress ?? null,
-          customerPostalCode: customerPostalCode ?? null,
-          customerBirthDate: customerBirthDate ?? null,
-          customerDocType: customerDocType ?? null,
-          customerDocNumber: customerDocNumber ?? null,
-          marketing: marketing ?? null,
-          serviceId: mainLine.serviceId,
-          optionId: mainLine.optionId,
-          channelId: effectiveChannelId,
-          quantity: totalMainQuantity,
-          pax: Number(b.pax ?? current.pax ?? mainLine.pax),
-          companionsCount,
-          depositCents,
-          isLicense: reservationState.isLicense,
-          jetskiLicenseMode: reservationState.jetskiLicenseMode,
-          pricingTier: reservationState.pricingTier,
-          licenseSchool: reservationState.isLicense ? finalLicenseSchool ?? null : null,
-          licenseType: reservationState.isLicense ? finalLicenseType ?? null : null,
-          licenseNumber: reservationState.isLicense ? finalLicenseNumber ?? null : null,
-          activityDate,
-          scheduledTime,
+      const reservationUpdateData: Prisma.ReservationUncheckedUpdateInput = {
+        customerName,
+        customerPhone: customerPhone ?? null,
+        customerEmail: customerEmail ?? null,
+        customerCountry: customerCountry.toUpperCase(),
+        customerAddress: customerAddress ?? null,
+        customerPostalCode: customerPostalCode ?? null,
+        customerBirthDate: customerBirthDate ?? null,
+        customerDocType: customerDocType ?? null,
+        customerDocNumber: customerDocNumber ?? null,
+        marketing: marketing ?? null,
+        serviceId: preserveCommercialSnapshot ? current.serviceId : mainLine.serviceId,
+        optionId: preserveCommercialSnapshot ? current.optionId : mainLine.optionId,
+        channelId: preserveCommercialSnapshot ? current.channelId : effectiveChannelId,
+        quantity: preserveCommercialSnapshot ? current.quantity : totalMainQuantity,
+        pax: Number(b.pax ?? current.pax ?? mainLine.pax),
+        companionsCount,
+        depositCents,
+        isLicense: reservationState.isLicense,
+        jetskiLicenseMode: reservationState.jetskiLicenseMode,
+        pricingTier: reservationState.pricingTier,
+        licenseSchool: reservationState.isLicense ? finalLicenseSchool ?? null : null,
+        licenseType: reservationState.isLicense ? finalLicenseType ?? null : null,
+        licenseNumber: reservationState.isLicense ? finalLicenseNumber ?? null : null,
+        activityDate,
+        scheduledTime,
+      };
+
+      if (!preserveCommercialSnapshot) {
+        Object.assign(reservationUpdateData, {
           basePriceCents: serviceSubtotal,
           commissionBaseCents: commercial.commissionBaseCents,
           appliedCommissionPct: commercialSnapshot.appliedCommissionPct,
@@ -933,27 +1099,34 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           companyDiscountCents: commercial.companyDiscountCents,
           promoCode: commercial.promoCode,
           totalPriceCents: commercial.finalTotalCents,
-        },
+        });
+      }
+
+      await tx.reservation.update({
+        where: { id },
+        data: reservationUpdateData,
         select: { id: true },
       });
 
-      await tx.reservationItem.deleteMany({
-        where: { reservationId: id, isExtra: false },
-      });
+      if (!preserveCommercialSnapshot) {
+        await tx.reservationItem.deleteMany({
+          where: { reservationId: id, isExtra: false },
+        });
 
-      await tx.reservationItem.createMany({
-        data: lineCreates.map((line) => ({
-          reservationId: id,
-          serviceId: line.serviceId,
-          optionId: line.optionId,
-          servicePriceId: line.servicePriceId,
-          quantity: line.quantity,
-          pax: line.pax,
-          unitPriceCents: line.unitPriceCents,
-          totalPriceCents: line.totalPriceCents,
-          isExtra: false,
-        })),
-      });
+        await tx.reservationItem.createMany({
+          data: lineCreates.map((line) => ({
+            reservationId: id,
+            serviceId: line.serviceId,
+            optionId: line.optionId,
+            servicePriceId: line.servicePriceId,
+            quantity: line.quantity,
+            pax: line.pax,
+            unitPriceCents: line.unitPriceCents,
+            totalPriceCents: line.totalPriceCents,
+            isExtra: false,
+          })),
+        });
+      }
 
       await syncReservationContractsTx(tx, {
         reservationId: id,
@@ -999,6 +1172,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             pax: Number(b.pax ?? current.pax ?? mainLine.pax),
             totalPriceCents: commercial.finalTotalCents,
             depositCents,
+            commercialSnapshotPreserved: preserveCommercialSnapshot,
+            paidServiceCents,
+            explicitRecalculatePricing,
             requiredUnits: contracts.requiredUnits,
             readyCount: contracts.readyCount,
             isLicense: reservationState.isLicense,

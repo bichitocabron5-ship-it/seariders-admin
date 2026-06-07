@@ -28,6 +28,7 @@ import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
+import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 
 export const runtime = "nodejs";
 
@@ -56,6 +57,31 @@ function sameInstant(a: Date | null | undefined, b: Date | null | undefined) {
   const at = a?.getTime() ?? null;
   const bt = b?.getTime() ?? null;
   return at === bt;
+}
+
+function toYmdInTz(d: Date, tz: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const y = parts.find((p) => p.type === "year")?.value;
+  const m = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+  return `${y}-${m}-${day}`;
+}
+
+function toHmInTz(d: Date, tz: string) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const h = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const m = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return `${h}:${m}`;
 }
 
 function buildComparableComposition(
@@ -195,6 +221,22 @@ const Body = z.object({
   confirmSignedContractReduction: z.boolean().optional(),
 });
 
+const ScheduleOnlyBody = z.object({
+  activityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  time: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  scheduledTime: z.string().datetime().nullable().optional(),
+  reason: z.string().max(300).nullable().optional(),
+});
+
+const scheduleOnlyKeys = new Set(["activityDate", "date", "time", "scheduledTime", "reason"]);
+
+function isScheduleOnlyPayload(json: unknown) {
+  if (!json || typeof json !== "object" || Array.isArray(json)) return false;
+  const keys = Object.keys(json as Record<string, unknown>);
+  return keys.length > 0 && keys.every((key) => scheduleOnlyKeys.has(key));
+}
+
 // igual que formalize
 function normalizeOptionalString(v: string | null | undefined) {
   if (v === undefined) return undefined; // no tocar
@@ -235,19 +277,184 @@ function toRouteErrorResponse(error: unknown) {
       { status: 409 }
     );
   }
+  if (
+    message.includes("Slot completo") ||
+    message.includes("No caben") ||
+    message.includes("Hora fuera de horario")
+  ) {
+    return new NextResponse(message, { status: 409 });
+  }
   return new NextResponse(
     message.replace(/^CONFIRM_SIGNED_CONTRACT_REDUCTION:\s*/, ""),
     { status: message.startsWith("CONFIRM_SIGNED_CONTRACT_REDUCTION:") ? 409 : 400 }
   );
 }
 
+async function rescheduleReservationOnly(args: {
+  reservationId: string;
+  body: z.infer<typeof ScheduleOnlyBody>;
+  session: AppSession;
+  requestContext: ReturnType<typeof getRequestOperationalContext>;
+}) {
+  const { reservationId, body, session, requestContext } = args;
+  const auditSource = session.role === "ADMIN" ? "ADMIN" : "STORE";
+
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.reservation.findUnique({
+      where: { id: reservationId },
+      select: {
+        id: true,
+        status: true,
+        activityDate: true,
+        scheduledTime: true,
+        quantity: true,
+        isLicense: true,
+        service: { select: { category: true } },
+        items: {
+          select: {
+            quantity: true,
+            isExtra: true,
+            service: { select: { category: true } },
+            option: { select: { durationMinutes: true } },
+          },
+        },
+        contracts: {
+          select: {
+            unitIndex: true,
+            logicalUnitIndex: true,
+            status: true,
+            supersededAt: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    if (!current) throw new Error("Reserva no existe");
+    if (
+      current.status === ReservationStatus.CANCELED ||
+      current.status === ReservationStatus.COMPLETED ||
+      current.status === ReservationStatus.IN_SEA
+    ) {
+      throw new Error("La reserva cancelada, en curso o completada no se puede editar.");
+    }
+
+    const tz = BUSINESS_TZ;
+    let activityDateYmd = body.activityDate ?? body.date ?? null;
+    let timeHm: string | null | undefined = body.time;
+
+    if (body.scheduledTime !== undefined) {
+      if (body.scheduledTime === null) {
+        timeHm = null;
+      } else {
+        const scheduledDate = new Date(body.scheduledTime);
+        activityDateYmd = toYmdInTz(scheduledDate, tz);
+        timeHm = toHmInTz(scheduledDate, tz);
+      }
+    }
+
+    activityDateYmd ??= toYmdInTz(current.activityDate, tz);
+    if (timeHm === undefined) {
+      timeHm = current.scheduledTime ? toHmInTz(current.scheduledTime, tz) : null;
+    }
+
+    const activityDate = utcDateFromYmdInTz(tz, activityDateYmd);
+    const scheduledTime = utcDateTimeFromYmdHmInTz(tz, activityDateYmd, timeHm ?? null);
+    const scheduleChanged =
+      !sameInstant(current.activityDate, activityDate) || !sameInstant(current.scheduledTime, scheduledTime);
+
+    if (scheduledTime) {
+      const dayEndExclusiveUtc = new Date(activityDate.getTime() + 24 * 60 * 60 * 1000);
+      for (const item of (current.items ?? []).filter((row) => !row.isExtra)) {
+        await assertSlotCapacityOrThrow({
+          tx,
+          dateStartUtc: activityDate,
+          dateEndExclusiveUtc: dayEndExclusiveUtc,
+          scheduledStartUtc: scheduledTime,
+          category: String(item.service?.category ?? "UNKNOWN").toUpperCase(),
+          durationMinutes: Number(item.option?.durationMinutes ?? 30),
+          units: Number(item.quantity ?? 0),
+          excludeReservationId: reservationId,
+        });
+      }
+    }
+
+    if (scheduleChanged) {
+      await tx.reservation.update({
+        where: { id: reservationId },
+        data: { activityDate, scheduledTime },
+        select: { id: true },
+      });
+
+      await writeOperationalLog(
+        {
+          action: "RESERVATION_RESCHEDULE",
+          entityType: "RESERVATION",
+          entityId: reservationId,
+          source: auditSource,
+          actor: { userId: session.userId },
+          request: requestContext,
+          metadata: {
+            oldActivityDate: current.activityDate.toISOString(),
+            oldScheduledTime: current.scheduledTime?.toISOString() ?? null,
+            newActivityDate: activityDate.toISOString(),
+            newScheduledTime: scheduledTime?.toISOString() ?? null,
+            reason: body.reason ?? null,
+            userId: session.userId ?? null,
+          },
+        },
+        tx
+      );
+    }
+
+    const requiredUnits = computeRequiredContractUnits({
+      quantity: current.quantity ?? 0,
+      isLicense: Boolean(current.isLicense),
+      serviceCategory: current.service?.category ?? null,
+      items: current.items ?? [],
+    });
+    const visibleContracts = pickVisibleContractsByLogicalUnit(current.contracts ?? [], requiredUnits);
+    const signedContractsCount = visibleContracts.filter((contract) => contract.status === "SIGNED").length;
+    const readyCount = countReadyVisibleContracts(current.contracts ?? [], requiredUnits);
+
+    return {
+      ok: true as const,
+      id: reservationId,
+      requiredUnits,
+      readyCount,
+      signedContractsCount,
+      warning:
+        signedContractsCount > 0
+          ? "Esta reserva tiene contratos firmados. Se cambiará la fecha/hora operativa, pero los contratos firmados no se regeneran."
+          : null,
+    };
+  });
+}
+
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await requireStore();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const requestContext = getRequestOperationalContext(req);
 
   const { id } = await Promise.resolve(ctx.params);
 
   const json = await req.json().catch(() => null);
+
+  if (isScheduleOnlyPayload(json)) {
+    const parsedSchedule = ScheduleOnlyBody.safeParse(json);
+    if (!parsedSchedule.success) return new NextResponse("Datos inválidos", { status: 400 });
+    try {
+      const result = await rescheduleReservationOnly({
+        reservationId: id,
+        body: parsedSchedule.data,
+        session,
+        requestContext,
+      });
+      return NextResponse.json(result);
+    } catch (error: unknown) {
+      return toRouteErrorResponse(error);
+    }
+  }
 
   // seguridad: no permitir editar nombre
   if (json && typeof json === "object" && "customerName" in json) {
@@ -473,6 +680,23 @@ const protectedNonScheduleFieldsChanged =
   normalizeComparableOptionalString(existing.licenseType) !== normalizeComparableOptionalString(finalLicenseType) ||
   normalizeComparableOptionalString(existing.licenseNumber) !== normalizeComparableOptionalString(finalLicenseNumber);
 const isScheduleOnlyChange = scheduleChanged && !compositionChanged && !protectedNonScheduleFieldsChanged;
+
+if (isScheduleOnlyChange) {
+  try {
+    const result = await rescheduleReservationOnly({
+      reservationId: id,
+      body: {
+        activityDate: b.activityDate,
+        time: b.time ?? null,
+      },
+      session,
+      requestContext,
+    });
+    return NextResponse.json(result);
+  } catch (error: unknown) {
+    return toRouteErrorResponse(error);
+  }
+}
 
 if (hasProItems) {
   // Si es pack padre, no debería permitir editar items aquí.
