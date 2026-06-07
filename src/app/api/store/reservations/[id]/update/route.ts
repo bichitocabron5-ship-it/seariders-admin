@@ -29,6 +29,10 @@ import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
+import {
+  commercialPricingStateChanged,
+  shouldPreserveFormalizeCommercialSnapshot,
+} from "@/lib/reservation-commercial-snapshot";
 
 export const runtime = "nodejs";
 
@@ -485,6 +489,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       readyForPlatformAt: true,
       paymentCompletedAt: true,
       customerCountry: true,
+      basePriceCents: true,
+      totalPriceCents: true,
+      autoDiscountCents: true,
+      customerDiscountCents: true,
+      appliedCommissionMode: true,
+      appliedCommissionValue: true,
+      appliedCommissionPct: true,
+      appliedCommissionCents: true,
 
       // para merge correcto
       customerPhone: true,
@@ -519,9 +531,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           optionId: true,
           quantity: true,
           pax: true,
+          unitPriceCents: true,
+          totalPriceCents: true,
           isExtra: true,
           service: { select: { category: true } },
           option: { select: { durationMinutes: true } },
+        },
+      },
+      payments: {
+        select: {
+          amountCents: true,
+          isDeposit: true,
+          direction: true,
         },
       },
       contracts: {
@@ -591,12 +612,25 @@ const requestedReservationState = deriveCommercialReservationState({
   isLicense: b.isLicense,
   pricingTier: b.pricingTier ?? existing.pricingTier,
 });
+const commercialPricingChanged = commercialPricingStateChanged({
+  current: {
+    serviceCategory: existing.service?.category ?? null,
+    isLicense: existing.isLicense,
+    jetskiLicenseMode: existing.jetskiLicenseMode,
+    pricingTier: existing.pricingTier,
+  },
+  requested: {
+    serviceCategory: requestedServiceCategory,
+    isLicense: b.isLicense,
+    jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
+    pricingTier: b.pricingTier ?? existing.pricingTier,
+  },
+});
 const priceSensitiveChanged =
   existing.serviceId !== b.serviceId ||
   existing.optionId !== b.optionId ||
   Number(existing.quantity) !== Number(b.quantity) ||
-  Boolean(existing.isLicense) !== Boolean(requestedReservationState.isLicense) ||
-  existing.pricingTier !== requestedReservationState.pricingTier;
+  commercialPricingChanged;
 const mainCount = await prisma.reservationItem.count({
   where: { reservationId: id, isExtra: false },
 });
@@ -644,6 +678,26 @@ const nextComposition = buildComparableComposition(
 const scheduleChanged =
   !sameInstant(existing.activityDate, activityDate) || !sameInstant(existing.scheduledTime, scheduledTime);
 const compositionChanged = JSON.stringify(existingComposition) !== JSON.stringify(nextComposition);
+const existingCommercialComposition = existingComposition.map(({ serviceId, optionId, quantity }) => ({
+  serviceId,
+  optionId,
+  quantity,
+}));
+const nextCommercialComposition = nextComposition.map(({ serviceId, optionId, quantity }) => ({
+  serviceId,
+  optionId,
+  quantity,
+}));
+const commercialCompositionChanged =
+  JSON.stringify(existingCommercialComposition) !== JSON.stringify(nextCommercialComposition);
+const requestedChannelId = b.channelId !== undefined ? b.channelId ?? null : existing.channelId ?? null;
+const commercialChannelChanged = (existing.channelId ?? null) !== requestedChannelId;
+const protectedCommercialSnapshot = shouldPreserveFormalizeCommercialSnapshot({
+  snapshot: existing,
+  payments: existing.payments,
+});
+const protectedCommercialChangeRequested =
+  commercialCompositionChanged || commercialChannelChanged || commercialPricingChanged;
 const resolvedCustomerPhone = customerPhone === undefined ? normalizeComparableOptionalString(existing.customerPhone) : customerPhone;
 const resolvedCustomerEmail = customerEmail === undefined ? normalizeComparableOptionalString(existing.customerEmail) : customerEmail;
 const resolvedCustomerCountry =
@@ -664,9 +718,7 @@ const protectedNonScheduleFieldsChanged =
   Number(existing.pax ?? 0) !== Number(b.pax ?? 0) ||
   Number(existing.companionsCount ?? 0) !== Number(b.companionsCount ?? 0) ||
   (existing.channelId ?? null) !== (b.channelId ?? null) ||
-  Boolean(existing.isLicense) !== Boolean(requestedReservationState.isLicense) ||
-  existing.jetskiLicenseMode !== requestedReservationState.jetskiLicenseMode ||
-  existing.pricingTier !== requestedReservationState.pricingTier ||
+  commercialPricingChanged ||
   normalizeComparableOptionalString(existing.customerPhone) !== resolvedCustomerPhone ||
   normalizeComparableOptionalString(existing.customerEmail) !== resolvedCustomerEmail ||
   (normalizeComparableOptionalString(existing.customerCountry)?.toUpperCase() ?? null) !== resolvedCustomerCountry ||
@@ -680,6 +732,13 @@ const protectedNonScheduleFieldsChanged =
   normalizeComparableOptionalString(existing.licenseType) !== normalizeComparableOptionalString(finalLicenseType) ||
   normalizeComparableOptionalString(existing.licenseNumber) !== normalizeComparableOptionalString(finalLicenseNumber);
 const isScheduleOnlyChange = scheduleChanged && !compositionChanged && !protectedNonScheduleFieldsChanged;
+
+if (protectedCommercialSnapshot && protectedCommercialChangeRequested) {
+  return new NextResponse(
+    "La reserva tiene snapshot comercial o pagos asociados. Cambiar actividad, cantidad, canal o tarifa requiere una accion explicita de recalculo.",
+    { status: 409 }
+  );
+}
 
 if (isScheduleOnlyChange) {
   try {

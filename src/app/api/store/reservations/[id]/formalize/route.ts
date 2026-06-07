@@ -34,6 +34,7 @@ import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-avail
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 import {
+  commercialPricingStateChanged,
   netPaidServiceCents,
   shouldPreserveFormalizeCommercialSnapshot,
 } from "@/lib/reservation-commercial-snapshot";
@@ -599,10 +600,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const commercialShapeChanged = !sameCommercialShape(currentCommercialShape, requestedCommercialShape);
       const channelChanged =
         b.channelId !== undefined && (b.channelId ?? null) !== (current.channelId ?? null);
-      const licensePricingChanged =
-        (b.isLicense !== undefined && Boolean(b.isLicense) !== Boolean(current.isLicense)) ||
-        (b.jetskiLicenseMode !== undefined && b.jetskiLicenseMode !== current.jetskiLicenseMode) ||
-        (b.pricingTier !== undefined && b.pricingTier !== current.pricingTier);
+      const licensePricingChanged = commercialPricingStateChanged({
+        current: {
+          serviceCategory: current.service?.category ?? null,
+          isLicense: current.isLicense,
+          jetskiLicenseMode: current.jetskiLicenseMode,
+          pricingTier: current.pricingTier,
+        },
+        requested: {
+          serviceCategory: current.service?.category ?? null,
+          isLicense: b.isLicense ?? current.isLicense,
+          jetskiLicenseMode: b.jetskiLicenseMode ?? current.jetskiLicenseMode,
+          pricingTier: b.pricingTier ?? current.pricingTier,
+        },
+      });
 
       if (preserveCommercialSnapshot && (commercialShapeChanged || channelChanged || licensePricingChanged)) {
         throw new Error(
