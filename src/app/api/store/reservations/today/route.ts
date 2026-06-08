@@ -33,6 +33,9 @@ export async function GET() {
     select: {
       id: true,
       status: true,
+      giftVoucherId: true,
+      passVoucherId: true,
+      passConsumeId: true,
       arrivalAt: true,
       activityDate: true,
       scheduledTime: true,
@@ -150,6 +153,9 @@ export async function GET() {
 
     const paymentStatus = resolveReservationPaymentStatus({
       reservationStatus: r.status,
+      giftVoucherId: r.giftVoucherId,
+      passVoucherId: r.passVoucherId,
+      passConsumeId: r.passConsumeId,
       totalPriceCents: r.totalPriceCents,
       depositCents: r.depositCents,
       quantity: r.quantity,
@@ -166,10 +172,14 @@ export async function GET() {
     // items principal + extras
     const mainItem = r.items.find((it) => !it.isExtra) ?? null;
     const extras = r.items.filter((it) => it.isExtra);
+    const isGift = Boolean(r.giftVoucherId);
+    const isPass = Boolean(r.passVoucherId || r.passConsumeId);
+    const isPrepaidVoucherReservation = isGift || isPass;
 
-    const serviceTotalCents = r.items
+    const rawServiceTotalCents = r.items
       .filter((it) => !it.isExtra)
       .reduce((sum, it) => sum + (it.totalPriceCents ?? 0), 0);
+    const serviceTotalCents = isPrepaidVoucherReservation ? 0 : rawServiceTotalCents;
 
     const extrasTotalCents = r.items
       .filter((it) => it.isExtra)
@@ -189,11 +199,15 @@ export async function GET() {
 
     const grossCents = isPack
       ? legacyGrossCents
-      : (r.items.length > 0
+      : isPrepaidVoucherReservation
+        ? extrasTotalCents
+        : (r.items.length > 0
           ? serviceTotalCents + extrasTotalCents
           : legacyGrossCents);
 
-    const soldTotalCents = Math.max(0, Number(r.totalPriceCents ?? Math.max(0, grossCents - totalDiscountCents)));
+    const soldTotalCents = isPrepaidVoucherReservation
+      ? paymentStatus.serviceDueCents
+      : Math.max(0, Number(r.totalPriceCents ?? Math.max(0, grossCents - totalDiscountCents)));
  
     // pendientes separados (✅ servicio basado en items)
     const pendingServiceCents = paymentStatus.displayPendingServiceCents;
@@ -244,9 +258,13 @@ export async function GET() {
 
     const pvpTotalCents = isPack
       ? grossCents
-      : (r.items.length > 0 ? serviceTotalCents + extrasTotalCents : Number(r.basePriceCents ?? 0));
+      : isPrepaidVoucherReservation
+        ? extrasTotalCents
+        : (r.items.length > 0 ? serviceTotalCents + extrasTotalCents : Number(r.basePriceCents ?? 0));
 
-    const finalTotalCents = Number(r.totalPriceCents ?? Math.max(0, pvpTotalCents - totalDiscountCents));
+    const finalTotalCents = isPrepaidVoucherReservation
+      ? paymentStatus.serviceDueCents
+      : Number(r.totalPriceCents ?? Math.max(0, pvpTotalCents - totalDiscountCents));
     const totalToChargeCents = finalTotalCents + depositCents;
     const jetskiAssignments = buildReservationJetskiAssignments({
       reservationId: r.id,
@@ -257,6 +275,12 @@ export async function GET() {
     return {
       id: r.id,
       status: r.status,
+      giftVoucherId: r.giftVoucherId,
+      passVoucherId: r.passVoucherId,
+      passConsumeId: r.passConsumeId,
+      isGift,
+      isPass,
+      paymentCoverageLabel: isGift ? "Pagado por regalo" : isPass ? "Pagado por bono" : null,
       storeFlowStage,
       operationalStatus: operationalStatus.code,
       operationalStatusLabel: operationalStatus.label,

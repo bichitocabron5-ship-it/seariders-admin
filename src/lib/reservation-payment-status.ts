@@ -1,4 +1,5 @@
 import { computeReservationDepositCents } from "./reservation-deposits";
+import { resolveChargeableServiceDueCents } from "./reservation-commercial-snapshot";
 
 type PaymentLike = {
   amountCents: number | null | undefined;
@@ -16,6 +17,9 @@ export type ReservationPaymentState =
 
 type ReservationPaymentStatusArgs = {
   reservationStatus?: string | null | undefined;
+  giftVoucherId?: string | null | undefined;
+  passVoucherId?: string | null | undefined;
+  passConsumeId?: string | null | undefined;
   totalPriceCents: number | null | undefined;
   depositCents: number | null | undefined;
   quantity: number | null | undefined;
@@ -24,6 +28,7 @@ type ReservationPaymentStatusArgs = {
   items?: Array<{
     quantity: number | null | undefined;
     isExtra: boolean | null | undefined;
+    totalPriceCents?: number | null | undefined;
     service?: { category: string | null | undefined } | null;
   }> | null;
   payments?: PaymentLike[] | null;
@@ -69,7 +74,16 @@ export function getReservationPaymentStateLabel(state: ReservationPaymentState) 
 }
 
 export function resolveReservationPaymentStatus(args: ReservationPaymentStatusArgs) {
-  const serviceDueCents = Math.max(0, Number(args.totalPriceCents ?? 0));
+  const serviceDueCents = resolveChargeableServiceDueCents({
+    giftVoucherId: args.giftVoucherId,
+    passVoucherId: args.passVoucherId,
+    passConsumeId: args.passConsumeId,
+    totalPriceCents: args.totalPriceCents,
+    items: (args.items ?? []).map((item) => ({
+      isExtra: Boolean(item.isExtra),
+      totalPriceCents: item.totalPriceCents ?? null,
+    })),
+  });
   const depositDueCents = computeReservationDepositCents({
     storedDepositCents: args.depositCents,
     quantity: args.quantity ?? null,

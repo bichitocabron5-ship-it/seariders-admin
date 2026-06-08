@@ -71,6 +71,9 @@ export async function POST(req: Request) {
         where: { id: reservationId },
         select: {
           id: true,
+          giftVoucherId: true,
+          passVoucherId: true,
+          passConsumeId: true,
           totalPriceCents: true,  // ✅ servicio (total final sin fianza)
           commissionBaseCents: true,
           appliedCommissionPct: true,
@@ -115,6 +118,7 @@ export async function POST(req: Request) {
               optionId: true,
               quantity: true,
               pax: true,
+              totalPriceCents: true,
               isExtra: true,
               splitReservationId: true,
               service: { select: { category: true } },
@@ -136,6 +140,9 @@ export async function POST(req: Request) {
       }
 
       const paymentStatus = getReservationPaymentStatus({
+        giftVoucherId: reservation.giftVoucherId,
+        passVoucherId: reservation.passVoucherId,
+        passConsumeId: reservation.passConsumeId,
         totalPriceCents: reservation.totalPriceCents,
         depositCents: reservation.depositCents,
         quantity: reservation.quantity,
@@ -258,6 +265,9 @@ export async function POST(req: Request) {
       const readyCheck = evaluateReadyForPlatform({
         status: reservation.status,
         formalizedAt: reservation.formalizedAt,
+        giftVoucherId: reservation.giftVoucherId,
+        passVoucherId: reservation.passVoucherId,
+        passConsumeId: reservation.passConsumeId,
         totalPriceCents: reservation.totalPriceCents,
         depositCents: reservation.depositCents,
         quantity: reservation.quantity,
@@ -266,6 +276,7 @@ export async function POST(req: Request) {
         items: (reservation.items ?? []).map((it) => ({
           quantity: it.quantity ?? 0,
           isExtra: Boolean(it.isExtra),
+          totalPriceCents: it.totalPriceCents ?? 0,
           service: it.service ? { category: it.service.category ?? null } : null,
         })),
         contracts: (reservation.contracts ?? []).map((contract) => ({

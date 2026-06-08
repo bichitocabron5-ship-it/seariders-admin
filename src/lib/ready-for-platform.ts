@@ -7,6 +7,9 @@ import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 type ReadyReservation = {
   status: ReservationStatus;
   formalizedAt: Date | null;
+  giftVoucherId?: string | null;
+  passVoucherId?: string | null;
+  passConsumeId?: string | null;
   totalPriceCents: number | null;
   depositCents: number | null;
   quantity: number | null;
@@ -15,6 +18,7 @@ type ReadyReservation = {
   items: Array<{
     quantity: number | null;
     isExtra: boolean;
+    totalPriceCents?: number | null;
     service: { category: string | null } | null;
   }>;
   contracts: Array<{
@@ -63,6 +67,9 @@ export function evaluateReadyForPlatform(reservation: ReadyReservation) {
   }
 
   const paymentStatus = getReservationPaymentStatus({
+    giftVoucherId: reservation.giftVoucherId,
+    passVoucherId: reservation.passVoucherId,
+    passConsumeId: reservation.passConsumeId,
     totalPriceCents: reservation.totalPriceCents,
     depositCents: reservation.depositCents,
     quantity: reservation.quantity,

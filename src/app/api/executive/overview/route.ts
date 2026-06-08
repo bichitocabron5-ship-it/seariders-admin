@@ -14,6 +14,9 @@ export const runtime = "nodejs";
 type ReservationMetricInput = {
   id: string;
   status: string;
+  giftVoucherId?: string | null;
+  passVoucherId?: string | null;
+  passConsumeId?: string | null;
   formalizedAt: Date | null;
   source: string | null;
   marketing?: string | null;
@@ -75,6 +78,9 @@ const reservationExecutiveSelect =
   Prisma.validator<Prisma.ReservationSelect>()({
     id: true,
     status: true,
+    giftVoucherId: true,
+    passVoucherId: true,
+    passConsumeId: true,
     formalizedAt: true,
     source: true,
     marketing: true,
@@ -277,9 +283,13 @@ function tzMonthRangeUtc(tz: string, date: Date) {
 
 function buildReservationMetrics(rows: ReservationMetricInput[]) {
   const mapped = rows.map((reservation) => {
-    const serviceTotalCents = reservation.items
+    const isPrepaidVoucherReservation = Boolean(
+      reservation.giftVoucherId || reservation.passVoucherId || reservation.passConsumeId
+    );
+    const rawServiceTotalCents = reservation.items
       .filter((item) => !item.isExtra)
       .reduce((sum, item) => sum + Number(item.totalPriceCents ?? 0), 0);
+    const serviceTotalCents = isPrepaidVoucherReservation ? 0 : rawServiceTotalCents;
 
     const extrasTotalCents = reservation.items
       .filter((item) => item.isExtra)
@@ -289,7 +299,9 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
     const manualDisc = Number(reservation.manualDiscountCents ?? 0);
 
     const soldTotalCents =
-      reservation.items.length > 0
+      isPrepaidVoucherReservation
+        ? extrasTotalCents
+        : reservation.items.length > 0
         ? Math.max(
             0,
             serviceTotalCents + extrasTotalCents - autoDisc - manualDisc
@@ -298,6 +310,9 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
 
     const paymentStatus = resolveReservationPaymentStatus({
       reservationStatus: reservation.status,
+      giftVoucherId: reservation.giftVoucherId,
+      passVoucherId: reservation.passVoucherId,
+      passConsumeId: reservation.passConsumeId,
       totalPriceCents: soldTotalCents,
       depositCents: reservation.depositCents,
       quantity: reservation.quantity ?? null,
@@ -306,6 +321,7 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
       items: reservation.items.map((item) => ({
         quantity: item.quantity ?? 0,
         isExtra: item.isExtra,
+        totalPriceCents: item.totalPriceCents ?? 0,
         service: { category: item.service?.category ?? null },
       })),
       payments: reservation.payments,
@@ -1452,6 +1468,9 @@ export async function GET() {
         (sum, reservation) => {
           const paidDeposit = resolveReservationPaymentStatus({
             reservationStatus: reservation.status,
+            giftVoucherId: reservation.giftVoucherId,
+            passVoucherId: reservation.passVoucherId,
+            passConsumeId: reservation.passConsumeId,
             totalPriceCents: reservation.totalPriceCents,
             depositCents: reservation.depositCents,
             quantity: reservation.quantity ?? null,
@@ -1460,6 +1479,7 @@ export async function GET() {
             items: reservation.items.map((item) => ({
               quantity: item.quantity ?? 0,
               isExtra: item.isExtra,
+              totalPriceCents: item.totalPriceCents ?? 0,
               service: { category: item.service?.category ?? null },
             })),
             payments: reservation.payments,
@@ -1474,6 +1494,9 @@ export async function GET() {
 
         const netDeposit = resolveReservationPaymentStatus({
           reservationStatus: reservation.status,
+          giftVoucherId: reservation.giftVoucherId,
+          passVoucherId: reservation.passVoucherId,
+          passConsumeId: reservation.passConsumeId,
           totalPriceCents: reservation.totalPriceCents,
           depositCents: reservation.depositCents,
           quantity: reservation.quantity ?? null,
@@ -1482,6 +1505,7 @@ export async function GET() {
           items: reservation.items.map((item) => ({
             quantity: item.quantity ?? 0,
             isExtra: item.isExtra,
+            totalPriceCents: item.totalPriceCents ?? 0,
             service: { category: item.service?.category ?? null },
           })),
           payments: reservation.payments,
@@ -1493,6 +1517,9 @@ export async function GET() {
         return (
           resolveReservationPaymentStatus({
             reservationStatus: reservation.status,
+            giftVoucherId: reservation.giftVoucherId,
+            passVoucherId: reservation.passVoucherId,
+            passConsumeId: reservation.passConsumeId,
             totalPriceCents:
               reservation.items.length > 0
                 ? Math.max(
@@ -1512,6 +1539,7 @@ export async function GET() {
             items: reservation.items.map((item) => ({
               quantity: item.quantity ?? 0,
               isExtra: item.isExtra,
+              totalPriceCents: item.totalPriceCents ?? 0,
               service: { category: item.service?.category ?? null },
             })),
             payments: reservation.payments,

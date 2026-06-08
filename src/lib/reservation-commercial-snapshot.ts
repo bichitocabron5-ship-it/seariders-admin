@@ -1,4 +1,7 @@
 export type CommercialSnapshotLike = {
+  giftVoucherId?: string | null;
+  passVoucherId?: string | null;
+  passConsumeId?: string | null;
   pvpTotalCents?: number | null;
   basePriceCents?: number | null;
   totalPriceCents?: number | null;
@@ -14,6 +17,7 @@ export type CommercialSnapshotLike = {
   promoterDiscountCents?: number | null;
   companyDiscountCents?: number | null;
   items?: Array<{
+    isExtra?: boolean | null;
     unitPriceCents?: number | null;
     totalPriceCents?: number | null;
   }> | null;
@@ -40,6 +44,35 @@ function isFiniteCents(value: unknown) {
 function isFiniteNullableNumber(value: unknown) {
   if (value == null) return true;
   return Number.isFinite(Number(value));
+}
+
+export function isReservationCoveredByPrepaidVoucher(snapshot: {
+  giftVoucherId?: string | null;
+  passVoucherId?: string | null;
+  passConsumeId?: string | null;
+}) {
+  return Boolean(snapshot.giftVoucherId || snapshot.passVoucherId || snapshot.passConsumeId);
+}
+
+export function voucherCoveredServiceDueCents(args: {
+  items?: Array<{
+    isExtra?: boolean | null;
+    totalPriceCents?: number | null;
+  }> | null;
+}) {
+  return (args.items ?? [])
+    .filter((item) => Boolean(item.isExtra))
+    .reduce((sum, item) => sum + Math.max(0, Math.round(Number(item.totalPriceCents ?? 0))), 0);
+}
+
+export function resolveChargeableServiceDueCents(
+  args: CommercialSnapshotLike
+) {
+  if (isReservationCoveredByPrepaidVoucher(args)) {
+    return voucherCoveredServiceDueCents(args);
+  }
+
+  return Math.max(0, Math.round(Number(args.totalPriceCents ?? 0)));
 }
 
 export function netPaidServiceCents(payments: PaymentSnapshotLike[] | null | undefined) {
@@ -87,6 +120,7 @@ export function shouldPreserveFormalizeCommercialSnapshot(args: {
   payments?: PaymentSnapshotLike[] | null;
   explicitRecalculate?: boolean;
 }) {
+  if (isReservationCoveredByPrepaidVoucher(args.snapshot)) return true;
   if (args.explicitRecalculate) return false;
   return hasSufficientCommercialSnapshot(args.snapshot) || netPaidServiceCents(args.payments) > 0;
 }

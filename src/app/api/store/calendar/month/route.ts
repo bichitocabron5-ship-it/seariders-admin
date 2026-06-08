@@ -64,6 +64,9 @@ export async function GET(req: Request) {
     select: {
       id: true,
       status: true,
+      giftVoucherId: true,
+      passVoucherId: true,
+      passConsumeId: true,
       source: true,
       activityDate: true,
       scheduledTime: true,
@@ -80,6 +83,7 @@ export async function GET(req: Request) {
         select: {
           quantity: true,
           isExtra: true,
+          totalPriceCents: true,
           service: { select: { category: true } },
         },
       },
@@ -167,6 +171,9 @@ export async function GET(req: Request) {
     const paid = payByRes[r.id] ?? { serviceNet: 0, depositNet: 0 };
     const paymentStatus = resolveReservationPaymentStatus({
       reservationStatus: r.status,
+      giftVoucherId: r.giftVoucherId,
+      passVoucherId: r.passVoucherId,
+      passConsumeId: r.passConsumeId,
       totalPriceCents: r.totalPriceCents,
       depositCents: r.depositCents,
       quantity: r.quantity,

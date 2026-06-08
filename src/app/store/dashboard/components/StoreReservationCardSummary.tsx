@@ -120,6 +120,9 @@ export function StoreReservationCardSummary({
   const timeLabel = hhmm(reservation.scheduledTime) || "sin hora";
   const precheckin = precheckinTone(readyCount, requiredUnits);
   const showDeposit = depositStatus !== "NO_APLICA";
+  const paymentCoverageLabel =
+    reservation.paymentCoverageLabel ??
+    (reservation.isGift ? "Pagado por regalo" : reservation.isPass ? "Pagado por bono" : null);
   const totalDiscount = customerDisc + autoDisc + manualDisc;
   const jetskiAssignments = reservation.jetskiAssignments ?? [];
   const appliedCommissionMode = reservation.appliedCommissionMode ?? "PERCENT";
@@ -212,6 +215,7 @@ export function StoreReservationCardSummary({
 
       <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
         <StatusBadge tone="info">Servicio {euros(servicePaid)}</StatusBadge>
+        {paymentCoverageLabel ? <StatusBadge tone="success">{paymentCoverageLabel}</StatusBadge> : null}
         {showDeposit ? <StatusBadge tone="warning">Fianza {euros(depositPaid)}</StatusBadge> : null}
         {showDeposit ? <StatusBadge tone={depositTone(depositStatus)}>{reservation.depositStatusLabel ?? getDepositStatusLabel(depositStatus)}</StatusBadge> : null}
         {pendingCents > 0 ? <StatusBadge tone="danger">Pendiente {euros(pendingCents)}</StatusBadge> : <StatusBadge tone="success">Todo cobrado</StatusBadge>}

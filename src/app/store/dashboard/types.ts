@@ -33,6 +33,12 @@ export type ReservationRow = {
   arrivalAt: string | null;
   id: string;
   formalizedAt?: string | null;
+  giftVoucherId?: string | null;
+  passVoucherId?: string | null;
+  passConsumeId?: string | null;
+  isGift?: boolean;
+  isPass?: boolean;
+  paymentCoverageLabel?: string | null;
   storeFlowStage?: string | null;
   operationalStatus?: string | null;
   operationalStatusLabel?: string | null;

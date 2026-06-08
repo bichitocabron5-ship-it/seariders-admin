@@ -35,6 +35,7 @@ import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operati
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 import {
   commercialPricingStateChanged,
+  isReservationCoveredByPrepaidVoucher,
   netPaidServiceCents,
   shouldPreserveFormalizeCommercialSnapshot,
 } from "@/lib/reservation-commercial-snapshot";
@@ -362,6 +363,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           formalizedAt: true,
           giftVoucherId: true,
           passVoucherId: true,
+          passConsumeId: true,
           isPackParent: true,
           parentReservationId: true,
           customerName: true,
@@ -385,6 +387,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           pricingTier: true,
           basePriceCents: true,
           totalPriceCents: true,
+          depositCents: true,
           commissionBaseCents: true,
           appliedCommissionPct: true,
           appliedCommissionMode: true,
@@ -394,7 +397,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           customerDiscountValue: true,
           customerDiscountCents: true,
           autoDiscountCents: true,
-          depositCents: true,
           companionsCount: true,
           licenseSchool: true,
           licenseType: true,
@@ -490,8 +492,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         throw new Error("Solo un administrador puede recalcular el precio al formalizar.");
       }
       const paidServiceCents = netPaidServiceCents(current.payments);
+      const isPrepaidVoucherReservation = isReservationCoveredByPrepaidVoucher(current);
       const hasCommercialLineSnapshots =
-        (current.items ?? []).length > 0 || Boolean(current.giftVoucherId || current.passVoucherId);
+        (current.items ?? []).length > 0 || isPrepaidVoucherReservation;
       const preserveCommercialSnapshot =
         shouldPreserveFormalizeCommercialSnapshot({
           snapshot: current,
@@ -687,7 +690,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           pricingTier: b.pricingTier ?? current.pricingTier,
         });
         const isVoucherIncludedBaseLine =
-          Boolean(current.giftVoucherId || current.passVoucherId) &&
+          isPrepaidVoucherReservation &&
           item.serviceId === current.serviceId &&
           item.optionId === current.optionId;
         if (isVoucherIncludedBaseLine) {
@@ -1027,13 +1030,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         });
       }
 
-      const depositCents = computeDepositFromResolvedItems({
-        isLicense: reservationState.isLicense,
-        resolvedItems: lineCreates.map((line) => ({
-          category: line.category,
-          quantity: line.quantity,
-        })),
-      });
+      const depositCents = isPrepaidVoucherReservation
+        ? Number(current.depositCents ?? 0)
+        : computeDepositFromResolvedItems({
+            isLicense: reservationState.isLicense,
+            resolvedItems: lineCreates.map((line) => ({
+              category: line.category,
+              quantity: line.quantity,
+            })),
+          });
       const nextRequiredContractUnits = computeRequiredContractUnits({
         quantity: totalMainQuantity,
         isLicense: reservationState.isLicense,
