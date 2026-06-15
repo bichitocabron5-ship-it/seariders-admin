@@ -126,6 +126,9 @@ export async function GET(req: Request) {
     select: {
       id: true,
       status: true,
+      giftVoucherId: true,
+      passVoucherId: true,
+      passConsumeId: true,
       createdAt: true,
       activityDate: true,
       scheduledTime: true,
@@ -195,6 +198,7 @@ export async function GET(req: Request) {
         select: {
           quantity: true,
           isExtra: true,
+          totalPriceCents: true,
           service: { select: { name: true, category: true } },
           option: { select: { durationMinutes: true } },
         },
@@ -324,6 +328,9 @@ export async function GET(req: Request) {
 
     const paymentStatus = resolveReservationPaymentStatus({
       reservationStatus: reservation.status,
+      giftVoucherId: reservation.giftVoucherId,
+      passVoucherId: reservation.passVoucherId,
+      passConsumeId: reservation.passConsumeId,
       totalPriceCents: reservation.totalPriceCents,
       depositCents: reservation.depositCents,
       quantity: reservation.quantity,
@@ -332,6 +339,9 @@ export async function GET(req: Request) {
       items: reservation.items ?? [],
       payments: reservation.payments,
     });
+    const isGift = Boolean(reservation.giftVoucherId);
+    const isPass = Boolean(reservation.passVoucherId || reservation.passConsumeId);
+    const chargeableTotalPriceCents = paymentStatus.serviceDueCents;
     const paidCents = paymentStatus.paidServiceCents + paymentStatus.paidDepositCents;
     const depositCollectedCents = reservation.payments
       .filter((payment) => payment.isDeposit && payment.direction === "IN")
@@ -392,6 +402,12 @@ export async function GET(req: Request) {
     return {
       id: reservation.id,
       status: reservation.status,
+      giftVoucherId: reservation.giftVoucherId,
+      passVoucherId: reservation.passVoucherId,
+      passConsumeId: reservation.passConsumeId,
+      isGift,
+      isPass,
+      paymentCoverageLabel: isGift ? "Pagado por regalo" : isPass ? "Pagado por bono" : null,
       storeFlowStage: historyMeta.storeFlowStage,
       operationalStatus: operationalStatus.code,
       operationalStatusLabel: operationalStatus.label,
@@ -408,7 +424,7 @@ export async function GET(req: Request) {
       quantity: reservation.quantity,
       pax: reservation.pax,
       isLicense: reservation.isLicense,
-      totalPriceCents: reservation.totalPriceCents,
+      totalPriceCents: chargeableTotalPriceCents,
       commissionBaseCents: appliedCommissionBaseCents,
       appliedCommissionPct,
       appliedCommissionMode,
@@ -441,7 +457,7 @@ export async function GET(req: Request) {
       depositCollectedCents,
       depositReturnedCents,
       depositRetainedCents: reservation.depositHeld ? Math.max(0, paidDepositCents) : 0,
-      totalToChargeCents: Number(reservation.totalPriceCents ?? 0) + depositPlannedCents,
+      totalToChargeCents: chargeableTotalPriceCents + depositPlannedCents,
       historyMeta: {
         reason: historyMeta.historicalReason,
         reasonLabel: storeHistoryReasonLabel(historyMeta.historicalReason),
@@ -458,7 +474,7 @@ export async function GET(req: Request) {
         quantity: reservation.quantity,
         pax: reservation.pax,
         isLicense: reservation.isLicense,
-        totalPriceCents: reservation.totalPriceCents,
+        totalPriceCents: chargeableTotalPriceCents,
         commissionBaseCents: appliedCommissionBaseCents,
         appliedCommissionPct,
         appliedCommissionMode,
@@ -469,7 +485,7 @@ export async function GET(req: Request) {
         depositCents: depositPlannedCents,
         paidDepositCents,
         depositPendingCents,
-        totalToChargeCents: Number(reservation.totalPriceCents ?? 0) + depositPlannedCents,
+        totalToChargeCents: chargeableTotalPriceCents + depositPlannedCents,
         formalizedAt: reservation.formalizedAt,
       },
       contractual: {

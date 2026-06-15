@@ -95,6 +95,12 @@ type AdjustmentSnapshot = {
 type HistoryRow = {
   id: string;
   status: string;
+  giftVoucherId?: string | null;
+  passVoucherId?: string | null;
+  passConsumeId?: string | null;
+  isGift?: boolean;
+  isPass?: boolean;
+  paymentCoverageLabel?: string | null;
   storeFlowStage: string | null;
   operationalStatus?: string | null;
   operationalStatusLabel?: string | null;
@@ -278,6 +284,9 @@ export default function StoreHistoryResultsSection({
                 const isAdjusting = adjustTargetId === row.id;
                 const manualContracts = row.adjustments?.manualContractAttachments ?? row.manualContractAttachments ?? [];
                 const manualContractsCount = manualContracts.length;
+                const paymentCoverageLabel =
+                  row.paymentCoverageLabel ??
+                  (row.isGift ? "Pagado por regalo" : row.isPass ? "Pagado por bono" : null);
                 const maxManualContracts = Math.max(1, Number(row.quantity ?? 1));
                 const canUploadMoreManualContracts =
                   (row.adjustments?.isManualEntry ?? row.isManualEntry) && manualContractsCount < maxManualContracts;
@@ -396,6 +405,7 @@ export default function StoreHistoryResultsSection({
                             <Pill>Cant {row.commercial?.quantity ?? row.quantity ?? 0}</Pill>
                             <Pill>PAX {row.commercial?.pax ?? row.pax ?? 0}</Pill>
                             {(row.commercial?.isLicense ?? row.isLicense) ? <Pill>Licencia</Pill> : null}
+                            {paymentCoverageLabel ? <Pill bg="#ecfdf5" border="#bbf7d0">{paymentCoverageLabel}</Pill> : null}
                           </div>
                           {row.extrasSummary && row.extrasSummary.length > 0 ? (
                             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -425,6 +435,7 @@ export default function StoreHistoryResultsSection({
                           <div style={mutedText}>
                             Cobro: {row.paymentStatusLabel || "Sin dato"}
                           </div>
+                          {paymentCoverageLabel ? <div style={mutedText}>{paymentCoverageLabel}</div> : null}
                           {row.adjustments?.financialAdjustedAt || row.financialAdjustedAt ? (
                             <div style={mutedText}>
                               Ajustada: {dt(row.adjustments?.financialAdjustedAt || row.financialAdjustedAt)}

@@ -4,8 +4,10 @@ import assert from "node:assert/strict";
 import {
   commercialPricingStateChanged,
   hasSufficientCommercialSnapshot,
+  isReservationCoveredByPrepaidVoucher,
   netPaidServiceCents,
   normalizeCommercialPricingState,
+  resolveChargeableServiceDueCents,
   shouldPreserveFormalizeCommercialSnapshot,
 } from "./reservation-commercial-snapshot";
 import { resolveReservationPaymentStatus } from "./reservation-payment-status";
@@ -50,6 +52,90 @@ test("formalize preserves a full paid promo snapshot so pending stays zero", () 
 
   assert.equal(status.pendingServiceCents, 0);
   assert.equal(status.state, "PAID");
+});
+
+test("paid gift voucher formalization keeps service pending at zero even with stale live price", () => {
+  const snapshot = {
+    ...completeSnapshot,
+    giftVoucherId: "gift_1",
+    totalPriceCents: 12_000,
+    appliedCommissionMode: null,
+    items: [{ isExtra: false, unitPriceCents: 12_000, totalPriceCents: 12_000 }],
+  };
+
+  assert.equal(isReservationCoveredByPrepaidVoucher(snapshot), true);
+  assert.equal(
+    shouldPreserveFormalizeCommercialSnapshot({
+      snapshot,
+      payments: [],
+      explicitRecalculate: true,
+    }),
+    true
+  );
+
+  const status = resolveReservationPaymentStatus({
+    giftVoucherId: "gift_1",
+    totalPriceCents: snapshot.totalPriceCents,
+    depositCents: 0,
+    quantity: 1,
+    isLicense: false,
+    serviceCategory: "JETSKI",
+    items: [{ quantity: 1, isExtra: false, totalPriceCents: 12_000, service: { category: "JETSKI" } }],
+    payments: [],
+  });
+
+  assert.equal(status.serviceDueCents, 0);
+  assert.equal(status.pendingServiceCents, 0);
+  assert.equal(status.state, "PAID");
+});
+
+test("paid pass voucher formalization keeps service pending at zero", () => {
+  const status = resolveReservationPaymentStatus({
+    passVoucherId: "pass_1",
+    passConsumeId: "consume_1",
+    totalPriceCents: 9_000,
+    depositCents: 0,
+    quantity: 1,
+    isLicense: false,
+    serviceCategory: "JETSKI",
+    items: [{ quantity: 1, isExtra: false, totalPriceCents: 9_000, service: { category: "JETSKI" } }],
+    payments: [],
+  });
+
+  assert.equal(status.serviceDueCents, 0);
+  assert.equal(status.pendingServiceCents, 0);
+  assert.equal(status.state, "PAID");
+});
+
+test("paid voucher update does not reopen service charge from stale main line", () => {
+  assert.equal(
+    resolveChargeableServiceDueCents({
+      passVoucherId: "pass_1",
+      totalPriceCents: 15_000,
+      items: [{ isExtra: false, unitPriceCents: 15_000, totalPriceCents: 15_000 }],
+    }),
+    0
+  );
+});
+
+test("paid voucher with extra charges only the extra", () => {
+  const status = resolveReservationPaymentStatus({
+    giftVoucherId: "gift_1",
+    totalPriceCents: 15_000,
+    depositCents: 0,
+    quantity: 1,
+    isLicense: false,
+    serviceCategory: "JETSKI",
+    items: [
+      { quantity: 1, isExtra: false, totalPriceCents: 12_000, service: { category: "JETSKI" } },
+      { quantity: 1, isExtra: true, totalPriceCents: 3_000, service: { category: "EXTRA" } },
+    ],
+    payments: [],
+  });
+
+  assert.equal(status.serviceDueCents, 3_000);
+  assert.equal(status.pendingServiceCents, 3_000);
+  assert.equal(status.state, "PENDING");
 });
 
 test("formalize preserves a partial paid promo snapshot and pending uses stored total", () => {

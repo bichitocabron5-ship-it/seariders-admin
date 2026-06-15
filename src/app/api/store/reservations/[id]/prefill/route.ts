@@ -112,6 +112,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       },
       giftVoucherId: true,
       passVoucherId: true,
+      passConsumeId: true,
       items: {
         select: {
           serviceId: true,
@@ -119,6 +120,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: true,
           pax: true,
           isExtra: true,
+          totalPriceCents: true,
           service: { select: { category: true } },
         },
       },
@@ -210,6 +212,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const isCompleted = r.status === "COMPLETED";
   const isReadOnly = isHistorical || isCanceled;
   const paymentStatus = getReservationPaymentStatus({
+    giftVoucherId: r.giftVoucherId,
+    passVoucherId: r.passVoucherId,
+    passConsumeId: r.passConsumeId,
     totalPriceCents: r.totalPriceCents,
     depositCents: r.depositCents,
     quantity: r.quantity,
@@ -270,7 +275,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       isCompleted,
       isReadOnly,
       isGift: Boolean(r.giftVoucherId),
-      isPass: Boolean(r.passVoucherId),
+      isPass: Boolean(r.passVoucherId || r.passConsumeId),
     },
     workflow,
   });

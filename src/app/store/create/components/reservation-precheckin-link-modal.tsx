@@ -34,7 +34,7 @@ export function ReservationPrecheckinLinkModal({
   const copy = getPublicCopy(language);
   const localizedUrl = useMemo(() => appendPublicLanguage(url, language), [language, url]);
   const whatsappPhone = normalizePhoneForWhatsApp(phone ?? "", country);
-  const expiryLabel = formatLinkExpiry(expiresInMinutes);
+  const expiryLabel = formatLinkExpiry(expiresInMinutes, language);
   const whatsappMessage = copy.precheckinModal.buildMessage({
     recipientName,
     contractsCount,

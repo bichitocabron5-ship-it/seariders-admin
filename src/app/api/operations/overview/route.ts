@@ -8,6 +8,7 @@ import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { computeReservationDepositCents, deriveReservationDepositStatus } from "@/lib/reservation-deposits";
 import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { getBusinessDayRange } from "@/lib/business-day";
+import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
 
 export const runtime = "nodejs";
 
@@ -85,6 +86,9 @@ export async function GET() {
     orderBy: [{ scheduledTime: "asc" }, { activityDate: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
+      giftVoucherId: true,
+      passVoucherId: true,
+      passConsumeId: true,
       createdAt: true,
       updatedAt: true,
 
@@ -259,13 +263,6 @@ export async function GET() {
       return sum + sign * p.amountCents;
     }, 0);
 
-    const paidServiceCents = r.payments
-      .filter((p) => !p.isDeposit)
-      .reduce((sum, p) => {
-        const sign = p.direction === "OUT" ? -1 : 1;
-        return sum + sign * p.amountCents;
-      }, 0);
-
     const paidDepositCents = r.payments
       .filter((p) => p.isDeposit)
       .reduce((sum, p) => {
@@ -273,7 +270,6 @@ export async function GET() {
         return sum + sign * p.amountCents;
       }, 0);
 
-    const refundableDepositCents = Math.max(0, paidDepositCents);
     const depositCents = computeReservationDepositCents({
       storedDepositCents: r.depositCents,
       quantity: r.quantity,
@@ -288,10 +284,14 @@ export async function GET() {
 
     const mainItem = r.items.find((it) => !it.isExtra) ?? null;
     const extras = r.items.filter((it) => it.isExtra);
+    const isGift = Boolean(r.giftVoucherId);
+    const isPass = Boolean(r.passVoucherId || r.passConsumeId);
+    const isPrepaidVoucherReservation = isGift || isPass;
 
-    const serviceTotalCents = r.items
+    const rawServiceTotalCents = r.items
       .filter((it) => !it.isExtra)
       .reduce((sum, it) => sum + (it.totalPriceCents ?? 0), 0);
+    const serviceTotalCents = isPrepaidVoucherReservation ? 0 : rawServiceTotalCents;
 
     const extrasTotalCents = r.items
       .filter((it) => it.isExtra)
@@ -305,16 +305,34 @@ export async function GET() {
 
     const grossCents = isPack
       ? Number(r.totalPriceCents ?? 0)
-      : (r.items.length > 0
+      : isPrepaidVoucherReservation
+        ? extrasTotalCents
+        : (r.items.length > 0
           ? serviceTotalCents + extrasTotalCents
           : legacyGrossCents);
 
-    const soldTotalCents = isPack
-      ? Number(r.totalPriceCents ?? 0)
-      : Math.max(0, grossCents - autoDisc - manualDisc);
+    const paymentStatus = resolveReservationPaymentStatus({
+      reservationStatus: r.status,
+      giftVoucherId: r.giftVoucherId,
+      passVoucherId: r.passVoucherId,
+      passConsumeId: r.passConsumeId,
+      totalPriceCents: r.totalPriceCents,
+      depositCents: r.depositCents,
+      quantity: r.quantity,
+      isLicense: Boolean(r.isLicense),
+      serviceCategory: r.service?.category ?? null,
+      items: r.items,
+      payments: r.payments,
+    });
 
-    const pendingServiceCents = Math.max(0, soldTotalCents - paidServiceCents);
-    const pendingDepositCents = Math.max(0, depositCents - refundableDepositCents);
+    const soldTotalCents = isPrepaidVoucherReservation
+      ? paymentStatus.serviceDueCents
+      : isPack
+        ? Number(r.totalPriceCents ?? 0)
+        : Math.max(0, grossCents - autoDisc - manualDisc);
+
+    const pendingServiceCents = paymentStatus.displayPendingServiceCents;
+    const pendingDepositCents = paymentStatus.displayPendingDepositCents;
     const pendingCents = pendingServiceCents + pendingDepositCents;
 
     const requiredUnits = computeRequiredContractUnits({
@@ -397,6 +415,12 @@ export async function GET() {
 
     return {
       id: r.id,
+      giftVoucherId: r.giftVoucherId,
+      passVoucherId: r.passVoucherId,
+      passConsumeId: r.passConsumeId,
+      isGift,
+      isPass,
+      paymentCoverageLabel: isGift ? "Pagado por regalo" : isPass ? "Pagado por bono" : null,
       bucket,
 
       createdAt: r.createdAt?.toISOString() ?? null,

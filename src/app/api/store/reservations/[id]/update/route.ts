@@ -31,6 +31,7 @@ import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commis
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 import {
   commercialPricingStateChanged,
+  isReservationCoveredByPrepaidVoucher,
   shouldPreserveFormalizeCommercialSnapshot,
 } from "@/lib/reservation-commercial-snapshot";
 
@@ -491,6 +492,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       customerCountry: true,
       basePriceCents: true,
       totalPriceCents: true,
+      depositCents: true,
       autoDiscountCents: true,
       customerDiscountCents: true,
       appliedCommissionMode: true,
@@ -525,6 +527,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       source: true,
       giftVoucherId: true,
       passVoucherId: true,
+      passConsumeId: true,
       items: {
         select: {
           serviceId: true,
@@ -692,6 +695,7 @@ const commercialCompositionChanged =
   JSON.stringify(existingCommercialComposition) !== JSON.stringify(nextCommercialComposition);
 const requestedChannelId = b.channelId !== undefined ? b.channelId ?? null : existing.channelId ?? null;
 const commercialChannelChanged = (existing.channelId ?? null) !== requestedChannelId;
+const isPrepaidVoucherReservation = isReservationCoveredByPrepaidVoucher(existing);
 const protectedCommercialSnapshot = shouldPreserveFormalizeCommercialSnapshot({
   snapshot: existing,
   payments: existing.payments,
@@ -879,7 +883,7 @@ if (hasProItems) {
         pricingTier: b.pricingTier ?? existing.pricingTier,
       });
       const isVoucherIncludedBaseLine =
-        Boolean(existing.giftVoucherId || existing.passVoucherId) &&
+        isPrepaidVoucherReservation &&
         it.serviceId === existing.serviceId &&
         it.optionId === existing.optionId;
       if (isVoucherIncludedBaseLine) {
@@ -1058,7 +1062,9 @@ if (hasProItems) {
       pricingTier: b.pricingTier ?? existing.pricingTier,
     });
     const depositPerUnit = reservationState.isLicense ? 50000 : 10000;
-    const depositCents = depositPerUnit * jetskiUnits;
+    const depositCents = isPrepaidVoucherReservation
+      ? Number(existing.depositCents ?? 0)
+      : depositPerUnit * jetskiUnits;
     const nextRequiredContractUnits = computeRequiredContractUnits({
       quantity: totalMainQuantity,
       isLicense: reservationState.isLicense,
@@ -1310,15 +1316,23 @@ if (hasProItems) {
     });
   }
 
-  const price = await findActiveServicePrice(prisma, {
-    serviceId: svc.id,
-    optionId: opt.id,
-    durationMinutes: Number(opt.durationMinutes ?? 30),
-    now: pricingWhen,
-    pricingTier: String(svc.category ?? "").toUpperCase() === "JETSKI" ? reservationState.pricingTier : PricingTier.STANDARD,
-  });
+  const isVoucherIncludedBaseLine =
+    isPrepaidVoucherReservation &&
+    svc.id === existing.serviceId &&
+    opt.id === existing.optionId;
+  const price = isVoucherIncludedBaseLine
+    ? null
+    : await findActiveServicePrice(prisma, {
+        serviceId: svc.id,
+        optionId: opt.id,
+        durationMinutes: Number(opt.durationMinutes ?? 30),
+        now: pricingWhen,
+        pricingTier: String(svc.category ?? "").toUpperCase() === "JETSKI" ? reservationState.pricingTier : PricingTier.STANDARD,
+      });
 
-  if (!price) return new NextResponse("No hay precio vigente para este servicio/duración.", { status: 400 });
+  if (!isVoucherIncludedBaseLine && !price) {
+    return new NextResponse("No hay precio vigente para este servicio/duración.", { status: 400 });
+  }
 
   if (lockedContractsCount > 0) {
     if (existing.serviceId !== b.serviceId || existing.optionId !== b.optionId) {
@@ -1331,11 +1345,13 @@ if (hasProItems) {
     }
   }
 
-  const unitPriceCents = Number(price.basePriceCents) || 0;
+  const unitPriceCents = isVoucherIncludedBaseLine ? 0 : Number(price!.basePriceCents) || 0;
   const principalCents = unitPriceCents * Number(b.quantity);
 
   const depositPerUnit = reservationState.isLicense ? 50000 : 10000;
-  const depositCents = depositPerUnit * Number(b.quantity);
+  const depositCents = isPrepaidVoucherReservation
+    ? Number(existing.depositCents ?? 0)
+    : depositPerUnit * Number(b.quantity);
   const nextSingleRequiredContractUnits = computeRequiredContractUnits({
     quantity: Number(b.quantity ?? 0),
     isLicense: reservationState.isLicense,
@@ -1411,7 +1427,7 @@ if (hasProItems) {
         reservationId: id,
         serviceId: svc.id,
         optionId: opt.id,
-        servicePriceId: price!.id ?? null,
+        servicePriceId: isVoucherIncludedBaseLine ? null : price!.id ?? null,
         quantity: b.quantity,
         pax: b.pax,
         unitPriceCents,
