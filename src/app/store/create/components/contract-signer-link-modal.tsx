@@ -11,12 +11,14 @@ import {
   type PublicLanguage,
 } from "@/lib/public-links/i18n";
 
-export function formatLinkExpiry(expiresInMinutes: number) {
+export function formatLinkExpiry(expiresInMinutes: number, language: PublicLanguage = "es") {
   if (expiresInMinutes >= 1440) {
     const days = Math.round(expiresInMinutes / 1440);
+    if (language === "en") return `${days} day${days === 1 ? "" : "s"}`;
     return `${days} dia${days === 1 ? "" : "s"}`;
   }
 
+  if (language === "en") return `${expiresInMinutes} minute${expiresInMinutes === 1 ? "" : "s"}`;
   return `${expiresInMinutes} minuto${expiresInMinutes === 1 ? "" : "s"}`;
 }
 
@@ -45,18 +47,19 @@ export function ContractSignerLinkModal({
   notificationError?: string | null;
   onClose: () => void;
 }) {
-  const [language, setLanguage] = useState<PublicLanguage>(getDefaultPublicLanguage(country));
+  const defaultLanguage = getDefaultPublicLanguage(country);
+  const [language, setLanguage] = useState<PublicLanguage>(defaultLanguage);
   const copy = getPublicCopy(language);
   const localizedUrl = useMemo(() => appendPublicLanguage(url, language), [language, url]);
   const whatsappPhone = normalizePhoneForWhatsApp(phone ?? "", country);
-  const expiryLabel = formatLinkExpiry(expiresInMinutes);
+  const expiryLabel = formatLinkExpiry(expiresInMinutes, language);
   const fallbackMessage = copy.signerModal.buildMessage({
     recipientName,
     unitLabel,
     url: localizedUrl,
     expiryLabel,
   });
-  const whatsappMessage = manualMessage?.trim() ? manualMessage : fallbackMessage;
+  const whatsappMessage = language === defaultLanguage && manualMessage?.trim() ? manualMessage : fallbackMessage;
   const whatsappUrl = whatsappPhone
     ? `https://wa.me/${encodeURIComponent(whatsappPhone)}?text=${encodeURIComponent(whatsappMessage)}`
     : null;
@@ -118,7 +121,7 @@ export function ContractSignerLinkModal({
           }}
         >
           <div style={{ background: "#fff", padding: 16, borderRadius: 12 }}>
-            <QRCode value={url} size={256} />
+            <QRCode value={localizedUrl} size={256} />
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-export type PublicLanguage = "es" | "en" | "fr";
+export type PublicLanguage = "es" | "en";
 
 export const PUBLIC_LANGUAGE_OPTIONS: Array<{ value: PublicLanguage; label: string }> = [
   { value: "es", label: "ES" },
@@ -8,13 +8,12 @@ export const PUBLIC_LANGUAGE_OPTIONS: Array<{ value: PublicLanguage; label: stri
 export function normalizePublicLanguage(value: string | null | undefined): PublicLanguage {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (normalized === "en") return "en";
-  if (normalized === "fr") return "fr";
+  if (normalized === "fr") return "en";
   return "es";
 }
 
 export function getDefaultPublicLanguage(country?: string | null): PublicLanguage {
   const normalized = String(country ?? "").trim().toUpperCase();
-  if (normalized === "FR") return "fr";
   if (normalized && normalized !== "ES") return "en";
   return "es";
 }
@@ -28,17 +27,16 @@ export function appendPublicLanguage(url: string, language: PublicLanguage) {
 
 function localeForLanguage(language: PublicLanguage) {
   if (language === "en") return "en-GB";
-  if (language === "fr") return "fr-FR";
   return "es-ES";
 }
 
 export function formatPublicDate(value: string | null, language: PublicLanguage) {
-  if (!value) return language === "en" ? "No date" : language === "fr" ? "Sans date" : "Sin fecha";
+  if (!value) return language === "en" ? "No date" : "Sin fecha";
   return new Date(value).toLocaleDateString(localeForLanguage(language));
 }
 
 export function formatPublicTime(value: string | null, language: PublicLanguage) {
-  if (!value) return language === "en" ? "No time" : language === "fr" ? "Sans heure" : "Sin hora";
+  if (!value) return language === "en" ? "No time" : "Sin hora";
   return new Date(value).toLocaleTimeString(localeForLanguage(language), {
     hour: "2-digit",
     minute: "2-digit",

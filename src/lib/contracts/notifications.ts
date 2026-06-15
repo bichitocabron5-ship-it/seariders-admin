@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { createContractSignatureToken } from "@/lib/contracts/signature-link";
 import { dispatchWhatsappMessage, normalizePhoneForWhatsApp } from "@/lib/notifications/whatsapp";
-import { appendPublicLanguage, getDefaultPublicLanguage, getPublicCopy } from "@/lib/public-links/i18n";
+import { appendPublicLanguage, getDefaultPublicLanguage, getPublicCopy, type PublicLanguage } from "@/lib/public-links/i18n";
 
 function resolvePublicBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -9,12 +9,14 @@ function resolvePublicBaseUrl() {
   return configured.replace(/\/+$/, "");
 }
 
-function formatLinkExpiry(expiresInMinutes: number) {
+function formatLinkExpiry(expiresInMinutes: number, language: PublicLanguage) {
   if (expiresInMinutes >= 1440) {
     const days = Math.round(expiresInMinutes / 1440);
+    if (language === "en") return `${days} day${days === 1 ? "" : "s"}`;
     return `${days} dia${days === 1 ? "" : "s"}`;
   }
 
+  if (language === "en") return `${expiresInMinutes} minute${expiresInMinutes === 1 ? "" : "s"}`;
   return `${expiresInMinutes} minuto${expiresInMinutes === 1 ? "" : "s"}`;
 }
 
@@ -49,7 +51,7 @@ export async function sendContractSignerWhatsapp(args: {
   const rawUrl = `${baseUrl}/sign/contracts/${encodeURIComponent(token)}`;
   const language = getDefaultPublicLanguage(args.country);
   const localizedUrl = appendPublicLanguage(rawUrl, language);
-  const expiryLabel = formatLinkExpiry(args.expiresInMinutes);
+  const expiryLabel = formatLinkExpiry(args.expiresInMinutes, language);
   const copy = getPublicCopy(language);
   const message = copy.signerModal.buildMessage({
     recipientName: args.recipientName,
