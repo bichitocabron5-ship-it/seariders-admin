@@ -12,6 +12,42 @@ import type { PublicLanguage } from "@/lib/public-links/i18n";
 
 const snapshotDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "__snapshots__");
 const shouldUpdateSnapshots = process.env.UPDATE_CONTRACT_SNAPSHOTS === "1";
+const snapshotTimeZone = "Europe/Madrid";
+
+function withSnapshotTimeZoneOption(options?: Intl.DateTimeFormatOptions) {
+  return {
+    ...options,
+    timeZone: options?.timeZone ?? snapshotTimeZone,
+  };
+}
+
+function withContractSnapshotTimeZone<T>(callback: () => T): T {
+  const originalToLocaleDateString = Date.prototype.toLocaleDateString;
+  const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
+
+  Date.prototype.toLocaleDateString = function (
+    this: Date,
+    locales?: Intl.LocalesArgument,
+    options?: Intl.DateTimeFormatOptions,
+  ) {
+    return originalToLocaleDateString.call(this, locales, withSnapshotTimeZoneOption(options));
+  } as Date["toLocaleDateString"];
+
+  Date.prototype.toLocaleTimeString = function (
+    this: Date,
+    locales?: Intl.LocalesArgument,
+    options?: Intl.DateTimeFormatOptions,
+  ) {
+    return originalToLocaleTimeString.call(this, locales, withSnapshotTimeZoneOption(options));
+  } as Date["toLocaleTimeString"];
+
+  try {
+    return callback();
+  } finally {
+    Date.prototype.toLocaleDateString = originalToLocaleDateString;
+    Date.prototype.toLocaleTimeString = originalToLocaleTimeString;
+  }
+}
 
 const baseReservation: ContractRenderReservation = {
   id: "reservation-snapshot",
@@ -157,14 +193,16 @@ const snapshotCases: SnapshotCase[] = [
 ];
 
 async function assertHtmlSnapshot(snapshotCase: SnapshotCase) {
-  const actual = buildContractHtml({
-    templateCode: snapshotCase.templateCode,
-    templateVersion: "v1",
-    language: snapshotCase.language,
-    logoSrc: "/logo-seariders.png",
-    reservation: snapshotCase.reservation,
-    contract: snapshotCase.contract,
-  });
+  const actual = withContractSnapshotTimeZone(() =>
+    buildContractHtml({
+      templateCode: snapshotCase.templateCode,
+      templateVersion: "v1",
+      language: snapshotCase.language,
+      logoSrc: "/logo-seariders.png",
+      reservation: snapshotCase.reservation,
+      contract: snapshotCase.contract,
+    })
+  );
 
   const snapshotPath = path.join(snapshotDir, `render-contract.${snapshotCase.name}.html`);
 
