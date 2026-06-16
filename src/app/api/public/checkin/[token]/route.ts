@@ -7,7 +7,7 @@ import {
   loadLogoSrc,
   templateCodeForContract,
 } from "@/lib/contracts/render-contract";
-import { normalizePublicLanguage } from "@/lib/public-links/i18n";
+import { normalizePublicLanguage, type PublicLanguage } from "@/lib/public-links/i18n";
 import { verifyReservationCheckinToken } from "@/lib/reservations/public-checkin-link";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import {
@@ -64,6 +64,33 @@ function normCountry(value: string | null | undefined) {
   if (value === undefined) return undefined;
   if (value === null) return null;
   return resolveCountryIso2(value);
+}
+
+const CHECKIN_ROUTE_TEXT = {
+  invalidLink: {
+    es: "Enlace de pre-checkin no valido o caducado",
+    en: "Pre-check-in link is invalid or expired",
+    fr: "Le lien de pre-check-in est invalide ou expire",
+  },
+  bookingNotFound: {
+    es: "Reserva no encontrada",
+    en: "Booking not found",
+    fr: "Reservation introuvable",
+  },
+  invalidBody: {
+    es: "Body invalido",
+    en: "Invalid request body",
+    fr: "Corps de requete invalide",
+  },
+  contractNotInReservation: {
+    es: "Uno de los contratos no pertenece a esta reserva.",
+    en: "One of the contracts does not belong to this booking.",
+    fr: "L'un des contrats n'appartient pas a cette reservation.",
+  },
+} as const satisfies Record<string, Record<PublicLanguage, string>>;
+
+function checkinRouteText(language: PublicLanguage, key: keyof typeof CHECKIN_ROUTE_TEXT) {
+  return CHECKIN_ROUTE_TEXT[key][language];
 }
 
 async function getReservationSnapshot(reservationId: string, language: ReturnType<typeof normalizePublicLanguage>) {
@@ -287,10 +314,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
   const { token } = await ctx.params;
   const language = normalizePublicLanguage(new URL(req.url).searchParams.get("lang"));
   const payload = verifyReservationCheckinToken(token);
-  if (!payload) return new NextResponse(language === "en" ? "Pre-check-in link is invalid or expired" : "Enlace de pre-checkin no valido o caducado", { status: 401 });
+  if (!payload) return new NextResponse(checkinRouteText(language, "invalidLink"), { status: 401 });
 
   const snapshot = await getReservationSnapshot(payload.reservationId, language);
-  if (!snapshot) return new NextResponse(language === "en" ? "Booking not found" : "Reserva no encontrada", { status: 404 });
+  if (!snapshot) return new NextResponse(checkinRouteText(language, "bookingNotFound"), { status: 404 });
 
   return NextResponse.json({ ok: true, language, ...snapshot });
 }
@@ -299,10 +326,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
   const { token } = await ctx.params;
   const language = normalizePublicLanguage(new URL(req.url).searchParams.get("lang"));
   const payload = verifyReservationCheckinToken(token);
-  if (!payload) return new NextResponse(language === "en" ? "Pre-check-in link is invalid or expired" : "Enlace de pre-checkin no valido o caducado", { status: 401 });
+  if (!payload) return new NextResponse(checkinRouteText(language, "invalidLink"), { status: 401 });
 
   const parsed = BodySchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return new NextResponse(language === "en" ? "Invalid request body" : "Body invalido", { status: 400 });
+  if (!parsed.success) return new NextResponse(checkinRouteText(language, "invalidBody"), { status: 400 });
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -323,7 +350,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
         },
       });
 
-      if (!reservation) throw new Error("Reserva no encontrada");
+      if (!reservation) throw new Error(checkinRouteText(language, "bookingNotFound"));
 
       const reservationPatch = parsed.data.reservation;
       const reservationCountry = normCountry(reservationPatch.customerCountry);
@@ -352,7 +379,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
 
       for (const contractPatch of parsed.data.contracts) {
         const current = contractMap.get(contractPatch.id);
-        if (!current) throw new Error("Uno de los contratos no pertenece a esta reserva.");
+        if (!current) throw new Error(checkinRouteText(language, "contractNotInReservation"));
         if (String(current.status) === "SIGNED") continue;
 
         const nextDriverBirthDate =
@@ -407,8 +434,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
       }
     });
 
-      const snapshot = await getReservationSnapshot(payload.reservationId, language);
-    if (!snapshot) return new NextResponse(language === "en" ? "Booking not found" : "Reserva no encontrada", { status: 404 });
+    const snapshot = await getReservationSnapshot(payload.reservationId, language);
+    if (!snapshot) return new NextResponse(checkinRouteText(language, "bookingNotFound"), { status: 404 });
     return NextResponse.json({ ok: true, language, ...snapshot });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Error";

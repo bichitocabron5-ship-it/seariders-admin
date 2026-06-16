@@ -80,6 +80,7 @@ function toCountrySelectOption(option: CountryOption, language: string | null | 
     option.label,
     option.labelEn,
     option.labelEs,
+    option.labelFr,
     ...(option.searchLabels ?? []),
     option.value,
   ];

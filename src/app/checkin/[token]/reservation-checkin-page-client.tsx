@@ -128,6 +128,24 @@ function getCheckinValidationText(language: PublicLanguage) {
     };
   }
 
+  if (language === "fr") {
+    return {
+      driverName: "Renseignez le nom complet du conducteur.",
+      driverCountry: "Selectionnez le pays du conducteur.",
+      driverAddress: "Renseignez l'adresse du conducteur.",
+      driverBirthDate: "Renseignez la date de naissance du conducteur.",
+      driverDocType: "Selectionnez le type de document.",
+      driverDocNumber: "Renseignez le numero de document.",
+      minorAuthorizationProvided: "Vous devez confirmer l'autorisation du parent ou tuteur.",
+      minorAuthorizationFile: "Le document d'autorisation doit etre valide en boutique avant la signature.",
+      licenseSchool: "Renseignez l'ecole ou l'emetteur du permis.",
+      licenseType: "Renseignez le type de permis.",
+      licenseNumber: "Renseignez le numero de permis.",
+      under16: "Un contrat ne peut pas etre signe pour un conducteur de moins de 16 ans.",
+      completeBeforeSign: "Completez les champs obligatoires avant de signer ce contrat.",
+    };
+  }
+
   return {
     driverName: "Indica el nombre completo del conductor.",
     driverCountry: "Selecciona el pais del conductor.",
@@ -732,7 +750,7 @@ export function ReservationCheckinPageClient({
   }, [expandedContractId, snapshot]);
 
   const countryOptions = useMemo(
-    () => getCountryOptions(language === "en" ? "en" : "es"),
+    () => getCountryOptions(language),
     [language]
   );
 
@@ -871,7 +889,7 @@ export function ReservationCheckinPageClient({
                           options={countryOptions}
                           language={language}
                           placeholder={copy.checkinPage.wizard.selectCountry}
-                          noOptionsMessage={language === "en" ? "No results" : "Sin resultados"}
+                          noOptionsMessage={language === "en" ? "No results" : language === "fr" ? "Aucun resultat" : "Sin resultados"}
                           onChange={(value) => updateContractDraft(activeContract.id, { driverCountry: value })}
                         />
                         <Field

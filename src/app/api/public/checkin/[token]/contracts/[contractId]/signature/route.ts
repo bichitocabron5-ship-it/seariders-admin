@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { saveContractSignature } from "@/lib/contracts/save-contract-signature";
 import { verifyReservationCheckinToken } from "@/lib/reservations/public-checkin-link";
 import { evaluateContractCheckinState } from "@/lib/contracts/public-checkin";
-import { normalizePublicLanguage } from "@/lib/public-links/i18n";
+import { normalizePublicLanguage, type PublicLanguage } from "@/lib/public-links/i18n";
 
 export const runtime = "nodejs";
 
@@ -13,11 +13,33 @@ const BodySchema = z.object({
   imageDataUrl: z.string().trim().min(30),
 });
 
+const CHECKIN_SIGNATURE_TEXT = {
+  invalidLink: {
+    es: "Enlace de pre-checkin no valido o caducado",
+    en: "Pre-check-in link is invalid or expired",
+    fr: "Le lien de pre-check-in est invalide ou expire",
+  },
+  contractNotFound: {
+    es: "Contrato no encontrado",
+    en: "Contract not found",
+    fr: "Contrat introuvable",
+  },
+  notReady: {
+    es: "El contrato no esta listo para firmar",
+    en: "The contract is not ready to sign",
+    fr: "Le contrat n'est pas pret a etre signe",
+  },
+} as const satisfies Record<string, Record<PublicLanguage, string>>;
+
+function signatureText(language: PublicLanguage, key: keyof typeof CHECKIN_SIGNATURE_TEXT) {
+  return CHECKIN_SIGNATURE_TEXT[key][language];
+}
+
 export async function POST(req: Request, ctx: { params: Promise<{ token: string; contractId: string }> }) {
   const { token, contractId } = await ctx.params;
   const language = normalizePublicLanguage(new URL(req.url).searchParams.get("lang"));
   const payload = verifyReservationCheckinToken(token);
-  if (!payload) return new NextResponse(language === "en" ? "Pre-check-in link is invalid or expired" : "Enlace de pre-checkin no valido o caducado", { status: 401 });
+  if (!payload) return new NextResponse(signatureText(language, "invalidLink"), { status: 401 });
 
   try {
     const body = BodySchema.parse(await req.json());
@@ -48,7 +70,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string;
     });
 
     if (!contract || contract.reservationId !== payload.reservationId) {
-      return new NextResponse(language === "en" ? "Contract not found" : "Contrato no encontrado", { status: 404 });
+      return new NextResponse(signatureText(language, "contractNotFound"), { status: 404 });
     }
 
     const evaluation = evaluateContractCheckinState({
@@ -59,7 +81,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string;
     });
 
     if (!evaluation.canBeReady) {
-      return new NextResponse(evaluation.blockingReason || (language === "en" ? "The contract is not ready to sign" : "El contrato no esta listo para firmar"), { status: 400 });
+      return new NextResponse(evaluation.blockingReason || signatureText(language, "notReady"), { status: 400 });
     }
 
     const updated = await saveContractSignature({

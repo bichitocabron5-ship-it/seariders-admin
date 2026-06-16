@@ -2,16 +2,19 @@
 import countries from "i18n-iso-countries";
 import en from "i18n-iso-countries/langs/en.json" with { type: "json" };
 import es from "i18n-iso-countries/langs/es.json" with { type: "json" };
+import fr from "i18n-iso-countries/langs/fr.json" with { type: "json" };
 import { getCountryCallingCode, isSupportedCountry, type CountryCode } from "libphonenumber-js";
 
 countries.registerLocale(en);
 countries.registerLocale(es);
+countries.registerLocale(fr);
 
 export type CountryOption = {
   value: string;
   label: string;
   labelEn?: string;
   labelEs?: string;
+  labelFr?: string;
   searchLabels?: string[];
 };
 
@@ -22,10 +25,12 @@ export type CountryDialCodeOption = CountryOption & {
 };
 
 const FREQUENT_PHONE_COUNTRIES = ["ES", "FR", "DE", "IT", "GB", "NL", "BE"] as const;
-export type CountryLanguage = "es" | "en";
+export type CountryLanguage = "es" | "en" | "fr";
 
 export function normalizeCountryLanguage(language: string | null | undefined): CountryLanguage {
-  return language === "en" ? "en" : "es";
+  if (language === "en") return "en";
+  if (language === "fr") return "fr";
+  return "es";
 }
 
 function uniqueClean(values: Array<string | null | undefined>) {
@@ -62,8 +67,10 @@ export function getCountryOptions(language: CountryLanguage = "es"): CountryOpti
   const names = countries.getNames(locale, { select: "official" });
   const namesEs = countries.getNames("es", { select: "official" });
   const namesEn = countries.getNames("en", { select: "official" });
+  const namesFr = countries.getNames("fr", { select: "official" });
   const aliasesEs = countries.getNames("es", { select: "all" });
   const aliasesEn = countries.getNames("en", { select: "all" });
+  const aliasesFr = countries.getNames("fr", { select: "all" });
 
   return Object.entries(names)
     .map(([code, name]) => {
@@ -71,18 +78,21 @@ export function getCountryOptions(language: CountryLanguage = "es"): CountryOpti
       const label = String(name ?? code);
       const labelEn = String(namesEn[code] ?? "");
       const labelEs = String(namesEs[code] ?? "");
+      const labelFr = String(namesFr[code] ?? "");
       const searchLabels = uniqueClean([
         label,
         labelEn,
         labelEs,
+        labelFr,
         ...countryNameList(aliasesEs[code]),
         ...countryNameList(aliasesEn[code]),
+        ...countryNameList(aliasesFr[code]),
         value,
         value === "GB" ? "UK" : null,
         value === "US" ? "USA" : null,
       ]);
 
-      return { value, label, labelEn, labelEs, searchLabels };
+      return { value, label, labelEn, labelEs, labelFr, searchLabels };
     })
     .sort((a, b) => a.label.localeCompare(b.label, locale));
 }
@@ -95,9 +105,14 @@ export function getCountryOptionsEn(): CountryOption[] {
   return getCountryOptions("en");
 }
 
+export function getCountryOptionsFr(): CountryOption[] {
+  return getCountryOptions("fr");
+}
+
 export function getCountryOptionLabel(option: CountryOption, language: string | null | undefined = "es") {
   const locale = normalizeCountryLanguage(language);
   if (locale === "en") return option.labelEn || option.label || option.value;
+  if (locale === "fr") return option.labelFr || option.label || option.value;
   return option.labelEs || option.label || option.value;
 }
 
@@ -121,9 +136,12 @@ export function resolveCountryIso2(value: string | null | undefined) {
   const alpha2Es = countries.getAlpha2Code(raw, "es");
   if (alpha2Es && isValidCountryIso2(alpha2Es)) return alpha2Es.toUpperCase();
 
+  const alpha2Fr = countries.getAlpha2Code(raw, "fr");
+  if (alpha2Fr && isValidCountryIso2(alpha2Fr)) return alpha2Fr.toUpperCase();
+
   const normalized = normalizeCountrySearchText(raw);
   for (const option of getCountryOptions("es")) {
-    const labels = option.searchLabels ?? [option.label, option.labelEn, option.labelEs, option.value];
+    const labels = option.searchLabels ?? [option.label, option.labelEn, option.labelEs, option.labelFr, option.value];
     if (labels.map(normalizeCountrySearchText).includes(normalized)) return option.value;
   }
 
@@ -167,6 +185,7 @@ export function getCountryDialCodeOptions(countryOptions: CountryOption[]): Coun
       const searchLabels = uniqueClean([
         option.label,
         option.labelEn,
+        option.labelFr,
         ...(option.searchLabels ?? []),
         value,
         value === "GB" ? "UK" : null,

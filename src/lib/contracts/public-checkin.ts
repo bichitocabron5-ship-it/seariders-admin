@@ -42,7 +42,9 @@ const LICENSE_REQUIRED_FIELDS = [
   "licenseNumber",
 ] as const satisfies readonly ContractCheckinMissingField[];
 
-const FIELD_LABELS: Record<"es" | "en", Record<ContractCheckinMissingField, string>> = {
+type CheckinLanguage = "es" | "en" | "fr";
+
+const FIELD_LABELS: Record<CheckinLanguage, Record<ContractCheckinMissingField, string>> = {
   es: {
     driverName: "nombre del conductor",
     driverCountry: "pais del conductor",
@@ -69,28 +71,57 @@ const FIELD_LABELS: Record<"es" | "en", Record<ContractCheckinMissingField, stri
     licenseType: "license type",
     licenseNumber: "license number",
   },
+  fr: {
+    driverName: "nom du conducteur",
+    driverCountry: "pays du conducteur",
+    driverAddress: "adresse du conducteur",
+    driverDocType: "type de document",
+    driverDocNumber: "numero de document",
+    driverBirthDate: "date de naissance du conducteur",
+    minorAuthorizationProvided: "autorisation du parent ou tuteur",
+    minorAuthorizationFile: "document d'autorisation du parent ou tuteur",
+    licenseSchool: "ecole ou emetteur du permis",
+    licenseType: "type de permis",
+    licenseNumber: "numero de permis",
+  },
 };
 
 function hasText(value: unknown) {
   return String(value ?? "").trim().length > 0;
 }
 
+function normalizeCheckinLanguage(language: string | null | undefined): CheckinLanguage {
+  if (language === "en") return "en";
+  if (language === "fr") return "fr";
+  return "es";
+}
+
+function textForLanguage(language: string | null | undefined, texts: Record<CheckinLanguage, string>) {
+  return texts[normalizeCheckinLanguage(language)];
+}
+
 function labelsForLanguage(language: string | null | undefined) {
-  return language === "en" ? FIELD_LABELS.en : FIELD_LABELS.es;
+  return FIELD_LABELS[normalizeCheckinLanguage(language)];
 }
 
 function buildMissingFieldsReason(fields: ContractCheckinMissingField[], language: string | null | undefined) {
   const labels = labelsForLanguage(language);
   const names = fields.map((field) => labels[field]).join(", ");
-  if (language === "en") return `Missing required fields: ${names}.`;
-  return `Faltan campos obligatorios: ${names}.`;
+  return textForLanguage(language, {
+    es: `Faltan campos obligatorios: ${names}.`,
+    en: `Missing required fields: ${names}.`,
+    fr: `Champs obligatoires manquants : ${names}.`,
+  });
 }
 
 function buildMissingLicenseReason(fields: ContractCheckinMissingField[], language: string | null | undefined) {
   const labels = labelsForLanguage(language);
   const names = fields.map((field) => labels[field]).join(", ");
-  if (language === "en") return `Missing required license fields: ${names}.`;
-  return `Faltan campos obligatorios de licencia: ${names}.`;
+  return textForLanguage(language, {
+    es: `Faltan campos obligatorios de licencia: ${names}.`,
+    en: `Missing required license fields: ${names}.`,
+    fr: `Champs obligatoires du permis manquants : ${names}.`,
+  });
 }
 
 function ageAtDate(birth: Date, at: Date) {
@@ -152,10 +183,11 @@ export function evaluateContractCheckinState(args: {
     return {
       canBeReady: false,
       nextStatus: "DRAFT" as const,
-      blockingReason:
-        args.language === "en"
-          ? "The driver's birth date is not valid."
-          : "La fecha de nacimiento del conductor no es valida.",
+      blockingReason: textForLanguage(args.language, {
+        es: "La fecha de nacimiento del conductor no es valida.",
+        en: "The driver's birth date is not valid.",
+        fr: "La date de naissance du conducteur n'est pas valide.",
+      }),
       blockingFields: ["driverBirthDate"] as ContractCheckinMissingField[],
       minorNeedsAuthorization: false,
     };
@@ -179,10 +211,11 @@ export function evaluateContractCheckinState(args: {
     return {
       canBeReady: false,
       nextStatus: "DRAFT" as const,
-      blockingReason:
-        args.language === "en"
-          ? "A contract cannot be signed for a driver under 16 years old."
-          : "No se puede formalizar un contrato para un menor de 16 anos.",
+      blockingReason: textForLanguage(args.language, {
+        es: "No se puede formalizar un contrato para un menor de 16 anos.",
+        en: "A contract cannot be signed for a driver under 16 years old.",
+        fr: "Un contrat ne peut pas etre signe pour un conducteur de moins de 16 ans.",
+      }),
       blockingFields: ["driverBirthDate"] as ContractCheckinMissingField[],
       minorNeedsAuthorization: true,
     };
@@ -192,10 +225,11 @@ export function evaluateContractCheckinState(args: {
     return {
       canBeReady: false,
       nextStatus: "DRAFT" as const,
-      blockingReason:
-        args.language === "en"
-          ? "Parent or guardian authorization is required for a 16 or 17 year old driver."
-          : "Para un menor de 16 o 17 anos debe constar la autorizacion.",
+      blockingReason: textForLanguage(args.language, {
+        es: "Para un menor de 16 o 17 anos debe constar la autorizacion.",
+        en: "Parent or guardian authorization is required for a 16 or 17 year old driver.",
+        fr: "Une autorisation du parent ou tuteur est obligatoire pour un conducteur de 16 ou 17 ans.",
+      }),
       blockingFields: ["minorAuthorizationProvided"] as ContractCheckinMissingField[],
       minorNeedsAuthorization: true,
     };
@@ -205,10 +239,11 @@ export function evaluateContractCheckinState(args: {
     return {
       canBeReady: false,
       nextStatus: "DRAFT" as const,
-      blockingReason:
-        args.language === "en"
-          ? "The parent or guardian authorization document must be validated in store before signing."
-          : "La autorizacion del tutor debe adjuntarse en tienda antes de firmar.",
+      blockingReason: textForLanguage(args.language, {
+        es: "La autorizacion del tutor debe adjuntarse en tienda antes de firmar.",
+        en: "The parent or guardian authorization document must be validated in store before signing.",
+        fr: "Le document d'autorisation du parent ou tuteur doit etre valide en boutique avant la signature.",
+      }),
       blockingFields: ["minorAuthorizationFile"] as ContractCheckinMissingField[],
       minorNeedsAuthorization: true,
     };

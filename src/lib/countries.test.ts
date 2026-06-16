@@ -7,6 +7,7 @@ import {
   getCountryOptionLabel,
   getCountryOptions,
   getCountryOptionsEs,
+  getCountryOptionsFr,
   resolveCountryIso2,
 } from "./countries";
 
@@ -15,11 +16,15 @@ test("country options localize labels by language", () => {
   const germanyEs = getCountryOptions("es").find((option) => option.value === "DE");
   const spainEn = getCountryOptions("en").find((option) => option.value === "ES");
   const germanyEn = getCountryOptions("en").find((option) => option.value === "DE");
+  const spainFr = getCountryOptions("fr").find((option) => option.value === "ES");
+  const germanyFr = getCountryOptions("fr").find((option) => option.value === "DE");
 
   assert.equal(spainEs?.label, "España");
   assert.equal(germanyEs?.label, "Alemania");
   assert.equal(spainEn?.label, "Spain");
   assert.equal(germanyEn?.label, "Germany");
+  assert.equal(spainFr?.label, "Espagne");
+  assert.equal(germanyFr?.label, "Allemagne");
 });
 
 test("country option labels can be rendered from the requested language", () => {
@@ -28,6 +33,7 @@ test("country option labels can be rendered from the requested language", () => 
   assert.ok(germany);
   assert.equal(getCountryOptionLabel(germany, "es"), "Alemania");
   assert.equal(getCountryOptionLabel(germany, "en"), "Germany");
+  assert.equal(getCountryOptionLabel(germany, "fr"), "Allemagne");
   assert.equal(getCountryOptionLabel(germany), "Alemania");
 });
 
@@ -36,8 +42,16 @@ test("country resolution accepts spanish, english, alias and ISO inputs", () => 
   assert.equal(resolveCountryIso2("France"), "FR");
   assert.equal(resolveCountryIso2("Alemania"), "DE");
   assert.equal(resolveCountryIso2("Germany"), "DE");
+  assert.equal(resolveCountryIso2("Allemagne"), "DE");
   assert.equal(resolveCountryIso2("fr"), "FR");
   assert.equal(resolveCountryIso2("UK"), "GB");
+});
+
+test("french country options are available", () => {
+  const france = getCountryOptionsFr().find((option) => option.value === "FR");
+
+  assert.ok(france);
+  assert.equal(france.label, "France");
 });
 
 test("phone country options put frequent countries first", () => {
