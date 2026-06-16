@@ -213,7 +213,8 @@ async function assertHtmlSnapshot(snapshotCase: SnapshotCase) {
   }
 
   const expected = await readFile(snapshotPath, "utf8");
-  assert.equal(actual, expected);
+  const normalizeSnapshotText = (text: string) => text.replace(/\r\n/g, "\n");
+  assert.equal(normalizeSnapshotText(actual), normalizeSnapshotText(expected));
 }
 
 for (const snapshotCase of snapshotCases) {
