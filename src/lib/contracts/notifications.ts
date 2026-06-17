@@ -13,10 +13,12 @@ function formatLinkExpiry(expiresInMinutes: number, language: PublicLanguage) {
   if (expiresInMinutes >= 1440) {
     const days = Math.round(expiresInMinutes / 1440);
     if (language === "en") return `${days} day${days === 1 ? "" : "s"}`;
+    if (language === "fr") return `${days} jour${days === 1 ? "" : "s"}`;
     return `${days} dia${days === 1 ? "" : "s"}`;
   }
 
   if (language === "en") return `${expiresInMinutes} minute${expiresInMinutes === 1 ? "" : "s"}`;
+  if (language === "fr") return `${expiresInMinutes} minute${expiresInMinutes === 1 ? "" : "s"}`;
   return `${expiresInMinutes} minuto${expiresInMinutes === 1 ? "" : "s"}`;
 }
 

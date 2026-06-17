@@ -97,3 +97,21 @@ test("precheckin exige pais del conductor para quedar listo", () => {
   assert.deepEqual(result.blockingFields, ["driverCountry"]);
   assert.match(result.blockingReason ?? "", /pais del conductor/);
 });
+
+test("precheckin en frances localiza campos obligatorios", () => {
+  const result = evaluateContractCheckinState({
+    isLicense: true,
+    status: "DRAFT",
+    language: "fr",
+    contract: {
+      ...completeBaseContract,
+      licenseSchool: "Ecole Nautique",
+      licenseType: "PER",
+      licenseNumber: "",
+    },
+  });
+
+  assert.equal(result.canBeReady, false);
+  assert.deepEqual(result.blockingFields, ["licenseNumber"]);
+  assert.match(result.blockingReason ?? "", /numero de permis/);
+});

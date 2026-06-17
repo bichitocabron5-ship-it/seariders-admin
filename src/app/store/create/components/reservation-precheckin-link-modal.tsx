@@ -1,17 +1,15 @@
 "use client";
 
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "react-qr-code";
-import { normalizePhoneForWhatsApp } from "@/lib/phone-normalization";
-import { formatLinkExpiry } from "./contract-signer-link-modal";
 import {
-  appendPublicLanguage,
   getDefaultPublicLanguage,
   getPublicCopy,
   PUBLIC_LANGUAGE_OPTIONS,
   type PublicLanguage,
 } from "@/lib/public-links/i18n";
+import { buildPrecheckinWhatsAppShare } from "@/lib/public-links/precheckin-whatsapp";
 
 export function ReservationPrecheckinLinkModal({
   url,
@@ -30,21 +28,31 @@ export function ReservationPrecheckinLinkModal({
   contractsCount: number;
   onClose: () => void;
 }) {
-  const [language, setLanguage] = useState<PublicLanguage>(getDefaultPublicLanguage(country));
-  const copy = getPublicCopy(language);
-  const localizedUrl = useMemo(() => appendPublicLanguage(url, language), [language, url]);
-  const whatsappPhone = normalizePhoneForWhatsApp(phone ?? "", country);
-  const expiryLabel = formatLinkExpiry(expiresInMinutes, language);
-  const whatsappMessage = copy.precheckinModal.buildMessage({
-    recipientName,
-    contractsCount,
-    url: localizedUrl,
-    expiryLabel,
-  });
+  const [language, setLanguage] = useState<PublicLanguage>(() => getDefaultPublicLanguage(country));
+  const latestLanguageRef = useRef<PublicLanguage>(language);
 
-  const whatsappUrl = whatsappPhone
-    ? `https://wa.me/${encodeURIComponent(whatsappPhone)}?text=${encodeURIComponent(whatsappMessage)}`
-    : null;
+  useEffect(() => {
+    latestLanguageRef.current = language;
+  }, [language]);
+
+  const buildShare = useCallback(
+    (selectedLanguage: PublicLanguage) =>
+      buildPrecheckinWhatsAppShare({
+        url,
+        language: selectedLanguage,
+        recipientName,
+        contractsCount,
+        expiresInMinutes,
+        phone,
+        country,
+      }),
+    [contractsCount, country, expiresInMinutes, phone, recipientName, url]
+  );
+
+  const share = useMemo(() => buildShare(language), [buildShare, language]);
+  const getLatestShare = useCallback(() => buildShare(latestLanguageRef.current), [buildShare]);
+  const copy = getPublicCopy(language);
+  const { localizedUrl, whatsappMessage, whatsappUrl } = share;
 
   return (
     <div
@@ -85,7 +93,11 @@ export function ReservationPrecheckinLinkModal({
           Idioma
           <select
             value={language}
-            onChange={(e) => setLanguage(e.target.value as PublicLanguage)}
+            onChange={(e) => {
+              const nextLanguage = e.target.value as PublicLanguage;
+              latestLanguageRef.current = nextLanguage;
+              setLanguage(nextLanguage);
+            }}
             style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1", fontSize: 13, background: "#fff" }}
           >
             {PUBLIC_LANGUAGE_OPTIONS.map((option) => (
@@ -137,16 +149,17 @@ export function ReservationPrecheckinLinkModal({
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-          <button type="button" onClick={() => void navigator.clipboard.writeText(localizedUrl)} style={buttonStyle}>
+          <button type="button" onClick={() => void navigator.clipboard.writeText(getLatestShare().localizedUrl)} style={buttonStyle}>
             {copy.precheckinModal.copyLink}
           </button>
-          <button type="button" onClick={() => void navigator.clipboard.writeText(whatsappMessage)} style={buttonStyle}>
+          <button type="button" onClick={() => void navigator.clipboard.writeText(getLatestShare().whatsappMessage)} style={buttonStyle}>
             {copy.precheckinModal.copyMessage}
           </button>
           <button
             type="button"
             onClick={() => {
-              if (whatsappUrl) window.location.href = whatsappUrl;
+              const latestShare = getLatestShare();
+              if (latestShare.whatsappUrl) window.location.href = latestShare.whatsappUrl;
             }}
             disabled={!whatsappUrl}
             style={{
@@ -162,7 +175,7 @@ export function ReservationPrecheckinLinkModal({
           </button>
           <button
             type="button"
-            onClick={() => window.open(localizedUrl, "_blank", "noopener,noreferrer")}
+            onClick={() => window.open(getLatestShare().localizedUrl, "_blank", "noopener,noreferrer")}
             style={{
               ...buttonStyle,
               border: "1px solid #0f172a",
