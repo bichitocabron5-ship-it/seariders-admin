@@ -8,6 +8,7 @@ import {
   loadLogoSrc,
   templateCodeForContract,
 } from "@/lib/contracts/render-contract";
+import { resolveContractRenderLanguage } from "@/lib/contracts/language";
 
 export const runtime = "nodejs";
 
@@ -63,6 +64,7 @@ export async function POST(
           minorAuthorizationFileName: true,
           signatureImageUrl: true,
           signatureSignedBy: true,
+          signedLanguage: true,
           signedAt: true,
           preparedJetski: {
             select: {
@@ -121,10 +123,15 @@ export async function POST(
         hasLicense,
       });
       const templateVersion = "v1";
+      const language = resolveContractRenderLanguage({
+        requestedLanguage: "es",
+        signedLanguage: contract.signedLanguage,
+      });
 
       const renderedHtml = buildContractHtml({
         templateCode,
         templateVersion,
+        language,
         logoSrc,
         reservation: {
           id: contract.reservation.id,

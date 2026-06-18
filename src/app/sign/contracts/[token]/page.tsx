@@ -7,6 +7,7 @@ import {
   loadLogoSrc,
   templateCodeForContract,
 } from "@/lib/contracts/render-contract";
+import { resolveContractRenderLanguage } from "@/lib/contracts/language";
 import { buildPublicPageMetadata } from "@/lib/metadata";
 import { normalizePublicLanguage } from "@/lib/public-links/i18n";
 import { SignContractPageClient } from "./sign-contract-page-client";
@@ -35,7 +36,7 @@ export default async function SignContractPage({
 }) {
   const { token } = await params;
   const { lang } = await searchParams;
-  const language = normalizePublicLanguage(lang);
+  const requestedLanguage = normalizePublicLanguage(lang);
   const payload = verifyContractSignatureToken(token);
   if (!payload) notFound();
 
@@ -64,6 +65,7 @@ export default async function SignContractPage({
       minorAuthorizationFileName: true,
       signatureImageUrl: true,
       signatureSignedBy: true,
+      signedLanguage: true,
       signedAt: true,
       renderedHtml: true,
       preparedJetski: {
@@ -103,6 +105,11 @@ export default async function SignContractPage({
   });
 
   if (!contract) notFound();
+
+  const language = resolveContractRenderLanguage({
+    requestedLanguage,
+    signedLanguage: contract.signedLanguage,
+  });
 
   const logoSrc = await loadLogoSrc();
   const hasLicense =

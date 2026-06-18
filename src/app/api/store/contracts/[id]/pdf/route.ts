@@ -6,6 +6,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { buildContractPdfKey, uploadPdfToS3 } from "@/lib/s3";
 import { generateContractPdfFromHtml } from "@/lib/contracts/render-contract-pdf";
+import { resolveContractRenderLanguage } from "@/lib/contracts/language";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,7 @@ export async function POST(
         renderedHtml: true,
         renderedPdfUrl: true,
         renderedPdfKey: true,
+        signedLanguage: true,
         reservation: {
           select: {
             customerName: true,
@@ -61,7 +63,13 @@ export async function POST(
       });
     }
 
-    const pdfBuffer = await generateContractPdfFromHtml(contract.renderedHtml);
+    const pdfBuffer = await generateContractPdfFromHtml(
+      contract.renderedHtml,
+      resolveContractRenderLanguage({
+        requestedLanguage: "es",
+        signedLanguage: contract.signedLanguage,
+      })
+    );
 
     const pdfKey = buildContractPdfKey({
       reservationId: contract.reservationId,
