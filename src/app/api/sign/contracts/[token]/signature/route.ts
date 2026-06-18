@@ -40,6 +40,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       imageDataUrl: body.imageDataUrl,
       imageConsentAccepted: body.imageConsentAccepted,
       language,
+      signedLanguage: language,
     });
 
     return NextResponse.json({ ok: true, contract });

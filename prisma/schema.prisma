@@ -601,6 +601,7 @@ model ReservationContract {
   signatureAuditJson    Json?
 
   signedAt            DateTime?
+  signedLanguage      String?
   signatureProvider   String?   @db.VarChar(40)
   signatureEnvelopeId String?   @db.VarChar(120)
   signatureUrl        String?   @db.VarChar(400)

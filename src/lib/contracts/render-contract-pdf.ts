@@ -12,6 +12,7 @@ import {
   loadLogoSrc,
   templateCodeForContract,
 } from "@/lib/contracts/render-contract";
+import { resolveContractRenderLanguage } from "@/lib/contracts/language";
 import type { PublicLanguage } from "@/lib/public-links/i18n";
 
 async function launchBrowser() {
@@ -133,6 +134,7 @@ export async function regenerateSignedContractPdf(
       signatureImageKey: true,
       signatureImageUrl: true,
       signatureSignedBy: true,
+      signedLanguage: true,
       signedAt: true,
       preparedJetski: {
         select: {
@@ -181,6 +183,11 @@ export async function regenerateSignedContractPdf(
 
   if (!contract) throw new Error("Contrato no encontrado");
 
+  const renderLanguage = resolveContractRenderLanguage({
+    requestedLanguage: language,
+    signedLanguage: contract.signedLanguage,
+  });
+
   const hasLicense =
     Boolean(contract.licenseNumber?.trim()) ||
     Boolean(contract.reservation.isLicense);
@@ -199,7 +206,7 @@ export async function regenerateSignedContractPdf(
   const renderedHtml = buildContractHtml({
     templateCode,
     templateVersion,
-    language,
+    language: renderLanguage,
     logoSrc,
     reservation: {
       id: contract.reservation.id,
@@ -244,7 +251,7 @@ export async function regenerateSignedContractPdf(
     },
   });
 
-  const pdfBuffer = await generateContractPdfFromHtml(renderedHtml, language);
+  const pdfBuffer = await generateContractPdfFromHtml(renderedHtml, renderLanguage);
 
   const uploaded = await uploadPdfToS3({
     key: buildContractPdfKey({
@@ -269,6 +276,7 @@ export async function regenerateSignedContractPdf(
       id: true,
       status: true,
       signedAt: true,
+      signedLanguage: true,
       renderedPdfKey: true,
       renderedPdfUrl: true,
     },

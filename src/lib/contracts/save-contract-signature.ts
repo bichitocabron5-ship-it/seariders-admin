@@ -29,6 +29,7 @@ export async function saveContractSignature(args: {
   imageDataUrl: string;
   imageConsentAccepted?: boolean;
   language?: PublicLanguage;
+  signedLanguage?: PublicLanguage;
 }) {
   const contract = await prisma.reservationContract.findUnique({
     where: { id: args.contractId },
@@ -67,6 +68,7 @@ export async function saveContractSignature(args: {
       signatureImageKey: key,
       signatureImageUrl: imageUrl,
       signatureSignedBy: args.signerName,
+      signedLanguage: args.signedLanguage ?? undefined,
       signedAt: new Date(),
       status: "SIGNED",
       imageConsentAccepted: args.imageConsentAccepted ?? undefined,
@@ -75,5 +77,8 @@ export async function saveContractSignature(args: {
     },
   });
 
-  return await regenerateSignedContractPdf(contract.id, args.language ?? "es");
+  return await regenerateSignedContractPdf(
+    contract.id,
+    args.language ?? args.signedLanguage ?? "es"
+  );
 }
