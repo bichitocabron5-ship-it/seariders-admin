@@ -192,8 +192,8 @@ const snapshotCases: SnapshotCase[] = [
   },
 ];
 
-async function assertHtmlSnapshot(snapshotCase: SnapshotCase) {
-  const actual = withContractSnapshotTimeZone(() =>
+function renderSnapshotHtml(snapshotCase: SnapshotCase) {
+  return withContractSnapshotTimeZone(() =>
     buildContractHtml({
       templateCode: snapshotCase.templateCode,
       templateVersion: "v1",
@@ -203,6 +203,10 @@ async function assertHtmlSnapshot(snapshotCase: SnapshotCase) {
       contract: snapshotCase.contract,
     })
   );
+}
+
+async function assertHtmlSnapshot(snapshotCase: SnapshotCase) {
+  const actual = renderSnapshotHtml(snapshotCase);
 
   const snapshotPath = path.join(snapshotDir, `render-contract.${snapshotCase.name}.html`);
 
@@ -222,3 +226,21 @@ for (const snapshotCase of snapshotCases) {
     await assertHtmlSnapshot(snapshotCase);
   });
 }
+
+test("JETSKI_NO_LICENSE.en does not contain the main Spanish legal clauses", () => {
+  const snapshotCase = snapshotCases.find((candidate) => candidate.name === "JETSKI_NO_LICENSE.en");
+  if (!snapshotCase) throw new Error("Missing JETSKI_NO_LICENSE.en snapshot case");
+
+  const actual = renderSnapshotHtml(snapshotCase);
+  const forbiddenSpanishPhrases = [
+    "Se saldrá del puerto",
+    "Se mantendrá siempre",
+    "El usuario se compromete",
+    "El cliente declara",
+    "Declara haber comprendido",
+  ];
+
+  for (const phrase of forbiddenSpanishPhrases) {
+    assert.equal(actual.includes(phrase), false, `Unexpected Spanish phrase in English contract: ${phrase}`);
+  }
+});
