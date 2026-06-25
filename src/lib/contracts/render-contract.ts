@@ -178,6 +178,7 @@ export function buildContractHtml(input: ContractRenderInput) {
     switch (input.templateCode) {
       case "JETSKI_NO_LICENSE":
         if (input.language === "en") return buildJetskiNoLicenseEnglishHtml(input);
+        if (input.language === "fr") return buildJetskiNoLicenseFrenchHtml(input);
         return buildJetskiNoLicenseHtml(input);
       case "JETSKI_LICENSED":
       case "BOAT_LICENSED":
@@ -920,6 +921,364 @@ ${renderJetskiNoLicenseEnglishClauses(jetskiNoLicenseEnglishContractClauses)}
     <div class="footer">
       <div>${esc(legalHeader)}</div>
       <div>${esc(reservationSummary || "Booking")} · Contract #${esc(contract.logicalUnitIndex ?? contract.unitIndex)}</div>
+    </div>
+  </div>
+
+</body>
+</html>
+`.trim();
+}
+
+const jetskiNoLicenseFrenchNavigationClauses = [
+  "La sortie du port se fera à une vitesse maximale de 3 noeuds.",
+  "Une distance minimale de sécurité de 50 mètres devra toujours être maintenue entre les jet-skis ou par rapport aux autres embarcations.",
+  "Les jet-skis navigueront en file, toujours derrière le moniteur.",
+  "Un moniteur observera les jet-skis et leur équipage pendant la navigation et répondra à toute question qu'ils pourraient avoir à ce sujet.",
+  "En cas de confusion ou d'impossibilité de contrôler le jet-ski, nous devons tirer sur la clé qui coupera le moteur et attendre sur le jet-ski que le moniteur arrive, sans abandonner l'embarcation en aucun cas et en faisant des signaux avec les bras en direction du moniteur.",
+  "En aucun cas les mineurs de moins de 18 ans ne sont autorisés à conduire des jet-skis. Les mineurs entre 16 et 18 ans devront présenter une autorisation signée du père, de la mère ou du tuteur légal.",
+  "Le port du gilet de sauvetage est obligatoire.",
+  "Avant de commencer la navigation, assurez-vous d'avoir compris les règles de sécurité et de fonctionnement du jet-ski; n'hésitez pas à poser toute question à ce sujet.",
+  "Il est strictement interdit d'entrer dans la zone de baignade et une distance minimale de 300 mètres de la plage et de 50 mètres entre les jet-skis et les autres embarcations devra toujours être maintenue.",
+] as const;
+
+const jetskiNoLicenseFrenchContractClauses = [
+  "L'utilisateur s'engage à lire et à respecter les règles de sécurité détaillées dans le contrat.",
+  "L'utilisateur qui enfreint l'une des règles de sécurité et de navigation détaillées dans le contrat répondra devant les autorités espagnoles; en cas de responsabilité civile, cela entraînera l'annulation immédiate du contrat de location sans droit à réclamation ni indemnisation, et l'utilisateur se soumet expressément à la juridiction des tribunaux de Barcelone.",
+  "Cette activité est couverte par une police d'assurance de responsabilité civile.",
+  "L'utilisateur reconnaît recevoir le véhicule en parfait état et s'engage à le conserver en bon état, à conduire en respectant les règles de navigation en vigueur dans ce pays, ainsi qu'à suivre les règles indiquées ci-dessus.",
+  "L'utilisateur décharge l'entreprise ou la personne physique de toute responsabilité civile pour les dommages corporels qui pourraient être causés par une mauvaise utilisation et une jouissance incorrecte des services fournis par cette entreprise.",
+  "L'utilisation du téléphone portable est strictement interdite, sauf si le moniteur donne l'autorisation de l'utiliser. Le téléphone portable ne pourra être utilisé que lorsque le moniteur l'indiquera. Son utilisation à tout autre moment pourra entraîner la retenue du dépôt de garantie ou l'annulation de l'activité sans droit à réclamation.",
+  "Le client déclare n'avoir consommé aucun type de drogues, d'alcool ou de stupéfiants, et ne souffrir d'aucune maladie susceptible de mettre sa santé en danger pendant l'activité.",
+  "Si l'utilisateur ne suit pas les instructions du moniteur, celui-ci suspendra l'activité sans que l'utilisateur puisse réclamer le remboursement du montant de l'activité ou de son dépôt de garantie.",
+  "Le locataire déclare avoir correctement compris toutes les instructions relatives à la bonne utilisation du jet-ski et au bon déroulement de l'activité.",
+] as const;
+
+function renderJetskiNoLicenseFrenchClauses(clauses: readonly string[]) {
+  return clauses
+    .map((clause, index) => `    <p class="clause-item"><b>${String.fromCharCode(97 + index)}.</b> ${clause}</p>`)
+    .join("\n");
+}
+
+function buildJetskiNoLicenseFrenchHtml(input: ContractRenderInput) {
+  const { templateCode, templateVersion, reservation, contract } = input;
+
+  const baseDate = reservation.scheduledTime ?? reservation.activityDate;
+  const dateText = formatDate(baseDate);
+  const startTimeText = formatTime(reservation.scheduledTime);
+  const endTime = addMinutes(baseDate, reservation.durationMinutes);
+  const endTimeText = endTime ? formatTime(endTime) : "—";
+  const durationText = reservation.durationMinutes ? `${reservation.durationMinutes} min` : "—";
+  const reservationSummary = [reservation.customerName, reservation.serviceName, dateText]
+    .filter((value) => String(value ?? "").trim().length > 0)
+    .join(" · ");
+
+  const driverDocLabel =
+    safeUpper(contract.driverDocType) === "PASSPORT"
+      ? "PASSEPORT"
+      : "PIÈCE D'IDENTITÉ / NIE / PASSEPORT";
+
+  const name = esc(contract.driverName || "");
+  const address = esc(contract.driverAddress || "");
+  const docNumber = esc(contract.driverDocNumber || "");
+  const birthDate = contract.driverBirthDate ? esc(formatDate(contract.driverBirthDate)) : "";
+  const phone = esc(contract.driverPhone || "");
+  const email = esc(contract.driverEmail || "");
+  const postalCountry =
+    `${esc(contract.driverPostalCode || "")}${contract.driverCountry ? ` · ${esc(contract.driverCountry)}` : ""}`.trim();
+
+  const legalHeader =
+    "UTE JETSKI CENTER- NOMAD NAUTIC · CIF: U16457343 · Tel: 608101272 · Email: seariderjetski@gmail.com · Adresse: C/ MARINA L-401 402, NUM 401 402 08330 PREMIÀ DE MAR - (BARCELONA)";
+
+  return `
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Contrat ${esc(contract.id)}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+    }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #111;
+      font-size: 12px;
+      line-height: 1.38;
+    }
+
+    .page {
+      padding: 14mm 14mm 12mm 14mm;
+      min-height: calc(297mm - 26mm);
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    .top-legal {
+      font-size: 9.5px;
+      text-align: center;
+      margin-bottom: 6px;
+      color: #111;
+    }
+
+    .logo-wrap {
+      text-align: center;
+      margin: 2px 0 4px 0;
+    }
+
+    .logo {
+      height: 56px;
+      object-fit: contain;
+    }
+
+    .title {
+      text-align: center;
+      font-size: 21px;
+      font-weight: 700;
+      margin: 4px 0 8px 0;
+      letter-spacing: 0.2px;
+    }
+
+    .subtitle {
+      text-align: center;
+      font-size: 10px;
+      color: #555;
+      margin-top: -2px;
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 10px 0 8px 0;
+      text-transform: uppercase;
+    }
+
+    .clause-item {
+      margin: 0 0 7px 0;
+      text-align: justify;
+    }
+
+    .box {
+      border: 1px solid #222;
+      padding: 10px;
+      margin-top: 10px;
+      page-break-inside: avoid;
+    }
+
+    .box.final-legal {
+      margin-top: 8px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 18px;
+    }
+
+    .field {
+      page-break-inside: avoid;
+    }
+
+    .field-label {
+      font-size: 10px;
+      font-weight: 700;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+    }
+
+    .field-line {
+      min-height: 18px;
+      border-bottom: 1px solid #222;
+      padding-bottom: 2px;
+    }
+
+    .field-line.empty {
+      color: transparent;
+    }
+
+    .sign-line {
+      margin-top: 18px;
+      border-bottom: 1px solid #222;
+      min-height: 48px;
+    }
+
+    .check-line {
+      margin-top: 10px;
+      font-size: 12px;
+    }
+
+    .bullet-block {
+      margin: 8px 0 0 0;
+      padding-left: 0;
+    }
+
+    .bullet-block p {
+      margin: 4px 0;
+      text-align: justify;
+    }
+
+    .footer {
+      position: absolute;
+      left: 14mm;
+      right: 14mm;
+      bottom: 6mm;
+      font-size: 10px;
+      color: #444;
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid #999;
+      padding-top: 5px;
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page">
+
+    <div class="logo-wrap">
+      <img src="${esc(input.logoSrc)}" class="logo" />
+    </div>
+
+    <div class="title">LOCATION DE JET-SKIS SANS PERMIS</div>
+    <div class="subtitle">Modèle ${esc(templateCode)} · Version ${esc(templateVersion)}</div>
+
+    <div class="section-title">1. RÈGLES DE NAVIGATION</div>
+
+${renderJetskiNoLicenseFrenchClauses(jetskiNoLicenseFrenchNavigationClauses)}
+
+    <div class="section-title">2. CONDITIONS DU CONTRAT</div>
+
+${renderJetskiNoLicenseFrenchClauses(jetskiNoLicenseFrenchContractClauses)}
+
+    <div class="footer">
+      <div>${esc(legalHeader)}</div>
+      <div>${esc(reservationSummary || "Réservation")} · Contrat #${esc(contract.logicalUnitIndex ?? contract.unitIndex)}</div>
+    </div>
+  </div>
+
+  <div class="page page-break">
+
+    <div class="logo-wrap">
+      <img src="${esc(input.logoSrc)}" class="logo" />
+    </div>
+
+    <div class="section-title">3. ACCIDENTS ET RÉPARATIONS</div>
+
+    <p class="clause-item">
+      En cas d'accident ou de casse due à la négligence du client, celui-ci s'engage à payer les dommages causés aux jet-skis selon les tarifs en vigueur, et à remplir la déclaration d'accident avec ses données.
+    </p>
+
+    <div class="box">
+      <div class="grid-2">
+        <div class="field">
+          <div class="field-label">NOM ET PRÉNOM(S)</div>
+          <div class="field-line ${!name ? "empty" : ""}">${name || " "}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">NOM DU MINEUR OU DE L'ACCOMPAGNANT</div>
+          <div class="field-line empty"> </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">ADRESSE</div>
+          <div class="field-line ${!address ? "empty" : ""}">${address || " "}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">${esc(driverDocLabel)}</div>
+          <div class="field-line ${!docNumber ? "empty" : ""}">${docNumber || " "}</div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">TÉLÉPHONE</div>
+          <div class="field-line ${!phone ? "empty" : ""}">${phone || " "}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">EMAIL</div>
+          <div class="field-line ${!email ? "empty" : ""}">${email || " "}</div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">CODE POSTAL / PAYS</div>
+          <div class="field-line ${!postalCountry ? "empty" : ""}">${postalCountry || " "}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">DATE DE NAISSANCE</div>
+          <div class="field-line ${!birthDate ? "empty" : ""}">${birthDate || " "}</div>
+        </div>
+      </div>
+
+      <p style="margin-top:12px;">
+        Le client déclare avoir compris les règles et accepte les conditions du contrat.
+      </p>
+
+
+      <div class="grid-2" style="margin-top:10px;">
+        <div class="field">
+          <div class="field-label">DATE</div>
+          <div class="field-line">${esc(dateText)}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">RESSOURCE ATTRIBUÉE</div>
+          <div class="field-line">Attribuée sur plateforme</div>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:10px;">
+        <div class="field-label">DURÉE D'UTILISATION</div>
+        <div class="field-line">${esc(durationText)} · ${esc(startTimeText)} - ${esc(endTimeText)}</div>
+      </div>
+
+      <div class="field" style="margin-top:12px;">
+        ${signatureBlockHtml({
+          signatureImageUrl: contract.signatureImageUrl,
+          signatureSignedBy: contract.signatureSignedBy,
+          signedAt: contract.signedAt,
+          label: "Signature client",
+        })}
+        <div class="sign-line"></div>
+      </div>
+    </div>
+
+    <div class="box final-legal">
+      <div class="section-title" style="margin-top:0;">DÉPÔT DE GARANTIE ET AUTORISATION D'IMAGE</div>
+
+      <p class="clause-item">
+        À TITRE DE GARANTIE POUR LA BONNE UTILISATION DU JET-SKI ET LE RESPECT DES CONDITIONS DE LOCATION, UN DÉPÔT DE GARANTIE DE 100 EUROS SERA DEMANDÉ AU MOMENT DE LA SIGNATURE DU CONTRAT OU AVANT LE DÉBUT DE L'ACTIVITÉ.
+      </p>
+
+      <div class="bullet-block">
+        <p><b>• CE DÉPÔT SERA INTÉGRALEMENT REMBOURSÉ À LA FIN DU SERVICE, À CONDITION QUE:</b></p>
+        <p><b>o</b> LE JET-SKI SOIT RESTITUÉ DANS LE MÊME ÉTAT QUE CELUI DANS LEQUEL IL A ÉTÉ REMIS.</p>
+        <p><b>o</b> AUCUN DOMMAGE NI MAUVAIS USAGE DE L'ÉQUIPEMENT N'AIT ÉTÉ CONSTATÉ.</p>
+        <p><b>o</b> LES RÈGLES DE SÉCURITÉ ET DE COMPORTEMENT INDIQUÉES PAR LE PERSONNEL AIENT ÉTÉ RESPECTÉES.</p>
+      </div>
+
+      <p class="clause-item" style="margin-top:10px;">
+        LE PAIEMENT DU DÉPÔT DE GARANTIE POURRA ÊTRE EFFECTUÉ EN ESPÈCES OU PAR CARTE BANCAIRE, SELON DISPONIBILITÉ.
+      </p>
+
+      <p class="clause-item">
+        Le client autorise UTE JERSKI CENTER- NOMAD NAUTIC à utiliser les photographies et vidéos prises pendant l'activité pour leur publication sur les réseaux sociaux, le site web et les supports publicitaires de l'entreprise. Cette autorisation est gratuite et pourra être révoquée à tout moment par notification écrite.
+      </p>
+
+    </div>
+
+    <div class="footer">
+      <div>${esc(legalHeader)}</div>
+      <div>${esc(reservationSummary || "Réservation")} · Contrat #${esc(contract.logicalUnitIndex ?? contract.unitIndex)}</div>
     </div>
   </div>
 
