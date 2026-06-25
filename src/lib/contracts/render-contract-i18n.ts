@@ -56,31 +56,6 @@ const commonEnglishReplacements: readonly Replacement[] = [
   ["El cliente autoriza", "The customer authorizes"],
 ];
 
-const noLicenseEnglishReplacements: readonly Replacement[] = [
-  ["ALQUILER DE MOTOS ACUÁTICAS SIN LICENCIA", "JET SKI RENTAL WITHOUT LICENSE"],
-  ["1. NORMAS DE NAVEGACIÓN", "1. NAVIGATION RULES"],
-  ["2. CONDICIONES DEL CONTRATO", "2. CONTRACT TERMS"],
-  ["3. ACCIDENTES Y REPARACIONES", "3. ACCIDENTS AND REPAIRS"],
-  ["FIANZA Y AUTORIZACIÓN DE IMAGEN", "DEPOSIT AND IMAGE AUTHORIZATION"],
-  ["NOMBRE Y APELLIDOS", "FULL NAME"],
-  ["NOMBRE DEL MENOR O DEL ACOMPAÑANTE", "NAME OF MINOR OR COMPANION"],
-  ["DIRECCIÓN", "ADDRESS"],
-  ["TELÉFONO", "PHONE"],
-  ["CÓDIGO POSTAL / PAÍS", "POSTAL CODE / COUNTRY"],
-  ["FECHA DE NACIMIENTO", "DATE OF BIRTH"],
-  ["FECHA", "DATE"],
-  ["RECURSO ASIGNADO", "ASSIGNED RESOURCE"],
-  ["Se asigna en plataforma", "Assigned on site"],
-  ["TIEMPO DE USO", "USAGE TIME"],
-  ["Declara haber comprendido las normas y acepta las condiciones del contrato.", "The customer declares that they have understood the rules and accept the contract terms."],
-  ["COMO GARANTÍA POR EL CORRECTO USO DE LA MOTO DE AGUA Y EL CUMPLIMIENTO DE LAS CONDICIONES DEL ALQUILER, SE COBRARÁ UNA FIANZA DE 100 EUROS AL MOMENTO DE LA FIRMA DEL CONTRATO O ANTES DEL INICIO DE LA ACTIVIDAD.", "AS A GUARANTEE FOR THE CORRECT USE OF THE JET SKI AND COMPLIANCE WITH THE RENTAL TERMS, A 100 EURO DEPOSIT WILL BE CHARGED WHEN THE CONTRACT IS SIGNED OR BEFORE THE ACTIVITY STARTS."],
-  ["• ESTA FIANZA SERÁ REEMBOLSADA ÍNTEGRAMENTE AL FINALIZAR EL SERVICIO, SIEMPRE QUE:", "• THIS DEPOSIT WILL BE FULLY REFUNDED AT THE END OF THE SERVICE, PROVIDED THAT:"],
-  ["LA MOTO DE AGUA SE DEVUELVA EN EL MISMO ESTADO EN EL QUE SE ENTREGÓ.", "THE JET SKI IS RETURNED IN THE SAME CONDITION IN WHICH IT WAS DELIVERED."],
-  ["NO SE HAYA PRODUCIDO NINGÚN DAÑO O MAL USO DEL EQUIPO.", "NO DAMAGE OR MISUSE OF THE EQUIPMENT HAS OCCURRED."],
-  ["SE HAYAN CUMPLIDO LAS NORMAS DE SEGURIDAD Y COMPORTAMIENTO INDICADAS POR EL PERSONAL.", "THE SAFETY AND BEHAVIOUR RULES GIVEN BY STAFF HAVE BEEN FOLLOWED."],
-  ["EL PAGO DE LA FIANZA PODRÁ REALIZARSE EN EFECTIVO O MEDIANTE TARJETA BANCARIA, SEGÚN DISPONIBILIDAD.", "THE DEPOSIT MAY BE PAID IN CASH OR BY BANK CARD, SUBJECT TO AVAILABILITY."],
-];
-
 const licensedEnglishReplacements: readonly Replacement[] = [
   ["CONTRATO DE MOTO DE AGUA CON LICENCIA", "LICENSED JET SKI RENTAL CONTRACT"],
   ["CONTRATO DE EMBARCACIÓN CON LICENCIA", "LICENSED BOAT RENTAL CONTRACT"],
@@ -196,11 +171,9 @@ export function translateContractHtml(args: {
 }) {
   const normalizedHtml = normalizeLegacyContractHtml(args.html);
   if (args.language !== "en") return normalizedHtml;
+  if (args.templateCode === "JETSKI_NO_LICENSE") return normalizedHtml;
 
-  const replacements =
-    args.templateCode === "JETSKI_NO_LICENSE"
-      ? [...commonEnglishReplacements, ...noLicenseEnglishReplacements]
-      : [...commonEnglishReplacements, ...licensedEnglishReplacements, ...commonTermEnglishReplacements];
+  const replacements = [...commonEnglishReplacements, ...licensedEnglishReplacements, ...commonTermEnglishReplacements];
 
   return applyReplacements(normalizedHtml, replacements);
 }
