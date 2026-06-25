@@ -172,6 +172,7 @@ export function translateContractHtml(args: {
   const normalizedHtml = normalizeLegacyContractHtml(args.html);
   if (args.language !== "en") return normalizedHtml;
   if (args.templateCode === "JETSKI_NO_LICENSE") return normalizedHtml;
+  if (args.templateCode === "JETSKI_LICENSED") return normalizedHtml;
 
   const replacements = [...commonEnglishReplacements, ...licensedEnglishReplacements, ...commonTermEnglishReplacements];
 

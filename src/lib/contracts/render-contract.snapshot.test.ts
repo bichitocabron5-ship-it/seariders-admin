@@ -239,14 +239,41 @@ for (const snapshotCase of snapshotCases) {
   });
 }
 
-test("JETSKI_NO_LICENSE.es and JETSKI_NO_LICENSE.en remain locked to snapshots", async () => {
-  const lockedSnapshotNames = ["JETSKI_NO_LICENSE.es", "JETSKI_NO_LICENSE.en"];
+test("contract snapshots outside JETSKI_LICENSED.en remain locked for this phase", async () => {
+  const lockedSnapshotNames = [
+    "JETSKI_LICENSED.es",
+    "JETSKI_NO_LICENSE.es",
+    "JETSKI_NO_LICENSE.en",
+    "JETSKI_NO_LICENSE.fr",
+    "BOAT_LICENSED.es",
+    "BOAT_LICENSED.en",
+  ];
 
   for (const snapshotName of lockedSnapshotNames) {
     const snapshotCase = snapshotCases.find((candidate) => candidate.name === snapshotName);
     if (!snapshotCase) throw new Error(`Missing ${snapshotName} snapshot case`);
 
     await assertHtmlSnapshot(snapshotCase);
+  }
+});
+
+test("JETSKI_LICENSED.en does not contain the main Spanish licensed contract phrases", () => {
+  const snapshotCase = snapshotCases.find((candidate) => candidate.name === "JETSKI_LICENSED.en");
+  if (!snapshotCase) throw new Error("Missing JETSKI_LICENSED.en snapshot case");
+
+  const actual = renderSnapshotHtml(snapshotCase);
+  const forbiddenSpanishPhrases = [
+    "De una parte",
+    "En adelante Arrendatario",
+    "El Arrendador arrienda",
+    "CLÁUSULAS",
+    "ENTREGA DE LA EMBARCACIÓN",
+    "ZONA DE NAVEGACIÓN",
+    "DERECHO Y JURISDICCIÓN",
+  ];
+
+  for (const phrase of forbiddenSpanishPhrases) {
+    assert.equal(actual.includes(phrase), false, `Unexpected Spanish phrase in English contract: ${phrase}`);
   }
 });
 
