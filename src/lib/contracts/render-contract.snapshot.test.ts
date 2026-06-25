@@ -131,6 +131,18 @@ const snapshotCases: SnapshotCase[] = [
     },
   },
   {
+    name: "JETSKI_NO_LICENSE.fr",
+    templateCode: "JETSKI_NO_LICENSE",
+    language: "fr",
+    reservation: baseReservation,
+    contract: {
+      ...baseContract,
+      licenseSchool: null,
+      licenseType: null,
+      licenseNumber: null,
+    },
+  },
+  {
     name: "JETSKI_LICENSED.es",
     templateCode: "JETSKI_LICENSED",
     language: "es",
@@ -227,6 +239,17 @@ for (const snapshotCase of snapshotCases) {
   });
 }
 
+test("JETSKI_NO_LICENSE.es and JETSKI_NO_LICENSE.en remain locked to snapshots", async () => {
+  const lockedSnapshotNames = ["JETSKI_NO_LICENSE.es", "JETSKI_NO_LICENSE.en"];
+
+  for (const snapshotName of lockedSnapshotNames) {
+    const snapshotCase = snapshotCases.find((candidate) => candidate.name === snapshotName);
+    if (!snapshotCase) throw new Error(`Missing ${snapshotName} snapshot case`);
+
+    await assertHtmlSnapshot(snapshotCase);
+  }
+});
+
 test("JETSKI_NO_LICENSE.en does not contain the main Spanish legal clauses", () => {
   const snapshotCase = snapshotCases.find((candidate) => candidate.name === "JETSKI_NO_LICENSE.en");
   if (!snapshotCase) throw new Error("Missing JETSKI_NO_LICENSE.en snapshot case");
@@ -242,5 +265,23 @@ test("JETSKI_NO_LICENSE.en does not contain the main Spanish legal clauses", () 
 
   for (const phrase of forbiddenSpanishPhrases) {
     assert.equal(actual.includes(phrase), false, `Unexpected Spanish phrase in English contract: ${phrase}`);
+  }
+});
+
+test("JETSKI_NO_LICENSE.fr does not contain the main Spanish legal clauses", () => {
+  const snapshotCase = snapshotCases.find((candidate) => candidate.name === "JETSKI_NO_LICENSE.fr");
+  if (!snapshotCase) throw new Error("Missing JETSKI_NO_LICENSE.fr snapshot case");
+
+  const actual = renderSnapshotHtml(snapshotCase);
+  const forbiddenSpanishPhrases = [
+    "Se saldrá del puerto",
+    "Se mantendrá siempre",
+    "El usuario se compromete",
+    "En caso de accidente",
+    "a utilizar las fotografías",
+  ];
+
+  for (const phrase of forbiddenSpanishPhrases) {
+    assert.equal(actual.includes(phrase), false, `Unexpected Spanish phrase in French contract: ${phrase}`);
   }
 });
