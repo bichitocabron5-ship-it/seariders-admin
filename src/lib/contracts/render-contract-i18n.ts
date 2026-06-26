@@ -173,6 +173,7 @@ export function translateContractHtml(args: {
   if (args.language !== "en") return normalizedHtml;
   if (args.templateCode === "JETSKI_NO_LICENSE") return normalizedHtml;
   if (args.templateCode === "JETSKI_LICENSED") return normalizedHtml;
+  if (args.templateCode === "BOAT_LICENSED") return normalizedHtml;
 
   const replacements = [...commonEnglishReplacements, ...licensedEnglishReplacements, ...commonTermEnglishReplacements];
 

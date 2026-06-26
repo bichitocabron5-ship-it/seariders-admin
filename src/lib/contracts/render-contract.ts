@@ -184,6 +184,7 @@ export function buildContractHtml(input: ContractRenderInput) {
         if (input.language === "en") return buildJetskiLicensedEnglishHtml(input);
         return buildLicensedHtml(input);
       case "BOAT_LICENSED":
+        if (input.language === "en") return buildBoatLicensedEnglishHtml(input);
         return buildLicensedHtml(input);
       default:
         throw new Error(`Template no soportada: ${input.templateCode}`);
@@ -1685,6 +1686,441 @@ function buildJetskiLicensedEnglishHtml(input: ContractRenderInput) {
 
     <div class="signature-zone">
       <p><b>In witness whereof</b>, the parties sign this jet ski rental contract in duplicate at the place and date set out below:</p>
+      <p><b>BADALONA on:</b> ${esc(dateText)}</p>
+
+      <div class="signature-row">
+        <div class="signature-box">
+          <div class="signature-line">LESSOR</div>
+        </div>
+        <div class="signature-box">
+          ${signatureBlockHtml({
+            signatureImageUrl: contract.signatureImageUrl,
+            signatureSignedBy: contract.signatureSignedBy,
+            signedAt: contract.signedAt,
+            label: "HIRER",
+          })}
+        </div>
+      </div>
+    </div>
+
+    <div class="final-box">
+      <p>
+        <b>AS A GUARANTEE FOR THE CORRECT USE OF THE ${assetLabelTitle} AND COMPLIANCE WITH THE RENTAL TERMS, A 500 EURO DEPOSIT WILL BE CHARGED WHEN THE CONTRACT IS SIGNED OR BEFORE THE ACTIVITY STARTS.</b>
+      </p>
+      <p><b>• THIS DEPOSIT WILL BE FULLY REFUNDED AT THE END OF THE SERVICE, PROVIDED THAT:</b></p>
+      <p class="bullet">o THE ${assetLabelTitle} IS RETURNED IN THE SAME CONDITION IN WHICH IT WAS DELIVERED.</p>
+      <p class="bullet">o NO DAMAGE OR MISUSE OF THE EQUIPMENT HAS OCCURRED.</p>
+      <p class="bullet">o THE SAFETY AND BEHAVIOUR RULES GIVEN BY STAFF HAVE BEEN FOLLOWED.</p>
+      <p>THE DEPOSIT MAY BE PAID IN CASH OR BY BANK CARD, SUBJECT TO AVAILABILITY.</p>
+      <p>
+        The customer authorizes UTE JERSKI CENTER- NOMAD NAUTIC to use the photographs and videos taken during the activity for publication on social media, the website and the company's advertising material. This authorization is free of charge and may be revoked at any time by written notice.
+      </p>
+    </div>
+
+    <div class="footer">${esc(legalHeader)}</div>
+  </div>
+
+</body>
+</html>
+`.trim();
+}
+
+function buildBoatLicensedEnglishHtml(input: ContractRenderInput) {
+  const { reservation, contract } = input;
+
+  const legalHeader =
+    "UTE JETSKI CENTER- NOMAD NAUTIC · CIF: U16457343 · Tel: 608101272 · Email: seariderjetski@gmail.com · Address: C/ MARINA L-401 402, NUM 401 402 08330 PREMIÀ DE MAR - (BARCELONA)";
+
+  const baseDate = reservation.scheduledTime ?? reservation.activityDate;
+  const dateText = formatDate(baseDate);
+  const startTimeText = formatTime(reservation.scheduledTime);
+  const endTime = addMinutes(baseDate, reservation.durationMinutes);
+  const endTimeText = endTime ? formatTime(endTime) : "—";
+
+  const priceText = eurosFromCents(reservation.totalPriceCents);
+  const depositText = "500 €";
+
+  const driverName = esc(contract.driverName || "");
+  const driverDocType = esc(contract.driverDocType || "");
+  const driverDoc = esc(contract.driverDocNumber || "");
+  const driverAddress = esc(contract.driverAddress || "");
+  const driverPostalCode = esc(contract.driverPostalCode || "");
+  const driverCountry = esc(contract.driverCountry || "");
+  const driverBirthDate = esc(formatDate(contract.driverBirthDate));
+  const driverPhone = esc(contract.driverPhone || "");
+  const driverEmail = esc(contract.driverEmail || "");
+  const licenseSchool = esc(contract.licenseSchool || "");
+  const licenseType = esc(contract.licenseType || "");
+  const licenseNumber = esc(contract.licenseNumber || "");
+
+  const resourceName = contract.preparedAsset
+    ? `${contract.preparedAsset.name ?? "BOAT"}${contract.preparedAsset.type ? ` ${contract.preparedAsset.type}` : ""}`.trim()
+    : "PENDING ASSIGNMENT";
+  const resourceType = contract.preparedAsset?.type || "BOAT";
+  const resourcePlate = contract.preparedAsset?.plate ?? "";
+  const assetLabel = "boat";
+  const assetLabelPlural = "boats";
+  const assetLabelTitle = "BOAT";
+  const dispatchPersonsText =
+    reservation.pax ? `MAXIMUM ${reservation.pax} PERSONS ON BOARD` : "";
+
+  return `
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Contract ${esc(contract.id)}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+    }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #111;
+    }
+
+    .page {
+      padding: 16mm 14mm 14mm 14mm;
+      min-height: calc(297mm - 30mm);
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    .top-legal {
+      font-size: 10px;
+      text-align: center;
+      margin-bottom: 8px;
+      color: #111;
+    }
+
+    .logo-wrap {
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    .logo {
+      height: 62px;
+      object-fit: contain;
+    }
+
+    .title {
+      text-align: center;
+      font-size: 18px;
+      font-weight: 700;
+      margin: 8px 0 16px 0;
+      text-transform: uppercase;
+    }
+
+    .intro {
+      margin-bottom: 14px;
+      text-align: justify;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 14px 0;
+      page-break-inside: avoid;
+    }
+
+    th, td {
+      border: 1px solid #222;
+      padding: 5px 7px;
+      vertical-align: top;
+      font-size: 12px;
+    }
+
+    th {
+      background: #f5f5f5;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .label-cell {
+      width: 110px;
+      font-weight: 700;
+      background: #fafafa;
+      text-align: left;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: 14px;
+      font-weight: 700;
+      margin: 10px 0 12px 0;
+      text-transform: uppercase;
+    }
+
+    .clause-title {
+      font-weight: 700;
+      font-size: 12px;
+      margin: 10px 0 6px 0;
+      text-transform: uppercase;
+    }
+
+    .clause {
+      margin: 0 0 8px 0;
+      text-align: justify;
+    }
+
+    .signature-zone {
+      margin-top: 18px;
+    }
+
+    .signature-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-top: 12px;
+    }
+
+    .signature-box {
+      min-height: 80px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .signature-line {
+      width: 220px;
+      border-top: 1px solid #000;
+      text-align: center;
+      padding-top: 6px;
+      font-size: 11px;
+    }
+
+    .final-box {
+      margin-top: 18px;
+      page-break-inside: avoid;
+    }
+
+    .final-box p {
+      margin: 0 0 8px 0;
+      text-align: justify;
+    }
+
+    .bullet {
+      margin-left: 18px;
+    }
+
+    .footer {
+      position: absolute;
+      left: 14mm;
+      right: 14mm;
+      bottom: 6mm;
+      font-size: 10px;
+      color: #444;
+      text-align: center;
+      border-top: 1px solid #999;
+      padding-top: 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page">
+
+    <div class="logo-wrap">
+      <img src="${esc(input.logoSrc)}" class="logo" />
+    </div>
+
+    <div class="title">LICENSED BOAT RENTAL CONTRACT</div>
+
+    <p class="intro">
+      On the one hand, UTE JETSKI CENTER- NOMAD NAUTIC, registered at C/ MARINA L-401 402, NUM 401 402 08330 PREMIÀ DE MAR - (BARCELONA) with tax ID B- U16457343 (hereinafter the Lessor), and on the other hand,
+    </p>
+
+    <table>
+      <tr>
+        <td class="label-cell">Name</td>
+        <td colspan="5">${driverName}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Document type</td>
+        <td colspan="2">${driverDocType}</td>
+        <td class="label-cell">Document number</td>
+        <td colspan="2">${driverDoc}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Date of birth</td>
+        <td colspan="2">${driverBirthDate}</td>
+        <td class="label-cell">Phone</td>
+        <td colspan="2">${driverPhone}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Address</td>
+        <td colspan="2">${driverAddress}</td>
+        <td class="label-cell">Post code</td>
+        <td>${driverPostalCode}</td>
+        <td>${driverCountry}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Email</td>
+        <td colspan="5">${driverEmail}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">License</td>
+        <td colspan="2">${licenseType}</td>
+        <td class="label-cell">License number</td>
+        <td colspan="2">${licenseNumber}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">School / issuer</td>
+        <td colspan="5">${licenseSchool}</td>
+      </tr>
+    </table>
+
+    <p class="intro">
+      Hereinafter the Hirer. The Lessor rents the following boat to the Hirer:
+    </p>
+
+    <table>
+      <tr>
+        <th>Type</th>
+        <th>Name</th>
+        <th>Registration</th>
+        <th>Authorized persons</th>
+      </tr>
+      <tr>
+        <td>${esc(resourceType)}</td>
+        <td>${esc(resourceName)}</td>
+        <td>${esc(resourcePlate)}</td>
+        <td>${esc(dispatchPersonsText)}</td>
+      </tr>
+    </table>
+
+    <p class="intro"><b>Boarding and disembarkation port:</b> PORT ESPORTIU DE BADALONA</p>
+
+    <p class="intro">The rental period is:</p>
+
+    <table>
+      <tr>
+        <th colspan="2">From</th>
+        <th colspan="2">Until</th>
+      </tr>
+      <tr>
+        <td class="label-cell">Day:</td>
+        <td>${esc(dateText)}</td>
+        <td class="label-cell">Day:</td>
+        <td>${esc(dateText)}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Time:</td>
+        <td>${esc(startTimeText)}</td>
+        <td class="label-cell">Time:</td>
+        <td>${esc(endTimeText)}</td>
+      </tr>
+    </table>
+
+    <p class="intro">
+      The rental price is set at <b>${esc(priceText)}</b>, VAT included, plus a deposit of <b>${esc(depositText)}</b>.
+    </p>
+
+    <div class="section-title">CLAUSES:</div>
+
+    <div class="clause-title">1. DELIVERY OF THE BOAT.</div>
+    <p class="clause">
+      a. At the time of delivery, the hirer shall check the general condition of the hull and the fuel level, undertaking to return the ${assetLabel} in the same condition in which it was delivered by the lessor.
+    </p>
+
+    <div class="clause-title">2. NAVIGATION AREA.</div>
+    <p class="clause">
+      The permitted navigation area is limited to the Catalan and Valencian coasts and the Balearic Islands. The hirer must request written permission from UTE JETSKI CENTER - NOMAD NAUTIC to navigate in areas other than those stated here or outside Spanish territorial waters.
+    </p>
+    <p class="clause">
+      If renting a ${assetLabel}, it may not navigate within 200m of the area reserved for bathers marked with yellow buoys, nor inside the buoyed channels reserved for the entry and exit of ${assetLabelPlural}. It is FORBIDDEN to be within 200m of the coastline, beaches or coves unless prior permission has been granted by UTE JETSKI CENTER- NOMAD NAUTIC when the bathing area is not delimited.
+    </p>
+
+    <div class="footer">${esc(legalHeader)}</div>
+  </div>
+
+  <div class="page page-break">
+
+    <div class="clause-title">3. USE OF THE BOAT.</div>
+    <p class="clause">a. The hirer undertakes to use the rented boat correctly and to comply with the rules established by the maritime, customs, health and tax authorities, as well as with national or foreign police authorities where applicable. In the event of any breach of regulations by the hirer, the hirer shall bear all penalties, fines and related costs.</p>
+    <p class="clause">b. The hirer undertakes not to carry more persons on board than permitted by the boat's safety certificate and to use the boat only for leisure cruising. The hirer also undertakes not to assign, subcontract or sublet the boat in whole or in part.</p>
+    <p class="clause">c. Towing other boats is strictly prohibited except in cases of emergency. Likewise, the rented boat may only be towed in the same circumstances and always using its own lines in order to avoid high salvage costs. The hirer shall not accept agreements or assume liabilities without authorization from UTE JETSKI CENTER- NOMAD NAUTIC.</p>
+    <p class="clause">d. If any salvage reward is obtained, it shall be divided 50% for UTE JETSKI CENTER- NOMAD NAUTIC and 50% for the hirer.</p>
+    <p class="clause">e. In the event of dangerous weather or sea forecasts (above Beaufort force 6 or 27 knots of wind), the hirer undertakes not to leave the port where the boat is located or otherwise to proceed to the nearest safe port or anchorage.</p>
+    <p class="clause">f. The hirer is responsible for any damage or loss affecting the rented boat, for the loss of its equipment and for any delay in returning the boat.</p>
+
+    <div class="clause-title">4. INSURANCE.</div>
+    <p class="clause">a. The boat insurance is included in the rental price.</p>
+    <p class="clause">b. UTE JETSKI CENTER- NOMAD NAUTIC shall not in any case be liable for personal injuries or for any loss of or damage to the personal belongings of the hirer, crew or guests on board the boat.</p>
+
+    <div class="clause-title">5. RETURN OF THE BOAT.</div>
+    <p class="clause">a. The hirer declares that they know the condition of the boat and therefore expressly agrees to return it in the same condition in which it was received, with the fuel tanks filled. If it is not returned in these conditions, the cost of refilling the tanks shall be deducted from the deposit. The fuel cost is set at 25€ for each line indicated on the gauge.</p>
+    <p class="clause">b. Upon return of the boat, UTE JETSKI CENTER- NOMAD NAUTIC shall inspect it, after which the deposit shall be returned to the hirer. If any damage to the boat or any loss or breakage of equipment is found, UTE JETSKI CENTER- NOMAD NAUTIC shall deduct from the deposit the amount necessary to repair such damage. UTE JETSKI CENTER- NOMAD NAUTIC reserves the right to claim an amount exceeding the deposit if repair costs are higher than the deposit paid.</p>
+    <p class="clause">c. The boat must be returned to the same port where delivery took place. The hirer shall bear all expenses arising from any change to the return location. These costs shall be 10 euros per mile travelled plus the crew transfer costs, and this amount shall be deducted from the deposit paid.</p>
+    <p class="clause">d. The hirer undertakes to inform UTE JETSKI CENTER- NOMAD NAUTIC of any anomaly, incident or problem that may have arisen during navigation.</p>
+
+    <div class="footer">${esc(legalHeader)}</div>
+  </div>
+
+  <div class="page page-break">
+
+    <div class="clause-title">6. LATE RETURN.</div>
+    <p class="clause">If there is any delay in returning the boat, the hirer shall be obliged as follows:</p>
+    <p class="clause">a. The hirer shall pay UTE JETSKI CENTER- NOMAD NAUTIC the proportional amount for the extra time used, and UTE JETSKI CENTER- NOMAD NAUTIC may deduct it from the deposit. If, after 24 hours from the end of the contract, the boat has not been returned and there is no news of it, a search shall be initiated and its disappearance shall be reported to the maritime authorities. Any resulting costs shall be borne by the hirer.</p>
+    <p class="clause">The time required to repair any damage to the boat shall also be considered a delay in return.</p>
+
+    <div class="clause-title">7. DAMAGE, ACCIDENTS AND BREAKDOWNS.</div>
+    <p class="clause">a) If, during the rental period, the rented boat suffers breakdowns, damage, defects or loss of equipment, the hirer is obliged to inform Barcodealquiler.com immediately, which shall provide the appropriate instructions to follow.</p>
+    <p class="clause">b) If accidents involving third parties occur, they must be reported by the hirer to the competent authorities, recording the details of the boats involved in the accident. The hirer must also draw up a report on what happened and deliver it to UTE JETSKI CENTER- NOMAD NAUTIC.</p>
+    <p class="clause">c) The hirer is obliged to inform UTE JETSKI CENTER- NOMAD NAUTIC of any contact between the boat and the seabed so that the consequences of such contacts can be assessed and later crews are not put at risk.</p>
+
+    <div class="clause-title">8. CANCELLATIONS AND TERMINATION</div>
+    <p class="clause">Any negligence in the use of the boat in breach of current legislation shall be grounds for automatic termination of the contract, and any amounts paid shall remain with UTE JETSKI CENTER- NOMAD NAUTIC.</p>
+
+    <div class="clause-title">9. CUSTOMER DECLARATION.</div>
+    <p class="clause">The customer declares that they have not consumed alcohol, narcotics or psychoactive substances and that they do not suffer from any illness or physical impairment preventing the safe handling of the boat.</p>
+
+    <div class="clause-title">10. LIABILITY TOWARDS THIRD PARTIES</div>
+    <p class="clause">If any claims are brought by third parties against the hirer due to the use of the rented boat, UTE JETSKI CENTER- NOMAD NAUTIC shall be exempt from any liability. The hirer shall also be jointly liable for any offences committed by the skipper of the boat.</p>
+
+    <div class="clause-title">11. SKIPPER EXPERIENCE.</div>
+    <p class="clause">
+      The hirer states that they have the knowledge and experience necessary for the voyage and that they hold the following nautical license:
+      <b>${licenseType}</b> issued by <b>${licenseSchool}</b>, designating Mr./Ms.
+      <b>${driverName}</b>, holder of the nautical license mentioned above, identified as:
+      <b>${driverDoc}</b>, as skipper of the boat. Under no circumstances may command of the boat be handed over to a person other than the one recorded as skipper.
+    </p>
+    <p class="clause">
+      UTE JETSKI CENTER- NOMAD NAUTIC reserves the right to cancel this contract if the skipper does not have sufficient training and competence to operate the boat safely. In that case, the hirer shall not be entitled to any rental refund; however, UTE JETSKI CENTER- NOMAD NAUTIC may provide another skipper to the hirer, if available. Any fees charged by that skipper shall be borne by the hirer.
+    </p>
+
+    <div class="footer">${esc(legalHeader)}</div>
+  </div>
+
+  <div class="page page-break">
+
+    <div class="clause-title">12. VALIDITY</div>
+    <p class="clause">If any clause of the contract loses its validity, this shall in no way affect the others, which shall remain fully effective between the parties.</p>
+
+    <div class="clause-title">13. DATA PROTECTION</div>
+    <p class="clause">In compliance with Organic Law 15/1999, of 13 December, on the Protection of Personal Data, by accepting this contract you are informed that your personal data shall be processed and incorporated into files for which UTE JETSKI CENTER- NOMAD NAUTIC is responsible, registered with the Spanish Data Protection Agency, for the purpose of customer and contract management.</p>
+    <p class="clause">The requested data are necessary, and if they are not provided it will not be possible to deliver the requested service. In this regard, you expressly consent to their collection and processing for the stated purpose. Likewise, you authorize the communication of your personal data to other entities when necessary to provide the requested service.</p>
+    <p class="clause">You also authorize the use of your data for periodic communications, including those sent by email, which our company may carry out to inform you of activities it performs directly or through partner companies. In all cases, you may exercise your rights of access, rectification, cancellation and objection by contacting the following email address: <b>SEARIDERSJETSKI@GMAIL.COM</b> or by calling <b>608-10-12-72</b>.</p>
+
+    <div class="clause-title">14. GOVERNING LAW AND JURISDICTION</div>
+    <p class="clause">This contract is governed by Spanish law. Any disputes or differences that may arise in connection with the performance, amendment, termination or effects of this contract shall be resolved by the courts of the city of BARCELONA, to whose jurisdiction the parties expressly submit.</p>
+
+    <div class="signature-zone">
+      <p><b>In witness whereof</b>, the parties sign this boat rental contract in duplicate at the place and date set out below:</p>
       <p><b>BADALONA on:</b> ${esc(dateText)}</p>
 
       <div class="signature-row">

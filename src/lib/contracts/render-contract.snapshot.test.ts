@@ -239,14 +239,14 @@ for (const snapshotCase of snapshotCases) {
   });
 }
 
-test("contract snapshots outside JETSKI_LICENSED.en remain locked for this phase", async () => {
+test("contract snapshots outside BOAT_LICENSED.en remain locked for this phase", async () => {
   const lockedSnapshotNames = [
+    "JETSKI_LICENSED.en",
     "JETSKI_LICENSED.es",
     "JETSKI_NO_LICENSE.es",
     "JETSKI_NO_LICENSE.en",
     "JETSKI_NO_LICENSE.fr",
     "BOAT_LICENSED.es",
-    "BOAT_LICENSED.en",
   ];
 
   for (const snapshotName of lockedSnapshotNames) {
@@ -254,6 +254,30 @@ test("contract snapshots outside JETSKI_LICENSED.en remain locked for this phase
     if (!snapshotCase) throw new Error(`Missing ${snapshotName} snapshot case`);
 
     await assertHtmlSnapshot(snapshotCase);
+  }
+});
+
+test("BOAT_LICENSED.en does not contain the main Spanish licensed boat contract phrases", () => {
+  const snapshotCase = snapshotCases.find((candidate) => candidate.name === "BOAT_LICENSED.en");
+  if (!snapshotCase) throw new Error("Missing BOAT_LICENSED.en snapshot case");
+
+  const actual = renderSnapshotHtml(snapshotCase);
+  const forbiddenSpanishPhrases = [
+    "De una parte",
+    "En adelante Arrendatario",
+    "El Arrendador arrienda",
+    "CLÁUSULAS",
+    "CLÃUSULAS",
+    "ENTREGA DE LA EMBARCACIÓN",
+    "ENTREGA DE LA EMBARCACIÃ“N",
+    "ZONA DE NAVEGACIÓN",
+    "ZONA DE NAVEGACIÃ“N",
+    "DERECHO Y JURISDICCIÓN",
+    "DERECHO Y JURISDICCIÃ“N",
+  ];
+
+  for (const phrase of forbiddenSpanishPhrases) {
+    assert.equal(actual.includes(phrase), false, `Unexpected Spanish phrase in English boat contract: ${phrase}`);
   }
 });
 
