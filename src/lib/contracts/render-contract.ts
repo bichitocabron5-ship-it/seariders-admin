@@ -65,6 +65,12 @@ export type ContractRenderInput = {
   contract: ContractRenderDriver;
 };
 
+type PreparedJetskiResource = NonNullable<ContractRenderDriver["preparedJetski"]>;
+type PreparedAssetResource = NonNullable<ContractRenderDriver["preparedAsset"]>;
+type PreparedResourceSelection =
+  | { source: "jetski"; resource: PreparedJetskiResource }
+  | { source: "asset"; resource: PreparedAssetResource };
+
 function esc(v: unknown) {
   return String(v ?? "")
     .replaceAll("&", "&amp;")
@@ -129,26 +135,62 @@ function addMinutes(v: Date | string | null | undefined, minutes: number | null 
   return d;
 }
 
-function preparedResourceSummary(contract: ContractRenderDriver) {
-  if (contract.preparedJetski) {
+function selectPreparedResource(
+  templateCode: string,
+  contract: ContractRenderDriver,
+): PreparedResourceSelection | null {
+  const preparedJetski: PreparedResourceSelection | null = contract.preparedJetski
+    ? { source: "jetski", resource: contract.preparedJetski }
+    : null;
+  const preparedAsset: PreparedResourceSelection | null = contract.preparedAsset
+    ? { source: "asset", resource: contract.preparedAsset }
+    : null;
+
+  if (templateCode === "BOAT_LICENSED") {
+    return preparedAsset ?? preparedJetski;
+  }
+
+  return preparedJetski ?? preparedAsset;
+}
+
+function preparedResourceSummary(args: {
+  templateCode: string;
+  contract: ContractRenderDriver;
+  labels: {
+    jetskiKind: string;
+    jetskiNameFallback: string;
+    assetKind: string;
+    assetNameFallback: string;
+    pendingKind: string;
+    pendingName: string;
+    assetKindWithType?: (type: string) => string;
+  };
+}) {
+  const selected = selectPreparedResource(args.templateCode, args.contract);
+
+  if (selected?.source === "jetski") {
     return {
-      kind: "MOTO ACUATICA",
-      name: `${contract.preparedJetski.model ?? "MOTO"}${contract.preparedJetski.number ? ` ${contract.preparedJetski.number}` : ""}`.trim(),
-      plate: contract.preparedJetski.plate ?? "",
+      kind: args.labels.jetskiKind,
+      name: `${selected.resource.model ?? args.labels.jetskiNameFallback}${selected.resource.number ? ` ${selected.resource.number}` : ""}`.trim(),
+      plate: selected.resource.plate ?? "",
     };
   }
 
-  if (contract.preparedAsset) {
+  if (selected?.source === "asset") {
+    const assetKind = selected.resource.type
+      ? args.labels.assetKindWithType?.(selected.resource.type) ?? `${args.labels.assetKind} ${selected.resource.type}`
+      : args.labels.assetKind;
+
     return {
-      kind: contract.preparedAsset.type ? `ASSET ${contract.preparedAsset.type}` : "ASSET",
-      name: contract.preparedAsset.name ?? "EMBARCACIÓN",
-      plate: contract.preparedAsset.plate ?? "",
+      kind: assetKind,
+      name: `${selected.resource.name ?? args.labels.assetNameFallback}${selected.resource.type ? ` ${selected.resource.type}` : ""}`.trim(),
+      plate: selected.resource.plate ?? "",
     };
   }
 
   return {
-    kind: "RECURSO",
-    name: "PENDIENTE DE ASIGNACIÓN",
+    kind: args.labels.pendingKind,
+    name: args.labels.pendingName,
     plate: "",
   };
 }
@@ -1319,14 +1361,24 @@ function buildJetskiLicensedEnglishHtml(input: ContractRenderInput) {
   const licenseType = esc(contract.licenseType || "");
   const licenseNumber = esc(contract.licenseNumber || "");
 
-  const resourceName = contract.preparedJetski
-    ? `${contract.preparedJetski.model ?? "JET SKI"}${contract.preparedJetski.number ? ` ${contract.preparedJetski.number}` : ""}`.trim()
-    : "PENDING ASSIGNMENT";
-
-  const resourcePlate = contract.preparedJetski?.plate ?? "";
   const assetLabel = "jet ski";
   const assetLabelPlural = "jet skis";
   const assetLabelTitle = "JET SKI";
+  const preparedResource = preparedResourceSummary({
+    templateCode: input.templateCode,
+    contract,
+    labels: {
+      jetskiKind: assetLabelTitle,
+      jetskiNameFallback: "JET SKI",
+      assetKind: "ASSET",
+      assetNameFallback: "BOAT",
+      pendingKind: assetLabelTitle,
+      pendingName: "PENDING ASSIGNMENT",
+    },
+  });
+  const resourceName = preparedResource.name;
+  const resourceType = preparedResource.kind;
+  const resourcePlate = preparedResource.plate;
   const dispatchPersonsText =
     reservation.pax ? `MAXIMUM ${reservation.pax} PERSONS ON THE ${assetLabelTitle}` : "";
 
@@ -1562,7 +1614,7 @@ function buildJetskiLicensedEnglishHtml(input: ContractRenderInput) {
         <th>Authorized persons</th>
       </tr>
       <tr>
-        <td>${assetLabelTitle}</td>
+        <td>${esc(resourceType)}</td>
         <td>${esc(resourceName)}</td>
         <td>${esc(resourcePlate)}</td>
         <td>${esc(dispatchPersonsText)}</td>
@@ -1754,14 +1806,23 @@ function buildJetskiLicensedFrenchHtml(input: ContractRenderInput) {
   const licenseType = esc(contract.licenseType || "");
   const licenseNumber = esc(contract.licenseNumber || "");
 
-  const resourceName = contract.preparedJetski
-    ? `${contract.preparedJetski.model ?? "JET-SKI"}${contract.preparedJetski.number ? ` ${contract.preparedJetski.number}` : ""}`.trim()
-    : "ATTRIBUTION EN ATTENTE";
-
-  const resourcePlate = contract.preparedJetski?.plate ?? "";
   const assetLabel = "jet-ski";
   const assetLabelPlural = "jet-skis";
   const assetLabelTitle = "JET-SKI";
+  const preparedResource = preparedResourceSummary({
+    templateCode: input.templateCode,
+    contract,
+    labels: {
+      jetskiKind: assetLabelTitle,
+      jetskiNameFallback: "JET-SKI",
+      assetKind: "ASSET",
+      assetNameFallback: "BATEAU",
+      pendingKind: assetLabelTitle,
+      pendingName: "ATTRIBUTION EN ATTENTE",
+    },
+  });
+  const resourceName = preparedResource.name;
+  const resourcePlate = preparedResource.plate;
   const dispatchPersonsText =
     reservation.pax ? `MAXIMUM ${reservation.pax} PERSONNES SUR LE ${assetLabelTitle}` : "";
 
@@ -1997,7 +2058,7 @@ function buildJetskiLicensedFrenchHtml(input: ContractRenderInput) {
         <th>Personnes autorisées</th>
       </tr>
       <tr>
-        <td>${assetLabelTitle}</td>
+        <td>${esc(preparedResource.kind)}</td>
         <td>${esc(resourceName)}</td>
         <td>${esc(resourcePlate)}</td>
         <td>${esc(dispatchPersonsText)}</td>
@@ -2189,14 +2250,25 @@ function buildBoatLicensedEnglishHtml(input: ContractRenderInput) {
   const licenseType = esc(contract.licenseType || "");
   const licenseNumber = esc(contract.licenseNumber || "");
 
-  const resourceName = contract.preparedAsset
-    ? `${contract.preparedAsset.name ?? "BOAT"}${contract.preparedAsset.type ? ` ${contract.preparedAsset.type}` : ""}`.trim()
-    : "PENDING ASSIGNMENT";
-  const resourceType = contract.preparedAsset?.type || "BOAT";
-  const resourcePlate = contract.preparedAsset?.plate ?? "";
   const assetLabel = "boat";
   const assetLabelPlural = "boats";
   const assetLabelTitle = "BOAT";
+  const preparedResource = preparedResourceSummary({
+    templateCode: input.templateCode,
+    contract,
+    labels: {
+      jetskiKind: "JET SKI",
+      jetskiNameFallback: "JET SKI",
+      assetKind: assetLabelTitle,
+      assetNameFallback: "BOAT",
+      pendingKind: assetLabelTitle,
+      pendingName: "PENDING ASSIGNMENT",
+      assetKindWithType: (type) => type,
+    },
+  });
+  const resourceName = preparedResource.name;
+  const resourceType = preparedResource.kind;
+  const resourcePlate = preparedResource.plate;
   const dispatchPersonsText =
     reservation.pax ? `MAXIMUM ${reservation.pax} PERSONS ON BOARD` : "";
 
@@ -2624,20 +2696,22 @@ function buildLicensedHtml(input: ContractRenderInput) {
   const licenseType = esc(contract.licenseType || "");
   const licenseNumber = esc(contract.licenseNumber || "");
 
-  const resourceName = contract.preparedJetski
-    ? `${contract.preparedJetski.model ?? "MOTO"}${contract.preparedJetski.number ? ` ${contract.preparedJetski.number}` : ""}`.trim()
-    : contract.preparedAsset
-      ? `${contract.preparedAsset.name ?? "EMBARCACIÓN"}${contract.preparedAsset.type ? ` ${contract.preparedAsset.type}` : ""}`.trim()
-      : "PENDIENTE DE ASIGNACIÓN";
+  const preparedResource = preparedResourceSummary({
+    templateCode: input.templateCode,
+    contract,
+    labels: {
+      jetskiKind: "MOTO ACUATICA",
+      jetskiNameFallback: "MOTO",
+      assetKind: "ASSET",
+      assetNameFallback: "EMBARCACIÓN",
+      pendingKind: "RECURSO",
+      pendingName: "PENDIENTE DE ASIGNACIÓN",
+    },
+  });
+  const resourceName = preparedResource.name;
+  const resourcePlate = preparedResource.plate;
 
-  const resourcePlate =
-    contract.preparedJetski?.plate ??
-    contract.preparedAsset?.plate ??
-    "";
-
-  const isJetskiContract =
-    reservation.serviceCategory === "JETSKI" ||
-    Boolean(contract.preparedJetski);
+  const isJetskiContract = input.templateCode === "JETSKI_LICENSED";
   const assetLabel = isJetskiContract ? "moto de agua" : "embarcación";
   const assetLabelPlural = isJetskiContract ? "motos de agua" : "embarcaciones";
   const assetLabelTitle = isJetskiContract ? "MOTO DE AGUA" : "EMBARCACIÓN";
@@ -2877,7 +2951,7 @@ function buildLicensedHtml(input: ContractRenderInput) {
         <th>Despacho Personas</th>
       </tr>
       <tr>
-        <td>${esc(preparedResourceSummary(contract).kind)}</td>
+        <td>${esc(preparedResource.kind)}</td>
         <td>${esc(resourceName)}</td>
         <td>${esc(resourcePlate)}</td>
         <td>${esc(dispatchPersonsText)}</td>
