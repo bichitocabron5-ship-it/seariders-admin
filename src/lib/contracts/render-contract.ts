@@ -182,6 +182,7 @@ export function buildContractHtml(input: ContractRenderInput) {
         return buildJetskiNoLicenseHtml(input);
       case "JETSKI_LICENSED":
         if (input.language === "en") return buildJetskiLicensedEnglishHtml(input);
+        if (input.language === "fr") return buildJetskiLicensedFrenchHtml(input);
         return buildLicensedHtml(input);
       case "BOAT_LICENSED":
         if (input.language === "en") return buildBoatLicensedEnglishHtml(input);
@@ -1714,6 +1715,441 @@ function buildJetskiLicensedEnglishHtml(input: ContractRenderInput) {
       <p>THE DEPOSIT MAY BE PAID IN CASH OR BY BANK CARD, SUBJECT TO AVAILABILITY.</p>
       <p>
         The customer authorizes UTE JERSKI CENTER- NOMAD NAUTIC to use the photographs and videos taken during the activity for publication on social media, the website and the company's advertising material. This authorization is free of charge and may be revoked at any time by written notice.
+      </p>
+    </div>
+
+    <div class="footer">${esc(legalHeader)}</div>
+  </div>
+
+</body>
+</html>
+`.trim();
+}
+
+function buildJetskiLicensedFrenchHtml(input: ContractRenderInput) {
+  const { reservation, contract } = input;
+
+  const legalHeader =
+    "UTE JETSKI CENTER- NOMAD NAUTIC · CIF: U16457343 · Tel: 608101272 · Email: seariderjetski@gmail.com · Adresse: C/ MARINA L-401 402, NUM 401 402 08330 PREMIÀ DE MAR - (BARCELONA)";
+
+  const baseDate = reservation.scheduledTime ?? reservation.activityDate;
+  const dateText = formatDate(baseDate);
+  const startTimeText = formatTime(reservation.scheduledTime);
+  const endTime = addMinutes(baseDate, reservation.durationMinutes);
+  const endTimeText = endTime ? formatTime(endTime) : "—";
+
+  const priceText = eurosFromCents(reservation.totalPriceCents);
+  const depositText = "500 €";
+
+  const driverName = esc(contract.driverName || "");
+  const driverDocType = esc(contract.driverDocType || "");
+  const driverDoc = esc(contract.driverDocNumber || "");
+  const driverAddress = esc(contract.driverAddress || "");
+  const driverPostalCode = esc(contract.driverPostalCode || "");
+  const driverCountry = esc(contract.driverCountry || "");
+  const driverBirthDate = esc(formatDate(contract.driverBirthDate));
+  const driverPhone = esc(contract.driverPhone || "");
+  const driverEmail = esc(contract.driverEmail || "");
+  const licenseSchool = esc(contract.licenseSchool || "");
+  const licenseType = esc(contract.licenseType || "");
+  const licenseNumber = esc(contract.licenseNumber || "");
+
+  const resourceName = contract.preparedJetski
+    ? `${contract.preparedJetski.model ?? "JET-SKI"}${contract.preparedJetski.number ? ` ${contract.preparedJetski.number}` : ""}`.trim()
+    : "ATTRIBUTION EN ATTENTE";
+
+  const resourcePlate = contract.preparedJetski?.plate ?? "";
+  const assetLabel = "jet-ski";
+  const assetLabelPlural = "jet-skis";
+  const assetLabelTitle = "JET-SKI";
+  const dispatchPersonsText =
+    reservation.pax ? `MAXIMUM ${reservation.pax} PERSONNES SUR LE ${assetLabelTitle}` : "";
+
+  return `
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Contrat ${esc(contract.id)}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+    }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #111;
+    }
+
+    .page {
+      padding: 16mm 14mm 14mm 14mm;
+      min-height: calc(297mm - 30mm);
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    .top-legal {
+      font-size: 10px;
+      text-align: center;
+      margin-bottom: 8px;
+      color: #111;
+    }
+
+    .logo-wrap {
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    .logo {
+      height: 62px;
+      object-fit: contain;
+    }
+
+    .title {
+      text-align: center;
+      font-size: 18px;
+      font-weight: 700;
+      margin: 8px 0 16px 0;
+      text-transform: uppercase;
+    }
+
+    .intro {
+      margin-bottom: 14px;
+      text-align: justify;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 14px 0;
+      page-break-inside: avoid;
+    }
+
+    th, td {
+      border: 1px solid #222;
+      padding: 5px 7px;
+      vertical-align: top;
+      font-size: 12px;
+    }
+
+    th {
+      background: #f5f5f5;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .label-cell {
+      width: 110px;
+      font-weight: 700;
+      background: #fafafa;
+      text-align: left;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: 14px;
+      font-weight: 700;
+      margin: 10px 0 12px 0;
+      text-transform: uppercase;
+    }
+
+    .clause-title {
+      font-weight: 700;
+      font-size: 12px;
+      margin: 10px 0 6px 0;
+      text-transform: uppercase;
+    }
+
+    .clause {
+      margin: 0 0 8px 0;
+      text-align: justify;
+    }
+
+    .signature-zone {
+      margin-top: 18px;
+    }
+
+    .signature-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-top: 12px;
+    }
+
+    .signature-box {
+      min-height: 80px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .signature-line {
+      width: 220px;
+      border-top: 1px solid #000;
+      text-align: center;
+      padding-top: 6px;
+      font-size: 11px;
+    }
+
+    .final-box {
+      margin-top: 18px;
+      page-break-inside: avoid;
+    }
+
+    .final-box p {
+      margin: 0 0 8px 0;
+      text-align: justify;
+    }
+
+    .bullet {
+      margin-left: 18px;
+    }
+
+    .footer {
+      position: absolute;
+      left: 14mm;
+      right: 14mm;
+      bottom: 6mm;
+      font-size: 10px;
+      color: #444;
+      text-align: center;
+      border-top: 1px solid #999;
+      padding-top: 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page">
+
+    <div class="logo-wrap">
+      <img src="${esc(input.logoSrc)}" class="logo" />
+    </div>
+
+    <div class="title">CONTRAT DE LOCATION DE JET-SKI AVEC PERMIS</div>
+
+    <p class="intro">
+      D'une part, l'entité UTE JETSKI CENTER- NOMAD NAUTIC, domiciliée à C/ MARINA L-401 402, NUM 401 402 08330 PREMIÀ DE MAR - (BARCELONA), munie du CIF B- U16457343 (ci-après le Loueur), et d'autre part,
+    </p>
+
+    <table>
+      <tr>
+        <td class="label-cell">Nom</td>
+        <td colspan="5">${driverName}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Type de document</td>
+        <td colspan="2">${driverDocType}</td>
+        <td class="label-cell">Numéro de document</td>
+        <td colspan="2">${driverDoc}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Date de naissance</td>
+        <td colspan="2">${driverBirthDate}</td>
+        <td class="label-cell">Téléphone</td>
+        <td colspan="2">${driverPhone}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Adresse</td>
+        <td colspan="2">${driverAddress}</td>
+        <td class="label-cell">Code postal</td>
+        <td>${driverPostalCode}</td>
+        <td>${driverCountry}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Email</td>
+        <td colspan="5">${driverEmail}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Permis</td>
+        <td colspan="2">${licenseType}</td>
+        <td class="label-cell">Numéro de permis</td>
+        <td colspan="2">${licenseNumber}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">École / émetteur</td>
+        <td colspan="5">${licenseSchool}</td>
+      </tr>
+    </table>
+
+    <p class="intro">
+      Ci-après le Locataire. Le Loueur loue au Locataire le jet-ski suivant:
+    </p>
+
+    <table>
+      <tr>
+        <th>Type</th>
+        <th>Nom</th>
+        <th>Immatriculation</th>
+        <th>Personnes autorisées</th>
+      </tr>
+      <tr>
+        <td>${assetLabelTitle}</td>
+        <td>${esc(resourceName)}</td>
+        <td>${esc(resourcePlate)}</td>
+        <td>${esc(dispatchPersonsText)}</td>
+      </tr>
+    </table>
+
+    <p class="intro"><b>Port d'embarquement et de débarquement:</b> PORT ESPORTIU DE BADALONA</p>
+
+    <p class="intro">La période de location comprend:</p>
+
+    <table>
+      <tr>
+        <th colspan="2">Du</th>
+        <th colspan="2">Au</th>
+      </tr>
+      <tr>
+        <td class="label-cell">Jour:</td>
+        <td>${esc(dateText)}</td>
+        <td class="label-cell">Jour:</td>
+        <td>${esc(dateText)}</td>
+      </tr>
+      <tr>
+        <td class="label-cell">Heure:</td>
+        <td>${esc(startTimeText)}</td>
+        <td class="label-cell">Heure:</td>
+        <td>${esc(endTimeText)}</td>
+      </tr>
+    </table>
+
+    <p class="intro">
+      Le prix de la location est fixé à <b>${esc(priceText)}</b>, TVA comprise, plus un dépôt de garantie de <b>${esc(depositText)}</b>.
+    </p>
+
+    <div class="section-title">CLAUSES:</div>
+
+    <div class="clause-title">1. REMISE DU JET-SKI.</div>
+    <p class="clause">
+      a. Au moment de la remise, le locataire vérifiera l'état général de la coque et le niveau de carburant, et s'engage à restituer le ${assetLabel} dans le même état que celui dans lequel il lui a été remis par le loueur.
+    </p>
+
+    <div class="clause-title">2. ZONE DE NAVIGATION.</div>
+    <p class="clause">
+      La zone de navigation autorisée est établie sur le littoral catalan, valencien et aux îles Baléares. Le locataire devra demander une autorisation écrite à UTE JETSKI CENTER - NOMAD NAUTIC pour naviguer dans des zones différentes de celles indiquées ici ou en dehors des eaux territoriales espagnoles.
+    </p>
+    <p class="clause">
+      En cas de location d'un ${assetLabel}, celui-ci ne pourra pas naviguer à moins de 200 m de la zone réservée aux baigneurs délimitée par des bouées jaunes, ni à l'intérieur des chenaux balisés réservés aux entrées et sorties de ${assetLabelPlural}. Il est INTERDIT de se trouver à moins de 200 m du littoral, des plages ou des criques, sauf autorisation préalable de UTE JETSKI CENTER- NOMAD NAUTIC lorsque la zone de baignade n'est pas délimitée.
+    </p>
+
+    <div class="footer">${esc(legalHeader)}</div>
+  </div>
+
+  <div class="page page-break">
+
+    <div class="clause-title">3. UTILISATION DU JET-SKI.</div>
+    <p class="clause">a. Le locataire s'engage à utiliser correctement le jet-ski loué et à respecter les règles établies par les autorités maritimes, douanières, sanitaires et fiscales, ainsi que par les polices nationales ou étrangères le cas échéant. En cas d'infraction aux règlements par le locataire, celui-ci prendra à sa charge toutes les sanctions, amendes et frais correspondants.</p>
+    <p class="clause">b. Le locataire s'engage à ne pas transporter à bord un nombre de personnes supérieur à celui autorisé selon le certificat de sécurité du jet-ski, et à utiliser le jet-ski uniquement pour des sorties de plaisance. Il s'engage également à ne pas céder, sous-traiter ni sous-louer totalement ou partiellement le jet-ski.</p>
+    <p class="clause">c. Le remorquage d'autres embarcations est strictement interdit, sauf en cas d'urgence. De même, le jet-ski loué ne pourra être remorqué que dans les mêmes cas et toujours avec ses propres aussières afin d'éviter des coûts élevés de sauvetage. Le locataire n'acceptera aucun accord et n'assumera aucune responsabilité sans l'autorisation de UTE JETSKI CENTER- NOMAD NAUTIC.</p>
+    <p class="clause">d. Dans l'hypothèse où une récompense de sauvetage serait obtenue, elle sera répartie à 50 % pour UTE JETSKI CENTER- NOMAD NAUTIC et à 50 % pour le locataire.</p>
+    <p class="clause">e. En cas de bulletins météorologiques dangereux concernant le temps ou la mer (supérieurs à force 6 Beaufort ou 27 noeuds de vent), le locataire s'engage à ne pas quitter le port où se trouve le jet-ski ou, le cas échéant, à rejoindre le port ou mouillage sûr le plus proche de sa position.</p>
+    <p class="clause">f. Le locataire est responsable de tout dommage ou préjudice causé au jet-ski loué, de la perte de ses éléments et des retards dans la restitution du jet-ski.</p>
+
+    <div class="clause-title">4. ASSURANCES.</div>
+    <p class="clause">a. L'assurance du jet-ski est incluse dans le prix de la location.</p>
+    <p class="clause">b. UTE JETSKI CENTER- NOMAD NAUTIC ne sera en aucun cas responsable des dommages corporels, pertes ou dommages que pourraient subir les effets personnels du locataire, des équipiers ou des invités à bord du jet-ski.</p>
+
+    <div class="clause-title">5. RESTITUTION DU JET-SKI.</div>
+    <p class="clause">a. Le locataire déclare connaître l'état de conservation du jet-ski et accepte donc expressément de le restituer dans les mêmes conditions que celles dans lesquelles il l'a reçu, avec les réservoirs de carburant. À défaut de restitution dans ces conditions, le coût du remplissage desdits réservoirs sera déduit du dépôt de garantie. Le coût du carburant est fixé à 25 € pour chaque ligne indiquée par la jauge.</p>
+    <p class="clause">b. Lors de la restitution du jet-ski, UTE JETSKI CENTER- NOMAD NAUTIC procédera à son inspection, après quoi le dépôt de garantie sera restitué au locataire. Si des dommages au jet-ski ou une perte ou casse de son équipement sont constatés, UTE JETSKI CENTER- NOMAD NAUTIC déduira du dépôt le montant nécessaire à la réparation de ces dommages. UTE JETSKI CENTER- NOMAD NAUTIC se réserve le droit d'exiger un montant supérieur au dépôt si les frais de réparation dépassent le montant du dépôt versé.</p>
+    <p class="clause">c. Le jet-ski devra être restitué dans le même port que celui où la remise a été effectuée. Le locataire supportera tous les frais découlant de tout changement de lieu de restitution. Ces frais seront de 10 euros par mille parcouru, plus le déplacement de l'équipage, et ce montant sera déduit du dépôt versé.</p>
+    <p class="clause">d. Le locataire s'engage à informer UTE JETSKI CENTER- NOMAD NAUTIC de toute anomalie, incidence ou tout problème survenu pendant la navigation.</p>
+
+    <div class="footer">${esc(legalHeader)}</div>
+  </div>
+
+  <div class="page page-break">
+
+    <div class="clause-title">6. RETARDS DANS LA RESTITUTION.</div>
+    <p class="clause">En cas de retard dans la restitution du jet-ski, le locataire sera tenu aux obligations suivantes:</p>
+    <p class="clause">a. Le locataire paiera à UTE JETSKI CENTER- NOMAD NAUTIC la part proportionnelle du temps supplémentaire utilisé, UTE JETSKI CENTER- NOMAD NAUTIC pouvant la déduire du montant du dépôt de garantie. Si, 24 heures après la fin du contrat, le jet-ski n'a pas été restitué et qu'aucune nouvelle n'a été reçue, les recherches seront engagées et sa disparition sera signalée aux autorités maritimes. Les frais qui en découleraient seront à la charge du locataire.</p>
+    <p class="clause">Le temps consacré à la réparation des dommages présents sur le jet-ski sera également considéré comme un retard de restitution.</p>
+
+    <div class="clause-title">7. DOMMAGES, ACCIDENTS ET PANNES.</div>
+    <p class="clause">a) Si, pendant la période de location, des pannes, dommages, détériorations ou pertes de matériel surviennent sur le jet-ski loué, le locataire a l'obligation d'en informer immédiatement Barcodealquiler.com, qui lui indiquera les instructions à suivre.</p>
+    <p class="clause">b) En cas d'accidents impliquant des tiers, ceux-ci doivent être déclarés par le locataire aux autorités compétentes, en notant les données des embarcations intervenues dans l'accident. Le locataire rédigera également un rapport sur les faits et le remettra à UTE JETSKI CENTER- NOMAD NAUTIC.</p>
+    <p class="clause">c) Le locataire est tenu de communiquer à UTE JETSKI CENTER- NOMAD NAUTIC tout contact du jet-ski avec le fond marin afin de pouvoir en déterminer les conséquences et d'éviter de mettre en danger les équipages ultérieurs.</p>
+
+    <div class="clause-title">8. ANNULATIONS ET RÉSILIATIONS</div>
+    <p class="clause">En cas de négligence dans l'utilisation du jet-ski en infraction avec la législation en vigueur, cela constituera un motif de résiliation automatique du contrat, les sommes versées restant acquises à UTE JETSKI CENTER- NOMAD NAUTIC.</p>
+
+    <div class="clause-title">9. DÉCLARATION DU CLIENT.</div>
+    <p class="clause">Le client déclare ne pas avoir consommé d'alcool, de stupéfiants ni aucune substance psychoactive, et ne souffrir d'aucune maladie ou incapacité physique empêchant la conduite correcte du jet-ski.</p>
+
+    <div class="clause-title">10. RESPONSABILITÉ ENVERS LES TIERS</div>
+    <p class="clause">En cas de réclamations de tiers contre le locataire du fait de l'utilisation du jet-ski loué, UTE JETSKI CENTER- NOMAD NAUTIC sera exonérée de toute responsabilité. Le locataire répondra également conjointement des fautes pouvant être commises par le pilote du jet-ski.</p>
+
+    <div class="clause-title">11. EXPÉRIENCE DU PILOTE.</div>
+    <p class="clause">
+      Le locataire assure posséder les connaissances et l'expérience nécessaires à la sortie et être titulaire du titre nautique suivant:
+      <b>${licenseType}</b>, délivré par <b>${licenseSchool}</b>, qui désigne M./Mme
+      <b>${driverName}</b>, titulaire du titre nautique mentionné ci-dessus, identifié par:
+      <b>${driverDoc}</b>, comme pilote du jet-ski. En aucun cas la conduite du jet-ski ne pourra être confiée à une personne différente de celle indiquée comme pilote.
+    </p>
+    <p class="clause">
+      UTE JETSKI CENTER- NOMAD NAUTIC se réserve le droit d'annuler le présent contrat si le pilote ne dispose pas de la formation et de la compétence suffisantes pour conduire le jet-ski en toute sécurité. Dans cette hypothèse, le locataire n'aura droit à aucun remboursement de la location; toutefois, UTE JETSKI CENTER- NOMAD NAUTIC pourra mettre un autre pilote à la disposition du locataire, s'il y en a un. Les honoraires que celui-ci pourrait facturer seront assumés par le locataire.
+    </p>
+
+    <div class="footer">${esc(legalHeader)}</div>
+  </div>
+
+  <div class="page page-break">
+
+    <div class="clause-title">12. EFFICACITÉ</div>
+    <p class="clause">Dans l'hypothèse où l'une des clauses du contrat perdrait sa validité, cela n'affectera en aucune manière les autres clauses, qui resteront pleinement applicables entre les parties.</p>
+
+    <div class="clause-title">13. PROTECTION DES DONNÉES</div>
+    <p class="clause">Conformément aux dispositions de la Loi organique 15/1999 du 13 décembre relative à la protection des données à caractère personnel, par l'acceptation du présent contrat, nous vous informons que vos données personnelles seront traitées et intégrées dans des fichiers sous la responsabilité de UTE JETSKI CENTER- NOMAD NAUTIC, enregistrés auprès de l'Agence espagnole de protection des données, aux fins de gestion des clients et des contrats.</p>
+    <p class="clause">Les données demandées sont nécessaires; à défaut de les fournir, il ne sera pas possible de fournir le service demandé. À cet égard, vous consentez expressément à leur collecte et à leur traitement pour la finalité indiquée. De même, vous autorisez la communication de vos données à caractère personnel à d'autres entités lorsque cela est nécessaire pour réaliser le service demandé.</p>
+    <p class="clause">Vous autorisez également l'utilisation de vos données pour réaliser des communications périodiques, y compris celles effectuées par courrier électronique, que notre entreprise pourra envoyer pour informer des activités qu'elle développe elle-même ou par l'intermédiaire de ses entreprises collaboratrices. Dans tous les cas, vous pouvez exercer vos droits d'accès, de rectification, d'annulation et d'opposition en vous adressant à l'adresse électronique suivante: <b>SEARIDERSJETSKI@GMAIL.COM</b> ou en appelant le <b>608-10-12-72</b>.</p>
+
+    <div class="clause-title">14. DROIT APPLICABLE ET JURIDICTION</div>
+    <p class="clause">Le présent contrat est soumis à la législation espagnole. Toutes les questions litigieuses ou différends qui pourraient survenir dans l'exécution, la modification, la résiliation et les effets du présent contrat seront résolus par les tribunaux de la ville de BARCELONE, à la juridiction desquels les parties se soumettent expressément.</p>
+
+    <div class="signature-zone">
+      <p><b>En preuve de conformité</b>, les parties signent en double exemplaire le présent contrat de location de jet-ski au lieu et à la date indiqués ci-dessous:</p>
+      <p><b>BADALONA le:</b> ${esc(dateText)}</p>
+
+      <div class="signature-row">
+        <div class="signature-box">
+          <div class="signature-line">LE LOUEUR</div>
+        </div>
+        <div class="signature-box">
+          ${signatureBlockHtml({
+            signatureImageUrl: contract.signatureImageUrl,
+            signatureSignedBy: contract.signatureSignedBy,
+            signedAt: contract.signedAt,
+            label: "LE LOCATAIRE",
+          })}
+        </div>
+      </div>
+    </div>
+
+    <div class="final-box">
+      <p>
+        <b>À TITRE DE GARANTIE POUR LA BONNE UTILISATION DU ${assetLabelTitle} ET LE RESPECT DES CONDITIONS DE LOCATION, UN DÉPÔT DE GARANTIE DE 500 EUROS SERA DEMANDÉ AU MOMENT DE LA SIGNATURE DU CONTRAT OU AVANT LE DÉBUT DE L'ACTIVITÉ.</b>
+      </p>
+      <p><b>• CE DÉPÔT SERA INTÉGRALEMENT REMBOURSÉ À LA FIN DU SERVICE, À CONDITION QUE:</b></p>
+      <p class="bullet">o LE ${assetLabelTitle} SOIT RESTITUÉ DANS LE MÊME ÉTAT QUE CELUI DANS LEQUEL IL A ÉTÉ REMIS.</p>
+      <p class="bullet">o AUCUN DOMMAGE NI MAUVAIS USAGE DE L'ÉQUIPEMENT N'AIT ÉTÉ CONSTATÉ.</p>
+      <p class="bullet">o LES RÈGLES DE SÉCURITÉ ET DE COMPORTEMENT INDIQUÉES PAR LE PERSONNEL AIENT ÉTÉ RESPECTÉES.</p>
+      <p>LE PAIEMENT DU DÉPÔT DE GARANTIE POURRA ÊTRE EFFECTUÉ EN ESPÈCES OU PAR CARTE BANCAIRE, SELON DISPONIBILITÉ.</p>
+      <p>
+        Le client autorise UTE JERSKI CENTER- NOMAD NAUTIC à utiliser les photographies et vidéos prises pendant l'activité pour leur publication sur les réseaux sociaux, le site web et les supports publicitaires de l'entreprise. Cette autorisation est gratuite et pourra être révoquée à tout moment par notification écrite.
       </p>
     </div>
 

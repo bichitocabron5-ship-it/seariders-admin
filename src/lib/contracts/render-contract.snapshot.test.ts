@@ -150,6 +150,13 @@ const snapshotCases: SnapshotCase[] = [
     contract: baseContract,
   },
   {
+    name: "JETSKI_LICENSED.fr",
+    templateCode: "JETSKI_LICENSED",
+    language: "fr",
+    reservation: baseReservation,
+    contract: baseContract,
+  },
+  {
     name: "JETSKI_LICENSED.en",
     templateCode: "JETSKI_LICENSED",
     language: "en",
@@ -239,14 +246,15 @@ for (const snapshotCase of snapshotCases) {
   });
 }
 
-test("contract snapshots outside BOAT_LICENSED.en remain locked for this phase", async () => {
+test("contract snapshots outside JETSKI_LICENSED.fr remain locked for phase 6A", async () => {
   const lockedSnapshotNames = [
-    "JETSKI_LICENSED.en",
     "JETSKI_LICENSED.es",
+    "JETSKI_LICENSED.en",
     "JETSKI_NO_LICENSE.es",
     "JETSKI_NO_LICENSE.en",
     "JETSKI_NO_LICENSE.fr",
     "BOAT_LICENSED.es",
+    "BOAT_LICENSED.en",
   ];
 
   for (const snapshotName of lockedSnapshotNames) {
@@ -298,6 +306,26 @@ test("JETSKI_LICENSED.en does not contain the main Spanish licensed contract phr
 
   for (const phrase of forbiddenSpanishPhrases) {
     assert.equal(actual.includes(phrase), false, `Unexpected Spanish phrase in English contract: ${phrase}`);
+  }
+});
+
+test("JETSKI_LICENSED.fr does not contain the main Spanish licensed contract phrases", () => {
+  const snapshotCase = snapshotCases.find((candidate) => candidate.name === "JETSKI_LICENSED.fr");
+  if (!snapshotCase) throw new Error("Missing JETSKI_LICENSED.fr snapshot case");
+
+  const actual = renderSnapshotHtml(snapshotCase);
+  const forbiddenSpanishPhrases = [
+    "De una parte",
+    "En adelante Arrendatario",
+    "El Arrendador arrienda",
+    "CLÁUSULAS",
+    "ENTREGA DE LA EMBARCACIÓN",
+    "ZONA DE NAVEGACIÓN",
+    "DERECHO Y JURISDICCIÓN",
+  ];
+
+  for (const phrase of forbiddenSpanishPhrases) {
+    assert.equal(actual.includes(phrase), false, `Unexpected Spanish phrase in French licensed contract: ${phrase}`);
   }
 });
 
