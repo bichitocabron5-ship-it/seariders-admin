@@ -63,6 +63,7 @@ export function ContractsSection({
   contractsLoading,
   contractsError,
   requiresLicense,
+  serviceCategory,
   recoveredContractProfile,
   onRecoveredContractProfileApplied,
   customer,
@@ -75,6 +76,7 @@ export function ContractsSection({
   contractsLoading: boolean;
   contractsError: string | null;
   requiresLicense: boolean;
+  serviceCategory?: string | null;
   recoveredContractProfile: RecoveredContractProfile | null;
   onRecoveredContractProfileApplied: () => void;
   customer: {
@@ -366,6 +368,7 @@ export function ContractsSection({
           key={c.id}
           reservationId={reservationId}
           isLicense={requiresLicense}
+          serviceCategory={serviceCategory}
           c={c}
           customer={customer}
           onSaved={onRefresh}

@@ -2165,6 +2165,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               contractsLoading={contractsLoading}
               contractsError={contractsError}
               requiresLicense={Boolean(isLicense)}
+              serviceCategory={selectedCategory}
               recoveredContractProfile={recoveredContractProfile}
               onRecoveredContractProfileApplied={() => {
                 setRecoveredContractProfile(null);

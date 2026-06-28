@@ -5,9 +5,10 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { z } from "zod";
-import { ContractStatus } from "@prisma/client";
+import { AssetType, ContractStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { resolveCountryIso2 } from "@/lib/countries";
+import { resolvePreparedResourceSelector } from "@/lib/contracts/prepared-resource";
 
 export const runtime = "nodejs";
 
@@ -100,8 +101,15 @@ export async function PATCH(
           id: true,
           reservationId: true,
           status: true,
+          templateCode: true,
           driverName: true,
-          reservation: { select: { id: true, isLicense: true } },
+          reservation: {
+            select: {
+              id: true,
+              isLicense: true,
+              service: { select: { category: true } },
+            },
+          },
         },
       });
 
@@ -115,6 +123,12 @@ export async function PATCH(
       if (current.status === ContractStatus.SIGNED) {
         throw new Error("Contrato ya firmado. No se puede modificar.");
       }
+
+      const preparedSelectorKind = resolvePreparedResourceSelector({
+        templateCode: current.templateCode,
+        isLicense: Boolean(current.reservation.isLicense),
+        serviceCategory: current.reservation.service?.category ?? null,
+      });
 
       const data: Prisma.ReservationContractUpdateInput = {};
 
@@ -146,6 +160,9 @@ export async function PATCH(
 
       if (b.preparedJetskiId !== undefined) {
         if (b.preparedJetskiId) {
+          if (preparedSelectorKind !== "jetski") {
+            throw new Error("Este contrato no permite seleccionar una moto preparada.");
+          }
           data.preparedJetski = { connect: { id: b.preparedJetskiId } };
           data.preparedAsset = { disconnect: true };
         } else {
@@ -155,6 +172,19 @@ export async function PATCH(
 
       if (b.preparedAssetId !== undefined) {
         if (b.preparedAssetId) {
+          if (preparedSelectorKind !== "asset") {
+            throw new Error("Este contrato no permite seleccionar un asset preparado.");
+          }
+          const preparedAsset = await tx.asset.findUnique({
+            where: { id: b.preparedAssetId },
+            select: { type: true },
+          });
+          if (!preparedAsset) {
+            throw new Error("Asset preparado no existe.");
+          }
+          if (preparedAsset.type !== AssetType.BOAT) {
+            throw new Error("Para contratos BOAT_LICENSED solo se pueden preparar assets tipo BOAT.");
+          }
           data.preparedAsset = { connect: { id: b.preparedAssetId } };
           data.preparedJetski = { disconnect: true };
         } else {

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { JetskiStatus, AssetStatus, PlatformOperabilityStatus } from "@prisma/client";
+import { JetskiStatus, AssetStatus, AssetType, PlatformOperabilityStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -42,6 +42,7 @@ export async function GET() {
     }),
     prisma.asset.findMany({
       where: {
+        type: AssetType.BOAT,
         status: AssetStatus.OPERATIONAL,
         operabilityStatus: PlatformOperabilityStatus.OPERATIONAL,
       },
