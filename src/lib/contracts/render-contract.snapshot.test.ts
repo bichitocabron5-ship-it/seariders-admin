@@ -273,6 +273,7 @@ for (const snapshotCase of snapshotCases) {
 test("JETSKI_LICENSED.en shows preparedJetski when it exists", () => {
   const actual = renderContractHtml({ templateCode: "JETSKI_LICENSED" });
 
+  assert.equal(actual.includes("<td>JET SKI</td>"), true);
   assert.equal(actual.includes("<td>Yamaha VX 7</td>"), true);
   assert.equal(actual.includes("<td>7A-BA-123</td>"), true);
   assert.equal(actual.includes("PENDING ASSIGNMENT"), false);
@@ -315,8 +316,10 @@ test("JETSKI_LICENSED.en falls back to preparedAsset when preparedJetski is miss
     },
   });
 
+  assert.equal(actual.includes("<td>ASSET LANCHA</td>"), true);
   assert.equal(actual.includes("<td>Legacy Boat LANCHA</td>"), true);
   assert.equal(actual.includes("<td>LEG-42</td>"), true);
+  assert.equal(actual.includes("<td>JET SKI</td>"), false);
   assert.equal(actual.includes("PENDING ASSIGNMENT"), false);
 });
 

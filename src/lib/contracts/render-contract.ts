@@ -1377,6 +1377,7 @@ function buildJetskiLicensedEnglishHtml(input: ContractRenderInput) {
     },
   });
   const resourceName = preparedResource.name;
+  const resourceType = preparedResource.kind;
   const resourcePlate = preparedResource.plate;
   const dispatchPersonsText =
     reservation.pax ? `MAXIMUM ${reservation.pax} PERSONS ON THE ${assetLabelTitle}` : "";
@@ -1613,7 +1614,7 @@ function buildJetskiLicensedEnglishHtml(input: ContractRenderInput) {
         <th>Authorized persons</th>
       </tr>
       <tr>
-        <td>${assetLabelTitle}</td>
+        <td>${esc(resourceType)}</td>
         <td>${esc(resourceName)}</td>
         <td>${esc(resourcePlate)}</td>
         <td>${esc(dispatchPersonsText)}</td>
