@@ -4,6 +4,7 @@ import type React from "react";
 import { CountrySelect } from "@/components/country-select";
 import { BirthDateField } from "@/components/customer-inputs";
 import { getCountryOptions } from "@/lib/countries";
+import type { PreparedResourceSelectorKind } from "@/lib/contracts/prepared-resource";
 import type { ContractDto } from "../types";
 
 const COUNTRY_OPTIONS = getCountryOptions("es");
@@ -94,7 +95,7 @@ type ContractLicenseSectionProps = CommonStyles & {
 };
 
 type ContractPreparedResourceSectionProps = CommonStyles & {
-  showPreparedSelector: boolean;
+  selectorKind: PreparedResourceSelectorKind | null;
   preparedJetskiId: string;
   preparedAssetId: string;
   preparedOptions: PreparedOptions;
@@ -447,7 +448,7 @@ export function ContractPreparedResourceSection({
   subCardStyle,
   inputStyle,
   sectionEyebrowStyle,
-  showPreparedSelector,
+  selectorKind,
   preparedJetskiId,
   preparedAssetId,
   preparedOptions,
@@ -455,7 +456,14 @@ export function ContractPreparedResourceSection({
   onPreparedJetskiChange,
   onPreparedAssetChange,
 }: ContractPreparedResourceSectionProps) {
-  if (!showPreparedSelector) return null;
+  if (!selectorKind) return null;
+
+  const currentPreparedResourceLabel =
+    selectorKind === "jetski" && contract.preparedJetski
+      ? `Moto ${contract.preparedJetski.number ?? "?"} · ${contract.preparedJetski.model ?? "Sin modelo"}${contract.preparedJetski.plate ? ` · ${contract.preparedJetski.plate}` : ""}`
+      : selectorKind === "asset" && contract.preparedAsset?.type === "BOAT"
+        ? `${contract.preparedAsset.name ?? "Sin nombre"}${contract.preparedAsset.type ? ` · ${contract.preparedAsset.type}` : ""}${contract.preparedAsset.plate ? ` · ${contract.preparedAsset.plate}` : ""}`
+        : null;
 
   return (
     <div style={subCardStyle}>
@@ -467,39 +475,38 @@ export function ContractPreparedResourceSection({
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Jetski preparado
-          <select value={preparedJetskiId} onChange={(e) => onPreparedJetskiChange(e.target.value)} style={inputStyle}>
-            <option value="">Selecciona jetski...</option>
-            {preparedOptions.jetskis.map((jetski) => (
-              <option key={jetski.id} value={jetski.id}>
-                {`Moto ${jetski.number ?? "?"} · ${jetski.model ?? "Sin modelo"}${jetski.plate ? ` · ${jetski.plate}` : ""}`}
-              </option>
-            ))}
-          </select>
-        </label>
+        {selectorKind === "jetski" ? (
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            Jetski preparado
+            <select value={preparedJetskiId} onChange={(e) => onPreparedJetskiChange(e.target.value)} style={inputStyle}>
+              <option value="">Selecciona jetski...</option>
+              {preparedOptions.jetskis.map((jetski) => (
+                <option key={jetski.id} value={jetski.id}>
+                  {`Moto ${jetski.number ?? "?"} · ${jetski.model ?? "Sin modelo"}${jetski.plate ? ` · ${jetski.plate}` : ""}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
-        <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
-          Asset / Boat preparado
-          <select value={preparedAssetId} onChange={(e) => onPreparedAssetChange(e.target.value)} style={inputStyle}>
-            <option value="">Selecciona asset...</option>
-            {preparedOptions.assets.map((asset) => (
-              <option key={asset.id} value={asset.id}>
-                {`${asset.name ?? "Sin nombre"}${asset.type ? ` · ${asset.type}` : ""}${asset.plate ? ` · ${asset.plate}` : ""}`}
-              </option>
-            ))}
-          </select>
-        </label>
+        {selectorKind === "asset" ? (
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 700 }}>
+            Asset / Boat preparado
+            <select value={preparedAssetId} onChange={(e) => onPreparedAssetChange(e.target.value)} style={inputStyle}>
+              <option value="">Selecciona barco...</option>
+              {preparedOptions.assets.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {`${asset.name ?? "Sin nombre"}${asset.type ? ` · ${asset.type}` : ""}${asset.plate ? ` · ${asset.plate}` : ""}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
-      {contract.preparedJetski || contract.preparedAsset ? (
+      {currentPreparedResourceLabel ? (
         <div style={{ fontSize: 12, color: "#64748b" }}>
-          Recurso actual:{" "}
-          {contract.preparedJetski
-            ? `Moto ${contract.preparedJetski.number ?? "?"} · ${contract.preparedJetski.model ?? "Sin modelo"}${contract.preparedJetski.plate ? ` · ${contract.preparedJetski.plate}` : ""}`
-            : contract.preparedAsset
-              ? `${contract.preparedAsset.name ?? "Sin nombre"}${contract.preparedAsset.type ? ` · ${contract.preparedAsset.type}` : ""}${contract.preparedAsset.plate ? ` · ${contract.preparedAsset.plate}` : ""}`
-              : "—"}
+          Recurso actual: {currentPreparedResourceLabel}
         </div>
       ) : null}
     </div>

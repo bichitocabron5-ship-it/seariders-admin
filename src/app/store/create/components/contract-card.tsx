@@ -4,6 +4,11 @@ import React, { useEffect, useState } from "react";
 
 import { opsStyles } from "@/components/ops-ui";
 import { getCountryLabel } from "@/lib/countries";
+import {
+  filterPreparedBoatAssets,
+  preparedResourcePatchForSelector,
+  resolvePreparedResourceSelector,
+} from "@/lib/contracts/prepared-resource";
 
 import { errorMessage } from "../utils/errors";
 import type { ContractDto, ContractPatch } from "../types";
@@ -173,6 +178,7 @@ function ageAt(birthYmd: string, at = new Date()) {
 type ContractCardProps = {
   reservationId: string;
   isLicense: boolean;
+  serviceCategory?: string | null;
   c: ContractDto;
   customer: {
     name: string;
@@ -195,6 +201,7 @@ type ContractCardProps = {
 export function ContractCard({
   reservationId,
   isLicense,
+  serviceCategory,
   c,
   customer,
   onSaved,
@@ -253,7 +260,22 @@ export function ContractCard({
     Boolean(licenseSchool?.trim()) ||
     Boolean(licenseType?.trim()) ||
     Boolean(licenseNumber?.trim());
-  const showPreparedSelector = isLicense;
+  const preparedSelectorKind = React.useMemo(
+    () =>
+      resolvePreparedResourceSelector({
+        templateCode: c.templateCode,
+        isLicense,
+        serviceCategory,
+      }),
+    [c.templateCode, isLicense, serviceCategory]
+  );
+  const visiblePreparedOptions = React.useMemo(
+    () => ({
+      jetskis: preparedSelectorKind === "jetski" ? preparedOptions.jetskis : [],
+      assets: preparedSelectorKind === "asset" ? filterPreparedBoatAssets(preparedOptions.assets) : [],
+    }),
+    [preparedOptions, preparedSelectorKind]
+  );
   const canDownloadFinalPdf =
     c.status === "SIGNED" &&
     Boolean(c.signedAt) &&
@@ -395,8 +417,11 @@ export function ContractCard({
       licenseSchool: licenseSchool || null,
       licenseType: licenseType || null,
       licenseNumber: licenseNumber || null,
-      preparedJetskiId: preparedJetskiId || null,
-      preparedAssetId: preparedAssetId || null,
+      ...preparedResourcePatchForSelector({
+        selectorKind: preparedSelectorKind,
+        preparedJetskiId,
+        preparedAssetId,
+      }),
     };
   }
 
@@ -764,10 +789,10 @@ export function ContractCard({
         subCardStyle={subCardStyle}
         inputStyle={inputStyle}
         sectionEyebrowStyle={sectionEyebrowStyle}
-        showPreparedSelector={showPreparedSelector}
-        preparedJetskiId={preparedJetskiId}
-        preparedAssetId={preparedAssetId}
-        preparedOptions={preparedOptions}
+        selectorKind={preparedSelectorKind}
+        preparedJetskiId={preparedSelectorKind === "jetski" ? preparedJetskiId : ""}
+        preparedAssetId={preparedSelectorKind === "asset" ? preparedAssetId : ""}
+        preparedOptions={visiblePreparedOptions}
         contract={c}
         onPreparedJetskiChange={(value) => {
           setPreparedJetskiId(value);
