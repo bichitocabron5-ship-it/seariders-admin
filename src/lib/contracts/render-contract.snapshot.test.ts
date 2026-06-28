@@ -224,6 +224,30 @@ function renderSnapshotHtml(snapshotCase: SnapshotCase) {
   );
 }
 
+function renderContractHtml(args: {
+  templateCode: "JETSKI_LICENSED" | "BOAT_LICENSED";
+  reservation?: Partial<ContractRenderReservation>;
+  contract?: Partial<ContractRenderDriver>;
+}) {
+  return withContractSnapshotTimeZone(() =>
+    buildContractHtml({
+      templateCode: args.templateCode,
+      templateVersion: "v1",
+      language: "en",
+      logoSrc: "/logo-seariders.png",
+      reservation: {
+        ...baseReservation,
+        serviceCategory: args.templateCode === "BOAT_LICENSED" ? "BOAT" : "JETSKI",
+        ...args.reservation,
+      },
+      contract: {
+        ...baseContract,
+        ...args.contract,
+      },
+    })
+  );
+}
+
 async function assertHtmlSnapshot(snapshotCase: SnapshotCase) {
   const actual = renderSnapshotHtml(snapshotCase);
 
@@ -245,6 +269,89 @@ for (const snapshotCase of snapshotCases) {
     await assertHtmlSnapshot(snapshotCase);
   });
 }
+
+test("JETSKI_LICENSED.en shows preparedJetski when it exists", () => {
+  const actual = renderContractHtml({ templateCode: "JETSKI_LICENSED" });
+
+  assert.equal(actual.includes("<td>Yamaha VX 7</td>"), true);
+  assert.equal(actual.includes("<td>7A-BA-123</td>"), true);
+  assert.equal(actual.includes("PENDING ASSIGNMENT"), false);
+});
+
+test("BOAT_LICENSED.en shows preparedAsset when it exists", () => {
+  const actual = renderContractHtml({
+    templateCode: "BOAT_LICENSED",
+    reservation: {
+      pax: 6,
+      durationMinutes: 120,
+    },
+    contract: {
+      preparedJetski: null,
+      preparedAsset: {
+        id: "boat-test",
+        name: "Seariders One",
+        type: "LANCHA",
+        plate: "BA-BOAT-42",
+      },
+    },
+  });
+
+  assert.equal(actual.includes("<td>Seariders One LANCHA</td>"), true);
+  assert.equal(actual.includes("<td>BA-BOAT-42</td>"), true);
+  assert.equal(actual.includes("PENDING ASSIGNMENT"), false);
+});
+
+test("JETSKI_LICENSED.en falls back to preparedAsset when preparedJetski is missing", () => {
+  const actual = renderContractHtml({
+    templateCode: "JETSKI_LICENSED",
+    contract: {
+      preparedJetski: null,
+      preparedAsset: {
+        id: "legacy-asset",
+        name: "Legacy Boat",
+        type: "LANCHA",
+        plate: "LEG-42",
+      },
+    },
+  });
+
+  assert.equal(actual.includes("<td>Legacy Boat LANCHA</td>"), true);
+  assert.equal(actual.includes("<td>LEG-42</td>"), true);
+  assert.equal(actual.includes("PENDING ASSIGNMENT"), false);
+});
+
+test("BOAT_LICENSED.en falls back to preparedJetski when preparedAsset is missing", () => {
+  const actual = renderContractHtml({
+    templateCode: "BOAT_LICENSED",
+    contract: {
+      preparedJetski: {
+        id: "legacy-jetski",
+        number: 12,
+        model: "Legacy Yamaha",
+        plate: "JS-12",
+      },
+      preparedAsset: null,
+    },
+  });
+
+  assert.equal(actual.includes("<td>Legacy Yamaha 12</td>"), true);
+  assert.equal(actual.includes("<td>JS-12</td>"), true);
+  assert.equal(actual.includes("PENDING ASSIGNMENT"), false);
+});
+
+test("licensed English contracts show pending assignment when no prepared resource exists", () => {
+  for (const templateCode of ["JETSKI_LICENSED", "BOAT_LICENSED"] as const) {
+    const actual = renderContractHtml({
+      templateCode,
+      contract: {
+        preparedJetski: null,
+        preparedAsset: null,
+      },
+    });
+
+    assert.equal(actual.includes("<td>PENDING ASSIGNMENT</td>"), true);
+  }
+});
 
 test("contract snapshots outside JETSKI_LICENSED.fr remain locked for phase 6A", async () => {
   const lockedSnapshotNames = [
