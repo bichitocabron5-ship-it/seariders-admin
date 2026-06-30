@@ -3,7 +3,10 @@ import { z } from "zod";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { saveContractSignature } from "@/lib/contracts/save-contract-signature";
+import {
+  ContractSignatureError,
+  saveContractSignature,
+} from "@/lib/contracts/save-contract-signature";
 
 export const runtime = "nodejs";
 
@@ -44,6 +47,7 @@ export async function POST(
       signerName: body.signerName,
       imageDataUrl: body.imageDataUrl,
       imageConsentAccepted: body.imageConsentAccepted,
+      access: { type: "internal" },
     });
 
     return NextResponse.json({
@@ -52,6 +56,7 @@ export async function POST(
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Error";
-    return new NextResponse(message, { status: 400 });
+    const status = e instanceof ContractSignatureError ? e.status : 400;
+    return new NextResponse(message, { status });
   }
 }

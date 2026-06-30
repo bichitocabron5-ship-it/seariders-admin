@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { verifyContractSignatureToken } from "@/lib/contracts/signature-link";
-import { saveContractSignature } from "@/lib/contracts/save-contract-signature";
+import {
+  ContractSignatureError,
+  saveContractSignature,
+} from "@/lib/contracts/save-contract-signature";
 import { normalizePublicLanguage, type PublicLanguage } from "@/lib/public-links/i18n";
 
 export const runtime = "nodejs";
@@ -27,25 +29,26 @@ function signatureRouteText(language: PublicLanguage, key: keyof typeof SIGNATUR
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
   const language = normalizePublicLanguage(new URL(req.url).searchParams.get("lang"));
-  const payload = verifyContractSignatureToken(token);
-  if (!payload) {
-    return new NextResponse(signatureRouteText(language, "invalidLink"), { status: 401 });
-  }
 
   try {
     const body = BodySchema.parse(await req.json());
     const contract = await saveContractSignature({
-      contractId: payload.contractId,
       signerName: body.signerName,
       imageDataUrl: body.imageDataUrl,
       imageConsentAccepted: body.imageConsentAccepted,
       language,
       signedLanguage: language,
+      access: { type: "contract-signature-token", token },
     });
 
     return NextResponse.json({ ok: true, contract });
   } catch (e: unknown) {
+    if (e instanceof ContractSignatureError && e.code === "INVALID_SIGNATURE_TOKEN") {
+      return new NextResponse(signatureRouteText(language, "invalidLink"), { status: e.status });
+    }
+
     const message = e instanceof Error ? e.message : "Error";
-    return new NextResponse(message, { status: 400 });
+    const status = e instanceof ContractSignatureError ? e.status : 400;
+    return new NextResponse(message, { status });
   }
 }

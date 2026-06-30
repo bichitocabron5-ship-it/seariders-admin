@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
-import { saveContractSignature } from "@/lib/contracts/save-contract-signature";
-import { verifyReservationCheckinToken } from "@/lib/reservations/public-checkin-link";
-import { evaluateContractCheckinState } from "@/lib/contracts/public-checkin";
+import {
+  ContractSignatureError,
+  saveContractSignature,
+} from "@/lib/contracts/save-contract-signature";
 import { normalizePublicLanguage, type PublicLanguage } from "@/lib/public-links/i18n";
 
 export const runtime = "nodejs";
@@ -24,11 +24,6 @@ const CHECKIN_SIGNATURE_TEXT = {
     en: "Contract not found",
     fr: "Contrat introuvable",
   },
-  notReady: {
-    es: "El contrato no esta listo para firmar",
-    en: "The contract is not ready to sign",
-    fr: "Le contrat n'est pas pret a etre signe",
-  },
 } as const satisfies Record<string, Record<PublicLanguage, string>>;
 
 function signatureText(language: PublicLanguage, key: keyof typeof CHECKIN_SIGNATURE_TEXT) {
@@ -38,62 +33,29 @@ function signatureText(language: PublicLanguage, key: keyof typeof CHECKIN_SIGNA
 export async function POST(req: Request, ctx: { params: Promise<{ token: string; contractId: string }> }) {
   const { token, contractId } = await ctx.params;
   const language = normalizePublicLanguage(new URL(req.url).searchParams.get("lang"));
-  const payload = verifyReservationCheckinToken(token);
-  if (!payload) return new NextResponse(signatureText(language, "invalidLink"), { status: 401 });
 
   try {
     const body = BodySchema.parse(await req.json());
-    const contract = await prisma.reservationContract.findUnique({
-      where: { id: contractId },
-      select: {
-        id: true,
-        reservationId: true,
-        status: true,
-        driverName: true,
-        driverPhone: true,
-        driverCountry: true,
-        driverAddress: true,
-        driverDocType: true,
-        driverDocNumber: true,
-        driverBirthDate: true,
-        minorAuthorizationProvided: true,
-        minorAuthorizationFileKey: true,
-        licenseSchool: true,
-        licenseType: true,
-        licenseNumber: true,
-        reservation: {
-          select: {
-            isLicense: true,
-          },
-        },
-      },
-    });
-
-    if (!contract || contract.reservationId !== payload.reservationId) {
-      return new NextResponse(signatureText(language, "contractNotFound"), { status: 404 });
-    }
-
-    const evaluation = evaluateContractCheckinState({
-      isLicense: Boolean(contract.reservation.isLicense),
-      status: contract.status,
-      language,
-      contract,
-    });
-
-    if (!evaluation.canBeReady) {
-      return new NextResponse(evaluation.blockingReason || signatureText(language, "notReady"), { status: 400 });
-    }
-
     const updated = await saveContractSignature({
-      contractId: contract.id,
+      contractId,
       signerName: body.signerName,
       imageDataUrl: body.imageDataUrl,
       language,
+      access: { type: "reservation-checkin-token", token },
     });
 
     return NextResponse.json({ ok: true, contract: updated });
   } catch (e: unknown) {
+    if (e instanceof ContractSignatureError && e.code === "INVALID_SIGNATURE_TOKEN") {
+      return new NextResponse(signatureText(language, "invalidLink"), { status: e.status });
+    }
+
+    if (e instanceof ContractSignatureError && e.code === "CONTRACT_NOT_FOUND") {
+      return new NextResponse(signatureText(language, "contractNotFound"), { status: e.status });
+    }
+
     const message = e instanceof Error ? e.message : "Error";
-    return new NextResponse(message, { status: 400 });
+    const status = e instanceof ContractSignatureError ? e.status : 400;
+    return new NextResponse(message, { status });
   }
 }
