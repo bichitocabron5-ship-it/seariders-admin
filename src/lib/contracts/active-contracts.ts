@@ -65,6 +65,22 @@ export function countReadyVisibleContracts<T extends ContractLike>(
   ).length;
 }
 
+export function countLockedVisibleContracts<T extends ContractLike>(
+  contracts: T[],
+  requiredUnits: number
+) {
+  return pickVisibleContractsByLogicalUnit(contracts, requiredUnits).filter(
+    (contract) => contract.status === "SIGNED"
+  ).length;
+}
+
+export function canEditReservationLegalContent<T extends ContractLike>(
+  contracts: T[],
+  requiredUnits: number
+) {
+  return countLockedVisibleContracts(contracts, requiredUnits) === 0;
+}
+
 export function listMissingLogicalUnits<T extends ContractLike>(
   contracts: T[],
   requiredUnits: number

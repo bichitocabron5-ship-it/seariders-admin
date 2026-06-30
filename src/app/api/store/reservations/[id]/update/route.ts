@@ -19,6 +19,7 @@ import {
 } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import {
+  countLockedVisibleContracts,
   countReadyVisibleContracts,
   listMissingLogicalUnits,
   pickVisibleContractsByLogicalUnit,
@@ -574,13 +575,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     serviceCategory: existing.service?.category ?? null,
     items: existing.items ?? [],
   });
-  const visibleContracts = pickVisibleContractsByLogicalUnit(existing.contracts ?? [], existingRequiredUnits);
-  const lockedContractsCount = visibleContracts.filter(
-    (contract) => contract.status === "READY" || contract.status === "SIGNED"
-  ).length;
-  const signedContractsCount = visibleContracts.filter(
-    (contract) => contract.status === "SIGNED"
-  ).length;
+  const lockedContractsCount = countLockedVisibleContracts(existing.contracts ?? [], existingRequiredUnits);
+  const signedContractsCount = lockedContractsCount;
   const desiredReadyAt =
     existing.status === ReservationStatus.READY_FOR_PLATFORM
       ? existing.readyForPlatformAt ?? existing.paymentCompletedAt ?? new Date()
@@ -806,7 +802,7 @@ if (hasProItems) {
   if (lockedContractsCount > 0) {
     if (!isScheduleOnlyChange && protectedNonScheduleFieldsChanged) {
       return new NextResponse(
-        "La reserva tiene contratos preparados o firmados. Solo puedes reagendar fecha y hora sin tocar pax, datos legales ni composición de la reserva.",
+        "La reserva tiene contratos firmados. Solo puedes reagendar fecha y hora sin tocar pax, datos legales ni composición de la reserva.",
         { status: 409 }
       );
     }
@@ -1130,6 +1126,7 @@ if (hasProItems) {
     }
 
     await tx.reservation.update({ where: { id }, data, select: { id: true } });
+    // Fase 2: este sync solo reconcilia unidades requeridas; revalidar DRAFT/READY queda para Fase 3.
     await syncReservationContractsTx(tx, {
       reservationId: id,
       requiredUnits: nextRequiredContractUnits,
@@ -1199,7 +1196,7 @@ if (hasProItems) {
   if (!priceSensitiveChanged) {
     if (lockedContractsCount > 0 && !isScheduleOnlyChange && protectedNonScheduleFieldsChanged) {
       return new NextResponse(
-        "La reserva tiene contratos preparados o firmados. Solo puedes reagendar fecha y hora sin tocar pax, datos legales ni composición de la reserva.",
+        "La reserva tiene contratos firmados. Solo puedes reagendar fecha y hora sin tocar pax, datos legales ni composición de la reserva.",
         { status: 409 }
       );
     }
@@ -1511,6 +1508,7 @@ if (hasProItems) {
       },
       select: { id: true },
     });
+    // Fase 2: este sync solo reconcilia unidades requeridas; revalidar DRAFT/READY queda para Fase 3.
     await syncReservationContractsTx(tx, {
       reservationId: id,
       requiredUnits: nextSingleRequiredContractUnits,
