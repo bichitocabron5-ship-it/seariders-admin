@@ -17,6 +17,7 @@ import type {
   Option,
   PackPreview,
   RecoveredContractProfile,
+  ReservationContractsResponse,
   ServiceMain,
 } from "../types";
 import { errorMessage, isAbortError } from "../utils/errors";
@@ -49,7 +50,7 @@ export function useContractsState(args: {
 
   const [contractDrafts, setContractDrafts] = useState<ContractDraftState>({});
 
-  const loadContractsBlock = useCallback(async (reservationId: string) => {
+  const loadContractsBlock = useCallback(async (reservationId: string): Promise<ReservationContractsResponse | null> => {
     try {
       setContractsBusy(true);
       setContractsError(null);
@@ -92,8 +93,10 @@ export function useContractsState(args: {
       }
 
       setContractDrafts(draftState);
+      return data;
     } catch (e: unknown) {
       setContractsError(errorMessage(e, "Error cargando contratos"));
+      return null;
     } finally {
       setContractsBusy(false);
     }
@@ -104,7 +107,7 @@ export function useContractsState(args: {
       setContractsError(null);
       setContractsLoading(true);
       try {
-        await loadContractsBlock(reservationId);
+        return await loadContractsBlock(reservationId);
       } finally {
         setContractsLoading(false);
       }

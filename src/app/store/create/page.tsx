@@ -993,7 +993,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     !customerPhone.trim()
   );
   const contractsReadyForFormalize =
-    !isMigrateMode || requiredUnits <= 0 || readyCount >= requiredUnits;
+    !prefillReservationId || requiredUnits <= 0 || readyCount >= requiredUnits;
 
   const customerFieldErrors = {
     firstName: firstName.trim() ? null : "Indica el nombre.",
@@ -1025,6 +1025,13 @@ const { discountPreview, discountLoading } = useDiscountPreview({
 
   const primaryDisabledReason = hardPrimaryDisabledReason ?? softPrimaryBlockedReason;
   const primaryDisabled = Boolean(hardPrimaryDisabledReason);
+  const primaryActionBlockedReason =
+    hardPrimaryDisabledReason ??
+    (requiredFormalizeMissing
+      ? "Para formalizar faltan datos mínimos (nombre y teléfono)."
+      : requiredCreateMissing
+        ? "Para crear faltan datos mínimos (nombre y teléfono)."
+        : null);
 
   const countryOptions = useMemo(() => getCountryOptionsEs(), []);
   const selectedCountryOpt = useMemo(
@@ -1492,13 +1499,114 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     );
   }
 
-  async function createReservation(e: FormEvent) {
-    e.preventDefault();
+  function focusContractsSection() {
+    const el = document.getElementById("contracts");
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.history.replaceState({}, "", "#contracts");
+  }
+
+  function firstVisibleContractText(
+    readValue: (contract: (typeof contracts)[number]) => string | null | undefined
+  ) {
+    const activeContract = [...contracts]
+      .filter((contract) => contract.status !== "VOID")
+      .sort(
+        (left, right) =>
+          (left.logicalUnitIndex ?? left.unitIndex) -
+          (right.logicalUnitIndex ?? right.unitIndex)
+      )[0];
+    return String(activeContract ? readValue(activeContract) ?? "" : "").trim();
+  }
+
+  async function saveCurrentReservationForContractSync(
+    reservationId: string,
+    confirmSignedContractReduction: boolean
+  ) {
+    const syncLicenseSchool = licenseSchool || firstVisibleContractText((contract) => contract.licenseSchool);
+    const syncLicenseType = licenseType || firstVisibleContractText((contract) => contract.licenseType);
+    const syncLicenseNumber = licenseNumber || firstVisibleContractText((contract) => contract.licenseNumber);
+
+    return await submitStoreCreateEditFlow({
+      editReservationId: reservationId,
+      customerName,
+      quantity,
+      pax,
+      isVoucherFormalizeFlow,
+      serviceId,
+      optionId,
+      channelId,
+      cartItemsLength: cartItems.length,
+      canCreate,
+      uiMode,
+      dateStr,
+      todayYmd: todayMadridYMD(),
+      isLicense: Boolean(isLicense),
+      jetskiLicenseMode,
+      pricingTier,
+      timeStr,
+      companions,
+      cartItems,
+      customerPhone,
+      customerEmail,
+      customerCountry,
+      customerAddress,
+      customerPostalCode,
+      customerBirthDate,
+      customerDocType,
+      customerDocNumber,
+      marketingSource,
+      licenseSchool: syncLicenseSchool,
+      licenseType: syncLicenseType,
+      licenseNumber: syncLicenseNumber,
+      confirmSignedContractReduction,
+      promoCode: applyPromo ? selectedPromoCode || null : null,
+    });
+  }
+
+  async function refreshActiveContractsAfterReservationSync(
+    reservationId: string,
+    fallback?: { requiredUnits?: number; readyCount?: number } | null
+  ) {
+    const refreshed = await refreshContracts(reservationId);
+    return {
+      requiredUnits: Number(refreshed?.requiredUnits ?? fallback?.requiredUnits ?? 0),
+      readyCount: Number(refreshed?.readyCount ?? fallback?.readyCount ?? 0),
+    };
+  }
+
+  function ensureActiveContractsReadyForFormalize(progress: {
+    requiredUnits: number;
+    readyCount: number;
+  }) {
+    if (progress.requiredUnits <= 0 || progress.readyCount >= progress.requiredUnits) {
+      return true;
+    }
+
+    setError(`Faltan contratos por completar: ${progress.readyCount}/${progress.requiredUnits} listos.`);
+    focusContractsSection();
+    return false;
+  }
+
+  async function syncAndValidateBeforeFormalize(
+    reservationId: string,
+    confirmSignedContractReduction: boolean
+  ) {
+    const updateResult = await saveCurrentReservationForContractSync(
+      reservationId,
+      confirmSignedContractReduction
+    );
+    const progress = await refreshActiveContractsAfterReservationSync(reservationId, updateResult);
+    return ensureActiveContractsReadyForFormalize(progress);
+  }
+
+  async function createReservation(e?: FormEvent) {
+    e?.preventDefault();
     if (submitInFlightRef.current || submitBusy) return;
     setSubmitAttempted(true);
     setError(null);
     setSubmitSuccess(null);
-    if (primaryDisabledReason) return;
+    if (primaryActionBlockedReason) return;
     submitInFlightRef.current = true;
     setSubmitBusy(true);
     setAvailabilityTick((x) => x + 1);
@@ -1518,6 +1626,12 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       }
 
       if (shouldForceFormalizeBooth && editReservationId) {
+        const contractsReady = await syncAndValidateBeforeFormalize(
+          editReservationId,
+          confirmSignedContractReduction
+        );
+        if (!contractsReady) return;
+
         await submitStoreCreateMigrateFlow({
           migrateReservationId: editReservationId,
           customerName,
@@ -1558,41 +1672,12 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       }
 
       if (isEditMode && editReservationId) {
-        await submitStoreCreateEditFlow({
+        const updateResult = await saveCurrentReservationForContractSync(
           editReservationId,
-          customerName,
-          quantity,
-          pax,
-          isVoucherFormalizeFlow,
-          serviceId,
-          optionId,
-          channelId,
-          cartItemsLength: cartItems.length,
-          canCreate,
-          uiMode,
-          dateStr,
-          todayYmd: todayMadridYMD(),
-          isLicense: Boolean(isLicense),
-          jetskiLicenseMode,
-          pricingTier,
-          timeStr,
-          companions,
-          cartItems,
-          customerPhone,
-          customerEmail,
-          customerCountry,
-          customerAddress,
-          customerPostalCode,
-          customerBirthDate,
-          customerDocType,
-          customerDocNumber,
-          marketingSource,
-          licenseSchool,
-          licenseType,
-          licenseNumber,
-          confirmSignedContractReduction,
-          promoCode: applyPromo ? selectedPromoCode || null : null,
-        });
+          confirmSignedContractReduction
+        );
+        await refreshActiveContractsAfterReservationSync(editReservationId, updateResult);
+        await refreshPrefill();
         router.push("/store");
         return;
       }
@@ -1603,6 +1688,12 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       }
 
       if (isMigrateMode && migrateReservationId) {
+        const contractsReady = await syncAndValidateBeforeFormalize(
+          migrateReservationId,
+          confirmSignedContractReduction
+        );
+        if (!contractsReady) return;
+
         await submitStoreCreateMigrateFlow({
           migrateReservationId,
           customerName,
@@ -2084,7 +2175,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
           ) : null}
         </div>
 
-        <form onSubmit={createReservation} style={{ padding: "18px clamp(18px, 3vw, 24px) 24px", display: "grid", gap: 16 }}>
+        <form noValidate onSubmit={createReservation} style={{ padding: "18px clamp(18px, 3vw, 24px) 24px", display: "grid", gap: 16 }}>
           {loadingCatalog ? <div style={{ color: "#64748b" }}>Cargando catálogo...</div> : null}
 
           {isVoucherFormalizeFlow ? (
@@ -2182,7 +2273,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
               }}
               onRefresh={() =>
                 prefillReservationId
-                  ? refreshContracts(prefillReservationId)
+                  ? refreshContracts(prefillReservationId).then(() => undefined)
                   : Promise.resolve()
               }
             />
@@ -2287,6 +2378,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             }
             workflowActionTargetId={workflowActionTargetId}
             onWorkflowAction={handleWorkflowAction}
+            onPrimaryAction={() => void createReservation()}
           />
         </form>
       </section>
