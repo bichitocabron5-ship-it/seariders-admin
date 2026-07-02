@@ -8,10 +8,6 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { countReadyVisibleContracts, pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
 import { resolveReadyContractCountWithManualAttachments } from "@/lib/manual-contract-attachments";
-import {
-  debugReservationContractFlow,
-  summarizeReservationContractsDebug,
-} from "@/lib/reservation-contract-debug";
 
 export const runtime = "nodejs";
 
@@ -218,13 +214,5 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     contracts,
   };
 
-  debugReservationContractFlow("contracts.get.response", {
-    reservationId: res.id,
-    requiredUnits,
-    returnedContractsCount: contracts.length,
-    returnedContracts: summarizeReservationContractsDebug(contracts),
-  });
-
   return NextResponse.json(response);
 }
-

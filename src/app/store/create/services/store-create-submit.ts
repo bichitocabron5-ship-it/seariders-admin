@@ -1,5 +1,4 @@
 import { clampBps } from "@/lib/commission";
-import { debugReservationEditFrontendFlow } from "../utils/reservation-edit-debug";
 
 type SubmitCartItem = {
   serviceId: string;
@@ -58,24 +57,6 @@ export function buildEditUpdateBody(args: {
   licenseNumber: string;
   confirmSignedContractReduction?: boolean;
 }) {
-  debugReservationEditFrontendFlow("buildEditUpdateBody.args", {
-    serviceId: args.serviceId,
-    optionId: args.optionId,
-    quantity: args.quantity,
-    pax: args.pax,
-    companions: args.companions,
-    channelId: args.channelId,
-    cartItemsLength: args.cartItems.length,
-    cartItems: args.cartItems.map((item) => ({
-      serviceId: item.serviceId,
-      optionId: item.optionId,
-      quantity: item.quantity,
-      pax: item.pax,
-      promoCode: item.promoCode ?? null,
-    })),
-    singlePromoCode: args.singlePromoCode ?? null,
-  });
-
   const body: Record<string, unknown> = {
     pax: Number(args.pax),
     isLicense: Boolean(args.isLicense),

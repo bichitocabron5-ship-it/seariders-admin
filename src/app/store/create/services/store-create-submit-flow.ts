@@ -3,7 +3,6 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 import { ensureOkResponse, throwValidationError } from "../utils/errors";
 import { buildCreateBody, buildEditUpdateBody, buildFormalizeBody, buildItemsToSend } from "./store-create-submit";
 import { validateBeforeSubmit, validateItemsForCreate } from "./store-create-validation";
-import { debugReservationEditFrontendFlow } from "../utils/reservation-edit-debug";
 
 type SharedArgs = {
   customerName: string;
@@ -72,25 +71,6 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
     todayYmd: args.todayYmd,
   });
 
-  debugReservationEditFrontendFlow("submitStoreCreateEditFlow.beforeBuildEditUpdateBody", {
-    editReservationId: args.editReservationId,
-    uiMode: args.uiMode,
-    serviceId: args.serviceId,
-    optionId: args.optionId,
-    quantity: args.quantity,
-    pax: args.pax,
-    companions: args.companions,
-    channelId: args.channelId,
-    cartItemsLength: args.cartItems.length,
-    cartItems: args.cartItems.map((item) => ({
-      serviceId: item.serviceId,
-      optionId: item.optionId,
-      quantity: item.quantity,
-      pax: item.pax,
-      promoCode: item.promoCode ?? null,
-    })),
-  });
-
   const body = buildEditUpdateBody({
     pax: args.pax,
     isLicense: Boolean(args.isLicense),
@@ -120,12 +100,6 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
     confirmSignedContractReduction: args.confirmSignedContractReduction,
   });
   const updateUrl = `/api/store/reservations/${args.editReservationId}/update`;
-
-  debugReservationEditFrontendFlow("submitStoreCreateEditFlow.postUpdate.body", {
-    url: updateUrl,
-    method: "POST",
-    body,
-  });
 
   const res = await fetch(updateUrl, {
     method: "POST",

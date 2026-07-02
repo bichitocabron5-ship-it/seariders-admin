@@ -5,7 +5,6 @@ import React from "react";
 import { PhoneWithCountryField } from "@/components/customer-inputs";
 import type { CountryOption } from "@/lib/countries";
 import type { Channel, JetskiLicenseMode, Option, PackPreview, PricingTier, ServiceMain } from "../types";
-import { debugReservationEditFrontendFlow } from "../utils/reservation-edit-debug";
 
 function euros(cents: number) {
   return `${(Number(cents || 0) / 100).toFixed(2)} EUR`;
@@ -133,29 +132,6 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
     hasError
       ? { ...inputStyle, border: "1px solid #ef4444", background: "#fff5f5" }
       : inputStyle;
-  const trackedFormValues = {
-    category: values.category,
-    serviceId: values.serviceId,
-    optionId: values.optionId,
-    quantity: values.quantity,
-  };
-  const debugEditFormChange = (
-    field: "category" | "serviceId" | "optionId" | "quantity",
-    rawValue: string,
-    nextValue: string | number
-  ) => {
-    if (!flags.isEditMode) return;
-    debugReservationEditFrontendFlow("form.onChange.after", {
-      field,
-      rawValue,
-      nextValue,
-      formValuesAfterOnChange: {
-        ...trackedFormValues,
-        [field]: nextValue,
-      },
-      previousRenderValues: trackedFormValues,
-    });
-  };
 
   return (
     <section style={{ display: "grid", gap: 14 }}>
@@ -312,11 +288,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
             <select
               disabled={flags.isVoucherFormalizeFlow}
               value={values.category}
-              onChange={(e) => {
-                const next = e.target.value;
-                handlers.onCategoryChange(next);
-                debugEditFormChange("category", next, next);
-              }}
+              onChange={(e) => handlers.onCategoryChange(e.target.value)}
               style={inputStyle}
             >
               <option value="">Todas</option>
@@ -330,11 +302,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
             <span>Servicio</span>
             <select
               value={values.serviceId}
-              onChange={(e) => {
-                const next = e.target.value;
-                handlers.onServiceChange(next);
-                debugEditFormChange("serviceId", next, next);
-              }}
+              onChange={(e) => handlers.onServiceChange(e.target.value)}
               disabled={flags.isVoucherFormalizeFlow}
               style={inputStyle}
             >
@@ -363,11 +331,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
             <span>Opción</span>
             <select
               value={values.optionId}
-              onChange={(e) => {
-                const next = e.target.value;
-                handlers.onOptionChange(next);
-                debugEditFormChange("optionId", next, next);
-              }}
+              onChange={(e) => handlers.onOptionChange(e.target.value)}
               disabled={flags.isVoucherFormalizeFlow}
               style={inputStyle}
             >
@@ -421,12 +385,7 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
               type="number"
               min={1}
               value={values.quantity}
-              onChange={(e) => {
-                const raw = e.target.value;
-                const next = Number(raw);
-                handlers.onQuantityChange(next);
-                debugEditFormChange("quantity", raw, next);
-              }}
+              onChange={(e) => handlers.onQuantityChange(Number(e.target.value))}
               disabled={flags.isVoucherFormalizeFlow}
               style={inputStyle}
             />

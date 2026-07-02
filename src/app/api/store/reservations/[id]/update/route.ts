@@ -28,10 +28,6 @@ import {
   resolveReservationContractSyncTarget,
   syncReservationContractsTx,
 } from "@/lib/reservation-contract-sync";
-import {
-  debugReservationContractFlow,
-  summarizeReservationContractsDebug,
-} from "@/lib/reservation-contract-debug";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
@@ -115,21 +111,6 @@ function buildComparableComposition(
     );
 }
 
-function debugUpdateEndpointResponse(reservationId: string, response: unknown) {
-  const payload = response as {
-    requiredUnits?: unknown;
-    contractsState?: unknown;
-    contracts?: unknown;
-  };
-
-  debugReservationContractFlow("update.response", {
-    reservationId,
-    requiredUnits: payload.requiredUnits ?? null,
-    contractsState: payload.contractsState ?? null,
-    activeContractsLength: Array.isArray(payload.contracts) ? payload.contracts.length : null,
-  });
-}
-
 async function ensureContractsTx(
   tx: Prisma.TransactionClient,
   reservationId: string,
@@ -164,25 +145,9 @@ async function ensureContractsTx(
     items: reservation.items ?? [],
   });
 
-  debugReservationContractFlow("update.after-reservation-save", {
-    reservationId,
-    storedQuantity: reservation.quantity ?? 0,
-    requiredUnits,
-    activeContracts: summarizeReservationContractsDebug(
-      pickVisibleContractsByLogicalUnit(reservation.contracts ?? [], requiredUnits)
-    ),
-  });
-
   const syncTarget = resolveReservationContractSyncTarget({
     serviceCategory: reservation.service?.category ?? null,
     isLicense: Boolean(reservation.isLicense),
-  });
-
-  debugReservationContractFlow("update.before-syncReservationContractsTx.call", {
-    reservationId,
-    requiredUnits,
-    materialChange: Boolean(options.materialChange),
-    syncTarget,
   });
 
   await syncReservationContractsTx(tx, {
@@ -384,22 +349,6 @@ async function rescheduleReservationOnly(args: {
       throw new Error("La reserva cancelada, en curso o completada no se puede editar.");
     }
 
-    const currentRequiredUnits = computeRequiredContractUnits({
-      quantity: current.quantity ?? 0,
-      isLicense: Boolean(current.isLicense),
-      serviceCategory: current.service?.category ?? null,
-      items: current.items ?? [],
-    });
-
-    debugReservationContractFlow("update.before-reservation-update", {
-      reservationId,
-      quantity: current.quantity ?? 0,
-      requiredUnits: currentRequiredUnits,
-      activeContracts: summarizeReservationContractsDebug(
-        pickVisibleContractsByLogicalUnit(current.contracts ?? [], currentRequiredUnits)
-      ),
-    });
-
     const tz = BUSINESS_TZ;
     let activityDateYmd = body.activityDate ?? body.date ?? null;
     let timeHm: string | null | undefined = body.time;
@@ -511,7 +460,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         session,
         requestContext,
       });
-      debugUpdateEndpointResponse(id, result);
       return NextResponse.json(result);
     } catch (error: unknown) {
       return toRouteErrorResponse(error);
@@ -636,16 +584,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     isLicense: Boolean(existing.isLicense),
     serviceCategory: existing.service?.category ?? null,
     items: existing.items ?? [],
-  });
-
-  debugReservationContractFlow("update.before-reservation-update", {
-    reservationId: id,
-    quantity: existing.quantity ?? 0,
-    requestedQuantity: b.quantity ?? null,
-    requiredUnits: existingRequiredUnits,
-    activeContracts: summarizeReservationContractsDebug(
-      pickVisibleContractsByLogicalUnit(existing.contracts ?? [], existingRequiredUnits)
-    ),
   });
 
   const lockedContractsCount = countLockedVisibleContracts(existing.contracts ?? [], existingRequiredUnits);
@@ -829,7 +767,6 @@ if (isScheduleOnlyChange) {
       session,
       requestContext,
     });
-    debugUpdateEndpointResponse(id, result);
     return NextResponse.json(result);
   } catch (error: unknown) {
     return toRouteErrorResponse(error);
@@ -1220,7 +1157,6 @@ if (hasProItems) {
   }
 
   const response = { ok: true, ...result };
-  debugUpdateEndpointResponse(id, response);
   return NextResponse.json(response);
 }
 
@@ -1335,7 +1271,6 @@ if (hasProItems) {
     }
 
     const response = { ok: true, id, ...contracts };
-    debugUpdateEndpointResponse(id, response);
     return NextResponse.json(response);
   }
 
@@ -1589,7 +1524,6 @@ if (hasProItems) {
   }
 
   const response = { ok: true, ...result };
-  debugUpdateEndpointResponse(id, response);
   return NextResponse.json(response);
 }
 

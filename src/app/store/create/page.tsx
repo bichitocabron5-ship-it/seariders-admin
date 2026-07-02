@@ -30,7 +30,6 @@ import {
 import { useAvailability, useContractsState, useCustomerProfileSearch, useDiscountPreview, useReservationPrefill, useStoreCreateCatalog, useStoreCreateSelection } from "./hooks/store-create-hooks";
 import { submitStoreCreateCreateFlow, submitStoreCreateEditFlow, submitStoreCreateMigrateFlow } from "./services/store-create-submit-flow";
 import { errorMessage } from "./utils/errors";
-import { debugReservationEditFrontendFlow } from "./utils/reservation-edit-debug";
 import type { CartItem, Channel, JetskiLicenseMode, Option, RecoveredContractProfile, ServiceMain, StoreCreateDraft, UIMode } from "./types";
 import type { AssetAvailability } from "../services/assets";
 import { resolvePhoneFieldState } from "@/lib/phone-country";
@@ -542,27 +541,6 @@ function StoreCreatePageInner() {
     durationMinutes: selectedOpt?.durationMinutes ?? null,
     quantity,
   });
-
-  useEffect(() => {
-    if (!isEditMode) return;
-    debugReservationEditFrontendFlow("react.state.afterSetState", {
-      category,
-      selectedCategory,
-      serviceId,
-      optionId,
-      quantity,
-      pax,
-      cartItemsLength: cartItems.length,
-      cartItems: cartItems.map((item) => ({
-        id: item.id,
-        serviceId: item.serviceId,
-        optionId: item.optionId,
-        quantity: item.quantity,
-        pax: item.pax,
-        promoCode: item.promoCode ?? null,
-      })),
-    });
-  }, [cartItems, category, isEditMode, optionId, pax, quantity, selectedCategory, serviceId]);
 
   const isJetskiSelection = selectedCategory === "JETSKI";
   const pricingTier: "STANDARD" | "RESIDENT" =
@@ -1548,28 +1526,6 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     const syncLicenseSchool = licenseSchool || firstVisibleContractText((contract) => contract.licenseSchool);
     const syncLicenseType = licenseType || firstVisibleContractText((contract) => contract.licenseType);
     const syncLicenseNumber = licenseNumber || firstVisibleContractText((contract) => contract.licenseNumber);
-
-    debugReservationEditFrontendFlow("react.state.usedForBuildEditUpdateBody", {
-      reservationId,
-      confirmSignedContractReduction,
-      category,
-      selectedCategory,
-      serviceId,
-      optionId,
-      quantity,
-      pax,
-      companions,
-      channelId,
-      cartItemsLength: cartItems.length,
-      cartItems: cartItems.map((item) => ({
-        id: item.id,
-        serviceId: item.serviceId,
-        optionId: item.optionId,
-        quantity: item.quantity,
-        pax: item.pax,
-        promoCode: item.promoCode ?? null,
-      })),
-    });
 
     return await submitStoreCreateEditFlow({
       editReservationId: reservationId,
