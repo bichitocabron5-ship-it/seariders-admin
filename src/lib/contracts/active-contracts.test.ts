@@ -57,3 +57,12 @@ test("VOID y superseded no aparecen como contratos activos", () => {
   assert.deepEqual(listMissingLogicalUnits(contracts, 2), [1, 2]);
   assert.equal(countReadyVisibleContracts(contracts, 2), 0);
 });
+
+test("requiredUnits 0 no expone contratos activos aunque existan filas antiguas", () => {
+  const contracts = [contract("DRAFT", 1), contract("READY", 2), contract("SIGNED", 3)];
+
+  assert.deepEqual(pickVisibleContractsByLogicalUnit(contracts, 0), []);
+  assert.deepEqual(listMissingLogicalUnits(contracts, 0), []);
+  assert.equal(countReadyVisibleContracts(contracts, 0), 0);
+  assert.equal(countLockedVisibleContracts(contracts, 0), 0);
+});

@@ -153,6 +153,44 @@ test("sync de 2 a 1 sin firmados invalida el contrato sobrante", async () => {
   assert.ok(surplus?.supersededAt);
 });
 
+test("sync JETSKI a actividad sin contrato invalida todos los no firmados y no recrea", async () => {
+  const { tx, rows } = makeTx([
+    row("contract-1", "DRAFT", 1, { templateCode: "JETSKI_NO_LICENSE" }),
+    row("contract-2", "READY", 2, { templateCode: "JETSKI_NO_LICENSE" }),
+  ]);
+
+  const result = await syncReservationContractsTx(tx, {
+    reservationId: "reservation-1",
+    requiredUnits: 0,
+    templateCode: null,
+    requiresLicense: false,
+    expectedResourceKind: null,
+  });
+
+  assert.equal(result.createdContracts, 0);
+  assert.equal(result.voidedContracts, 2);
+  assert.equal(rows.length, 2);
+  assert.equal(rows.find((item) => item.id === "contract-1")?.status, "VOID");
+  assert.equal(rows.find((item) => item.id === "contract-2")?.status, "VOID");
+  assert.ok(rows.find((item) => item.id === "contract-1")?.supersededAt);
+  assert.ok(rows.find((item) => item.id === "contract-2")?.supersededAt);
+});
+
+test("sync no crea contratos cuando requiredUnits es 0", async () => {
+  const { tx, rows } = makeTx([]);
+
+  const result = await syncReservationContractsTx(tx, {
+    reservationId: "reservation-1",
+    requiredUnits: 0,
+    templateCode: null,
+    requiresLicense: false,
+    expectedResourceKind: null,
+  });
+
+  assert.equal(result.createdContracts, 0);
+  assert.equal(rows.length, 0);
+});
+
 test("sync de 2 a 1 con 1 SIGNED conserva firmado e invalida READY", async () => {
   const { tx, rows } = makeTx([
     row("signed-1", "SIGNED", 1),

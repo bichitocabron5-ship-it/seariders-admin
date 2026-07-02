@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 
 import {
   commercialPricingStateChanged,
+  getCommercialCommitmentBlockers,
   hasSufficientCommercialSnapshot,
+  hasCommercialRecalculationCommitment,
   isReservationCoveredByPrepaidVoucher,
   netPaidServiceCents,
   normalizeCommercialPricingState,
@@ -31,6 +33,105 @@ const completeSnapshot = {
 
 test("commercial snapshot is sufficient when reservation and item price snapshots are present", () => {
   assert.equal(hasSufficientCommercialSnapshot(completeSnapshot), true);
+});
+
+function commercialCommitmentArgs(overrides: Partial<Parameters<typeof getCommercialCommitmentBlockers>[0]> = {}) {
+  return {
+    status: "WAITING",
+    formalizedAt: null,
+    snapshot: completeSnapshot,
+    payments: [],
+    signedContractsCount: 0,
+    commissionLines: [],
+    ...overrides,
+  };
+}
+
+test("BOOTH commercial snapshot without real commitment allows recalculation path", () => {
+  const args = commercialCommitmentArgs({
+    snapshot: {
+      ...completeSnapshot,
+      giftVoucherId: null,
+      passVoucherId: null,
+      passConsumeId: null,
+    },
+  });
+
+  assert.deepEqual(getCommercialCommitmentBlockers(args), []);
+  assert.equal(hasCommercialRecalculationCommitment(args), false);
+});
+
+test("commercial snapshot with real payment blocks recalculation", () => {
+  assert.deepEqual(
+    getCommercialCommitmentBlockers(
+      commercialCommitmentArgs({
+        payments: [{ amountCents: 4_000, isDeposit: false, direction: "IN" }],
+      })
+    ),
+    ["PAYMENT"]
+  );
+});
+
+test("commercial snapshot with signed contract blocks recalculation", () => {
+  assert.deepEqual(
+    getCommercialCommitmentBlockers(
+      commercialCommitmentArgs({
+        signedContractsCount: 1,
+      })
+    ),
+    ["SIGNED_CONTRACT"]
+  );
+});
+
+test("commercial snapshot with voucher, pass, or gift blocks recalculation", () => {
+  assert.deepEqual(
+    getCommercialCommitmentBlockers(
+      commercialCommitmentArgs({
+        snapshot: { ...completeSnapshot, giftVoucherId: "gift_1" },
+      })
+    ),
+    ["PREPAID_VOUCHER"]
+  );
+
+  assert.deepEqual(
+    getCommercialCommitmentBlockers(
+      commercialCommitmentArgs({
+        snapshot: { ...completeSnapshot, passVoucherId: "pass_1" },
+      })
+    ),
+    ["PREPAID_VOUCHER"]
+  );
+
+  assert.deepEqual(
+    getCommercialCommitmentBlockers(
+      commercialCommitmentArgs({
+        snapshot: { ...completeSnapshot, passConsumeId: "consume_1" },
+      })
+    ),
+    ["PREPAID_VOUCHER"]
+  );
+});
+
+test("commercial snapshot with READY_FOR_PLATFORM status blocks recalculation", () => {
+  assert.deepEqual(
+    getCommercialCommitmentBlockers(
+      commercialCommitmentArgs({
+        status: "READY_FOR_PLATFORM",
+      })
+    ),
+    ["OPERATIONAL_STATUS"]
+  );
+});
+
+test("commercial snapshot with paid commission blocks recalculation", () => {
+  assert.deepEqual(
+    getCommercialCommitmentBlockers(
+      commercialCommitmentArgs({
+        commissionLines: [{ status: "PAID" }],
+      })
+    ),
+    ["COMMISSION_PAID"]
+  );
 });
 
 test("formalize preserves a full paid promo snapshot so pending stays zero", () => {

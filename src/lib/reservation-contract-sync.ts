@@ -5,6 +5,12 @@ import {
   type ReservationContractPreparedResourceKind,
   type ReservationContractSyncBlocker,
 } from "@/lib/reservation-contract-sync-plan";
+import {
+  RESERVATION_CONTRACT_DEBUG,
+  debugReservationContractFlow,
+  summarizeReservationContractBucketsDebug,
+  summarizeReservationContractsDebug,
+} from "@/lib/reservation-contract-debug";
 
 type ContractRow = {
   id: string;
@@ -253,6 +259,21 @@ export async function syncReservationContractsTx(
     blockSignedOnMaterialChange: Boolean(args.blockSignedOnMaterialChange),
   });
 
+  debugReservationContractFlow("syncReservationContractsTx.before-apply", {
+    reservationId: args.reservationId,
+    requiredUnits,
+    target,
+    materialChange: Boolean(args.materialChange),
+    blockSignedOnMaterialChange: Boolean(args.blockSignedOnMaterialChange),
+    existingContracts: summarizeReservationContractsDebug(contracts),
+    planReservationContractSync: plan,
+    keep: plan.keep,
+    create: plan.create,
+    void: plan.void,
+    reset: plan.reset,
+    blockers: plan.blockers,
+  });
+
   if (plan.blockers.length > 0) {
     throw new ReservationContractSyncBlockedError(plan.blockers);
   }
@@ -293,6 +314,27 @@ export async function syncReservationContractsTx(
         templateCode: item.templateCode,
       })),
       skipDuplicates: true,
+    });
+  }
+
+  if (RESERVATION_CONTRACT_DEBUG) {
+    const contractsAfterSync = await tx.reservationContract.findMany({
+      where: { reservationId: args.reservationId },
+      orderBy: { unitIndex: "asc" },
+      select: {
+        id: true,
+        unitIndex: true,
+        logicalUnitIndex: true,
+        status: true,
+        supersededAt: true,
+        createdAt: true,
+      },
+    });
+
+    debugReservationContractFlow("syncReservationContractsTx.after-apply", {
+      reservationId: args.reservationId,
+      requiredUnits,
+      contracts: summarizeReservationContractBucketsDebug(contractsAfterSync, requiredUnits),
     });
   }
 

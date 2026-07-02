@@ -1,4 +1,4 @@
-type ContractLike = {
+export type ContractLike = {
   unitIndex: number | null | undefined;
   logicalUnitIndex?: number | null | undefined;
   status?: string | null | undefined;

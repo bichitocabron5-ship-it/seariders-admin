@@ -20,14 +20,18 @@ import {
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import {
   countLockedVisibleContracts,
-  countReadyVisibleContracts,
   pickVisibleContractsByLogicalUnit,
 } from "@/lib/contracts/active-contracts";
+import { buildReservationContractProgress } from "@/lib/contracts/reservation-contract-progress";
 import {
   ReservationContractSyncBlockedError,
   resolveReservationContractSyncTarget,
   syncReservationContractsTx,
 } from "@/lib/reservation-contract-sync";
+import {
+  debugReservationContractFlow,
+  summarizeReservationContractsDebug,
+} from "@/lib/reservation-contract-debug";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
@@ -35,8 +39,8 @@ import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commis
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 import {
   commercialPricingStateChanged,
+  getCommercialCommitmentBlockers,
   isReservationCoveredByPrepaidVoucher,
-  shouldPreserveFormalizeCommercialSnapshot,
 } from "@/lib/reservation-commercial-snapshot";
 
 export const runtime = "nodejs";
@@ -111,6 +115,21 @@ function buildComparableComposition(
     );
 }
 
+function debugUpdateEndpointResponse(reservationId: string, response: unknown) {
+  const payload = response as {
+    requiredUnits?: unknown;
+    contractsState?: unknown;
+    contracts?: unknown;
+  };
+
+  debugReservationContractFlow("update.response", {
+    reservationId,
+    requiredUnits: payload.requiredUnits ?? null,
+    contractsState: payload.contractsState ?? null,
+    activeContractsLength: Array.isArray(payload.contracts) ? payload.contracts.length : null,
+  });
+}
+
 async function ensureContractsTx(
   tx: Prisma.TransactionClient,
   reservationId: string,
@@ -131,7 +150,7 @@ async function ensureContractsTx(
         },
       },
       contracts: {
-        select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+        select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
       },
     },
   });
@@ -145,24 +164,41 @@ async function ensureContractsTx(
     items: reservation.items ?? [],
   });
 
+  debugReservationContractFlow("update.after-reservation-save", {
+    reservationId,
+    storedQuantity: reservation.quantity ?? 0,
+    requiredUnits,
+    activeContracts: summarizeReservationContractsDebug(
+      pickVisibleContractsByLogicalUnit(reservation.contracts ?? [], requiredUnits)
+    ),
+  });
+
+  const syncTarget = resolveReservationContractSyncTarget({
+    serviceCategory: reservation.service?.category ?? null,
+    isLicense: Boolean(reservation.isLicense),
+  });
+
+  debugReservationContractFlow("update.before-syncReservationContractsTx.call", {
+    reservationId,
+    requiredUnits,
+    materialChange: Boolean(options.materialChange),
+    syncTarget,
+  });
+
   await syncReservationContractsTx(tx, {
     reservationId,
     requiredUnits,
-    ...resolveReservationContractSyncTarget({
-      serviceCategory: reservation.service?.category ?? null,
-      isLicense: Boolean(reservation.isLicense),
-    }),
+    ...syncTarget,
     materialChange: Boolean(options.materialChange),
   });
 
   const contracts = await tx.reservationContract.findMany({
     where: { reservationId },
-    select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+    orderBy: { unitIndex: "asc" },
+    select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
   });
 
-  const readyCount = countReadyVisibleContracts(contracts, requiredUnits);
-
-  return { requiredUnits, readyCount };
+  return buildReservationContractProgress(contracts, requiredUnits);
 }
 
 // mismo contrato que formalize
@@ -328,6 +364,7 @@ async function rescheduleReservationOnly(args: {
         },
         contracts: {
           select: {
+            id: true,
             unitIndex: true,
             logicalUnitIndex: true,
             status: true,
@@ -346,6 +383,22 @@ async function rescheduleReservationOnly(args: {
     ) {
       throw new Error("La reserva cancelada, en curso o completada no se puede editar.");
     }
+
+    const currentRequiredUnits = computeRequiredContractUnits({
+      quantity: current.quantity ?? 0,
+      isLicense: Boolean(current.isLicense),
+      serviceCategory: current.service?.category ?? null,
+      items: current.items ?? [],
+    });
+
+    debugReservationContractFlow("update.before-reservation-update", {
+      reservationId,
+      quantity: current.quantity ?? 0,
+      requiredUnits: currentRequiredUnits,
+      activeContracts: summarizeReservationContractsDebug(
+        pickVisibleContractsByLogicalUnit(current.contracts ?? [], currentRequiredUnits)
+      ),
+    });
 
     const tz = BUSINESS_TZ;
     let activityDateYmd = body.activityDate ?? body.date ?? null;
@@ -458,6 +511,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         session,
         requestContext,
       });
+      debugUpdateEndpointResponse(id, result);
       return NextResponse.json(result);
     } catch (error: unknown) {
       return toRouteErrorResponse(error);
@@ -490,6 +544,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       channelId: true,
       activityDate: true,
       scheduledTime: true,
+      formalizedAt: true,
       readyForPlatformAt: true,
       paymentCompletedAt: true,
       customerCountry: true,
@@ -561,6 +616,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           createdAt: true,
         },
       },
+      commissionLines: {
+        select: {
+          status: true,
+        },
+      },
     },
   });
   if (!existing) return new NextResponse("Reserva no existe", { status: 404 });
@@ -577,6 +637,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     serviceCategory: existing.service?.category ?? null,
     items: existing.items ?? [],
   });
+
+  debugReservationContractFlow("update.before-reservation-update", {
+    reservationId: id,
+    quantity: existing.quantity ?? 0,
+    requestedQuantity: b.quantity ?? null,
+    requiredUnits: existingRequiredUnits,
+    activeContracts: summarizeReservationContractsDebug(
+      pickVisibleContractsByLogicalUnit(existing.contracts ?? [], existingRequiredUnits)
+    ),
+  });
+
   const lockedContractsCount = countLockedVisibleContracts(existing.contracts ?? [], existingRequiredUnits);
   const signedContractsCount = lockedContractsCount;
   const desiredReadyAt =
@@ -694,9 +765,13 @@ const commercialCompositionChanged =
 const requestedChannelId = b.channelId !== undefined ? b.channelId ?? null : existing.channelId ?? null;
 const commercialChannelChanged = (existing.channelId ?? null) !== requestedChannelId;
 const isPrepaidVoucherReservation = isReservationCoveredByPrepaidVoucher(existing);
-const protectedCommercialSnapshot = shouldPreserveFormalizeCommercialSnapshot({
+const commercialCommitmentBlockers = getCommercialCommitmentBlockers({
+  status: existing.status,
+  formalizedAt: existing.formalizedAt,
   snapshot: existing,
   payments: existing.payments,
+  signedContractsCount,
+  commissionLines: existing.commissionLines,
 });
 const protectedCommercialChangeRequested =
   commercialCompositionChanged || commercialChannelChanged || commercialPricingChanged;
@@ -736,9 +811,9 @@ const protectedNonScheduleFieldsChanged =
 const isScheduleOnlyChange = scheduleChanged && !compositionChanged && !protectedNonScheduleFieldsChanged;
 const materialContractChange = scheduleChanged || compositionChanged || protectedNonScheduleFieldsChanged;
 
-if (protectedCommercialSnapshot && protectedCommercialChangeRequested) {
+if (protectedCommercialChangeRequested && commercialCommitmentBlockers.length > 0) {
   return new NextResponse(
-    "La reserva tiene snapshot comercial o pagos asociados. Cambiar actividad, cantidad, canal o tarifa requiere una accion explicita de recalculo.",
+    "La reserva tiene un compromiso comercial real asociado. Cambiar actividad, cantidad, canal o tarifa requiere una accion explicita de recalculo.",
     { status: 409 }
   );
 }
@@ -754,6 +829,7 @@ if (isScheduleOnlyChange) {
       session,
       requestContext,
     });
+    debugUpdateEndpointResponse(id, result);
     return NextResponse.json(result);
   } catch (error: unknown) {
     return toRouteErrorResponse(error);
@@ -1143,7 +1219,9 @@ if (hasProItems) {
     return toRouteErrorResponse(error);
   }
 
-  return NextResponse.json({ ok: true, ...result });
+  const response = { ok: true, ...result };
+  debugUpdateEndpointResponse(id, response);
+  return NextResponse.json(response);
 }
 
   // regla de negocio recomendada:
@@ -1256,7 +1334,9 @@ if (hasProItems) {
       return toRouteErrorResponse(error);
     }
 
-    return NextResponse.json({ ok: true, id, ...contracts });
+    const response = { ok: true, id, ...contracts };
+    debugUpdateEndpointResponse(id, response);
+    return NextResponse.json(response);
   }
 
   if (priceSensitiveChanged && isMultiOrPack) {
@@ -1508,6 +1588,8 @@ if (hasProItems) {
     return toRouteErrorResponse(error);
   }
 
-  return NextResponse.json({ ok: true, ...result });
+  const response = { ok: true, ...result };
+  debugUpdateEndpointResponse(id, response);
+  return NextResponse.json(response);
 }
 

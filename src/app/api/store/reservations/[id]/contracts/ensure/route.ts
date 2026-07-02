@@ -11,6 +11,11 @@ import {
   resolveReservationContractSyncTarget,
   syncReservationContractsTx,
 } from "@/lib/reservation-contract-sync";
+import {
+  RESERVATION_CONTRACT_DEBUG,
+  debugReservationContractFlow,
+  summarizeReservationContractsDebug,
+} from "@/lib/reservation-contract-debug";
 
 export const runtime = "nodejs";
 
@@ -27,11 +32,21 @@ async function requireStoreOrAdmin() {
   return null;
 }
 
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const session = await requireStoreOrAdmin();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { id } = await Promise.resolve(ctx.params);
+  const debugBody = RESERVATION_CONTRACT_DEBUG
+    ? await req.clone().json().catch(() => null)
+    : null;
+
+  debugReservationContractFlow("contracts.ensure.request", {
+    reservationId: id,
+    method: req.method,
+    url: req.url,
+    body: debugBody,
+  });
 
   try {
     const out = await prisma.$transaction(async (tx) => {
@@ -216,7 +231,16 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       return { reservationId: id, requiredUnits, readyCount, contracts: visibleContracts };
     });
 
-    return NextResponse.json({ ok: true, ...out });
+    const response = { ok: true, ...out };
+    debugReservationContractFlow("contracts.ensure.response", {
+      reservationId: id,
+      requiredUnits: out.requiredUnits,
+      readyCount: out.readyCount,
+      returnedContractsCount: out.contracts.length,
+      returnedContracts: summarizeReservationContractsDebug(out.contracts),
+    });
+
+    return NextResponse.json(response);
   } catch (e: unknown) {
     if (e instanceof ReservationContractSyncBlockedError) {
       return NextResponse.json(
