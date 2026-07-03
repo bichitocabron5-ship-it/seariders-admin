@@ -38,6 +38,10 @@ import {
   getCommercialCommitmentBlockers,
   isReservationCoveredByPrepaidVoucher,
 } from "@/lib/reservation-commercial-snapshot";
+import {
+  SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE,
+  hasSignedContractBlockingChange,
+} from "@/lib/signed-contract-formalization";
 
 export const runtime = "nodejs";
 
@@ -66,6 +70,52 @@ function sameInstant(a: Date | null | undefined, b: Date | null | undefined) {
   const at = a?.getTime() ?? null;
   const bt = b?.getTime() ?? null;
   return at === bt;
+}
+
+function dateKey(value: Date | null | undefined) {
+  if (!value) return null;
+  return value.toISOString().slice(0, 10);
+}
+
+function sameStringOrFallback(
+  next: string | null | undefined,
+  current: string | null | undefined,
+  fallback?: string | null
+) {
+  const normalizedNext = normalizeComparableOptionalString(next);
+  const normalizedFallback = normalizeComparableOptionalString(fallback);
+  return (
+    normalizedNext === normalizeComparableOptionalString(current) ||
+    (normalizedFallback !== null && normalizedNext === normalizedFallback)
+  );
+}
+
+function sameCountryOrFallback(
+  next: string | null | undefined,
+  current: string | null | undefined,
+  fallback?: string | null
+) {
+  const normalizeCountry = (value: string | null | undefined) =>
+    normalizeComparableOptionalString(value)?.toUpperCase() ?? null;
+  const normalizedNext = normalizeCountry(next);
+  const normalizedFallback = normalizeCountry(fallback);
+  return (
+    normalizedNext === normalizeCountry(current) ||
+    (normalizedFallback !== null && normalizedNext === normalizedFallback)
+  );
+}
+
+function sameDateOrFallback(
+  next: Date | null | undefined,
+  current: Date | null | undefined,
+  fallback?: Date | null
+) {
+  const normalizedNext = dateKey(next);
+  const normalizedFallback = dateKey(fallback);
+  return (
+    normalizedNext === dateKey(current) ||
+    (normalizedFallback !== null && normalizedNext === normalizedFallback)
+  );
 }
 
 function toYmdInTz(d: Date, tz: string) {
@@ -562,6 +612,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           status: true,
           supersededAt: true,
           createdAt: true,
+          driverPhone: true,
+          driverEmail: true,
+          driverCountry: true,
+          driverAddress: true,
+          driverPostalCode: true,
+          driverBirthDate: true,
+          driverDocType: true,
+          driverDocNumber: true,
+          licenseSchool: true,
+          licenseType: true,
+          licenseNumber: true,
         },
       },
       commissionLines: {
@@ -586,6 +647,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     items: existing.items ?? [],
   });
 
+  const existingVisibleContracts = pickVisibleContractsByLogicalUnit(existing.contracts ?? [], existingRequiredUnits);
+  const primaryContractFallback = existingVisibleContracts[0] ?? null;
+  const completeLicenseContractFallback =
+    existingVisibleContracts.find(
+      (contract) =>
+        Boolean(String(contract.licenseSchool ?? "").trim()) &&
+        Boolean(String(contract.licenseType ?? "").trim()) &&
+        Boolean(String(contract.licenseNumber ?? "").trim())
+    ) ?? null;
   const lockedContractsCount = countLockedVisibleContracts(existing.contracts ?? [], existingRequiredUnits);
   const signedContractsCount = lockedContractsCount;
   const desiredReadyAt =
@@ -729,25 +799,40 @@ const resolvedCustomerDocType =
 const resolvedCustomerDocNumber =
   customerDocNumber === undefined ? normalizeComparableOptionalString(existing.customerDocNumber) : customerDocNumber;
 const resolvedMarketing = marketing === undefined ? normalizeComparableOptionalString(existing.marketing) : marketing;
+const resolvedCompanionsCount = Number(b.companionsCount ?? existing.companionsCount ?? 0);
+const customerLegalFieldsChanged =
+  !sameStringOrFallback(resolvedCustomerPhone, existing.customerPhone, primaryContractFallback?.driverPhone) ||
+  !sameStringOrFallback(resolvedCustomerEmail, existing.customerEmail, primaryContractFallback?.driverEmail) ||
+  !sameCountryOrFallback(resolvedCustomerCountry, existing.customerCountry, primaryContractFallback?.driverCountry) ||
+  !sameStringOrFallback(resolvedCustomerAddress, existing.customerAddress, primaryContractFallback?.driverAddress) ||
+  !sameStringOrFallback(resolvedCustomerPostalCode, existing.customerPostalCode, primaryContractFallback?.driverPostalCode) ||
+  !sameDateOrFallback(resolvedCustomerBirthDate, existing.customerBirthDate, primaryContractFallback?.driverBirthDate) ||
+  !sameStringOrFallback(resolvedCustomerDocType, existing.customerDocType, primaryContractFallback?.driverDocType) ||
+  !sameStringOrFallback(resolvedCustomerDocNumber, existing.customerDocNumber, primaryContractFallback?.driverDocNumber) ||
+  normalizeComparableOptionalString(existing.marketing) !== resolvedMarketing;
+const licenseFieldsChanged =
+  !sameStringOrFallback(finalLicenseSchool, existing.licenseSchool, completeLicenseContractFallback?.licenseSchool) ||
+  !sameStringOrFallback(finalLicenseType, existing.licenseType, completeLicenseContractFallback?.licenseType) ||
+  !sameStringOrFallback(finalLicenseNumber, existing.licenseNumber, completeLicenseContractFallback?.licenseNumber);
 const protectedNonScheduleFieldsChanged =
   Number(existing.pax ?? 0) !== Number(b.pax ?? 0) ||
-  Number(existing.companionsCount ?? 0) !== Number(b.companionsCount ?? 0) ||
-  (existing.channelId ?? null) !== (b.channelId ?? null) ||
+  Number(existing.companionsCount ?? 0) !== resolvedCompanionsCount ||
+  (existing.channelId ?? null) !== requestedChannelId ||
   commercialPricingChanged ||
-  normalizeComparableOptionalString(existing.customerPhone) !== resolvedCustomerPhone ||
-  normalizeComparableOptionalString(existing.customerEmail) !== resolvedCustomerEmail ||
-  (normalizeComparableOptionalString(existing.customerCountry)?.toUpperCase() ?? null) !== resolvedCustomerCountry ||
-  normalizeComparableOptionalString(existing.customerAddress) !== resolvedCustomerAddress ||
-  normalizeComparableOptionalString(existing.customerPostalCode) !== resolvedCustomerPostalCode ||
-  !sameInstant(existing.customerBirthDate, resolvedCustomerBirthDate) ||
-  normalizeComparableOptionalString(existing.customerDocType) !== resolvedCustomerDocType ||
-  normalizeComparableOptionalString(existing.customerDocNumber) !== resolvedCustomerDocNumber ||
-  normalizeComparableOptionalString(existing.marketing) !== resolvedMarketing ||
-  normalizeComparableOptionalString(existing.licenseSchool) !== normalizeComparableOptionalString(finalLicenseSchool) ||
-  normalizeComparableOptionalString(existing.licenseType) !== normalizeComparableOptionalString(finalLicenseType) ||
-  normalizeComparableOptionalString(existing.licenseNumber) !== normalizeComparableOptionalString(finalLicenseNumber);
+  customerLegalFieldsChanged ||
+  licenseFieldsChanged;
 const isScheduleOnlyChange = scheduleChanged && !compositionChanged && !protectedNonScheduleFieldsChanged;
 const materialContractChange = scheduleChanged || compositionChanged || protectedNonScheduleFieldsChanged;
+
+if (
+  hasSignedContractBlockingChange({
+    hasSignedContracts: lockedContractsCount > 0,
+    compositionChanged,
+    protectedNonScheduleFieldsChanged,
+  })
+) {
+  return new NextResponse(SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE, { status: 409 });
+}
 
 if (protectedCommercialChangeRequested && commercialCommitmentBlockers.length > 0) {
   return new NextResponse(
