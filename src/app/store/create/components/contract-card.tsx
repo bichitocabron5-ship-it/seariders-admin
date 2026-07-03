@@ -388,12 +388,14 @@ export function ContractCard({
     };
   }, [awaitingExternalSignature, c.status, onSaved]);
 
-  function validateBeforeAdvance(action: "ready" | "signer") {
+  function validateBeforeAdvance(action: "ready" | "signer" | "pdf") {
     setAdvanceAttempted(true);
     if (hasContractAdvanceErrors) {
       setErr(
         action === "signer"
           ? "Completa los campos obligatorios antes de abrir la firma o el enlace de WhatsApp."
+          : action === "pdf"
+            ? "Completa los campos obligatorios antes de generar el PDF del contrato."
           : "Completa los campos obligatorios antes de dejar el contrato listo para firma."
       );
       return false;
@@ -457,6 +459,7 @@ export function ContractCard({
   }
 
   async function handleGeneratePdfClick() {
+    if (c.status !== "SIGNED" && !validateBeforeAdvance("pdf")) return;
     if (c.status !== "SIGNED") {
       await savePartial(buildPayload());
     }

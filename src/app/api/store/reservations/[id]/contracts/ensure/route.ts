@@ -5,7 +5,12 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
-import { countReadyVisibleContracts, listMissingLogicalUnits, pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
+import { countReadyVisibleContracts, pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
+import {
+  ReservationContractSyncBlockedError,
+  resolveReservationContractSyncTarget,
+  syncReservationContractsTx,
+} from "@/lib/reservation-contract-sync";
 
 export const runtime = "nodejs";
 
@@ -94,21 +99,11 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
         })),
       });
 
-      // Si no requiere contratos, devolvemos ok (pero dejamos endpoint idempotente)
-      if (requiredUnits <= 0) {
-        return {
-          reservationId: id,
-          requiredUnits: 0,
-          readyCount: 0,
-          contracts: [] as Array<{ id: string; unitIndex: number; status: string }>,
-        };
-      }
-
       const existingContracts = res.contracts ?? [];
       const hasUnitOne = existingContracts.some((c) => Number(c.unitIndex) === 1);
 
       // Compat legacy: si existe contrato principal en unitIndex 0, se reutiliza como #1.
-      if (!hasUnitOne) {
+      if (requiredUnits > 0 && !hasUnitOne) {
         const legacyPrimary = existingContracts
           .filter((c) => Number(c.unitIndex) <= 0)
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0];
@@ -121,57 +116,41 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
         }
       }
 
-      const existingRows = await tx.reservationContract.findMany({
+      await syncReservationContractsTx(tx, {
+        reservationId: id,
+        requiredUnits,
+        ...resolveReservationContractSyncTarget({
+          serviceCategory: res.service?.category ?? null,
+          isLicense: Boolean(res.isLicense),
+        }),
+      });
+
+      const rowsAfterSync = await tx.reservationContract.findMany({
         where: { reservationId: id },
-        select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
-      });
-      const missingSlots = listMissingLogicalUnits(existingRows, requiredUnits);
-      const maxUnitIndex = Math.max(0, ...existingRows.map((c) => Number(c.unitIndex ?? 0)));
-      const toCreate: Array<{
-        reservationId: string;
-        unitIndex: number;
-        logicalUnitIndex: number;
-        driverName: string | null;
-        driverPhone: string | null;
-        driverEmail: string | null;
-        driverCountry: string | null;
-        driverAddress: string | null;
-        driverPostalCode: string | null;
-        driverDocType: string | null;
-        driverDocNumber: string | null;
-        driverBirthDate: Date | null;
-        licenseSchool: string | null;
-        licenseType: string | null;
-        licenseNumber: string | null;
-      }> = missingSlots.map((slot, idx) => {
-        const isPrimaryContract = slot === 1;
-        return {
-          reservationId: id,
-          unitIndex: maxUnitIndex + idx + 1,
-          logicalUnitIndex: slot,
-          driverName: isPrimaryContract ? res.customerName ?? null : null,
-          driverPhone: isPrimaryContract ? res.customerPhone ?? null : null,
-          driverEmail: isPrimaryContract ? res.customerEmail ?? null : null,
-          driverCountry: isPrimaryContract ? res.customerCountry ?? null : null,
-          driverAddress: isPrimaryContract ? res.customerAddress ?? null : null,
-          driverPostalCode: isPrimaryContract ? res.customerPostalCode ?? null : null,
-          driverDocType: isPrimaryContract ? res.customerDocType ?? null : null,
-          driverDocNumber: isPrimaryContract ? res.customerDocNumber ?? null : null,
-          driverBirthDate: isPrimaryContract ? res.customerBirthDate ?? null : null,
-          licenseSchool: isPrimaryContract && res.isLicense ? res.licenseSchool ?? null : null,
-          licenseType: isPrimaryContract && res.isLicense ? res.licenseType ?? null : null,
-          licenseNumber: isPrimaryContract && res.isLicense ? res.licenseNumber ?? null : null,
-        };
+        orderBy: { unitIndex: "asc" },
+        select: {
+          id: true,
+          unitIndex: true,
+          logicalUnitIndex: true,
+          status: true,
+          supersededAt: true,
+          createdAt: true,
+          driverName: true,
+          driverPhone: true,
+          driverEmail: true,
+          driverCountry: true,
+          driverAddress: true,
+          driverPostalCode: true,
+          driverDocType: true,
+          driverDocNumber: true,
+          driverBirthDate: true,
+          licenseSchool: true,
+          licenseType: true,
+          licenseNumber: true,
+        },
       });
 
-      if (toCreate.length) {
-        await tx.reservationContract.createMany({
-          data: toCreate,
-          skipDuplicates: true, // idempotente
-        });
-      }
-
-      const visibleDraftContracts = (res.contracts ?? []).filter((contract) => {
+      const visibleDraftContracts = rowsAfterSync.filter((contract) => {
         const slot = Number(contract.logicalUnitIndex ?? contract.unitIndex ?? 0);
         return !contract.supersededAt && contract.status === "DRAFT" && slot >= 1 && slot <= requiredUnits;
       });
@@ -237,8 +216,17 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       return { reservationId: id, requiredUnits, readyCount, contracts: visibleContracts };
     });
 
-    return NextResponse.json({ ok: true, ...out });
+    const response = { ok: true, ...out };
+
+    return NextResponse.json(response);
   } catch (e: unknown) {
+    if (e instanceof ReservationContractSyncBlockedError) {
+      return NextResponse.json(
+        { error: e.code, message: e.message, blockers: e.blockers },
+        { status: e.status }
+      );
+    }
+
     return new NextResponse(e instanceof Error ? e.message : "Error", { status: 400 });
   }
 }

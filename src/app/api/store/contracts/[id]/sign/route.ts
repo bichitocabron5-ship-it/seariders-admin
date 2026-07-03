@@ -39,6 +39,7 @@ export async function PATCH(
         select: {
           id: true,
           status: true,
+          supersededAt: true,
           renderedHtml: true,
         },
       });
@@ -49,6 +50,10 @@ export async function PATCH(
 
       if (current.status === ContractStatus.VOID) {
         throw new Error("No se puede firmar un contrato VOID");
+      }
+
+      if (current.supersededAt) {
+        throw new Error("No se puede firmar un contrato sustituido");
       }
 
       if (!current.renderedHtml?.trim()) {

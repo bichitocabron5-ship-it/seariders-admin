@@ -182,7 +182,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const contractsState: "OK" | "PARTIAL" | "MISSING" =
     requiredUnits <= 0 ? "OK" : readyCount >= requiredUnits ? "OK" : readyCount > 0 ? "PARTIAL" : "MISSING";
 
-  return NextResponse.json({
+  const response = {
     ok: true,
     reservationId: res.id,
     reservation: {
@@ -212,6 +212,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Contratos ya filtrados
     contracts,
-  });
-}
+  };
 
+  return NextResponse.json(response);
+}

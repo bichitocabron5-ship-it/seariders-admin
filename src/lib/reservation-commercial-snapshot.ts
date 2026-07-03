@@ -29,6 +29,28 @@ export type PaymentSnapshotLike = {
   direction?: string | null;
 };
 
+export type CommercialCommitmentBlocker =
+  | "FORMALIZED"
+  | "OPERATIONAL_STATUS"
+  | "PAYMENT"
+  | "PREPAID_VOUCHER"
+  | "SIGNED_CONTRACT"
+  | "COMMISSION_PAID";
+
+export type CommercialCommitmentArgs = {
+  status?: string | null;
+  formalizedAt?: Date | string | null;
+  snapshot: {
+    giftVoucherId?: string | null;
+    passVoucherId?: string | null;
+    passConsumeId?: string | null;
+  };
+  payments?: PaymentSnapshotLike[] | null;
+  signedContractsCount?: number | null;
+  contracts?: Array<{ status?: string | null }> | null;
+  commissionLines?: Array<{ status?: string | null }> | null;
+};
+
 export type CommercialPricingStateLike = {
   serviceCategory?: string | null;
   isLicense?: boolean | null;
@@ -82,6 +104,46 @@ export function netPaidServiceCents(payments: PaymentSnapshotLike[] | null | und
       const sign = String(payment.direction ?? "IN").toUpperCase() === "OUT" ? -1 : 1;
       return sum + sign * Math.max(0, Math.round(Number(payment.amountCents ?? 0)));
     }, 0);
+}
+
+export function netPaidDepositCents(payments: PaymentSnapshotLike[] | null | undefined) {
+  return (payments ?? [])
+    .filter((payment) => Boolean(payment.isDeposit))
+    .reduce((sum, payment) => {
+      const sign = String(payment.direction ?? "IN").toUpperCase() === "OUT" ? -1 : 1;
+      return sum + sign * Math.max(0, Math.round(Number(payment.amountCents ?? 0)));
+    }, 0);
+}
+
+export function getCommercialCommitmentBlockers(
+  args: CommercialCommitmentArgs
+): CommercialCommitmentBlocker[] {
+  const blockers: CommercialCommitmentBlocker[] = [];
+  const status = String(args.status ?? "").trim().toUpperCase();
+
+  if (args.formalizedAt) blockers.push("FORMALIZED");
+  if (["READY_FOR_PLATFORM", "IN_SEA", "COMPLETED", "CANCELED"].includes(status)) {
+    blockers.push("OPERATIONAL_STATUS");
+  }
+  if (isReservationCoveredByPrepaidVoucher(args.snapshot)) blockers.push("PREPAID_VOUCHER");
+  if (netPaidServiceCents(args.payments) !== 0 || netPaidDepositCents(args.payments) !== 0) {
+    blockers.push("PAYMENT");
+  }
+  if (
+    Number(args.signedContractsCount ?? 0) > 0 ||
+    (args.contracts ?? []).some((contract) => String(contract.status ?? "").toUpperCase() === "SIGNED")
+  ) {
+    blockers.push("SIGNED_CONTRACT");
+  }
+  if ((args.commissionLines ?? []).some((line) => String(line.status ?? "").toUpperCase() === "PAID")) {
+    blockers.push("COMMISSION_PAID");
+  }
+
+  return blockers;
+}
+
+export function hasCommercialRecalculationCommitment(args: CommercialCommitmentArgs) {
+  return getCommercialCommitmentBlockers(args).length > 0;
 }
 
 export function hasSufficientCommercialSnapshot(snapshot: CommercialSnapshotLike) {

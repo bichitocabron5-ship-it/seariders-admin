@@ -283,12 +283,18 @@ function buildReset(
   let clearPreparedAsset = false;
   let clearLicense = false;
 
-  if (args.expectedResourceKind === "asset" && contract.preparedJetskiId) {
+  if (
+    (args.expectedResourceKind === "asset" || args.expectedResourceKind === null) &&
+    contract.preparedJetskiId
+  ) {
     clearPreparedJetski = true;
     reasons.push("prepared-jetski-incompatible");
   }
 
-  if (args.expectedResourceKind === "jetski" && contract.preparedAssetId) {
+  if (
+    (args.expectedResourceKind === "jetski" || args.expectedResourceKind === null) &&
+    contract.preparedAssetId
+  ) {
     clearPreparedAsset = true;
     reasons.push("prepared-asset-incompatible");
   }

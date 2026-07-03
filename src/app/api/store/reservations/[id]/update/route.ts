@@ -20,11 +20,14 @@ import {
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import {
   countLockedVisibleContracts,
-  countReadyVisibleContracts,
-  listMissingLogicalUnits,
   pickVisibleContractsByLogicalUnit,
 } from "@/lib/contracts/active-contracts";
-import { syncReservationContractsTx } from "@/lib/reservation-contract-sync";
+import { buildReservationContractProgress } from "@/lib/contracts/reservation-contract-progress";
+import {
+  ReservationContractSyncBlockedError,
+  resolveReservationContractSyncTarget,
+  syncReservationContractsTx,
+} from "@/lib/reservation-contract-sync";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
@@ -32,8 +35,8 @@ import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commis
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 import {
   commercialPricingStateChanged,
+  getCommercialCommitmentBlockers,
   isReservationCoveredByPrepaidVoucher,
-  shouldPreserveFormalizeCommercialSnapshot,
 } from "@/lib/reservation-commercial-snapshot";
 
 export const runtime = "nodejs";
@@ -108,7 +111,11 @@ function buildComparableComposition(
     );
 }
 
-async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: string) {
+async function ensureContractsTx(
+  tx: Prisma.TransactionClient,
+  reservationId: string,
+  options: { materialChange?: boolean } = {}
+) {
   const reservation = await tx.reservation.findUnique({
     where: { id: reservationId },
     select: {
@@ -124,7 +131,7 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
         },
       },
       contracts: {
-        select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+        select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
       },
     },
   });
@@ -138,36 +145,25 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
     items: reservation.items ?? [],
   });
 
-  if (requiredUnits <= 0) return { requiredUnits: 0, readyCount: 0 };
+  const syncTarget = resolveReservationContractSyncTarget({
+    serviceCategory: reservation.service?.category ?? null,
+    isLicense: Boolean(reservation.isLicense),
+  });
 
-  const missingSlots = listMissingLogicalUnits(reservation.contracts ?? [], requiredUnits);
-  const maxUnitIndex = Math.max(
-    0,
-    ...(reservation.contracts ?? []).map((contract) => Number(contract.unitIndex ?? 0))
-  );
-  const toCreate: Array<{ reservationId: string; unitIndex: number; logicalUnitIndex: number }> = missingSlots.map(
-    (slot, idx) => ({
-      reservationId,
-      unitIndex: maxUnitIndex + idx + 1,
-      logicalUnitIndex: slot,
-    })
-  );
-
-  if (toCreate.length > 0) {
-    await tx.reservationContract.createMany({
-      data: toCreate,
-      skipDuplicates: true,
-    });
-  }
+  await syncReservationContractsTx(tx, {
+    reservationId,
+    requiredUnits,
+    ...syncTarget,
+    materialChange: Boolean(options.materialChange),
+  });
 
   const contracts = await tx.reservationContract.findMany({
     where: { reservationId },
-    select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+    orderBy: { unitIndex: "asc" },
+    select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
   });
 
-  const readyCount = countReadyVisibleContracts(contracts, requiredUnits);
-
-  return { requiredUnits, readyCount };
+  return buildReservationContractProgress(contracts, requiredUnits);
 }
 
 // mismo contrato que formalize
@@ -276,6 +272,13 @@ function deriveCommercialReservationState(args: {
 }
 
 function toRouteErrorResponse(error: unknown) {
+  if (error instanceof ReservationContractSyncBlockedError) {
+    return NextResponse.json(
+      { error: error.code, message: error.message, blockers: error.blockers },
+      { status: error.status }
+    );
+  }
+
   const message = error instanceof Error ? error.message : "Error";
   if (message.startsWith("CONFIGURATION_REQUIRED:")) {
     return NextResponse.json(
@@ -326,6 +329,7 @@ async function rescheduleReservationOnly(args: {
         },
         contracts: {
           select: {
+            id: true,
             unitIndex: true,
             logicalUnitIndex: true,
             status: true,
@@ -421,13 +425,13 @@ async function rescheduleReservationOnly(args: {
     });
     const visibleContracts = pickVisibleContractsByLogicalUnit(current.contracts ?? [], requiredUnits);
     const signedContractsCount = visibleContracts.filter((contract) => contract.status === "SIGNED").length;
-    const readyCount = countReadyVisibleContracts(current.contracts ?? [], requiredUnits);
+    const contracts = await ensureContractsTx(tx, reservationId, { materialChange: scheduleChanged });
 
     return {
       ok: true as const,
       id: reservationId,
-      requiredUnits,
-      readyCount,
+      requiredUnits: contracts.requiredUnits,
+      readyCount: contracts.readyCount,
       signedContractsCount,
       warning:
         signedContractsCount > 0
@@ -488,6 +492,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       channelId: true,
       activityDate: true,
       scheduledTime: true,
+      formalizedAt: true,
       readyForPlatformAt: true,
       paymentCompletedAt: true,
       customerCountry: true,
@@ -559,6 +564,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           createdAt: true,
         },
       },
+      commissionLines: {
+        select: {
+          status: true,
+        },
+      },
     },
   });
   if (!existing) return new NextResponse("Reserva no existe", { status: 404 });
@@ -575,6 +585,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     serviceCategory: existing.service?.category ?? null,
     items: existing.items ?? [],
   });
+
   const lockedContractsCount = countLockedVisibleContracts(existing.contracts ?? [], existingRequiredUnits);
   const signedContractsCount = lockedContractsCount;
   const desiredReadyAt =
@@ -692,9 +703,13 @@ const commercialCompositionChanged =
 const requestedChannelId = b.channelId !== undefined ? b.channelId ?? null : existing.channelId ?? null;
 const commercialChannelChanged = (existing.channelId ?? null) !== requestedChannelId;
 const isPrepaidVoucherReservation = isReservationCoveredByPrepaidVoucher(existing);
-const protectedCommercialSnapshot = shouldPreserveFormalizeCommercialSnapshot({
+const commercialCommitmentBlockers = getCommercialCommitmentBlockers({
+  status: existing.status,
+  formalizedAt: existing.formalizedAt,
   snapshot: existing,
   payments: existing.payments,
+  signedContractsCount,
+  commissionLines: existing.commissionLines,
 });
 const protectedCommercialChangeRequested =
   commercialCompositionChanged || commercialChannelChanged || commercialPricingChanged;
@@ -732,10 +747,11 @@ const protectedNonScheduleFieldsChanged =
   normalizeComparableOptionalString(existing.licenseType) !== normalizeComparableOptionalString(finalLicenseType) ||
   normalizeComparableOptionalString(existing.licenseNumber) !== normalizeComparableOptionalString(finalLicenseNumber);
 const isScheduleOnlyChange = scheduleChanged && !compositionChanged && !protectedNonScheduleFieldsChanged;
+const materialContractChange = scheduleChanged || compositionChanged || protectedNonScheduleFieldsChanged;
 
-if (protectedCommercialSnapshot && protectedCommercialChangeRequested) {
+if (protectedCommercialChangeRequested && commercialCommitmentBlockers.length > 0) {
   return new NextResponse(
-    "La reserva tiene snapshot comercial o pagos asociados. Cambiar actividad, cantidad, canal o tarifa requiere una accion explicita de recalculo.",
+    "La reserva tiene un compromiso comercial real asociado. Cambiar actividad, cantidad, canal o tarifa requiere una accion explicita de recalculo.",
     { status: 409 }
   );
 }
@@ -1061,17 +1077,6 @@ if (hasProItems) {
     const depositCents = isPrepaidVoucherReservation
       ? Number(existing.depositCents ?? 0)
       : depositPerUnit * jetskiUnits;
-    const nextRequiredContractUnits = computeRequiredContractUnits({
-      quantity: totalMainQuantity,
-      isLicense: reservationState.isLicense,
-      serviceCategory: main.category,
-      items: lineCreates.map((line) => ({
-        quantity: line.quantity,
-        isExtra: false,
-        service: { category: line.category },
-      })),
-    });
-
     // Compat main: primer item
     const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
       channelId: b.channelId ?? null,
@@ -1126,12 +1131,6 @@ if (hasProItems) {
     }
 
     await tx.reservation.update({ where: { id }, data, select: { id: true } });
-    // Fase 2: este sync solo reconcilia unidades requeridas; revalidar DRAFT/READY queda para Fase 3.
-    await syncReservationContractsTx(tx, {
-      reservationId: id,
-      requiredUnits: nextRequiredContractUnits,
-      confirmSignedReduction: Boolean(b.confirmSignedContractReduction),
-    });
     await syncReservationPlatformUnitsTx(
       tx,
       {
@@ -1149,7 +1148,7 @@ if (hasProItems) {
       desiredReadyAt
     );
     await syncChannelCommissionLineFromReservationTx(tx, id);
-    const contracts = await ensureContractsTx(tx, id);
+    const contracts = await ensureContractsTx(tx, id, { materialChange: materialContractChange });
 
       return { id, ...contracts };
     });
@@ -1157,7 +1156,8 @@ if (hasProItems) {
     return toRouteErrorResponse(error);
   }
 
-  return NextResponse.json({ ok: true, ...result });
+  const response = { ok: true, ...result };
+  return NextResponse.json(response);
 }
 
   // regla de negocio recomendada:
@@ -1264,13 +1264,14 @@ if (hasProItems) {
           select: { id: true },
         });
         await syncChannelCommissionLineFromReservationTx(tx, id);
-        return await ensureContractsTx(tx, id);
+        return await ensureContractsTx(tx, id, { materialChange: materialContractChange });
       });
     } catch (error: unknown) {
       return toRouteErrorResponse(error);
     }
 
-    return NextResponse.json({ ok: true, id, ...contracts });
+    const response = { ok: true, id, ...contracts };
+    return NextResponse.json(response);
   }
 
   if (priceSensitiveChanged && isMultiOrPack) {
@@ -1349,19 +1350,6 @@ if (hasProItems) {
   const depositCents = isPrepaidVoucherReservation
     ? Number(existing.depositCents ?? 0)
     : depositPerUnit * Number(b.quantity);
-  const nextSingleRequiredContractUnits = computeRequiredContractUnits({
-    quantity: Number(b.quantity ?? 0),
-    isLicense: reservationState.isLicense,
-    serviceCategory: svc.category ?? null,
-    items: [
-      {
-        quantity: Number(b.quantity ?? 0),
-        isExtra: false,
-        service: { category: svc.category ?? null },
-      },
-    ],
-  });
-
   let result: { id: string; requiredUnits: number; readyCount: number };
   try {
     result = await prisma.$transaction(async (tx) => {
@@ -1508,12 +1496,6 @@ if (hasProItems) {
       },
       select: { id: true },
     });
-    // Fase 2: este sync solo reconcilia unidades requeridas; revalidar DRAFT/READY queda para Fase 3.
-    await syncReservationContractsTx(tx, {
-      reservationId: id,
-      requiredUnits: nextSingleRequiredContractUnits,
-      confirmSignedReduction: Boolean(b.confirmSignedContractReduction),
-    });
     await syncReservationPlatformUnitsTx(
       tx,
       {
@@ -1533,7 +1515,7 @@ if (hasProItems) {
       desiredReadyAt
     );
     await syncChannelCommissionLineFromReservationTx(tx, id);
-    const contracts = await ensureContractsTx(tx, id);
+    const contracts = await ensureContractsTx(tx, id, { materialChange: materialContractChange });
 
       return { id, ...contracts };
     });
@@ -1541,6 +1523,7 @@ if (hasProItems) {
     return toRouteErrorResponse(error);
   }
 
-  return NextResponse.json({ ok: true, ...result });
+  const response = { ok: true, ...result };
+  return NextResponse.json(response);
 }
 

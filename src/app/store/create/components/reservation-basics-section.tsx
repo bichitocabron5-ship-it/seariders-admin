@@ -285,7 +285,12 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
         <div style={gridStyle}>
           <label style={labelStyle}>
             <span>Categoría</span>
-            <select disabled={flags.isVoucherFormalizeFlow} value={values.category} onChange={(e) => handlers.onCategoryChange(e.target.value)} style={inputStyle}>
+            <select
+              disabled={flags.isVoucherFormalizeFlow}
+              value={values.category}
+              onChange={(e) => handlers.onCategoryChange(e.target.value)}
+              style={inputStyle}
+            >
               <option value="">Todas</option>
               {lists.categoriesMain.map((c) => (
                 <option key={c} value={c}>{c}</option>
@@ -295,7 +300,12 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
 
           <label style={labelStyle}>
             <span>Servicio</span>
-            <select value={values.serviceId} onChange={(e) => handlers.onServiceChange(e.target.value)} disabled={flags.isVoucherFormalizeFlow} style={inputStyle}>
+            <select
+              value={values.serviceId}
+              onChange={(e) => handlers.onServiceChange(e.target.value)}
+              disabled={flags.isVoucherFormalizeFlow}
+              style={inputStyle}
+            >
               <option value="" disabled>Selecciona servicio...</option>
               {lists.servicesMainFiltered.map((s) => (
                 <option key={s.id} value={s.id}>{s.category ? `${s.category} | ` : ""}{s.name}</option>
@@ -319,7 +329,12 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
 
           <label style={labelStyle}>
             <span>Opción</span>
-            <select value={values.optionId} onChange={(e) => handlers.onOptionChange(e.target.value)} disabled={flags.isVoucherFormalizeFlow} style={inputStyle}>
+            <select
+              value={values.optionId}
+              onChange={(e) => handlers.onOptionChange(e.target.value)}
+              disabled={flags.isVoucherFormalizeFlow}
+              style={inputStyle}
+            >
               <option value="" disabled>{values.serviceId ? "Selecciona opción..." : "Selecciona servicio primero"}</option>
               {lists.filteredOptions.map((o) => (
                 <option key={o.id} value={o.id}>
@@ -366,7 +381,14 @@ export function ReservationBasicsSection({ values, flags, lists, handlers, valid
 
           <label style={labelStyle}>
             <span>Cantidad</span>
-            <input type="number" min={1} value={values.quantity} onChange={(e) => handlers.onQuantityChange(Number(e.target.value))} disabled={flags.isVoucherFormalizeFlow} style={inputStyle} />
+            <input
+              type="number"
+              min={1}
+              value={values.quantity}
+              onChange={(e) => handlers.onQuantityChange(Number(e.target.value))}
+              disabled={flags.isVoucherFormalizeFlow}
+              style={inputStyle}
+            />
           </label>
 
           <label style={labelStyle}>

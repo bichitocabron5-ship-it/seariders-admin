@@ -27,6 +27,15 @@ type SubmitCartItem = {
   promoCode?: string | null;
 };
 
+export type StoreCreateMutationProgress = {
+  ok?: boolean;
+  id: string;
+  requiredUnits?: number;
+  readyCount?: number;
+  alreadyFormalized?: boolean;
+  isHistorical?: boolean;
+};
+
 export async function submitStoreCreateEditFlow(args: SharedArgs & {
   editReservationId: string;
   isLicense: boolean;
@@ -99,8 +108,9 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
     licenseNumber: args.licenseNumber,
     confirmSignedContractReduction: args.confirmSignedContractReduction,
   });
+  const updateUrl = `/api/store/reservations/${args.editReservationId}/update`;
 
-  const res = await fetch(`/api/store/reservations/${args.editReservationId}/update`, {
+  const res = await fetch(updateUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -108,7 +118,7 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
 
   await ensureOkResponse(res, "No se pudo actualizar la reserva");
   const j = await res.json();
-  return j as { id: string; requiredUnits?: number; readyCount?: number };
+  return j as StoreCreateMutationProgress;
 }
 
 export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
@@ -133,7 +143,6 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
   licenseNumber?: string;
   confirmSignedContractReduction?: boolean;
   promoCode?: string | null;
-  router: AppRouterInstance;
 }) {
   validateBeforeSubmit({
     flow: "MIGRATE",
@@ -194,8 +203,8 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
   });
 
   await ensureOkResponse(res, "No se pudo formalizar la reserva");
-  await res.json();
-  args.router.push("/store");
+  const j = await res.json();
+  return j as StoreCreateMutationProgress;
 }
 
 export async function submitStoreCreateCreateFlow(args: SharedArgs & {

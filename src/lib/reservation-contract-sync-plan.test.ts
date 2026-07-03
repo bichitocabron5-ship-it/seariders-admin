@@ -73,6 +73,28 @@ test("de 2 a 1 unidades sin firmados conserva 1 contrato y void 1 sobrante", () 
   assert.deepEqual(plan.blockers, []);
 });
 
+test("JETSKI a actividad sin contrato deja requiredUnits 0 y void todos los no firmados", () => {
+  const plan = planReservationContractSync({
+    requiredUnits: 0,
+    contracts: [
+      contract("contract-1", "DRAFT", 1, { templateCode: "JETSKI_NO_LICENSE", requiresLicense: false }),
+      contract("contract-2", "READY", 2, { templateCode: "JETSKI_NO_LICENSE", requiresLicense: false }),
+    ],
+    templateCode: null,
+    requiresLicense: false,
+    expectedResourceKind: null,
+  });
+
+  assert.equal(plan.requiredUnits, 0);
+  assert.deepEqual(plan.keep, []);
+  assert.deepEqual(plan.create, []);
+  assert.deepEqual(
+    plan.void.map((item) => item.contractId),
+    ["contract-1", "contract-2"]
+  );
+  assert.deepEqual(plan.blockers, []);
+});
+
 test("de 2 a 1 con 1 SIGNED y 1 READY conserva SIGNED y void READY", () => {
   const plan = planReservationContractSync({
     requiredUnits: 1,

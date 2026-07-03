@@ -465,6 +465,7 @@ export function SubmitSection({
   workflowActionLabel = null,
   workflowActionTargetId = null,
   onWorkflowAction = undefined,
+  onPrimaryAction,
 }: {
   primaryDisabled: boolean;
   primaryLabel: string;
@@ -478,6 +479,7 @@ export function SubmitSection({
   workflowActionLabel?: string | null;
   workflowActionTargetId?: string | null;
   onWorkflowAction?: (() => void) | undefined;
+  onPrimaryAction: () => void;
 }) {
   return (
     <section style={{ ...cardStyle, display: "grid", gap: 12 }}>
@@ -516,7 +518,8 @@ export function SubmitSection({
       ) : null}
 
       <button
-        type="submit"
+        type="button"
+        onClick={onPrimaryAction}
         disabled={primaryDisabled || primaryBusy}
         style={{
           padding: "14px 16px",

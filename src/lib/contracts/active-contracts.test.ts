@@ -5,9 +5,11 @@ import {
   canEditReservationLegalContent,
   countLockedVisibleContracts,
   countReadyVisibleContracts,
+  listMissingLogicalUnits,
+  pickVisibleContractsByLogicalUnit,
 } from "./active-contracts";
 
-function contract(status: "DRAFT" | "READY" | "SIGNED", logicalUnitIndex = 1) {
+function contract(status: "DRAFT" | "READY" | "SIGNED" | "VOID", logicalUnitIndex = 1) {
   return {
     unitIndex: logicalUnitIndex,
     logicalUnitIndex,
@@ -43,4 +45,24 @@ test("READY cuenta como preparado pero no como locked", () => {
 
   assert.equal(countReadyVisibleContracts(contracts, 1), 1);
   assert.equal(countLockedVisibleContracts(contracts, 1), 0);
+});
+
+test("VOID y superseded no aparecen como contratos activos", () => {
+  const contracts = [
+    contract("VOID", 1),
+    { ...contract("READY", 2), supersededAt: new Date("2026-06-30T11:00:00.000Z") },
+  ];
+
+  assert.deepEqual(pickVisibleContractsByLogicalUnit(contracts, 2), []);
+  assert.deepEqual(listMissingLogicalUnits(contracts, 2), [1, 2]);
+  assert.equal(countReadyVisibleContracts(contracts, 2), 0);
+});
+
+test("requiredUnits 0 no expone contratos activos aunque existan filas antiguas", () => {
+  const contracts = [contract("DRAFT", 1), contract("READY", 2), contract("SIGNED", 3)];
+
+  assert.deepEqual(pickVisibleContractsByLogicalUnit(contracts, 0), []);
+  assert.deepEqual(listMissingLogicalUnits(contracts, 0), []);
+  assert.equal(countReadyVisibleContracts(contracts, 0), 0);
+  assert.equal(countLockedVisibleContracts(contracts, 0), 0);
 });

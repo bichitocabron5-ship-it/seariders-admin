@@ -1,4 +1,4 @@
-type ContractLike = {
+export type ContractLike = {
   unitIndex: number | null | undefined;
   logicalUnitIndex?: number | null | undefined;
   status?: string | null | undefined;
@@ -18,7 +18,7 @@ export function contractLogicalUnitIndex(contract: ContractLike) {
 }
 
 export function isContractSuperseded(contract: ContractLike) {
-  return Boolean(contract.supersededAt);
+  return Boolean(contract.supersededAt) || String(contract.status ?? "").toUpperCase() === "VOID";
 }
 
 export function pickVisibleContractsByLogicalUnit<T extends ContractLike>(
@@ -40,8 +40,8 @@ export function pickVisibleContractsByLogicalUnit<T extends ContractLike>(
     const bucket = bySlot.get(slot) ?? [];
     if (!bucket.length) continue;
 
-    const active = bucket.filter((contract) => !isContractSuperseded(contract));
-    const candidates = active.length ? active : bucket;
+    const candidates = bucket.filter((contract) => !isContractSuperseded(contract));
+    if (!candidates.length) continue;
 
     candidates.sort((a, b) => {
       const timeDiff = toMillis(b.createdAt) - toMillis(a.createdAt);
