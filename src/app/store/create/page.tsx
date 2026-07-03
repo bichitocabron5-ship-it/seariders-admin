@@ -15,6 +15,10 @@ import {
 import { buildServiceAllowedChannelIndex, filterChannelsForServices } from "@/lib/service-channel-availability";
 import { finalizeReservationCommercialBreakdown } from "@/lib/reservation-commercial-breakdown";
 import {
+  SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE,
+  shouldSyncReservationBeforeFormalize,
+} from "@/lib/signed-contract-formalization";
+import {
   getDisplayChannels,
   reconcileChannelSelectionOnServiceChange,
   resolveCompatibleChannelFallback,
@@ -1505,12 +1509,6 @@ const { discountPreview, discountLoading } = useDiscountPreview({
       nextRequiredContractUnits < requiredUnits;
   }
 
-  function requestSignedContractReductionConfirmation() {
-    return window.confirm(
-      "Vas a retirar una unidad con contrato firmado. La firma y el PDF histórico se conservarán, pero esa unidad dejará de contar para la operativa y el importe se recalculará. ¿Confirmas la retirada?"
-    );
-  }
-
   function focusContractsSection() {
     const el = document.getElementById("contracts");
     if (!el) return;
@@ -1628,10 +1626,18 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     reservationId: string,
     confirmSignedContractReduction: boolean
   ) {
-    const contractsReady = await syncAndValidateBeforeFormalize(
-      reservationId,
-      confirmSignedContractReduction
-    );
+    const shouldSyncBeforeFormalize = shouldSyncReservationBeforeFormalize({
+      hasSignedContracts,
+      hasPendingReservationChanges: reservationSyncPending,
+    });
+    const contractsReady = shouldSyncBeforeFormalize
+      ? await syncAndValidateBeforeFormalize(
+          reservationId,
+          confirmSignedContractReduction
+        )
+      : ensureActiveContractsReadyForFormalize(
+          await refreshActiveContractsAfterReservationSync(reservationId)
+        );
     if (!contractsReady) return;
 
     const formalizeResult = await submitStoreCreateMigrateFlow({
@@ -1698,9 +1704,11 @@ const { discountPreview, discountLoading } = useDiscountPreview({
     setAvailabilityTick((x) => x + 1);
 
     try {
-      const confirmSignedContractReduction =
-        !needsSignedContractReductionConfirmation() || requestSignedContractReductionConfirmation();
-      if (!confirmSignedContractReduction) return;
+      if (needsSignedContractReductionConfirmation()) {
+        setError(SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE);
+        return;
+      }
+      const confirmSignedContractReduction = false;
 
       if (isReadOnlyReservation) {
         setError(
@@ -2171,7 +2179,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
             Esta reserva tiene contratos firmados. Se cambiará la fecha/hora operativa, pero los contratos firmados no se regeneran.
           </div>
           <div style={{ fontSize: 13, color: "#475569" }}>
-            Puedes añadir unidades pendientes y reducir unidades. Si retiras una unidad firmada, se pedirá confirmación fuerte y la firma quedará conservada como histórico.
+            Puedes reagendar fecha y hora. Los cambios de cantidad, pax, actividad, licencia, datos legales o composición quedan bloqueados mientras haya contratos firmados.
           </div>
         </section>
       ) : null}

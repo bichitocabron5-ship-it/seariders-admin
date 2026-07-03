@@ -39,6 +39,10 @@ import {
   netPaidServiceCents,
   shouldPreserveFormalizeCommercialSnapshot,
 } from "@/lib/reservation-commercial-snapshot";
+import {
+  SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE,
+  hasSignedContractBlockingChange,
+} from "@/lib/signed-contract-formalization";
 
 export const runtime = "nodejs";
 
@@ -100,6 +104,56 @@ function normalizeOptionalString(v: string | null | undefined) {
   const t = String(v).trim();
   if (t === "-") return null;
   return t.length ? t : null;
+}
+
+function normalizeComparableOptionalString(value: string | null | undefined) {
+  return normalizeOptionalString(value) ?? null;
+}
+
+function dateKey(value: Date | null | undefined) {
+  if (!value) return null;
+  return value.toISOString().slice(0, 10);
+}
+
+function sameStringOrFallback(
+  next: string | null | undefined,
+  current: string | null | undefined,
+  fallback?: string | null
+) {
+  const normalizedNext = normalizeComparableOptionalString(next);
+  const normalizedFallback = normalizeComparableOptionalString(fallback);
+  return (
+    normalizedNext === normalizeComparableOptionalString(current) ||
+    (normalizedFallback !== null && normalizedNext === normalizedFallback)
+  );
+}
+
+function sameCountryOrFallback(
+  next: string | null | undefined,
+  current: string | null | undefined,
+  fallback?: string | null
+) {
+  const normalizeCountry = (value: string | null | undefined) =>
+    normalizeComparableOptionalString(value)?.toUpperCase() ?? null;
+  const normalizedNext = normalizeCountry(next);
+  const normalizedFallback = normalizeCountry(fallback);
+  return (
+    normalizedNext === normalizeCountry(current) ||
+    (normalizedFallback !== null && normalizedNext === normalizedFallback)
+  );
+}
+
+function sameDateOrFallback(
+  next: Date | null | undefined,
+  current: Date | null | undefined,
+  fallback?: Date | null
+) {
+  const normalizedNext = dateKey(next);
+  const normalizedFallback = dateKey(fallback);
+  return (
+    normalizedNext === dateKey(current) ||
+    (normalizedFallback !== null && normalizedNext === normalizedFallback)
+  );
 }
 
 function fallbackOptionalString(...values: Array<string | null | undefined>) {
@@ -181,6 +235,9 @@ function toRouteErrorResponse(error: unknown) {
   ) {
     return new NextResponse(message, { status: 409 });
   }
+  if (message === SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE) {
+    return new NextResponse(message, { status: 409 });
+  }
   return new NextResponse(
     message.replace(/^CONFIRM_SIGNED_CONTRACT_REDUCTION:\s*/, ""),
     { status: message.startsWith("CONFIRM_SIGNED_CONTRACT_REDUCTION:") ? 409 : 400 }
@@ -257,6 +314,36 @@ function buildCommercialShape(
 function sameCommercialShape(
   left: ReturnType<typeof buildCommercialShape>,
   right: ReturnType<typeof buildCommercialShape>
+) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function buildContractContentShape(
+  items: Array<{
+    serviceId: string;
+    optionId: string | null;
+    quantity: number | null | undefined;
+    pax: number | null | undefined;
+  }>
+) {
+  return items
+    .map((item) => ({
+      serviceId: item.serviceId,
+      optionId: item.optionId ?? "",
+      quantity: Number(item.quantity ?? 0),
+      pax: Number(item.pax ?? 0),
+    }))
+    .sort((a, b) =>
+      a.serviceId.localeCompare(b.serviceId) ||
+      a.optionId.localeCompare(b.optionId) ||
+      a.quantity - b.quantity ||
+      a.pax - b.pax
+    );
+}
+
+function sameContractContentShape(
+  left: ReturnType<typeof buildContractContentShape>,
+  right: ReturnType<typeof buildContractContentShape>
 ) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
@@ -521,6 +608,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         currentContractProgress.visibleContracts[0] ??
         current.contracts[0] ??
         null;
+      const signedContractsCount = currentContractProgress.visibleContracts.filter(
+        (contract) => contract.status === "SIGNED"
+      ).length;
+      const completeLicenseContractFallback =
+        currentContractProgress.visibleContracts.find(
+          (contract) =>
+            Boolean(String(contract.licenseSchool ?? "").trim()) &&
+            Boolean(String(contract.licenseType ?? "").trim()) &&
+            Boolean(String(contract.licenseNumber ?? "").trim())
+        ) ?? null;
       const contractCompatibilityFallback = !current.formalizedAt ? primaryContract : null;
       const customerPhone =
         b.customerPhone !== undefined
@@ -588,10 +685,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           optionId: item.optionId ?? current.optionId,
           quantity: item.quantity,
         }));
+      const currentContractShapeSource = (current.items ?? [])
+        .filter((item) => !item.isExtra)
+        .map((item) => ({
+          serviceId: item.serviceId,
+          optionId: item.optionId ?? current.optionId,
+          quantity: item.quantity,
+          pax: item.pax ?? current.pax,
+        }));
       const currentCommercialShape = buildCommercialShape(
         currentCommercialShapeSource.length > 0
           ? currentCommercialShapeSource
           : [{ serviceId: current.serviceId, optionId: current.optionId, quantity: current.quantity }]
+      );
+      const currentContractShape = buildContractContentShape(
+        currentContractShapeSource.length > 0
+          ? currentContractShapeSource
+          : [{
+              serviceId: current.serviceId,
+              optionId: current.optionId,
+              quantity: current.quantity,
+              pax: current.pax,
+            }]
       );
       const requestedCommercialShape = buildCommercialShape(
         candidateItems.map((item) => ({
@@ -600,7 +715,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: item.quantity,
         }))
       );
+      const requestedContractShape = buildContractContentShape(
+        candidateItems.map((item) => ({
+          serviceId: item.serviceId,
+          optionId: item.optionId,
+          quantity: item.quantity,
+          pax: item.pax,
+        }))
+      );
       const commercialShapeChanged = !sameCommercialShape(currentCommercialShape, requestedCommercialShape);
+      const contractCompositionChanged = !sameContractContentShape(currentContractShape, requestedContractShape);
       const channelChanged =
         b.channelId !== undefined && (b.channelId ?? null) !== (current.channelId ?? null);
       const licensePricingChanged = commercialPricingStateChanged({
@@ -617,6 +741,45 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           pricingTier: b.pricingTier ?? current.pricingTier,
         },
       });
+      const customerLegalFieldsChanged =
+        !sameStringOrFallback(customerName, current.customerName, primaryContract?.driverName) ||
+        !sameStringOrFallback(customerPhone, current.customerPhone, primaryContract?.driverPhone) ||
+        !sameStringOrFallback(customerEmail, current.customerEmail, primaryContract?.driverEmail) ||
+        !sameCountryOrFallback(customerCountry, current.customerCountry, primaryContract?.driverCountry) ||
+        !sameStringOrFallback(customerAddress, current.customerAddress, primaryContract?.driverAddress) ||
+        !sameStringOrFallback(customerPostalCode, current.customerPostalCode, primaryContract?.driverPostalCode) ||
+        !sameDateOrFallback(customerBirthDate, current.customerBirthDate, primaryContract?.driverBirthDate) ||
+        !sameStringOrFallback(customerDocType, current.customerDocType, primaryContract?.driverDocType) ||
+        !sameStringOrFallback(customerDocNumber, current.customerDocNumber, primaryContract?.driverDocNumber) ||
+        normalizeComparableOptionalString(marketing) !== normalizeComparableOptionalString(current.marketing);
+      const requestedLicenseSchool =
+        b.licenseSchool !== undefined ? normalizeOptionalString(b.licenseSchool) : current.licenseSchool;
+      const requestedLicenseType =
+        b.licenseType !== undefined ? normalizeOptionalString(b.licenseType) : current.licenseType;
+      const requestedLicenseNumber =
+        b.licenseNumber !== undefined ? normalizeOptionalString(b.licenseNumber) : current.licenseNumber;
+      const licenseFieldsChanged =
+        !sameStringOrFallback(requestedLicenseSchool, current.licenseSchool, completeLicenseContractFallback?.licenseSchool) ||
+        !sameStringOrFallback(requestedLicenseType, current.licenseType, completeLicenseContractFallback?.licenseType) ||
+        !sameStringOrFallback(requestedLicenseNumber, current.licenseNumber, completeLicenseContractFallback?.licenseNumber);
+      const companionsChanged =
+        Number(current.companionsCount ?? 0) !== Number(companionsCount ?? 0);
+      const protectedNonScheduleFieldsChanged =
+        channelChanged ||
+        licensePricingChanged ||
+        companionsChanged ||
+        customerLegalFieldsChanged ||
+        licenseFieldsChanged;
+
+      if (
+        hasSignedContractBlockingChange({
+          hasSignedContracts: signedContractsCount > 0,
+          compositionChanged: contractCompositionChanged,
+          protectedNonScheduleFieldsChanged,
+        })
+      ) {
+        throw new Error(SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE);
+      }
 
       if (preserveCommercialSnapshot && (commercialShapeChanged || channelChanged || licensePricingChanged)) {
         throw new Error(
