@@ -40,7 +40,10 @@ import {
 } from "@/lib/reservation-commercial-snapshot";
 import {
   SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE,
+  buildComparableContractComposition,
+  buildExistingReservationContractComposition,
   hasSignedContractBlockingChange,
+  sameContractComposition,
 } from "@/lib/signed-contract-formalization";
 
 export const runtime = "nodejs";
@@ -141,24 +144,6 @@ function toHmInTz(d: Date, tz: string) {
   const h = parts.find((p) => p.type === "hour")?.value ?? "00";
   const m = parts.find((p) => p.type === "minute")?.value ?? "00";
   return `${h}:${m}`;
-}
-
-function buildComparableComposition(
-  items: Array<{ serviceId: string; optionId: string; quantity: number; pax: number }>
-) {
-  return items
-    .map((item) => ({
-      serviceId: item.serviceId,
-      optionId: item.optionId,
-      quantity: Number(item.quantity ?? 0),
-      pax: Number(item.pax ?? 0),
-    }))
-    .sort((a, b) =>
-      a.serviceId.localeCompare(b.serviceId) ||
-      a.optionId.localeCompare(b.optionId) ||
-      a.quantity - b.quantity ||
-      a.pax - b.pax
-    );
 }
 
 async function ensureContractsTx(
@@ -730,17 +715,14 @@ const licenseNumber = normalizeOptionalString(b.licenseNumber);
 const finalLicenseSchool = licenseSchool === undefined ? existing.licenseSchool : licenseSchool;
 const finalLicenseType = licenseType === undefined ? existing.licenseType : licenseType;
 const finalLicenseNumber = licenseNumber === undefined ? existing.licenseNumber : licenseNumber;
-const existingComposition = buildComparableComposition(
-  (existing.items ?? [])
-    .filter((item) => !item.isExtra && item.optionId)
-    .map((item) => ({
-      serviceId: item.serviceId,
-      optionId: item.optionId!,
-      quantity: Number(item.quantity ?? 0),
-      pax: Number(item.pax ?? existing.pax ?? 0),
-    }))
-);
-const nextComposition = buildComparableComposition(
+const existingComposition = buildExistingReservationContractComposition({
+  serviceId: existing.serviceId,
+  optionId: existing.optionId,
+  quantity: existing.quantity,
+  pax: existing.pax,
+  items: existing.items ?? [],
+});
+const nextComposition = buildComparableContractComposition(
   (b.items?.length
     ? b.items
     : [{
@@ -757,7 +739,7 @@ const nextComposition = buildComparableComposition(
 );
 const scheduleChanged =
   !sameInstant(existing.activityDate, activityDate) || !sameInstant(existing.scheduledTime, scheduledTime);
-const compositionChanged = JSON.stringify(existingComposition) !== JSON.stringify(nextComposition);
+const compositionChanged = !sameContractComposition(existingComposition, nextComposition);
 const existingCommercialComposition = existingComposition.map(({ serviceId, optionId, quantity }) => ({
   serviceId,
   optionId,
