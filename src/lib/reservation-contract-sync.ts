@@ -122,9 +122,7 @@ function resolveSyncTarget(
   const templateCode = normalizeCode(args.templateCode);
   const inferredRequiresLicense = inferRequiresLicenseFromTemplate(templateCode);
   const expectedResourceKind =
-    args.expectedResourceKind !== undefined
-      ? args.expectedResourceKind
-      : inferResourceKindFromTemplate(templateCode);
+    args.expectedResourceKind ?? inferResourceKindFromTemplate(templateCode);
 
   return {
     templateCode,

@@ -301,7 +301,7 @@ test("sync BOAT_LICENSED a JETSKI_LICENSED limpia asset incompatible", async () 
   assert.equal(old?.preparedAssetId, null);
 });
 
-test("sync a contrato sin licencia limpia datos de licencia en no firmados reseteados", async () => {
+test("sync a contrato sin licencia limpia licencia sin borrar prepared resource sin target", async () => {
   const { tx, rows } = makeTx([
     row("draft-1", "DRAFT", 1, {
       templateCode: null,
@@ -327,6 +327,6 @@ test("sync a contrato sin licencia limpia datos de licencia en no firmados reset
   assert.equal(contract?.licenseSchool, null);
   assert.equal(contract?.licenseType, null);
   assert.equal(contract?.licenseNumber, null);
-  assert.equal(contract?.preparedJetskiId, null);
+  assert.equal(contract?.preparedJetskiId, "jetski-a");
   assert.equal(contract?.renderedHtml, null);
 });
