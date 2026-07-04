@@ -151,6 +151,121 @@ test("READY no cuenta como bloqueante", () => {
   assert.equal(plan.reset[0]?.nextStatus, "DRAFT");
 });
 
+test("READY JETSKI_LICENSED con expectedResourceKind null conserva preparedJetski", () => {
+  const plan = planReservationContractSync({
+    requiredUnits: 1,
+    contracts: [
+      contract("jetski-ready", "READY", 1, {
+        templateCode: "JETSKI_LICENSED",
+        expectedResourceKind: null,
+        preparedJetskiId: "jetski-a",
+      }),
+    ],
+    templateCode: "JETSKI_LICENSED",
+    requiresLicense: true,
+    expectedResourceKind: null,
+  });
+
+  assert.deepEqual(
+    plan.keep.map((item) => item.contractId),
+    ["jetski-ready"]
+  );
+  assert.deepEqual(plan.void, []);
+  assert.deepEqual(plan.create, []);
+  assert.deepEqual(plan.reset, []);
+});
+
+test("READY BOAT_LICENSED con expectedResourceKind null conserva preparedAsset", () => {
+  const plan = planReservationContractSync({
+    requiredUnits: 1,
+    contracts: [
+      contract("boat-ready", "READY", 1, {
+        templateCode: "BOAT_LICENSED",
+        expectedResourceKind: null,
+        preparedAssetId: "asset-boat",
+        preparedAssetType: "BOAT",
+      }),
+    ],
+    templateCode: "BOAT_LICENSED",
+    requiresLicense: true,
+    expectedResourceKind: null,
+    expectedAssetType: "BOAT",
+  });
+
+  assert.deepEqual(
+    plan.keep.map((item) => item.contractId),
+    ["boat-ready"]
+  );
+  assert.deepEqual(plan.void, []);
+  assert.deepEqual(plan.create, []);
+  assert.deepEqual(plan.reset, []);
+});
+
+test("expectedResourceKind explicito asset limpia preparedJetski", () => {
+  const plan = planReservationContractSync({
+    requiredUnits: 1,
+    contracts: [
+      contract("legacy-ready", "READY", 1, {
+        templateCode: null,
+        preparedJetskiId: "jetski-a",
+      }),
+    ],
+    templateCode: null,
+    requiresLicense: true,
+    expectedResourceKind: "asset",
+  });
+
+  assert.equal(plan.reset[0]?.contractId, "legacy-ready");
+  assert.equal(plan.reset[0]?.clearPreparedJetski, true);
+  assert.equal(plan.reset[0]?.clearPreparedAsset, false);
+  assert.equal(plan.reset[0]?.nextStatus, "DRAFT");
+});
+
+test("expectedResourceKind explicito jetski limpia preparedAsset", () => {
+  const plan = planReservationContractSync({
+    requiredUnits: 1,
+    contracts: [
+      contract("legacy-ready", "READY", 1, {
+        templateCode: null,
+        preparedAssetId: "asset-boat",
+        preparedAssetType: "BOAT",
+      }),
+    ],
+    templateCode: null,
+    requiresLicense: true,
+    expectedResourceKind: "jetski",
+  });
+
+  assert.equal(plan.reset[0]?.contractId, "legacy-ready");
+  assert.equal(plan.reset[0]?.clearPreparedJetski, false);
+  assert.equal(plan.reset[0]?.clearPreparedAsset, true);
+  assert.equal(plan.reset[0]?.nextStatus, "DRAFT");
+});
+
+test("contrato READY compatible no baja a DRAFT por target null", () => {
+  const plan = planReservationContractSync({
+    requiredUnits: 1,
+    contracts: [
+      contract("ready-compatible", "READY", 1, {
+        templateCode: null,
+        requiresLicense: true,
+        preparedJetskiId: "jetski-a",
+      }),
+    ],
+    templateCode: null,
+    requiresLicense: true,
+    expectedResourceKind: null,
+  });
+
+  assert.deepEqual(
+    plan.keep.map((item) => item.contractId),
+    ["ready-compatible"]
+  );
+  assert.deepEqual(plan.void, []);
+  assert.deepEqual(plan.create, []);
+  assert.deepEqual(plan.reset, []);
+});
+
 test("VOID y superseded no cuentan como activos", () => {
   const plan = planReservationContractSync({
     requiredUnits: 1,
