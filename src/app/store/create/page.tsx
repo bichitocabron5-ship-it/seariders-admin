@@ -235,6 +235,9 @@ function StoreCreatePageInner() {
         quantity?: number | null;
         pax?: number | null;
         promoCode?: string | null;
+        servicePriceId?: string | null;
+        unitPriceCents?: number | null;
+        totalPriceCents?: number | null;
       }> | null;
       service?: ServiceMain | null;
       option?: Option | null;
@@ -306,6 +309,9 @@ function StoreCreatePageInner() {
           pax: Number(item.pax ?? res.pax ?? 1),
           applyPromo: Boolean(item.promoCode),
           promoCode: item.promoCode ?? null,
+          servicePriceId: item.servicePriceId ?? null,
+          unitPriceCents: item.unitPriceCents ?? null,
+          totalPriceCents: item.totalPriceCents ?? null,
           availablePromos: [],
         }))
       );

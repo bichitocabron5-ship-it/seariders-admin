@@ -61,6 +61,9 @@ export type CartItem = {
   pax: number;
   applyPromo?: boolean;
   promoCode?: string | null;
+  servicePriceId?: string | null;
+  unitPriceCents?: number | null;
+  totalPriceCents?: number | null;
   availablePromos?: DiscountPromoChoice[];
 };
 

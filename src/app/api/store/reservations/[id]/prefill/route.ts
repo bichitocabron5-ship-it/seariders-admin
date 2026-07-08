@@ -8,6 +8,7 @@ import { sessionOptions, AppSession } from "@/lib/session";
 import { getReservationWorkflowState } from "@/lib/reservation-workflow";
 import { getReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { buildReservationPrefillCartItems } from "@/lib/reservation-prefill";
 import { countReadyVisibleContracts, pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
 import { resolveReadyContractCountWithManualAttachments } from "@/lib/manual-contract-attachments";
 
@@ -64,6 +65,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       manualDiscountCents: true,
       autoDiscountCents: true,
       customerDiscountCents: true,
+      promoCode: true,
       discountResponsibility: true,
       promoterDiscountShareBps: true,
       promoterDiscountCents: true,
@@ -120,6 +122,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: true,
           pax: true,
           isExtra: true,
+          servicePriceId: true,
+          unitPriceCents: true,
           totalPriceCents: true,
           service: { select: { category: true } },
         },
@@ -184,14 +188,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const contractCompatibilityFallback = !r.formalizedAt ? primaryContract : null;
   const reservation = {
     ...r,
-    items: (r.items ?? [])
-      .filter((item) => !item.isExtra)
-      .map((item) => ({
-        serviceId: item.serviceId,
-        optionId: item.optionId,
-        quantity: item.quantity,
-        pax: item.pax,
-      })),
+    items: buildReservationPrefillCartItems({
+      promoCode: r.promoCode,
+      fallbackOptionId: r.optionId,
+      items: r.items ?? [],
+    }),
     customerName: fallbackOptionalString(r.customerName, contractCompatibilityFallback?.driverName),
     customerPhone: fallbackOptionalString(r.customerPhone, contractCompatibilityFallback?.driverPhone),
     customerEmail: fallbackOptionalString(r.customerEmail, contractCompatibilityFallback?.driverEmail),

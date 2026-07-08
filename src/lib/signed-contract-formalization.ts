@@ -92,5 +92,6 @@ export function shouldSyncReservationBeforeFormalize(args: {
   hasSignedContracts: boolean;
   hasPendingReservationChanges: boolean;
 }) {
-  return !args.hasSignedContracts || args.hasPendingReservationChanges;
+  void args.hasSignedContracts;
+  return args.hasPendingReservationChanges;
 }

@@ -27,6 +27,26 @@ test("reserva WEB pagada con contrato SIGNED y sin cambios pendientes formaliza 
   );
 });
 
+test("reserva sin contratos firmados y sin cambios pendientes formaliza sin update previo", () => {
+  assert.equal(
+    shouldSyncReservationBeforeFormalize({
+      hasSignedContracts: false,
+      hasPendingReservationChanges: false,
+    }),
+    false
+  );
+});
+
+test("reserva sin contratos firmados sincroniza solo si hay cambios pendientes", () => {
+  assert.equal(
+    shouldSyncReservationBeforeFormalize({
+      hasSignedContracts: false,
+      hasPendingReservationChanges: true,
+    }),
+    true
+  );
+});
+
 test("contrato SIGNED con cambio de cantidad bloquea", () => {
   assert.equal(
     hasSignedContractBlockingChange({

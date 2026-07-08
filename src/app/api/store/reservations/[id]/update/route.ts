@@ -34,9 +34,12 @@ import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-avail
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 import {
+  buildComparableCommercialComposition,
   commercialPricingStateChanged,
   getCommercialCommitmentBlockers,
+  hasExplicitPromoCodeChange,
   isReservationCoveredByPrepaidVoucher,
+  sameCommercialComposition,
 } from "@/lib/reservation-commercial-snapshot";
 import {
   SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE,
@@ -256,6 +259,7 @@ const Body = z.object({
   manualDiscountCents: z.number().int().min(0).max(1_000_000).optional(),
   manualDiscountReason: z.string().max(200).nullable().optional(),
   confirmSignedContractReduction: z.boolean().optional(),
+  recalculatePricing: z.boolean().optional(),
 });
 
 const ScheduleOnlyBody = z.object({
@@ -533,6 +537,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       customerCountry: true,
       basePriceCents: true,
       totalPriceCents: true,
+      promoCode: true,
       depositCents: true,
       autoDiscountCents: true,
       customerDiscountCents: true,
@@ -691,10 +696,10 @@ const commercialPricingChanged = commercialPricingStateChanged({
     pricingTier: b.pricingTier ?? existing.pricingTier,
   },
 });
-const priceSensitiveChanged =
-  existing.serviceId !== b.serviceId ||
-  existing.optionId !== b.optionId ||
-  Number(existing.quantity) !== Number(b.quantity) ||
+const legacyMainPriceFieldsChanged =
+  (b.serviceId !== undefined && existing.serviceId !== b.serviceId) ||
+  (b.optionId !== undefined && existing.optionId !== b.optionId) ||
+  (b.quantity !== undefined && Number(existing.quantity) !== Number(b.quantity)) ||
   commercialPricingChanged;
 const mainCount = await prisma.reservationItem.count({
   where: { reservationId: id, isExtra: false },
@@ -740,20 +745,27 @@ const nextComposition = buildComparableContractComposition(
 const scheduleChanged =
   !sameInstant(existing.activityDate, activityDate) || !sameInstant(existing.scheduledTime, scheduledTime);
 const compositionChanged = !sameContractComposition(existingComposition, nextComposition);
-const existingCommercialComposition = existingComposition.map(({ serviceId, optionId, quantity }) => ({
-  serviceId,
-  optionId,
-  quantity,
-}));
-const nextCommercialComposition = nextComposition.map(({ serviceId, optionId, quantity }) => ({
-  serviceId,
-  optionId,
-  quantity,
-}));
+const existingCommercialComposition = buildComparableCommercialComposition(existingComposition);
+const nextCommercialComposition = buildComparableCommercialComposition(nextComposition);
 const commercialCompositionChanged =
-  JSON.stringify(existingCommercialComposition) !== JSON.stringify(nextCommercialComposition);
+  !sameCommercialComposition(existingCommercialComposition, nextCommercialComposition);
 const requestedChannelId = b.channelId !== undefined ? b.channelId ?? null : existing.channelId ?? null;
 const commercialChannelChanged = (existing.channelId ?? null) !== requestedChannelId;
+const explicitRecalculatePricing = Boolean(b.recalculatePricing);
+const promoCodeChanged = hasExplicitPromoCodeChange({
+  currentPromoCode: existing.promoCode,
+  requestedPromoCodes: (b.items ?? []).map((item) => item.promoCode),
+});
+const manualDiscountChanged =
+  b.manualDiscountCents !== undefined &&
+  Number(existing.manualDiscountCents ?? 0) !== Number(b.manualDiscountCents ?? 0);
+const priceSensitiveChanged =
+  explicitRecalculatePricing ||
+  legacyMainPriceFieldsChanged ||
+  commercialCompositionChanged ||
+  commercialChannelChanged ||
+  promoCodeChanged ||
+  manualDiscountChanged;
 const isPrepaidVoucherReservation = isReservationCoveredByPrepaidVoucher(existing);
 const commercialCommitmentBlockers = getCommercialCommitmentBlockers({
   status: existing.status,
@@ -764,7 +776,7 @@ const commercialCommitmentBlockers = getCommercialCommitmentBlockers({
   commissionLines: existing.commissionLines,
 });
 const protectedCommercialChangeRequested =
-  commercialCompositionChanged || commercialChannelChanged || commercialPricingChanged;
+  priceSensitiveChanged;
 const resolvedCustomerPhone = customerPhone === undefined ? normalizeComparableOptionalString(existing.customerPhone) : customerPhone;
 const resolvedCustomerEmail = customerEmail === undefined ? normalizeComparableOptionalString(existing.customerEmail) : customerEmail;
 const resolvedCustomerCountry =
@@ -840,7 +852,7 @@ if (isScheduleOnlyChange) {
   }
 }
 
-if (hasProItems) {
+if (hasProItems && priceSensitiveChanged) {
   // Si es pack padre, no debería permitir editar items aquí.
   const existingPack = await prisma.reservation.findUnique({
     where: { id },
@@ -954,6 +966,10 @@ if (hasProItems) {
     for (const it of b.items!) {
       const svc = svcById.get(it.serviceId)!;
       const opt = optById.get(it.optionId)!;
+      const linePromoCode =
+        existingPack.source === "BOOTH"
+          ? null
+          : (String(it.promoCode ?? existing.promoCode ?? "").trim().toUpperCase() || null);
 
       const reservationState = deriveCommercialReservationState({
         serviceCategory: svc.category ?? null,
@@ -973,7 +989,7 @@ if (hasProItems) {
           durationMinutes: Number(opt.durationMinutes ?? 30),
           quantity: qty,
           pax: Math.max(1, Number(it.pax || b.pax)),
-          promoCode: existingPack.source === "BOOTH" ? null : (String(it.promoCode ?? "").trim().toUpperCase() || null),
+          promoCode: linePromoCode,
           servicePriceId: null,
           unitPriceCents: 0,
           totalPriceCents: 0,
@@ -1002,7 +1018,7 @@ if (hasProItems) {
         durationMinutes: Number(opt.durationMinutes ?? 30),
         quantity: qty,
         pax: Math.max(1, Number(it.pax || b.pax)),
-        promoCode: existingPack.source === "BOOTH" ? null : (String(it.promoCode ?? "").trim().toUpperCase() || null),
+        promoCode: linePromoCode,
         servicePriceId: price.id ?? null,
         unitPriceCents,
         totalPriceCents: lineTotal,
@@ -1520,7 +1536,7 @@ if (hasProItems) {
           category: svc.category ?? null,
           quantity: Number(b.quantity),
           lineBaseCents: serviceSubtotal,
-          promoCode: null,
+          promoCode: existing.promoCode ?? null,
         },
       ],
       customerCountry: customerCountry === undefined ? existing.customerCountry : customerCountry,

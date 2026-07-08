@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildComparableCommercialComposition,
   commercialPricingStateChanged,
   getCommercialCommitmentBlockers,
+  hasExplicitPromoCodeChange,
   hasSufficientCommercialSnapshot,
   hasCommercialRecalculationCommitment,
   isReservationCoveredByPrepaidVoucher,
@@ -33,6 +35,39 @@ const completeSnapshot = {
 
 test("commercial snapshot is sufficient when reservation and item price snapshots are present", () => {
   assert.equal(hasSufficientCommercialSnapshot(completeSnapshot), true);
+});
+
+test("commercial composition ignores pax and preserves equivalent service option quantity", () => {
+  assert.deepEqual(
+    buildComparableCommercialComposition([
+      { serviceId: "svc-b", optionId: "opt-2", quantity: 1 },
+      { serviceId: "svc-a", optionId: "opt-1", quantity: 2 },
+    ]),
+    [
+      { serviceId: "svc-a", optionId: "opt-1", quantity: 2 },
+      { serviceId: "svc-b", optionId: "opt-2", quantity: 1 },
+    ]
+  );
+});
+
+test("missing promoCode in incoming items does not clear a valid snapshot", () => {
+  assert.equal(
+    hasExplicitPromoCodeChange({
+      currentPromoCode: "MAYO",
+      requestedPromoCodes: [null, undefined],
+    }),
+    false
+  );
+});
+
+test("different incoming promoCode is a commercial change", () => {
+  assert.equal(
+    hasExplicitPromoCodeChange({
+      currentPromoCode: "MAYO",
+      requestedPromoCodes: ["JUNIO"],
+    }),
+    true
+  );
 });
 
 function commercialCommitmentArgs(overrides: Partial<Parameters<typeof getCommercialCommitmentBlockers>[0]> = {}) {
