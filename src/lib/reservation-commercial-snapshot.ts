@@ -58,6 +58,18 @@ export type CommercialPricingStateLike = {
   pricingTier?: string | null;
 };
 
+export type CommercialCompositionLine = {
+  serviceId: string;
+  optionId: string;
+  quantity: number;
+};
+
+export type CommercialCompositionItemInput = {
+  serviceId: string;
+  optionId?: string | null;
+  quantity?: number | null;
+};
+
 function isFiniteCents(value: unknown) {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0;
@@ -225,4 +237,46 @@ export function commercialPricingStateChanged(args: {
     current.jetskiLicenseMode !== requested.jetskiLicenseMode ||
     current.pricingTier !== requested.pricingTier
   );
+}
+
+export function normalizePromoCode(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
+export function buildComparableCommercialComposition(
+  items: CommercialCompositionItemInput[]
+): CommercialCompositionLine[] {
+  return items
+    .map((item) => ({
+      serviceId: item.serviceId,
+      optionId: item.optionId ?? "",
+      quantity: Number(item.quantity ?? 0),
+    }))
+    .sort((left, right) =>
+      left.serviceId.localeCompare(right.serviceId) ||
+      left.optionId.localeCompare(right.optionId) ||
+      left.quantity - right.quantity
+    );
+}
+
+export function sameCommercialComposition(
+  left: CommercialCompositionLine[],
+  right: CommercialCompositionLine[]
+) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function hasExplicitPromoCodeChange(args: {
+  currentPromoCode?: string | null;
+  requestedPromoCodes: Array<string | null | undefined>;
+}) {
+  const currentPromoCode = normalizePromoCode(args.currentPromoCode);
+  const requestedPromoCodes = Array.from(
+    new Set(args.requestedPromoCodes.map(normalizePromoCode).filter(Boolean))
+  );
+
+  if (requestedPromoCodes.length === 0) return false;
+  if (requestedPromoCodes.length > 1) return true;
+  return requestedPromoCodes[0] !== currentPromoCode;
 }

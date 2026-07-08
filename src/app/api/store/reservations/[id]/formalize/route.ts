@@ -836,6 +836,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       for (const item of candidateItems) {
         const qty = Number(item.quantity ?? 0);
         const pax = Number(item.pax ?? 0);
+        const linePromoCode =
+          current.source === "BOOTH"
+            ? null
+            : (String(item.promoCode ?? current.promoCode ?? "").trim().toUpperCase() || null);
         if (!Number.isFinite(qty) || qty < 1 || qty > 99) throw new Error("Cantidad invalida.");
         if (!Number.isFinite(pax) || pax < 1 || pax > 50) throw new Error("PAX invalido.");
 
@@ -863,7 +867,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             durationMinutes: Number(option.durationMinutes ?? 30),
             quantity: qty,
             pax,
-            promoCode: item.promoCode ?? null,
+            promoCode: linePromoCode,
             servicePriceId: null,
             unitPriceCents: 0,
             totalPriceCents: 0,
@@ -882,7 +886,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             durationMinutes: Number(option.durationMinutes ?? 30),
             quantity: qty,
             pax,
-            promoCode: item.promoCode ?? null,
+            promoCode: linePromoCode,
             servicePriceId: frozenItem?.servicePriceId ?? null,
             unitPriceCents: Number(frozenItem?.unitPriceCents ?? 0),
             totalPriceCents: Number(frozenItem?.totalPriceCents ?? 0),
@@ -913,7 +917,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           durationMinutes: Number(option.durationMinutes ?? 30),
           quantity: qty,
           pax,
-          promoCode: item.promoCode ?? null,
+          promoCode: linePromoCode,
           servicePriceId: price.id ?? null,
           unitPriceCents,
           totalPriceCents: unitPriceCents * qty,

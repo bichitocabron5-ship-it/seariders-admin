@@ -292,6 +292,9 @@ export function useReservationPrefill(args: {
         quantity?: number | null;
         pax?: number | null;
         promoCode?: string | null;
+        servicePriceId?: string | null;
+        unitPriceCents?: number | null;
+        totalPriceCents?: number | null;
       }> | null;
       totalServiceCents?: number | null;
       paidServiceCents?: number | null;
