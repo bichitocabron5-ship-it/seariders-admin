@@ -251,10 +251,150 @@ En contratos firmados, no se cambia el recurso firmado. Si el recurso firmado ya
 
 ---
 
-## 6. Invariantes
+## 6. Carril B0: ajustes comerciales
+
+Carril B0 define la politica comercial para ajustar una reserva ya creada. En esta fase el RFC solo fija contrato funcional y tecnico: no implica cambios de Prisma, no crea endpoints y no modifica codigo de aplicacion.
+
+El ajuste comercial es independiente del historico legal de pagos y contratos. La reserva puede necesitar un nuevo total comercial, pero los pagos existentes y los contratos firmados no se reescriben.
+
+### Concepto `CommercialAdjustment`
+
+Aunque no se implemente todavia, el modelo logico de auditoria debe representar cada decision comercial aplicada o pendiente sobre una reserva:
+
+| Campo | Significado |
+| --- | --- |
+| `id` | Identificador unico del ajuste comercial. |
+| `reservationId` | Reserva afectada. |
+| `oldTotalCents` | Total comercial de servicio antes del ajuste. |
+| `newTotalCents` | Total comercial de servicio despues del ajuste. |
+| `paidServiceCents` | Importe neto historico de dinero real `IN/OUT` aplicado al servicio, calculado desde movimientos `Payment` existentes. No incluye cobertura de gift, pass ni voucher. |
+| `coveredServiceCents` | Importe de servicio cubierto por gift, pass o voucher. Es cobertura comercial/prepagada, no un pago cash normal de la reserva. |
+| `chargeableNewTotalCents` | Importe realmente cobrable tras aplicar cobertura: `max(newTotalCents - coveredServiceCents, 0)`. |
+| `overpaidServiceCents` | Sobrepago de servicio tras el ajuste: `max(paidServiceCents - chargeableNewTotalCents, 0)`. |
+| `pendingServiceCents` | Pendiente de cobrar tras el ajuste: `max(chargeableNewTotalCents - paidServiceCents, 0)`. |
+| `refundMode` | Decision sobre el sobrepago: sin devolucion, devolucion real inmediata, devolucion pendiente o credito futuro reservado. |
+| `reason` | Motivo obligatorio del ajuste. |
+| `status` | Estado del ajuste: aplicado, pendiente de devolucion, devuelto o anulado. |
+| `createdByUserId` | Usuario operador que confirma el ajuste. |
+| `createdAt` | Fecha de creacion del ajuste. |
+
+`CommercialAdjustment` no sustituye a `Payment`. Es una decision comercial/auditable; el dinero real sigue representado por movimientos `Payment`.
+
+### Vouchers, passes y gifts
+
+Gift vouchers, pass vouchers y consumos de bonos no deben compararse como si fueran pagos cash normales de la reserva. Cubren todo o parte del servicio con un derecho adquirido previamente o con un flujo propio de prepago, por lo que no forman parte de `paidServiceCents`.
+
+Separacion obligatoria de importes:
+
+- `paidServiceCents`: dinero real que entro o salio en la reserva mediante `Payment IN/OUT` de servicio.
+- `coveredServiceCents`: importe de servicio cubierto por `giftVoucherId`, `passVoucherId`, `passConsumeId` u otro mecanismo equivalente de gift/pass/voucher.
+- `chargeableNewTotalCents`: importe realmente cobrable al cliente despues de restar `coveredServiceCents` al nuevo total comercial.
+
+En fase 1, cualquier reserva con `giftVoucherId`, `passVoucherId` o `passConsumeId` bloquea el ajuste comercial normal de Carril B0. Debe requerir un flujo especifico de gift/pass/voucher que preserve la contabilidad del prepago, el consumo del bono y la trazabilidad de la cobertura.
+
+### Motivo obligatorio
+
+Todo ajuste debe tener un motivo obligatorio elegido de un catalogo cerrado:
+
+- `reduccion_motos`: reduccion de motos.
+- `cambio_actividad`: cambio de actividad.
+- `mal_tiempo`: mal tiempo.
+- `error_operador`: error operador.
+- `incidencia_cliente`: incidencia cliente.
+- `compensacion`: compensacion.
+- `otro`: otro.
+
+El commit debe rechazar ajustes sin motivo. Preview puede calcular importes sin persistir, pero la confirmacion no debe avanzar sin `reason`.
+
+### Regla de pagos historicos
+
+Los pagos historicos son asientos de caja y no se modifican nunca.
+
+Campos prohibidos de editar en pagos existentes:
+
+- `amountCents`.
+- `direction`.
+- `method`.
+- `createdAt`.
+
+Si el ajuste genera mas importe a cobrar, se crea un nuevo `Payment` `IN` cuando entra dinero real. Si el ajuste genera devolucion real, se crea un nuevo `Payment` `OUT` cuando sale dinero real. No se corrigen pagos antiguos para "cuadrar" el total nuevo.
+
+### Endpoint legacy `financial-adjustment`
+
+`/api/admin/reservations/[id]/financial-adjustment` queda deprecated para operaciones normales de tienda.
+
+No debe usarse como implementacion de Carril B0 porque pertenece al flujo legacy y puede mutar pagos historicos para cuadrar importes. Carril B0 define un flujo nuevo: no modifica `Payment` antiguos y solo crea nuevos `Payment IN/OUT` cuando hay entrada o salida real de dinero.
+
+Mientras el endpoint legacy exista, debe tratarse como una excepcion administrativa de alto riesgo y no como camino normal de operacion.
+
+### Pending refund
+
+Si existe sobrepago pero no se devuelve en ese momento, debe quedar registrado como devolucion pendiente.
+
+Reglas:
+
+- `overpaidServiceCents > 0` no implica crear automaticamente un `Payment OUT`.
+- Si no hay salida real de caja, el ajuste queda con `refundMode = PENDING_REFUND` y `status = PENDING_REFUND`.
+- El sistema debe poder listar o resolver devoluciones pendientes en un flujo posterior.
+- El `Payment OUT` se crea solo cuando el dinero sale realmente de caja o del metodo de pago correspondiente.
+
+Esto evita que caja, cierres y auditoria reflejen una salida que aun no ocurrio.
+
+### Credit
+
+Credito queda documentado como concepto futuro, pero no se implementa en fase 1.
+
+En fase 1:
+
+- No se crea saldo a favor reutilizable.
+- No se descuenta automaticamente una reserva futura.
+- No se usa credito para ocultar una devolucion pendiente.
+
+Si negocio decide soportarlo, `refundMode` podra reservar un valor de credito futuro, respaldado por modelo contable propio, permisos, caducidad y trazabilidad.
+
+### Contratos `SIGNED`
+
+Un contrato `SIGNED` nunca se modifica por un ajuste comercial.
+
+Cancelar o ajustar una reserva firmada conserva el contrato firmado como historico legal. No se cambian estado, firma, conductor, contenido legal, HTML/PDF firmado, recurso firmado ni snapshots renderizados. Si la politica comercial permite ajustar o cancelar la reserva, el ajuste queda como hecho comercial posterior; el contrato firmado sigue siendo evidencia de lo que el cliente acepto en su momento.
+
+Si el ajuste contradice contenido firmado y negocio necesita reflejarlo legalmente, debe existir un flujo legal/administrativo separado. Carril B0 no reutiliza ni reescribe contratos firmados.
+
+### Helper unico de politica
+
+`resolveCommercialAdjustmentPolicy` debe ser la fuente unica de decision para ajustes comerciales.
+
+Responsabilidades del helper:
+
+- Recibir snapshot de reserva, total anterior, total propuesto, pagos historicos relevantes, contratos firmados existentes, motivo y modo de devolucion solicitado.
+- Calcular `oldTotalCents`, `newTotalCents`, `paidServiceCents`, `coveredServiceCents`, `chargeableNewTotalCents`, `overpaidServiceCents` y `pendingServiceCents`.
+- Decidir si el ajuste esta permitido, bloqueado o permitido con avisos.
+- Bloquear en fase 1 el ajuste normal si la reserva tiene `giftVoucherId`, `passVoucherId` o `passConsumeId`.
+- Decidir si corresponde `Payment IN`, `Payment OUT`, devolucion pendiente o ningun movimiento de caja.
+- Preservar la regla de no mutar pagos historicos.
+- Preservar la regla de no mutar contratos `SIGNED`.
+- Devolver un resultado estructurado consumible por preview, commit, logs y tests.
+
+Preview y commit deben usar el mismo helper. Commit debe recalcular la politica dentro del contexto transaccional o con datos recien leidos, y no confiar ciegamente en un preview antiguo.
+
+### Flujo esperado
+
+El flujo de ajuste comercial es:
+
+1. `resolveCommercialAdjustmentPolicy`.
+2. Preview para mostrar impacto: total anterior, total nuevo, cobertura, importe cobrable, pendiente de cobro, sobrepago, devolucion pendiente o movimiento de caja previsto.
+3. Confirmacion explicita con motivo obligatorio y modo de devolucion.
+4. Commit: aplicar cambio comercial, crear solo nuevos movimientos `Payment IN/OUT` cuando haya dinero real, registrar ajuste y conservar historicos.
+
+---
+
+## 7. Invariantes
 
 - No hay mas de un contrato activo por unidad logica. Activo significa `supersededAt = null`, `status != VOID` y `logicalUnitIndex` dentro de `1..requiredUnits`.
 - `SIGNED` nunca cambia su estado, contenido legal, firma, conductor, render ni PDF firmado.
+- `Payment` historicos no se mutan por Carril B0; todo dinero real posterior se representa con nuevos `Payment IN/OUT`.
+- Gift/pass/voucher no cuenta como pago cash normal: `paidServiceCents` solo refleja dinero real y la cobertura va en `coveredServiceCents`.
+- Reservas con `giftVoucherId`, `passVoucherId` o `passConsumeId` bloquean en fase 1 el ajuste comercial normal y requieren flujo especifico.
 - `VOID`/superseded nunca se firma.
 - `requiredUnits` debe coincidir con contratos activos visibles, salvo historicos firmados superseded.
 - Los contratos no firmados no deben conservar PDF/render antiguo tras cambios materiales.
@@ -263,10 +403,13 @@ En contratos firmados, no se cambia el recurso firmado. Si el recurso firmado ya
 - La firma solo puede operar sobre el contrato visible vigente para su unidad logica.
 - La sincronizacion debe ser idempotente.
 - Los errores de bloqueo deben ocurrir antes de escribir cambios parciales.
+- Los pagos historicos no se modifican: cualquier cobro o devolucion real posterior se representa con nuevos movimientos `Payment IN/OUT`.
+- Todo ajuste comercial confirmado tiene motivo obligatorio.
+- Un sobrepago no devuelto debe quedar como devolucion pendiente, no como `Payment OUT` ficticio.
 
 ---
 
-## 7. Seguridad de firma
+## 8. Seguridad de firma
 
 `saveContractSignature` debe aplicar guardas estrictas antes de subir firma, cambiar estado o regenerar PDF firmado.
 
@@ -298,7 +441,7 @@ Errores esperados:
 
 ---
 
-## 8. UX recomendada
+## 9. UX recomendada
 
 La UI debe anticipar impactos, pero el backend decide.
 
@@ -315,11 +458,13 @@ Comportamiento recomendado:
 - Diferenciar avisos bloqueantes de avisos informativos.
 - En reservas con contratos `READY`, no impedir editar; avisar que el cambio puede invalidar renders o devolver contratos a `DRAFT`.
 - En reservas con contratos `SIGNED`, mostrar claramente que los contratos firmados no se modificaran y que ciertas ediciones pueden bloquearse.
+- En ajustes comerciales, mostrar siempre total anterior, total nuevo, pagado historico, pendiente de cobro, sobrepago y devolucion pendiente si aplica.
+- No mostrar una devolucion como ejecutada hasta que exista `Payment OUT` real.
 - Tras guardar, refrescar contratos desde backend y no confiar en estado local anterior.
 
 ---
 
-## 9. Tests imprescindibles
+## 10. Tests imprescindibles
 
 Antes de implementar, deben existir tests que cubran como minimo:
 
@@ -347,10 +492,19 @@ Antes de implementar, deben existir tests que cubran como minimo:
 - Firma concurrente: dos intentos simultaneos no generan doble firma ni estados inconsistentes.
 - Endpoints de update/ensure aplican el helper y devuelven `requiredUnits`, `readyCount` y plan aplicado coherente.
 - Listados publicos y de tienda excluyen contratos `VOID`/superseded de la vista activa.
+- `resolveCommercialAdjustmentPolicy` calcula `chargeableNewTotalCents` descontando `coveredServiceCents` antes de comparar contra `paidServiceCents`.
+- `resolveCommercialAdjustmentPolicy` calcula pendiente de cobro cuando `chargeableNewTotalCents > paidServiceCents`.
+- `resolveCommercialAdjustmentPolicy` calcula sobrepago cuando `paidServiceCents > chargeableNewTotalCents`.
+- Ajuste con sobrepago y sin salida real queda como devolucion pendiente y no crea `Payment OUT`.
+- Ajuste con devolucion real crea nuevo `Payment OUT` sin mutar pagos historicos.
+- Ajuste con importe adicional crea nuevo `Payment IN` solo cuando entra dinero real.
+- Ajuste sin motivo obligatorio se bloquea en commit.
+- Ajuste sobre reserva con contrato `SIGNED` conserva contrato firmado sin mutarlo.
+- Preview y commit usan la misma politica y devuelven importes coherentes.
 
 ---
 
-## 10. Plan de implementacion por fases
+## 11. Plan de implementacion por fases
 
 ### Fase 1: blindar firma
 
@@ -363,6 +517,18 @@ Antes de implementar, deben existir tests que cubran como minimo:
 - Crear un helper puro que reciba snapshot de reserva y contratos existentes.
 - Devolver un plan sin escribir en base de datos.
 - Cubrir con tests unitarios los escenarios de aumento, reduccion, incompatibilidad, renders y recursos preparados.
+
+### Carril B0: politica de ajustes comerciales
+
+- Definir `resolveCommercialAdjustmentPolicy` como helper puro antes de exponer preview o commit.
+- Usar el mismo helper para preview y commit.
+- Mantener pagos historicos inmutables y representar dinero real solo con nuevos `Payment IN/OUT`.
+- Separar dinero real (`paidServiceCents`) de cobertura gift/pass/voucher (`coveredServiceCents`) y calcular el cobrable real con `chargeableNewTotalCents`.
+- Bloquear en fase 1 los ajustes normales sobre reservas con `giftVoucherId`, `passVoucherId` o `passConsumeId`.
+- Excluir `/api/admin/reservations/[id]/financial-adjustment` del Carril B0 y documentarlo como legacy/deprecated para tienda.
+- Registrar sobrepagos no devueltos como devolucion pendiente.
+- Dejar credito fuera de fase 1, solo como concepto futuro documentado.
+- Conservar contratos `SIGNED` como historico legal ante ajustes o cancelaciones permitidas por negocio.
 
 ### Fase 3: aplicar sync en update/ensure
 
@@ -386,17 +552,25 @@ Antes de implementar, deben existir tests que cubran como minimo:
 
 ---
 
-## 11. Decisiones abiertas
+## 12. Decisiones abiertas
 
 - Definir si se necesita almacenar un hash/fingerprint material del contrato en una fase posterior o si basta con limpiar renders de forma conservadora cuando update detecta cambios materiales.
 - Definir el flujo legal para una unidad firmada que negocio quiera cancelar, retirar o sustituir. No debe mezclarse con la edicion normal de cantidad.
 - Definir si `READY` debe volver siempre a `DRAFT` ante cualquier cambio material o si puede mantenerse `READY` cuando las validaciones siguen pasando y el render se regenera antes de firma.
 - Definir si el recurso preparado firmado representa compromiso legal o solo informacion operativa mostrada al cliente.
 - Definir el detalle exacto de "reserva activa" para firma: estados permitidos, por ejemplo `SCHEDULED`, `WAITING` y `READY_FOR_PLATFORM`, y estados bloqueados como `CANCELED` o `COMPLETED`.
+- Definir los valores finales de `refundMode` y `status` para `CommercialAdjustment`.
+- Definir si el motivo `otro` requiere un texto libre adicional obligatorio.
+- Definir como se listan, autorizan y cierran las devoluciones pendientes.
+- Definir la separacion exacta entre importes de servicio, fianza, extras, bar y otros conceptos para calcular `paidServiceCents`.
+- Definir el flujo especifico para ajustar reservas con gift/pass/voucher: cobertura parcial, devolucion del prepago, reversa de consumo y efectos sobre `coveredServiceCents`.
+- Definir el modelo futuro de credito, si negocio lo aprueba: saldo, caducidad, permisos, uso parcial y auditoria.
+- Definir que ajustes comerciales sobre reservas con `SIGNED` se permiten sin flujo legal adicional y cuales deben bloquearse.
+- Definir si el endpoint legacy `/api/admin/reservations/[id]/financial-adjustment` debe eliminarse, protegerse por permisos reforzados o quedar solo como herramienta administrativa temporal.
 
 ---
 
-## 12. Riesgos pendientes
+## 13. Riesgos pendientes
 
 - Compatibilidad con datos legacy que tengan `logicalUnitIndex` nulo o contratos visibles duplicados.
 - Enlaces publicos antiguos que apunten a contratos ahora superseded.
@@ -404,3 +578,11 @@ Antes de implementar, deben existir tests que cubran como minimo:
 - Concurrencia entre update de reserva, ensure de contratos y firma publica.
 - Ambiguedad si un cambio de precio/duracion ocurre despues de firma pero antes de operar la reserva.
 - Posible diferencia entre unidad contractual y unidad operacional de plataforma.
+- Crear `Payment OUT` antes de una salida real de caja descuadraria cierres y auditoria.
+- Mutar pagos historicos romperia trazabilidad contable y podria invalidar cierres previos.
+- Doble commit concurrente de un ajuste podria duplicar cobros, devoluciones o pendientes si no hay guardas transaccionales.
+- Clasificar mal `paidServiceCents` puede mezclar servicio con fianzas, bar o extras y producir saldos incorrectos.
+- Tratar gift/pass/voucher como pago cash normal podria cobrar o devolver importes incorrectos porque mezcla dinero real de la reserva con cobertura prepagada.
+- Mientras `/api/admin/reservations/[id]/financial-adjustment` exista, un uso manual puede romper las invariantes de Carril B0 al mutar pagos historicos.
+- Las devoluciones pendientes pueden quedar olvidadas si no existe vista operativa, responsable y cierre explicito.
+- Ajustar comercialmente una reserva firmada sin comunicar bien el historico legal puede generar discrepancias entre operacion, cliente y contrato conservado.
