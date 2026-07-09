@@ -150,9 +150,12 @@ export function buildCommercialAdjustmentPreview(
     items: reservation.items ?? [],
   });
   const visibleContracts = pickVisibleContractsByLogicalUnit(reservation.contracts ?? [], requiredUnits);
-  const hasSignedContracts = visibleContracts.some(
-    (contract) => String(contract.status ?? "").toUpperCase() === "SIGNED"
-  );
+  const hasSignedContracts =
+    (reservation.contracts ?? []).some(
+      (contract) =>
+        String(contract.status ?? "").toUpperCase() === "SIGNED" && !contract.supersededAt
+    ) ||
+    visibleContracts.some((contract) => String(contract.status ?? "").toUpperCase() === "SIGNED");
 
   const policy = resolveCommercialAdjustmentPolicy({
     oldTotalCents,

@@ -185,3 +185,20 @@ test("refundNow sin motivo bloquea", () => {
   assert.equal(policy.refundNowCents, 2_000);
   assert.deepEqual(policy.blockers, ["REFUND_REASON_REQUIRED"]);
 });
+
+test("refundNow bloquea en fase B3A", () => {
+  const policy = resolveCommercialAdjustmentPolicy(
+    basePolicyArgs({
+      oldTotalCents: 10_000,
+      newTotalCents: 8_000,
+      paidServiceCents: 10_000,
+      requestedRefundMode: "refundNow",
+      reason: "Devolucion aprobada",
+      phase: "B3A",
+    })
+  );
+
+  assert.equal(policy.canCommit, false);
+  assert.equal(policy.refundNowCents, 2_000);
+  assert.deepEqual(policy.blockers, ["REFUND_NOW_NOT_SUPPORTED_B3A"]);
+});

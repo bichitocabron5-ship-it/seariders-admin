@@ -107,6 +107,8 @@ export function resolveReservationPaymentStatus(args: ReservationPaymentStatusAr
 
   const pendingServiceCents = Math.max(0, serviceDueCents - paidServiceCents);
   const pendingDepositCents = Math.max(0, depositDueCents - paidDepositCents);
+  const overpaidServiceCents = Math.max(0, paidServiceCents - serviceDueCents);
+  const overpaidDepositCents = Math.max(0, paidDepositCents - depositDueCents);
   const status = String(args.reservationStatus ?? "").toUpperCase();
   const isCanceled = status === "CANCELED";
   const servicePayments = (args.payments ?? []).filter((payment) => !payment.isDeposit);
@@ -163,6 +165,8 @@ export function resolveReservationPaymentStatus(args: ReservationPaymentStatusAr
     paidDepositCents,
     pendingServiceCents,
     pendingDepositCents,
+    overpaidServiceCents,
+    overpaidDepositCents,
     displayPendingServiceCents,
     displayPendingDepositCents,
     displayPendingCents,

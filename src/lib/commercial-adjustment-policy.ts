@@ -5,6 +5,7 @@ export type CommercialAdjustmentRefundMode = "refundNow" | "leavePendingRefund";
 export type CommercialAdjustmentPolicyBlocker =
   | "ADVANCED_RESERVATION_STATUS"
   | "PAID_COMMISSION"
+  | "REFUND_NOW_NOT_SUPPORTED_B3A"
   | "REFUND_MODE_REQUIRED"
   | "REFUND_REASON_REQUIRED"
   | "SIGNED_CONTRACT_MATERIAL_EDIT"
@@ -39,6 +40,7 @@ export type ResolveCommercialAdjustmentPolicyArgs = {
   requestedRefundMode?: CommercialAdjustmentRefundMode | null;
   reason?: string | null;
   operationType: CommercialAdjustmentOperationType;
+  phase?: "B3A" | "B3B" | null;
 };
 
 export type CommercialAdjustmentPolicy = {
@@ -82,6 +84,8 @@ export function resolveCommercialAdjustmentPolicy(
   const status = normalizeStatus(args.reservationStatus);
   const materialTotalChange = oldTotalCents !== newTotalCents;
   const hasAnyPayment = paidServiceCents > 0 || paidDepositCents > 0;
+  const refundNowBlockedInB3A =
+    args.phase === "B3A" && args.requestedRefundMode === "refundNow";
 
   const pendingServiceCents = Math.max(0, newTotalCents - paidServiceCents);
   const overpaidServiceCents = Math.max(0, paidServiceCents - newTotalCents);
@@ -113,7 +117,9 @@ export function resolveCommercialAdjustmentPolicy(
     if (args.requestedRefundMode === "refundNow") {
       refundNowCents = overpaidServiceCents;
       requiredActions.push("REFUND_NOW");
-      if (!hasReason(args.reason)) {
+      if (refundNowBlockedInB3A) {
+        blockers.push("REFUND_NOW_NOT_SUPPORTED_B3A");
+      } else if (!hasReason(args.reason)) {
         blockers.push("REFUND_REASON_REQUIRED");
       }
     } else if (args.requestedRefundMode === "leavePendingRefund") {
@@ -124,10 +130,13 @@ export function resolveCommercialAdjustmentPolicy(
     }
   }
 
+  if (refundNowBlockedInB3A && overpaidServiceCents === 0) {
+    blockers.push("REFUND_NOW_NOT_SUPPORTED_B3A");
+  }
+
   if (
     args.hasSignedContracts &&
-    args.operationType === "EDIT" &&
-    materialTotalChange
+    args.operationType === "EDIT"
   ) {
     blockers.push("SIGNED_CONTRACT_MATERIAL_EDIT");
   }
@@ -137,7 +146,7 @@ export function resolveCommercialAdjustmentPolicy(
     pushUnique(requiredActions, "KEEP_SIGNED_CONTRACT_HISTORY");
   }
 
-  if (args.hasPaidCommission && materialTotalChange) {
+  if (args.hasPaidCommission) {
     blockers.push("PAID_COMMISSION");
   }
 
@@ -145,7 +154,7 @@ export function resolveCommercialAdjustmentPolicy(
     blockers.push("ADVANCED_RESERVATION_STATUS");
   }
 
-  if (args.hasVoucherOrPassOrGift && materialTotalChange) {
+  if (args.hasVoucherOrPassOrGift) {
     blockers.push("VOUCHER_OR_PASS_OR_GIFT");
     requiredActions.push("REVIEW_VOUCHER_OR_PASS_OR_GIFT");
   }
