@@ -33,6 +33,46 @@ import {
 const RIGHT_STATUSES = new Set(["READY_FOR_PLATFORM", "IN_SEA"]);
 const LEFT_STATUSES_EXCLUDE = new Set(["COMPLETED", "CANCELED"]);
 
+type CancelRefundMode = "refundNow" | "leavePendingRefund" | "none";
+
+type CancelPreview = {
+  canCommit: boolean;
+  blockers: string[];
+  warnings: string[];
+  oldTotalCents: number;
+  newTotalCents: number;
+  paidServiceCents: number;
+  paidDepositCents: number;
+  pendingServiceCents: number;
+  overpaidServiceCents: number;
+  refundNowCents: number;
+  pendingRefundCents: number;
+  requiredActions: string[];
+};
+
+type CancelDraft = {
+  reservation: ReservationRow;
+  method: PayMethod;
+  refundMode: CancelRefundMode;
+  reason: string;
+};
+
+async function responseErrorMessage(res: Response, fallbackMessage: string) {
+  const text = await res.text().catch(() => "");
+  if (!text.trim()) return fallbackMessage;
+  try {
+    const payload = JSON.parse(text) as { error?: unknown };
+    return typeof payload.error === "string" ? payload.error : text.trim();
+  } catch {
+    return text.trim();
+  }
+}
+
+function defaultCancelRefundMode(reservation: ReservationRow): CancelRefundMode {
+  const paidServiceCents = Math.max(0, Number(reservation.paidServiceCents ?? reservation.paidCents ?? 0));
+  return paidServiceCents > 0 ? "leavePendingRefund" : "none";
+}
+
 export default function StoreDashboard() {
   const [rows, setRows] = useState<ReservationRow[]>([]);
   const [, setLoading] = useState(true);
@@ -49,6 +89,11 @@ export default function StoreDashboard() {
   const [servicePayLinesByReservation, setServicePayLinesByReservation] = useState<Record<string, PayLine[]>>({});
   const [extraUi, setExtraUi] = useState<ExtraUiMap>({});
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [cancelDraft, setCancelDraft] = useState<CancelDraft | null>(null);
+  const [cancelPreview, setCancelPreview] = useState<CancelPreview | null>(null);
+  const [cancelPreviewLoading, setCancelPreviewLoading] = useState(false);
+  const [cancelPreviewError, setCancelPreviewError] = useState<string | null>(null);
+  const [cancelCommitting, setCancelCommitting] = useState(false);
 
   const handleActionError = useCallback((context: string, e: unknown, fallback: string) => {
     const message = errorMessage(e, fallback);
@@ -289,23 +334,101 @@ export default function StoreDashboard() {
     }
   }
 
-  async function cancelReservation(reservationId: string, opts: { refund: boolean; method: PayMethod }) {
+  function openCancelReservation(reservation: ReservationRow, method: PayMethod) {
     setError(null);
+    setCancelPreview(null);
+    setCancelPreviewError(null);
+    setCancelDraft({
+      reservation,
+      method,
+      refundMode: defaultCancelRefundMode(reservation),
+      reason: "",
+    });
+  }
+
+  useEffect(() => {
+    if (!cancelDraft) {
+      setCancelPreview(null);
+      setCancelPreviewError(null);
+      setCancelPreviewLoading(false);
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setCancelPreviewLoading(true);
+      setCancelPreviewError(null);
+      try {
+        const r = await fetch(`/api/store/reservations/${cancelDraft.reservation.id}/commercial-adjustment/preview`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            newTotalCents: 0,
+            newDepositCents: 0,
+            operationType: "CANCEL",
+            requestedRefundMode: cancelDraft.refundMode,
+            reason: cancelDraft.reason,
+          }),
+        });
+
+        if (!r.ok) throw new Error(await responseErrorMessage(r, "No se pudo preparar la cancelacion"));
+        const preview = (await r.json()) as CancelPreview;
+        if (!active) return;
+        setCancelPreview(preview);
+      } catch (e: unknown) {
+        if (!active) return;
+        setCancelPreview(null);
+        setCancelPreviewError(errorMessage(e, "No se pudo preparar la cancelacion"));
+      } finally {
+        if (active) setCancelPreviewLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [cancelDraft]);
+
+  async function commitCancelReservation() {
+    if (!cancelDraft) return;
+    const reason = cancelDraft.reason.trim();
+    const requestedRefundMode: CancelRefundMode =
+      Math.max(0, Number(cancelPreview?.overpaidServiceCents ?? 0)) > 0
+        ? cancelDraft.refundMode
+        : "none";
+    if (!reason) {
+      setCancelPreviewError("Indica el motivo de la cancelacion.");
+      return;
+    }
+    if (requestedRefundMode === "refundNow" && isCashClosed) {
+      setCancelPreviewError("Caja cerrada: no se puede devolver ahora.");
+      return;
+    }
+
+    setError(null);
+    setCancelCommitting(true);
     try {
-      const r = await fetch(`/api/store/reservations/${reservationId}/cancel`, {
+      const r = await fetch(`/api/store/reservations/${cancelDraft.reservation.id}/cancel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          refundMode: opts.refund ? "FULL" : "NONE",
-          refundMethod: opts.method,
+          requestedRefundMode,
+          refundMethod: cancelDraft.method,
           refundOrigin: "STORE",
+          reason,
         }),
       });
 
-      await ensureOkResponse(r, "No se pudo cancelar la reserva");
+      if (!r.ok) throw new Error(await responseErrorMessage(r, "No se pudo cancelar la reserva"));
+      setCancelDraft(null);
       await load();
     } catch (e: unknown) {
-      handleActionError("cancel reservation", e, "No se pudo cancelar la reserva");
+      const message = errorMessage(e, "No se pudo cancelar la reserva");
+      setCancelPreviewError(message);
+      handleActionError("cancel reservation", e, message);
+    } finally {
+      setCancelCommitting(false);
     }
   }
 
@@ -549,7 +672,7 @@ export default function StoreDashboard() {
                       updateServicePayLine={(idx, patch) => updateServicePayLine(r.id, idx, patch)}
                       chargeServiceSplit={chargeServiceSplit}
                       nowMs={nowMs}
-                      cancelReservation={cancelReservation}
+                      cancelReservation={openCancelReservation}
                     />
                   );
                 })}
@@ -591,7 +714,7 @@ export default function StoreDashboard() {
                   updateServicePayLine={(idx, patch) => updateServicePayLine(r.id, idx, patch)}
                   chargeServiceSplit={chargeServiceSplit}
                   completeReturn={completeReturn}
-                  cancelReservation={cancelReservation}
+                  cancelReservation={openCancelReservation}
                 />
               );
             })}
@@ -638,13 +761,232 @@ export default function StoreDashboard() {
                   showReturnedBanner
                   showReturnedActions
                   completeReturn={completeReturn}
-                  cancelReservation={cancelReservation}
+                  cancelReservation={openCancelReservation}
                 />
               );
             })}
           </StoreReservationColumnSection>
         </div>
       </section>
+
+      {cancelDraft ? (
+        <CancelReservationModal
+          draft={cancelDraft}
+          preview={cancelPreview}
+          previewLoading={cancelPreviewLoading}
+          previewError={cancelPreviewError}
+          isCashClosed={isCashClosed}
+          committing={cancelCommitting}
+          onClose={() => {
+            if (cancelCommitting) return;
+            setCancelDraft(null);
+          }}
+          onChange={(patch) => setCancelDraft((current) => (current ? { ...current, ...patch } : current))}
+          onConfirm={() => void commitCancelReservation()}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function cancelBlockerLabel(blocker: string) {
+  switch (blocker) {
+    case "CANCEL_REASON_REQUIRED":
+      return "Indica el motivo de la cancelacion.";
+    case "REFUND_MODE_REQUIRED":
+      return "Elige devolver ahora o dejar la devolucion pendiente.";
+    case "REFUND_REASON_REQUIRED":
+      return "La devolucion requiere motivo.";
+    case "PAID_COMMISSION":
+      return "Comision pagada: requiere flujo admin.";
+    case "ADVANCED_RESERVATION_STATUS":
+      return "El estado operativo no permite cancelar desde tienda.";
+    case "VOUCHER_OR_PASS_OR_GIFT":
+      return "Reserva con bono, regalo o voucher: requiere revision.";
+    default:
+      return blocker;
+  }
+}
+
+function CancelReservationModal({
+  draft,
+  preview,
+  previewLoading,
+  previewError,
+  isCashClosed,
+  committing,
+  onClose,
+  onChange,
+  onConfirm,
+}: {
+  draft: CancelDraft;
+  preview: CancelPreview | null;
+  previewLoading: boolean;
+  previewError: string | null;
+  isCashClosed: boolean;
+  committing: boolean;
+  onClose: () => void;
+  onChange: (patch: Partial<CancelDraft>) => void;
+  onConfirm: () => void;
+}) {
+  const paidServiceFallback = Math.max(
+    0,
+    Number(draft.reservation.paidServiceCents ?? draft.reservation.paidCents ?? 0)
+  );
+  const hasRefundableService =
+    Math.max(0, Number(preview?.overpaidServiceCents ?? paidServiceFallback)) > 0;
+  const canConfirm =
+    Boolean(draft.reason.trim()) &&
+    Boolean(preview?.canCommit) &&
+    !previewLoading &&
+    !committing &&
+    !(draft.refundMode === "refundNow" && isCashClosed);
+  const oldTotalCents = Number(preview?.oldTotalCents ?? draft.reservation.finalTotalCents ?? draft.reservation.totalPriceCents ?? 0);
+  const paidServiceCents = Number(preview?.paidServiceCents ?? paidServiceFallback);
+  const refundNowCents = Number(preview?.refundNowCents ?? 0);
+  const pendingRefundCents = Number(preview?.pendingRefundCents ?? 0);
+
+  return (
+    <div style={modalBackdrop}>
+      <div role="dialog" aria-modal="true" aria-labelledby="cancel-reservation-title" style={modalPanel}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div id="cancel-reservation-title" style={{ fontWeight: 950, fontSize: 20 }}>
+              Cancelar reserva
+            </div>
+            <div style={{ color: "#475569", fontSize: 13 }}>
+              {draft.reservation.customerName || "Sin nombre"} - {draft.reservation.serviceName ?? "Servicio"}
+            </div>
+          </div>
+          <ActionButton type="button" variant="secondary" onClick={onClose} disabled={committing}>
+            Cerrar
+          </ActionButton>
+        </div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ fontWeight: 900 }}>Modo de devolucion</div>
+          {hasRefundableService ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              <label style={radioRowStyle}>
+                <input
+                  type="radio"
+                  checked={draft.refundMode === "refundNow"}
+                  disabled={isCashClosed}
+                  onChange={() => onChange({ refundMode: "refundNow" })}
+                />
+                <span>Devolver ahora</span>
+              </label>
+              <label style={radioRowStyle}>
+                <input
+                  type="radio"
+                  checked={draft.refundMode === "leavePendingRefund"}
+                  onChange={() => onChange({ refundMode: "leavePendingRefund" })}
+                />
+                <span>Dejar devolucion pendiente</span>
+              </label>
+              {isCashClosed ? (
+                <AlertBanner tone="warning" title="Caja cerrada">
+                  No se puede registrar una devolucion ahora en este turno.
+                </AlertBanner>
+              ) : null}
+            </div>
+          ) : (
+            <label style={radioRowStyle}>
+              <input
+                type="radio"
+                checked={!hasRefundableService || draft.refundMode === "none"}
+                onChange={() => onChange({ refundMode: "none" })}
+              />
+              <span>Sin devolucion</span>
+            </label>
+          )}
+        </div>
+
+        {draft.refundMode === "refundNow" && hasRefundableService ? (
+          <div style={{ display: "grid", gap: 6 }}>
+            <label htmlFor="cancel-refund-method" style={{ fontWeight: 900 }}>
+              Metodo
+            </label>
+            <select
+              id="cancel-refund-method"
+              value={draft.method}
+              onChange={(event) => onChange({ method: event.target.value as PayMethod })}
+              style={fieldStyle}
+            >
+              <option value="CASH">Efectivo</option>
+              <option value="CARD">Tarjeta</option>
+              <option value="BIZUM">Bizum</option>
+              <option value="TRANSFER">Transferencia</option>
+            </select>
+          </div>
+        ) : null}
+
+        <div style={{ display: "grid", gap: 6 }}>
+          <label htmlFor="cancel-reason" style={{ fontWeight: 900 }}>
+            Motivo obligatorio
+          </label>
+          <textarea
+            id="cancel-reason"
+            value={draft.reason}
+            onChange={(event) => onChange({ reason: event.target.value })}
+            rows={3}
+            maxLength={500}
+            placeholder="Ej: cliente cancela, climatologia, cambio operativo..."
+            style={{ ...fieldStyle, resize: "vertical" }}
+          />
+        </div>
+
+        <div style={summaryGridStyle}>
+          <div>
+            <div style={summaryLabelStyle}>oldTotal</div>
+            <div style={summaryValueStyle}>{euros(oldTotalCents)}</div>
+          </div>
+          <div>
+            <div style={summaryLabelStyle}>paidServiceCents</div>
+            <div style={summaryValueStyle}>{euros(paidServiceCents)}</div>
+          </div>
+          <div>
+            <div style={summaryLabelStyle}>refundNowCents</div>
+            <div style={summaryValueStyle}>{euros(refundNowCents)}</div>
+          </div>
+          <div>
+            <div style={summaryLabelStyle}>pendingRefundCents</div>
+            <div style={summaryValueStyle}>{euros(pendingRefundCents)}</div>
+          </div>
+        </div>
+
+        {previewLoading ? <StatusBadge tone="info">Calculando preview</StatusBadge> : null}
+        {previewError ? (
+          <AlertBanner tone="danger" title="No se pudo preparar">
+            {previewError}
+          </AlertBanner>
+        ) : null}
+        {preview?.blockers.length ? (
+          <AlertBanner tone="danger" title="Bloqueos">
+            {preview.blockers.map(cancelBlockerLabel).join(" ")}
+          </AlertBanner>
+        ) : null}
+        {preview?.warnings.includes("SIGNED_CONTRACT_HISTORY_PRESERVED") ? (
+          <AlertBanner tone="info" title="Contrato firmado">
+            Los contratos firmados se conservan intactos como historico legal.
+          </AlertBanner>
+        ) : null}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+          <ActionButton type="button" variant="secondary" onClick={onClose} disabled={committing}>
+            Volver
+          </ActionButton>
+          <ActionButton
+            type="button"
+            variant="danger"
+            onClick={onConfirm}
+            disabled={!canConfirm}
+            style={{ opacity: canConfirm ? 1 : 0.55, cursor: canConfirm ? "pointer" : "not-allowed" }}
+          >
+            {committing ? "Cancelando..." : "Confirmar cancelacion"}
+          </ActionButton>
+        </div>
+      </div>
     </div>
   );
 }
@@ -655,5 +997,72 @@ const columnCard: CSSProperties = {
   borderRadius: 20,
   background: "#fff",
   boxShadow: "0 10px 28px rgba(20, 32, 51, 0.04)",
+};
+
+const modalBackdrop: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 50,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 20,
+  background: "rgba(15, 23, 42, 0.48)",
+};
+
+const modalPanel: CSSProperties = {
+  width: "min(640px, 100%)",
+  maxHeight: "min(92vh, 820px)",
+  overflow: "auto",
+  display: "grid",
+  gap: 16,
+  padding: 18,
+  borderRadius: 16,
+  border: "1px solid #dbe4ef",
+  background: "#fff",
+  boxShadow: "0 24px 80px rgba(15, 23, 42, 0.26)",
+};
+
+const radioRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: 10,
+  borderRadius: 10,
+  border: "1px solid #dbe4ef",
+  background: "#f8fafc",
+  fontWeight: 800,
+};
+
+const fieldStyle: CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: 10,
+  borderRadius: 10,
+  border: "1px solid #cbd5e1",
+  color: "#0f172a",
+  background: "#fff",
+};
+
+const summaryGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+  gap: 10,
+  padding: 12,
+  borderRadius: 12,
+  border: "1px solid #dbe4ef",
+  background: "#f8fafc",
+};
+
+const summaryLabelStyle: CSSProperties = {
+  fontSize: 12,
+  color: "#64748b",
+  fontWeight: 800,
+};
+
+const summaryValueStyle: CSSProperties = {
+  marginTop: 4,
+  fontWeight: 950,
+  color: "#0f172a",
 };
 

@@ -134,6 +134,7 @@ test("contrato SIGNED con CANCEL permite cancelar conservando historico", () => 
       newTotalCents: 0,
       hasSignedContracts: true,
       operationType: "CANCEL",
+      reason: "Cancelacion comercial",
     })
   );
 
@@ -141,6 +142,20 @@ test("contrato SIGNED con CANCEL permite cancelar conservando historico", () => 
   assert.deepEqual(policy.blockers, []);
   assert.ok(policy.warnings.includes("SIGNED_CONTRACT_HISTORY_PRESERVED"));
   assert.ok(policy.requiredActions.includes("KEEP_SIGNED_CONTRACT_HISTORY"));
+});
+
+test("CANCEL sin motivo bloquea incluso sin devolucion", () => {
+  const policy = resolveCommercialAdjustmentPolicy(
+    basePolicyArgs({
+      oldTotalCents: 10_000,
+      newTotalCents: 0,
+      operationType: "CANCEL",
+      reason: "   ",
+    })
+  );
+
+  assert.equal(policy.canCommit, false);
+  assert.ok(policy.blockers.includes("CANCEL_REASON_REQUIRED"));
 });
 
 test("comision PAID bloquea el ajuste normal", () => {

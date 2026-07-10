@@ -359,6 +359,37 @@ test("commit logico sin pagos actualiza total y sync contratos", async () => {
   assert.deepEqual(paymentMutations, []);
 });
 
+test("commit ejecuta hooks transaccionales sin duplicar calculo", async () => {
+  const { client } = makeState();
+  const calls: string[] = [];
+
+  await commitCommercialAdjustment(
+    client as never,
+    "res_1",
+    {
+      newTotalCents: 12_000,
+      operationType: "EDIT",
+      requestedRefundMode: "none",
+      reason: "Ajuste comercial",
+    },
+    {
+      beforeMutationTx: async (_tx, context) => {
+        calls.push("before");
+        assert.equal(context.reservation.id, "res_1");
+        assert.equal(context.evaluation.oldTotalCents, 10_000);
+        assert.equal(context.evaluation.newTotalCents, 12_000);
+      },
+      afterMutationTx: async (_tx, context) => {
+        calls.push("after");
+        assert.equal(context.updated.id, "res_1");
+        assert.equal(context.resultEvaluation.pendingServiceCents, 12_000);
+      },
+    }
+  );
+
+  assert.deepEqual(calls, ["before", "after"]);
+});
+
 test("pago parcial y nuevo total mayor deja pendiente de cobro", async () => {
   const { client, reservation } = makeState({
     status: "READY_FOR_PLATFORM",
@@ -582,6 +613,37 @@ test("cancelacion con refundNow crea OUT y conserva contratos SIGNED", async () 
   assert.equal(reservation.contracts.find((contract) => contract.id === "draft_2")?.status, "VOID");
 });
 
+test("cancelacion con refundNow bloquea si la caja esta cerrada", async () => {
+  const { client, reservation, paymentMutations } = makeState({
+    payments: [{ id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" }],
+    contracts: [baseContract("signed_1", "SIGNED", 1)],
+  });
+
+  await assert.rejects(
+    commitCommercialAdjustment(
+      client as never,
+      "res_1",
+      {
+        newTotalCents: 0,
+        newDepositCents: 0,
+        operationType: "CANCEL",
+        requestedRefundMode: "refundNow",
+        reason: "Cancelacion con devolucion",
+      },
+      {
+        assertRefundCashOpen: async () => {
+          throw new Error("Caja cerrada para este turno. Pide a ADMIN que la reabra.");
+        },
+      }
+    ),
+    /Caja cerrada/
+  );
+
+  assert.equal(reservation.status, "WAITING");
+  assert.deepEqual(paymentMutations, []);
+  assert.equal(reservation.contracts.find((contract) => contract.id === "signed_1")?.status, "SIGNED");
+});
+
 test("cancelacion con leavePendingRefund no crea OUT", async () => {
   const { client, reservation, paymentMutations } = makeState({
     payments: [{ id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" }],
@@ -624,6 +686,34 @@ test("comision PAID bloquea", async () => {
       newTotalCents: 12_000,
       operationType: "EDIT",
       requestedRefundMode: "none",
+    }),
+    "PAID_COMMISSION"
+  );
+});
+
+test("comision PAID bloquea CANCEL", async () => {
+  const { client } = makeState({
+    commissionLines: [
+      {
+        id: "comm_1",
+        channelId: "ch_1",
+        reservationId: "res_1",
+        paymentId: null,
+        serviceId: "svc_1",
+        status: "PAID",
+        commissionCents: 1_000,
+        notes: null,
+      },
+    ],
+  });
+
+  await assertBlocked(
+    commitCommercialAdjustment(client as never, "res_1", {
+      newTotalCents: 0,
+      newDepositCents: 0,
+      operationType: "CANCEL",
+      requestedRefundMode: "none",
+      reason: "Cancelacion comercial",
     }),
     "PAID_COMMISSION"
   );

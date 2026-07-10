@@ -53,7 +53,7 @@ type ReadyReservationCardProps = {
   showReturnedBanner?: boolean;
   showReturnedActions?: boolean;
   completeReturn: (input: CompleteReturnInput) => Promise<void>;
-  cancelReservation: (reservationId: string, opts: { refund: boolean; method: PayMethod }) => Promise<void>;
+  cancelReservation: (reservation: ReservationRow, method: PayMethod) => void;
 };
 
 function toneFromStatus(r: ReservationRow) {
@@ -127,7 +127,6 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
   const depositHeld = r.depositHeld === true;
   const paid = Number(r.paidCents ?? 0);
   const refundableDepositCents = Math.max(0, paidDepositCents);
-  const hasRefundableAmount = paid > 0;
   const depositStatus = r.depositStatus ?? "NO_APLICA";
   const showDeposit = depositStatus !== "NO_APLICA";
   const isFullyPaid = pendingTotal === 0;
@@ -204,19 +203,7 @@ export function ReadyReservationCard(props: ReadyReservationCardProps) {
             </ActionButton>
             <ActionButton
               type="button"
-              onClick={async () => {
-                if (!hasRefundableAmount) {
-                  if (!window.confirm("¿Cancelar esta reserva?")) return;
-                  await cancelReservation(r.id, { refund: false, method });
-                  return;
-                }
-
-                const refund = window.confirm(
-                  `La reserva tiene cobros registrados. Aceptar = cancelar y devolver usando ${method}. Cancelar = seguir sin devolución.`,
-                );
-                if (!refund && !window.confirm("¿Confirmas cancelar sin devolución?")) return;
-                await cancelReservation(r.id, { refund, method });
-              }}
+              onClick={() => cancelReservation(r, method)}
               variant="danger"
             >
               Cancelar

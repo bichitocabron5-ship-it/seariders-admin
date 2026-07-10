@@ -4,6 +4,7 @@ export type CommercialAdjustmentRefundMode = "refundNow" | "leavePendingRefund";
 
 export type CommercialAdjustmentPolicyBlocker =
   | "ADVANCED_RESERVATION_STATUS"
+  | "CANCEL_REASON_REQUIRED"
   | "PAID_COMMISSION"
   | "REFUND_NOW_NOT_SUPPORTED_B3A"
   | "REFUND_MODE_REQUIRED"
@@ -132,6 +133,10 @@ export function resolveCommercialAdjustmentPolicy(
 
   if (refundNowBlockedInB3A && overpaidServiceCents === 0) {
     blockers.push("REFUND_NOW_NOT_SUPPORTED_B3A");
+  }
+
+  if (args.operationType === "CANCEL" && !hasReason(args.reason)) {
+    blockers.push("CANCEL_REASON_REQUIRED");
   }
 
   if (

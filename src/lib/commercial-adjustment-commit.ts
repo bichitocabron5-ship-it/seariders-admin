@@ -114,6 +114,25 @@ export type CommercialAdjustmentCommitOptions = {
   refundOrigin?: PaymentOrigin | null;
   refundShiftSessionId?: string | null;
   assertRefundCashOpen?: () => Promise<void>;
+  beforeMutationTx?: (
+    tx: Prisma.TransactionClient,
+    context: {
+      reservation: CommitReservation;
+      proposal: CommercialAdjustmentCommitProposal;
+      evaluation: ReturnType<typeof buildCommercialAdjustmentCommitEvaluation>;
+    }
+  ) => Promise<void>;
+  afterMutationTx?: (
+    tx: Prisma.TransactionClient,
+    context: {
+      reservation: CommitReservation;
+      proposal: CommercialAdjustmentCommitProposal;
+      evaluation: ReturnType<typeof buildCommercialAdjustmentCommitEvaluation>;
+      resultEvaluation: ReturnType<typeof buildPostCommitEvaluation>;
+      updated: { id: string; status: ReservationStatus };
+      now: Date;
+    }
+  ) => Promise<void>;
   phase?: "B3A" | "B3B" | null;
 };
 
@@ -219,6 +238,9 @@ function isActiveSignedContract(contract: ContractLike) {
 function blockerMessage(blockers: ReturnType<typeof resolveCommercialAdjustmentPolicy>["blockers"]) {
   if (blockers.includes("REFUND_NOW_NOT_SUPPORTED_B3A")) {
     return "refundNow se implementa en B3B";
+  }
+  if (blockers.includes("CANCEL_REASON_REQUIRED")) {
+    return "La cancelacion requiere motivo.";
   }
   if (blockers.includes("SIGNED_CONTRACT_MATERIAL_EDIT")) {
     return "La reserva tiene contratos firmados y no permite un ajuste comercial EDIT.";
@@ -467,6 +489,12 @@ export async function commitCommercialAdjustment(
       });
     }
 
+    await options.beforeMutationTx?.(tx, {
+      reservation,
+      proposal,
+      evaluation,
+    });
+
     const reason = normalizeReason(proposal.reason);
     if (evaluation.refundNowCents > 0) {
       if (!reason) {
@@ -633,6 +661,15 @@ export async function commitCommercialAdjustment(
 
     await syncChannelCommissionLineFromReservationTx(tx, reservationId);
     const resultEvaluation = buildPostCommitEvaluation(evaluation);
+
+    await options.afterMutationTx?.(tx, {
+      reservation,
+      proposal,
+      evaluation,
+      resultEvaluation,
+      updated,
+      now,
+    });
 
     return {
       ok: true as const,

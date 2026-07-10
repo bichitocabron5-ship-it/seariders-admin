@@ -7,26 +7,36 @@ import {
   PaymentOrigin,
   ReservationSource,
   ReservationStatus,
-  ReservationUnitStatus,
   RoleName,
   RunAssignmentStatus,
+  type Prisma,
 } from "@prisma/client";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
-import { prisma } from "@/lib/prisma";
-import { AppSession, sessionOptions } from "@/lib/session";
+
+import {
+  CommercialAdjustmentCommitBlockedError,
+  commitCommercialAdjustment,
+  type CommercialAdjustmentCommitProposal,
+} from "@/lib/commercial-adjustment-commit";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
-import { voidPendingChannelCommissionLinesForReservationTx } from "@/lib/channel-commission-lines";
+import { findCurrentShiftSession } from "@/lib/shiftSessions";
+import { prisma } from "@/lib/prisma";
+import { AppSession, sessionOptions } from "@/lib/session";
 
 export const runtime = "nodejs";
 
 const Body = z.object({
-  refundMode: z.enum(["NONE", "SERVICE", "FULL"]).default("NONE"),
+  refundMode: z.enum(["NONE", "SERVICE", "FULL"]).optional(),
+  requestedRefundMode: z.enum(["refundNow", "leavePendingRefund", "none"]).optional(),
   refundMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
   refundOrigin: z.nativeEnum(PaymentOrigin).default(PaymentOrigin.STORE),
+  reason: z.string().max(500).optional().nullable(),
 });
+
+type StoreCancelBody = z.infer<typeof Body>;
 
 async function requireStoreOrAdmin() {
   const cookieStore = await cookies();
@@ -34,6 +44,79 @@ async function requireStoreOrAdmin() {
   if (!session?.userId) return null;
   if (session.role !== "STORE" && session.role !== "ADMIN") return null;
   return session;
+}
+
+function normalizeCancelReason(value: string | null | undefined) {
+  const text = String(value ?? "").trim();
+  return text.length > 0 ? text.slice(0, 500) : null;
+}
+
+function requestedRefundModeForCancel(
+  body: Pick<StoreCancelBody, "refundMode" | "requestedRefundMode">
+): CommercialAdjustmentCommitProposal["requestedRefundMode"] {
+  if (body.requestedRefundMode) return body.requestedRefundMode;
+  if (body.refundMode === "FULL" || body.refundMode === "SERVICE") return "refundNow";
+  if (body.refundMode === "NONE") return "leavePendingRefund";
+  return "none";
+}
+
+async function assertStoreCancellationOperationalStateTx(
+  tx: Prisma.TransactionClient,
+  reservationId: string
+) {
+  const reservation = await tx.reservation.findUnique({
+    where: { id: reservationId },
+    select: {
+      id: true,
+      source: true,
+      arrivedStoreAt: true,
+    },
+  });
+
+  if (!reservation) {
+    throw Object.assign(new Error("Reserva no existe"), { status: 404 });
+  }
+
+  if (reservation.source === ReservationSource.BOOTH && !reservation.arrivedStoreAt) {
+    throw Object.assign(
+      new Error("La reserva sigue en carpa. Cancelala desde BOOTH para no afectar la caja de STORE."),
+      { status: 409 }
+    );
+  }
+
+  const activeAssignments = await tx.monitorRunAssignment.count({
+    where: {
+      reservationId,
+      status: RunAssignmentStatus.ACTIVE,
+      run: {
+        status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] },
+      },
+    },
+  });
+
+  if (activeAssignments > 0) {
+    throw Object.assign(
+      new Error("La reserva esta activa en plataforma. Cierrala o desasignala antes de cancelarla."),
+      { status: 409 }
+    );
+  }
+
+  const queuedAssignments = await tx.monitorRunAssignment.findMany({
+    where: {
+      reservationId,
+      status: RunAssignmentStatus.QUEUED,
+      run: {
+        status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] },
+      },
+    },
+    select: { id: true },
+  });
+
+  if (queuedAssignments.length > 0) {
+    await tx.monitorRunAssignment.deleteMany({
+      where: { id: { in: queuedAssignments.map((assignment) => assignment.id) } },
+    });
+  }
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -45,250 +128,125 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await Promise.resolve(ctx.params);
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json ?? {});
-  if (!parsed.success) return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
 
   const body = parsed.data;
-  const userId = session.userId as string;
-
-  if (body.refundMode !== "NONE") {
-    await assertCashOpenForUser(userId, session.role as RoleName);
-  }
+  const actorUserId = session.userId as string;
+  const requestedRefundMode = requestedRefundModeForCancel(body);
+  const reason = normalizeCancelReason(body.reason);
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const reservation = await tx.reservation.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          source: true,
-          status: true,
-          arrivedStoreAt: true,
-          depositHeld: true,
-          depositHoldReason: true,
-          contracts: {
-            select: {
-              id: true,
-              status: true,
-              driverName: true,
-              logicalUnitIndex: true,
-              unitIndex: true,
-            },
-          },
-          payments: {
-            select: {
-              amountCents: true,
-              isDeposit: true,
-              direction: true,
-            },
-          },
-        },
-      });
-
-      if (!reservation) {
-        throw Object.assign(new Error("Reserva no existe"), { status: 404 });
-      }
-
-      if (reservation.status === ReservationStatus.CANCELED) {
-        return {
-          ok: true as const,
-          alreadyCanceled: true,
-          refundedServiceCents: 0,
-          refundedDepositCents: 0,
-        };
-      }
-
-      if (reservation.status === ReservationStatus.COMPLETED) {
-        throw Object.assign(new Error("No se puede cancelar una reserva completada"), { status: 409 });
-      }
-
-      if (reservation.status === ReservationStatus.IN_SEA) {
-        throw Object.assign(
-          new Error("Una reserva en el mar no se puede cancelar ni devolver desde tienda"),
-          { status: 409 }
-        );
-      }
-
-      const signedContracts = (reservation.contracts ?? []).filter(
-        (contract) => contract.status === "SIGNED"
-      );
-      if (signedContracts.length > 0) {
-        const firstSigned = signedContracts[0];
-        const unitLabel = Number(firstSigned?.logicalUnitIndex ?? firstSigned?.unitIndex ?? 1);
-        const driverLabel = String(firstSigned?.driverName ?? "").trim();
-        throw Object.assign(
-          new Error(
-            `No se puede cancelar una reserva con contratos firmados. Contrato bloqueante: unidad ${unitLabel}${driverLabel ? ` (${driverLabel})` : ""}.`
-          ),
-          { status: 409 }
-        );
-      }
-
-      if (reservation.source === ReservationSource.BOOTH && !reservation.arrivedStoreAt) {
-        throw Object.assign(
-          new Error("La reserva sigue en carpa. Cancélala desde BOOTH para no afectar la caja de STORE."),
-          { status: 409 }
-        );
-      }
-
-      const activeAssignments = await tx.monitorRunAssignment.count({
-        where: {
-          reservationId: id,
-          status: RunAssignmentStatus.ACTIVE,
-          run: {
-            status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] },
-          },
-        },
-      });
-
-      if (activeAssignments > 0) {
-        throw Object.assign(
-          new Error("La reserva está activa en plataforma. Ciérrala o desasígnala antes de cancelarla."),
-          { status: 409 }
-        );
-      }
-
-      const queuedAssignments = await tx.monitorRunAssignment.findMany({
-        where: {
-          reservationId: id,
-          status: RunAssignmentStatus.QUEUED,
-          run: {
-            status: { in: [MonitorRunStatus.READY, MonitorRunStatus.IN_SEA] },
-          },
-        },
-        select: { id: true },
-      });
-
-      if (queuedAssignments.length > 0) {
-        await tx.monitorRunAssignment.deleteMany({
-          where: { id: { in: queuedAssignments.map((a) => a.id) } },
-        });
-      }
-
-      const netServicePaidCents = reservation.payments
-        .filter((p) => !p.isDeposit)
-        .reduce((sum, p) => sum + (p.direction === "OUT" ? -1 : 1) * p.amountCents, 0);
-
-      const netDepositPaidCents = reservation.payments
-        .filter((p) => p.isDeposit)
-        .reduce((sum, p) => sum + (p.direction === "OUT" ? -1 : 1) * p.amountCents, 0);
-
-      const refundableServiceCents = Math.max(0, netServicePaidCents);
-      const refundableDepositCents = Math.max(0, netDepositPaidCents);
-
-      let refundedServiceCents = 0;
-      let refundedDepositCents = 0;
-
-      if (body.refundMode === "SERVICE" || body.refundMode === "FULL") {
-        refundedServiceCents = refundableServiceCents;
-      }
-
-      if (body.refundMode === "FULL") {
-        if (reservation.depositHeld) {
-          throw Object.assign(
-            new Error(
-              `La fianza está retenida${reservation.depositHoldReason ? `: ${reservation.depositHoldReason}` : ""}`
-            ),
-            { status: 409 }
-          );
-        }
-        refundedDepositCents = refundableDepositCents;
-      }
-
-      if (refundedServiceCents > 0) {
-        await tx.payment.create({
-          data: {
-            reservationId: id,
-            origin: body.refundOrigin,
-            method: body.refundMethod,
-            amountCents: refundedServiceCents,
-            isDeposit: false,
-            direction: "OUT",
-          },
-        });
-      }
-
-      if (refundedDepositCents > 0) {
-        await tx.payment.create({
-          data: {
-            reservationId: id,
-            origin: body.refundOrigin,
-            method: body.refundMethod,
-            amountCents: refundedDepositCents,
-            isDeposit: true,
-            direction: "OUT",
-          },
-        });
-      }
-
-      await tx.extraTimeEvent.updateMany({
-        where: {
-          reservationId: id,
-          status: ExtraTimeStatus.PENDING,
-        },
-        data: { status: ExtraTimeStatus.VOIDED },
-      });
-
-      await tx.reservationUnit.updateMany({
-        where: { reservationId: id },
-        data: {
-          status: ReservationUnitStatus.CANCELED,
-          jetskiId: null,
-          readyForPlatformAt: null,
-        },
-      });
-
-      await tx.reservation.update({
-        where: { id },
-        data: {
-          status: ReservationStatus.CANCELED,
-          taxiboatTripId: null,
-          taxiboatAssignedAt: null,
-          readyForPlatformAt: null,
-        },
-      });
-
-      await voidPendingChannelCommissionLinesForReservationTx(tx, id, "Reservation canceled");
-      await syncStoreFulfillmentTasksForReservation(tx, id);
-
-      await writeOperationalLog(
-        {
-          action: "RESERVATION_CANCEL",
-          entityType: "RESERVATION",
-          entityId: id,
-          source: auditSource,
-          actor: { userId: session.userId },
-          request: requestContext,
-          metadata: {
-            reservationSource: reservation.source,
-            statusBefore: reservation.status,
-            refundMode: body.refundMode,
-            refundMethod: body.refundMethod,
-            refundOrigin: body.refundOrigin,
-            refundedServiceCents,
-            refundedDepositCents,
-            depositHeld: reservation.depositHeld,
-          },
-        },
-        tx
-      );
-
-      return {
-        ok: true as const,
-        alreadyCanceled: false,
-        refundedServiceCents,
-        refundedDepositCents,
-      };
+    const current = await prisma.reservation.findUnique({
+      where: { id },
+      select: { status: true },
     });
 
-    return NextResponse.json(result);
+    if (!current) return NextResponse.json({ error: "Reserva no existe" }, { status: 404 });
+    if (current.status === ReservationStatus.CANCELED) {
+      return NextResponse.json({
+        ok: true,
+        alreadyCanceled: true,
+        refundedServiceCents: 0,
+        refundedDepositCents: 0,
+        refundNowCents: 0,
+        pendingRefundCents: 0,
+      });
+    }
+
+    const refundShiftSession =
+      requestedRefundMode === "refundNow"
+        ? await findCurrentShiftSession({
+            userId: actorUserId,
+            role: session.role as RoleName,
+            shiftSessionId: session.shiftSessionId,
+          })
+        : null;
+
+    const result = await commitCommercialAdjustment(
+      prisma,
+      id,
+      {
+        newTotalCents: 0,
+        newDepositCents: 0,
+        operationType: "CANCEL",
+        requestedRefundMode,
+        reason,
+      },
+      {
+        actorUserId,
+        refundMethod: body.refundMethod,
+        refundOrigin: body.refundOrigin,
+        refundShiftSessionId: refundShiftSession?.id ?? null,
+        assertRefundCashOpen:
+          requestedRefundMode === "refundNow"
+            ? () => assertCashOpenForUser(actorUserId, session.role as RoleName, session.shiftSessionId)
+            : undefined,
+        beforeMutationTx: async (tx) => {
+          await assertStoreCancellationOperationalStateTx(tx, id);
+        },
+        afterMutationTx: async (tx, context) => {
+          await tx.extraTimeEvent.updateMany({
+            where: {
+              reservationId: id,
+              status: ExtraTimeStatus.PENDING,
+            },
+            data: { status: ExtraTimeStatus.VOIDED },
+          });
+
+          await syncStoreFulfillmentTasksForReservation(tx, id);
+
+          await writeOperationalLog(
+            {
+              action: "RESERVATION_CANCEL",
+              entityType: "RESERVATION",
+              entityId: id,
+              source: auditSource,
+              actor: { userId: session.userId },
+              request: requestContext,
+              metadata: {
+                reservationSource: context.reservation.source,
+                statusBefore: context.reservation.status,
+                requestedRefundMode,
+                refundMethod: body.refundMethod,
+                refundOrigin: body.refundOrigin,
+                refundNowCents: context.resultEvaluation.refundNowCents,
+                pendingRefundCents: context.resultEvaluation.pendingRefundCents,
+                paidServiceCents: context.evaluation.paidServiceCents,
+              },
+            },
+            tx
+          );
+        },
+      }
+    );
+
+    if (!result) return NextResponse.json({ error: "Reserva no existe" }, { status: 404 });
+
+    return NextResponse.json({
+      ...result,
+      alreadyCanceled: false,
+      refundedServiceCents: result.refundNowCents,
+      refundedDepositCents: 0,
+    });
   } catch (error: unknown) {
+    if (error instanceof CommercialAdjustmentCommitBlockedError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          blockers: error.blockers,
+          summary: error.summary,
+        },
+        { status: error.status }
+      );
+    }
+
     const status =
       typeof error === "object" &&
       error !== null &&
       "status" in error &&
       typeof (error as { status?: unknown }).status === "number"
-        ? ((error as { status: number }).status)
-        : 500;
+        ? (error as { status: number }).status
+        : 400;
 
     const message = error instanceof Error ? error.message : "No se pudo cancelar la reserva";
     return NextResponse.json({ error: message }, { status });
