@@ -41,7 +41,7 @@ type LeftReservationCardProps = {
   updateServicePayLine: (idx: number, patch: Partial<PayLine>) => void;
   chargeServiceSplit: (reservationId: string, maxServiceCents: number) => Promise<void>;
   nowMs: number;
-  cancelReservation: (reservationId: string, opts: { refund: boolean; method: PayMethod }) => Promise<void>;
+  cancelReservation: (reservation: ReservationRow, method: PayMethod) => void;
 };
 
 export function LeftReservationCard(props: LeftReservationCardProps) {
@@ -98,7 +98,6 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
   const isFullyPaid = pendingTotal === 0;
   const servicePaid = Math.max(0, Number(r.paidServiceCents ?? 0));
   const depositPaid = Math.max(0, paidDepositCents);
-  const hasRefundableAmount = paid > 0;
   const requiredUnits = Number(r.contractsBadge?.requiredUnits ?? 0);
   const readyCount = Number(r.contractsBadge?.readyCount ?? 0);
   const showContracts = requiredUnits > 0 || readyCount > 0;
@@ -132,19 +131,7 @@ export function LeftReservationCard(props: LeftReservationCardProps) {
         contractsState={contractsState}
         isFullyPaid={isFullyPaid}
         onEdit={() => router.push(reservationHref)}
-        onCancel={async () => {
-          if (!hasRefundableAmount) {
-            if (!window.confirm("¿Cancelar esta reserva?")) return;
-            await cancelReservation(r.id, { refund: false, method });
-            return;
-          }
-
-          const refund = window.confirm(
-            `La reserva tiene cobros registrados. Aceptar = cancelar y devolver usando ${method}. Cancelar = seguir sin devolución.`
-          );
-          if (!refund && !window.confirm("¿Confirmas cancelar sin devolución?")) return;
-          await cancelReservation(r.id, { refund, method });
-        }}
+        onCancel={async () => cancelReservation(r, method)}
         onCompleteContracts={() => router.push(`/store/create?migrateFrom=${r.id}#contracts`)}
         onPassToReady={() => passToReadyForPlatform(r.id)}
       />

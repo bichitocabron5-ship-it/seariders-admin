@@ -79,3 +79,21 @@ test("resolveReservationPaymentStatus marks refunded service reservations as REF
   assert.equal(status.state, "REFUNDED");
   assert.equal(status.paidServiceCents, 0);
 });
+
+test("resolveReservationPaymentStatus clears service overpayment after Payment OUT", () => {
+  const status = resolveReservationPaymentStatus({
+    totalPriceCents: 8_000,
+    depositCents: 0,
+    quantity: 1,
+    isLicense: false,
+    serviceCategory: "JETSKI",
+    payments: [
+      { amountCents: 10_000, isDeposit: false, direction: "IN", method: "CARD" },
+      { amountCents: 2_000, isDeposit: false, direction: "OUT", method: "CASH" },
+    ],
+  });
+
+  assert.equal(status.paidServiceCents, 8_000);
+  assert.equal(status.pendingServiceCents, 0);
+  assert.equal(status.overpaidServiceCents, 0);
+});

@@ -486,12 +486,18 @@ export default function StoreCalendarPage() {
       );
       if (!wantsCancel) return;
 
-      let refundMode: "NONE" | "FULL" = "NONE";
+      const reason = window.prompt("Motivo de la cancelacion");
+      if (!reason?.trim()) {
+        setErr("Indica el motivo de la cancelacion.");
+        return;
+      }
+
+      let requestedRefundMode: "none" | "refundNow" | "leavePendingRefund" = "none";
       let refundMethod: "CASH" | "CARD" | "BIZUM" | "TRANSFER" = "CARD";
 
       if (paidCents > 0) {
-        const wantsRefund = window.confirm("Aceptar = cancelar y devolver el dinero cobrado. Cancelar = cancelar sin devolución.");
-        refundMode = wantsRefund ? "FULL" : "NONE";
+        const wantsRefund = window.confirm("Aceptar = devolver ahora. Cancelar = dejar devolucion pendiente.");
+        requestedRefundMode = wantsRefund ? "refundNow" : "leavePendingRefund";
         if (wantsRefund) {
           const chosenMethod = askRefundMethod();
           if (!chosenMethod) return;
@@ -506,9 +512,10 @@ export default function StoreCalendarPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            refundMode,
+            requestedRefundMode,
             refundMethod,
             refundOrigin: "STORE",
+            reason: reason.trim(),
           }),
         });
 
