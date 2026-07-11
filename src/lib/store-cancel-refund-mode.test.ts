@@ -34,10 +34,10 @@ test("cancel requestedRefundMode moderno tiene prioridad sobre refundMode legacy
   );
 });
 
-test("cancel refundMode NONE legacy no solicita devolucion", () => {
+test("cancel refundMode NONE legacy deja devolucion pendiente", () => {
   assert.deepEqual(refundSelectionForStoreCancel({ refundMode: "NONE" }), {
-    requestedRefundMode: "none",
-    refundScope: "NONE",
+    requestedRefundMode: "leavePendingRefund",
+    refundScope: "FULL",
   });
 });
 

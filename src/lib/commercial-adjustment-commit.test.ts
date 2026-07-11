@@ -7,6 +7,7 @@ import {
   commitCommercialAdjustment,
 } from "./commercial-adjustment-commit";
 import { resolveReservationPaymentStatus } from "./reservation-payment-status";
+import { refundSelectionForStoreCancel } from "./store-cancel-refund-mode";
 
 type PaymentRow = {
   id: string;
@@ -411,6 +412,7 @@ test("pago parcial y nuevo total mayor deja pendiente de cobro", async () => {
     newTotalCents: 15_000,
     operationType: "EDIT",
     requestedRefundMode: "none",
+    refundScope: "DEPOSIT",
   });
 
   assert.equal(result?.pendingServiceCents, 10_000);
@@ -434,9 +436,31 @@ test("pago total y nuevo total menor con leavePendingRefund aplica y devuelve pe
   });
 
   assert.equal(result?.pendingRefundCents, 2_000);
+  assert.equal(result?.pendingServiceRefundCents, 2_000);
   assert.equal(result?.overpaidServiceCents, 2_000);
   assert.equal(reservation.totalPriceCents, 8_000);
   assert.equal(JSON.stringify(reservation.payments), beforePayments);
+  assert.deepEqual(paymentMutations, []);
+});
+
+test("EDIT con sobrepago de servicio y refundScope DEPOSIT bloquea", async () => {
+  const { client, reservation, paymentMutations } = makeState({
+    payments: [{ id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" }],
+  });
+
+  await assertBlocked(
+    commitCommercialAdjustment(client as never, "res_1", {
+      newTotalCents: 8_000,
+      operationType: "EDIT",
+      requestedRefundMode: "refundNow",
+      refundScope: "DEPOSIT",
+      reason: "Devolucion aprobada",
+    }),
+    "REFUND_SCOPE_INCOMPATIBLE",
+    "El ajuste deja servicio sobrepagado y el alcance de devolucion debe incluir SERVICE."
+  );
+
+  assert.equal(reservation.totalPriceCents, 10_000);
   assert.deepEqual(paymentMutations, []);
 });
 
@@ -479,6 +503,35 @@ test("refundNow crea Payment OUT auditable sin modificar el pago historico", asy
   assert.equal(paymentCreates[0]?.shiftSessionId, "shift_1");
   assert.equal(paymentCreates[0]?.description, "Devolucion por ajuste comercial");
   assert.match(paymentCreates[0]?.notes ?? "", /Devolver diferencia aprobada/);
+});
+
+test("EDIT con sobrepago de servicio permite refundNow con scope SERVICE y FULL", async () => {
+  for (const refundScope of ["SERVICE", "FULL"] as const) {
+    const { client, paymentCreates } = makeState({
+      payments: [{ id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" }],
+    });
+
+    const result = await commitCommercialAdjustment(
+      client as never,
+      "res_1",
+      {
+        newTotalCents: 8_000,
+        operationType: "EDIT",
+        requestedRefundMode: "refundNow",
+        refundScope,
+        reason: "Devolucion aprobada",
+      },
+      {
+        assertRefundCashOpen: async () => undefined,
+      }
+    );
+
+    assert.equal(result?.refundNowCents, 2_000);
+    assert.equal(result?.serviceRefundNowCents, 2_000);
+    assert.equal(paymentCreates.length, 1);
+    assert.equal(paymentCreates[0]?.amountCents, 2_000);
+    assert.equal(paymentCreates[0]?.isDeposit, false);
+  }
 });
 
 test("refundNow bloquea si la caja esta cerrada", async () => {
@@ -766,31 +819,53 @@ test("cancelacion con alcance DEPOSIT crea OUT solo de fianza", async () => {
   );
 });
 
-test("cancelacion legacy NONE con servicio y fianza pagados no crea OUT", async () => {
+test("cancelacion legacy NONE con servicio y fianza pagados deja devolucion pendiente y no crea OUT", async () => {
   const servicePayment = { id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" as const };
   const depositPayment = { id: "pay_2", amountCents: 5_000, isDeposit: true, direction: "IN" as const };
-  const { client, reservation, paymentCreates } = makeState({
+  const { client, reservation, paymentMutations } = makeState({
     depositCents: 5_000,
     payments: [servicePayment, depositPayment],
   });
   const beforeServicePayment = { ...servicePayment };
   const beforeDepositPayment = { ...depositPayment };
+  const refundSelection = refundSelectionForStoreCancel({ refundMode: "NONE" });
 
   const result = await commitCommercialAdjustment(client as never, "res_1", {
     newTotalCents: 0,
     newDepositCents: 0,
     operationType: "CANCEL",
-    requestedRefundMode: "none",
-    refundScope: "NONE",
-    reason: "Cancelacion sin devolucion",
+    ...refundSelection,
+    reason: "Cancelacion sin devolucion inmediata",
+  });
+
+  assert.equal(result?.status, "CANCELED");
+  assert.equal(result?.refundNowCents, 0);
+  assert.equal(result?.pendingRefundCents, 15_000);
+  assert.equal(result?.pendingServiceRefundCents, 10_000);
+  assert.equal(result?.pendingDepositRefundCents, 5_000);
+  assert.deepEqual(reservation.payments[0], beforeServicePayment);
+  assert.deepEqual(reservation.payments[1], beforeDepositPayment);
+  assert.deepEqual(paymentMutations, []);
+});
+
+test("cancelacion legacy NONE sin importes pagados cancela sin devolucion", async () => {
+  const { client, paymentMutations } = makeState();
+  const refundSelection = refundSelectionForStoreCancel({ refundMode: "NONE" });
+
+  const result = await commitCommercialAdjustment(client as never, "res_1", {
+    newTotalCents: 0,
+    newDepositCents: 0,
+    operationType: "CANCEL",
+    ...refundSelection,
+    reason: "Cancelacion sin pagos",
   });
 
   assert.equal(result?.status, "CANCELED");
   assert.equal(result?.refundNowCents, 0);
   assert.equal(result?.pendingRefundCents, 0);
-  assert.deepEqual(reservation.payments[0], beforeServicePayment);
-  assert.deepEqual(reservation.payments[1], beforeDepositPayment);
-  assert.deepEqual(paymentCreates, []);
+  assert.equal(result?.pendingServiceRefundCents, 0);
+  assert.equal(result?.pendingDepositRefundCents, 0);
+  assert.deepEqual(paymentMutations, []);
 });
 
 test("cancelacion pagada solo con fianza crea un OUT de fianza", async () => {

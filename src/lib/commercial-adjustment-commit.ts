@@ -289,6 +289,9 @@ function blockerMessage(blockers: ReturnType<typeof resolveCommercialAdjustmentP
   if (blockers.includes("REFUND_MODE_REQUIRED")) {
     return "La reserva queda sobrepagada y requiere leavePendingRefund en B3A.";
   }
+  if (blockers.includes("REFUND_SCOPE_INCOMPATIBLE")) {
+    return "El ajuste deja servicio sobrepagado y el alcance de devolucion debe incluir SERVICE.";
+  }
   if (blockers.includes("REFUND_REASON_REQUIRED")) {
     return "La devolucion requiere motivo.";
   }
