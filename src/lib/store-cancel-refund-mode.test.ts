@@ -1,22 +1,46 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { requestedRefundModeForStoreCancel } from "./store-cancel-refund-mode";
+import {
+  refundSelectionForStoreCancel,
+  requestedRefundModeForStoreCancel,
+} from "./store-cancel-refund-mode";
 
-test("cancel refundMode FULL legacy solicita refundNow", () => {
-  assert.equal(requestedRefundModeForStoreCancel({ refundMode: "FULL" }), "refundNow");
+test("cancel refundMode SERVICE legacy solicita refundNow solo para servicio", () => {
+  assert.deepEqual(refundSelectionForStoreCancel({ refundMode: "SERVICE" }), {
+    requestedRefundMode: "refundNow",
+    refundScope: "SERVICE",
+  });
+});
+
+test("cancel refundMode FULL legacy solicita refundNow para servicio y fianza", () => {
+  assert.deepEqual(refundSelectionForStoreCancel({ refundMode: "FULL" }), {
+    requestedRefundMode: "refundNow",
+    refundScope: "FULL",
+  });
 });
 
 test("cancel requestedRefundMode moderno tiene prioridad sobre refundMode legacy", () => {
-  assert.equal(
-    requestedRefundModeForStoreCancel({
+  assert.deepEqual(
+    refundSelectionForStoreCancel({
       refundMode: "FULL",
       requestedRefundMode: "leavePendingRefund",
+      refundScope: "DEPOSIT",
     }),
-    "leavePendingRefund"
+    {
+      requestedRefundMode: "leavePendingRefund",
+      refundScope: "DEPOSIT",
+    }
   );
 });
 
-test("cancel refundMode NONE legacy deja devolucion pendiente", () => {
-  assert.equal(requestedRefundModeForStoreCancel({ refundMode: "NONE" }), "leavePendingRefund");
+test("cancel refundMode NONE legacy no solicita devolucion", () => {
+  assert.deepEqual(refundSelectionForStoreCancel({ refundMode: "NONE" }), {
+    requestedRefundMode: "none",
+    refundScope: "NONE",
+  });
+});
+
+test("cancel requestedRefundMode compatible devuelve solo el modo", () => {
+  assert.equal(requestedRefundModeForStoreCancel({ refundMode: "SERVICE" }), "refundNow");
 });

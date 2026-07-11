@@ -10,6 +10,10 @@ import { StorePendingColumnSection } from "./dashboard/components/StorePendingCo
 import { StoreReservationColumnSection } from "./dashboard/components/StoreReservationColumnSection";
 import { LeftReservationCard } from "./dashboard/components/LeftReservationCard";
 import { ReadyReservationCard } from "./dashboard/components/ReadyReservationCard";
+import {
+  resolveCancelRefundSubmit,
+  type CancelRefundMode,
+} from "./dashboard/cancel-refund";
 import type {
   CashClosureSummary,
   CashSummary,
@@ -32,8 +36,6 @@ import {
 
 const RIGHT_STATUSES = new Set(["READY_FOR_PLATFORM", "IN_SEA"]);
 const LEFT_STATUSES_EXCLUDE = new Set(["COMPLETED", "CANCELED"]);
-
-type CancelRefundMode = "refundNow" | "leavePendingRefund" | "none";
 
 type CancelPreview = {
   canCommit: boolean;
@@ -84,6 +86,13 @@ function defaultCancelRefundMode(reservation: ReservationRow): CancelRefundMode 
   const paidServiceCents = Math.max(0, Number(reservation.paidServiceCents ?? reservation.paidCents ?? 0));
   const paidDepositCents = Math.max(0, Number(reservation.paidDepositCents ?? 0));
   return paidServiceCents + paidDepositCents > 0 ? "leavePendingRefund" : "none";
+}
+
+function refundableCancelAmountsFromReservation(reservation: ReservationRow) {
+  return {
+    refundableServiceCents: Math.max(0, Number(reservation.paidServiceCents ?? reservation.paidCents ?? 0)),
+    refundableDepositCents: Math.max(0, Number(reservation.paidDepositCents ?? 0)),
+  };
 }
 
 export default function StoreDashboard() {
@@ -372,6 +381,10 @@ export default function StoreDashboard() {
       setCancelPreviewLoading(true);
       setCancelPreviewError(null);
       try {
+        const refundSubmit = resolveCancelRefundSubmit({
+          selectedRefundMode: cancelDraft.refundMode,
+          ...refundableCancelAmountsFromReservation(cancelDraft.reservation),
+        });
         const r = await fetch(`/api/store/reservations/${cancelDraft.reservation.id}/commercial-adjustment/preview`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -379,7 +392,8 @@ export default function StoreDashboard() {
             newTotalCents: 0,
             newDepositCents: 0,
             operationType: "CANCEL",
-            requestedRefundMode: cancelDraft.refundMode,
+            requestedRefundMode: refundSubmit.requestedRefundMode,
+            refundScope: refundSubmit.refundScope,
             reason: cancelDraft.reason,
           }),
         });
@@ -406,10 +420,23 @@ export default function StoreDashboard() {
   async function commitCancelReservation() {
     if (!cancelDraft) return;
     const reason = cancelDraft.reason.trim();
-    const requestedRefundMode: CancelRefundMode =
-      Math.max(0, Number(cancelPreview?.overpaidServiceCents ?? 0)) > 0
-        ? cancelDraft.refundMode
-        : "none";
+    const fallbackAmounts = refundableCancelAmountsFromReservation(cancelDraft.reservation);
+    const refundSubmit = resolveCancelRefundSubmit({
+      selectedRefundMode: cancelDraft.refundMode,
+      refundableServiceCents: Math.max(
+        0,
+        Number(
+          cancelPreview?.refundableServiceCents ??
+            cancelPreview?.overpaidServiceCents ??
+            fallbackAmounts.refundableServiceCents
+        )
+      ),
+      refundableDepositCents: Math.max(
+        0,
+        Number(cancelPreview?.refundableDepositCents ?? fallbackAmounts.refundableDepositCents)
+      ),
+    });
+    const { requestedRefundMode, refundScope } = refundSubmit;
     if (!reason) {
       setCancelPreviewError("Indica el motivo de la cancelacion.");
       return;
@@ -427,6 +454,7 @@ export default function StoreDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           requestedRefundMode,
+          refundScope,
           refundMethod: cancelDraft.method,
           refundOrigin: "STORE",
           reason,

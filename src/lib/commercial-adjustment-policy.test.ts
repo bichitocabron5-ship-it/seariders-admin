@@ -113,6 +113,25 @@ test("pago total y nuevo total menor requiere elegir politica de devolucion", ()
   assert.deepEqual(policy.blockers, ["REFUND_MODE_REQUIRED"]);
 });
 
+test("alcance sin servicio no exige modo por sobrepago de servicio", () => {
+  const policy = resolveCommercialAdjustmentPolicy(
+    basePolicyArgs({
+      oldTotalCents: 10_000,
+      newTotalCents: 0,
+      paidServiceCents: 10_000,
+      refundScope: "DEPOSIT",
+      operationType: "CANCEL",
+      reason: "Cancelacion sin devolver servicio",
+    })
+  );
+
+  assert.equal(policy.canCommit, true);
+  assert.equal(policy.overpaidServiceCents, 10_000);
+  assert.deepEqual(policy.blockers, []);
+  assert.equal(policy.refundNowCents, 0);
+  assert.equal(policy.pendingRefundCents, 0);
+});
+
 test("contrato SIGNED con EDIT bloquea cambios materiales", () => {
   const policy = resolveCommercialAdjustmentPolicy(
     basePolicyArgs({

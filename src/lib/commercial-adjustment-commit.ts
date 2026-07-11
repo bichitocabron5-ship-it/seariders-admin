@@ -11,6 +11,7 @@ import {
 import {
   type CommercialAdjustmentOperationType,
   type CommercialAdjustmentRefundMode,
+  type CommercialAdjustmentRefundScope,
   resolveCommercialAdjustmentPolicy,
 } from "./commercial-adjustment-policy";
 import { syncChannelCommissionLineFromReservationTx } from "./channel-commission-lines";
@@ -75,6 +76,7 @@ export type CommercialAdjustmentCommitProposal = {
   newDepositCents?: number | null;
   operationType: CommercialAdjustmentOperationType;
   requestedRefundMode?: CommercialAdjustmentRefundMode | "none" | null;
+  refundScope?: CommercialAdjustmentRefundScope | null;
   reason?: string | null;
 };
 
@@ -229,6 +231,23 @@ function normalizeRequestedRefundMode(
 ): CommercialAdjustmentRefundMode | null {
   if (value === "refundNow" || value === "leavePendingRefund") return value;
   return null;
+}
+
+function normalizeRefundScope(
+  value: CommercialAdjustmentCommitProposal["refundScope"]
+): CommercialAdjustmentRefundScope {
+  if (value === "SERVICE" || value === "DEPOSIT" || value === "FULL" || value === "NONE") {
+    return value;
+  }
+  return "FULL";
+}
+
+function refundScopeIncludesService(scope: CommercialAdjustmentRefundScope) {
+  return scope === "SERVICE" || scope === "FULL";
+}
+
+function refundScopeIncludesDeposit(scope: CommercialAdjustmentRefundScope) {
+  return scope === "DEPOSIT" || scope === "FULL";
 }
 
 function normalizeReason(value: string | null | undefined) {
@@ -388,23 +407,29 @@ function buildCommercialAdjustmentCommitEvaluation(
   const paidServiceCents = Math.max(0, normalizeCents(netPaidServiceCents(reservation.payments)));
   const paidDepositCents = Math.max(0, normalizeCents(netPaidDepositCents(reservation.payments)));
   const requestedRefundMode = normalizeRequestedRefundMode(proposal.requestedRefundMode);
+  const refundScope = normalizeRefundScope(proposal.refundScope);
+  const refundService = refundScopeIncludesService(refundScope);
+  const refundDeposit = refundScopeIncludesDeposit(refundScope);
   const refundableServiceCents = Math.max(0, paidServiceCents - newTotalCents);
   const refundableDepositCents =
     proposal.operationType === "CANCEL" ? Math.max(0, paidDepositCents - newDepositCents) : 0;
   const depositRefundBlockedReason =
-    refundableDepositCents > 0 && reservation.depositHeld ? ("DEPOSIT_HELD" as const) : null;
-  const serviceRefundNowCents = requestedRefundMode === "refundNow" ? refundableServiceCents : 0;
+    refundDeposit && refundableDepositCents > 0 && reservation.depositHeld
+      ? ("DEPOSIT_HELD" as const)
+      : null;
+  const serviceRefundNowCents =
+    requestedRefundMode === "refundNow" && refundService ? refundableServiceCents : 0;
   const depositRefundNowCents =
-    requestedRefundMode === "refundNow" && !depositRefundBlockedReason
+    requestedRefundMode === "refundNow" && refundDeposit && !depositRefundBlockedReason
       ? refundableDepositCents
       : 0;
   const pendingServiceRefundCents =
-    requestedRefundMode === "leavePendingRefund" ? refundableServiceCents : 0;
+    requestedRefundMode === "leavePendingRefund" && refundService ? refundableServiceCents : 0;
   const pendingDepositRefundCents =
-    requestedRefundMode === "leavePendingRefund" && !depositRefundBlockedReason
+    requestedRefundMode === "leavePendingRefund" && refundDeposit && !depositRefundBlockedReason
       ? refundableDepositCents
       : 0;
-  const depositRefundHeldCents = depositRefundBlockedReason ? refundableDepositCents : 0;
+  const depositRefundHeldCents = refundDeposit && depositRefundBlockedReason ? refundableDepositCents : 0;
   const requiredUnits = computeRequiredContractUnits({
     quantity: reservation.quantity ?? 0,
     isLicense: Boolean(reservation.isLicense),
@@ -429,6 +454,7 @@ function buildCommercialAdjustmentCommitEvaluation(
       reservation.giftVoucherId || reservation.passVoucherId || reservation.passConsumeId
     ),
     requestedRefundMode,
+    refundScope,
     reason: proposal.reason,
     operationType: proposal.operationType,
     phase,
@@ -440,6 +466,7 @@ function buildCommercialAdjustmentCommitEvaluation(
   if (
     proposal.operationType === "CANCEL" &&
     refundableDepositCents > 0 &&
+    refundDeposit &&
     !depositRefundBlockedReason &&
     requestedRefundMode !== "refundNow" &&
     requestedRefundMode !== "leavePendingRefund" &&

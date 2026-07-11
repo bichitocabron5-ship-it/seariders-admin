@@ -634,6 +634,7 @@ test("cancelacion pagada con servicio y fianza crea dos OUT separados", async ()
       newDepositCents: 0,
       operationType: "CANCEL",
       requestedRefundMode: "refundNow",
+      refundScope: "FULL",
       reason: "Cancelacion con devolucion completa",
     },
     {
@@ -681,6 +682,117 @@ test("cancelacion pagada con servicio y fianza crea dos OUT separados", async ()
   assert.equal(paymentStatus.overpaidDepositCents, 0);
 });
 
+test("cancelacion legacy SERVICE con servicio y fianza pagados crea OUT solo de servicio", async () => {
+  const servicePayment = { id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" as const };
+  const depositPayment = { id: "pay_2", amountCents: 5_000, isDeposit: true, direction: "IN" as const };
+  const { client, reservation, paymentCreates } = makeState({
+    depositCents: 5_000,
+    payments: [servicePayment, depositPayment],
+  });
+  const beforeServicePayment = { ...servicePayment };
+  const beforeDepositPayment = { ...depositPayment };
+
+  const result = await commitCommercialAdjustment(
+    client as never,
+    "res_1",
+    {
+      newTotalCents: 0,
+      newDepositCents: 0,
+      operationType: "CANCEL",
+      requestedRefundMode: "refundNow",
+      refundScope: "SERVICE",
+      reason: "Cancelacion con devolucion de servicio",
+    },
+    {
+      assertRefundCashOpen: async () => undefined,
+    }
+  );
+
+  assert.equal(result?.refundNowCents, 10_000);
+  assert.equal(result?.serviceRefundNowCents, 10_000);
+  assert.equal(result?.depositRefundNowCents, 0);
+  assert.deepEqual(reservation.payments[0], beforeServicePayment);
+  assert.deepEqual(reservation.payments[1], beforeDepositPayment);
+  assert.equal(paymentCreates.length, 1);
+  assert.deepEqual(
+    paymentCreates.map((payment) => ({
+      amountCents: payment.amountCents,
+      isDeposit: payment.isDeposit,
+      direction: payment.direction,
+    })),
+    [{ amountCents: 10_000, isDeposit: false, direction: "OUT" }]
+  );
+});
+
+test("cancelacion con alcance DEPOSIT crea OUT solo de fianza", async () => {
+  const servicePayment = { id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" as const };
+  const depositPayment = { id: "pay_2", amountCents: 5_000, isDeposit: true, direction: "IN" as const };
+  const { client, reservation, paymentCreates } = makeState({
+    depositCents: 5_000,
+    payments: [servicePayment, depositPayment],
+  });
+  const beforeServicePayment = { ...servicePayment };
+  const beforeDepositPayment = { ...depositPayment };
+
+  const result = await commitCommercialAdjustment(
+    client as never,
+    "res_1",
+    {
+      newTotalCents: 0,
+      newDepositCents: 0,
+      operationType: "CANCEL",
+      requestedRefundMode: "refundNow",
+      refundScope: "DEPOSIT",
+      reason: "Cancelacion con devolucion de fianza",
+    },
+    {
+      assertRefundCashOpen: async () => undefined,
+    }
+  );
+
+  assert.equal(result?.refundNowCents, 5_000);
+  assert.equal(result?.serviceRefundNowCents, 0);
+  assert.equal(result?.depositRefundNowCents, 5_000);
+  assert.deepEqual(reservation.payments[0], beforeServicePayment);
+  assert.deepEqual(reservation.payments[1], beforeDepositPayment);
+  assert.equal(paymentCreates.length, 1);
+  assert.deepEqual(
+    paymentCreates.map((payment) => ({
+      amountCents: payment.amountCents,
+      isDeposit: payment.isDeposit,
+      direction: payment.direction,
+    })),
+    [{ amountCents: 5_000, isDeposit: true, direction: "OUT" }]
+  );
+});
+
+test("cancelacion legacy NONE con servicio y fianza pagados no crea OUT", async () => {
+  const servicePayment = { id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" as const };
+  const depositPayment = { id: "pay_2", amountCents: 5_000, isDeposit: true, direction: "IN" as const };
+  const { client, reservation, paymentCreates } = makeState({
+    depositCents: 5_000,
+    payments: [servicePayment, depositPayment],
+  });
+  const beforeServicePayment = { ...servicePayment };
+  const beforeDepositPayment = { ...depositPayment };
+
+  const result = await commitCommercialAdjustment(client as never, "res_1", {
+    newTotalCents: 0,
+    newDepositCents: 0,
+    operationType: "CANCEL",
+    requestedRefundMode: "none",
+    refundScope: "NONE",
+    reason: "Cancelacion sin devolucion",
+  });
+
+  assert.equal(result?.status, "CANCELED");
+  assert.equal(result?.refundNowCents, 0);
+  assert.equal(result?.pendingRefundCents, 0);
+  assert.deepEqual(reservation.payments[0], beforeServicePayment);
+  assert.deepEqual(reservation.payments[1], beforeDepositPayment);
+  assert.deepEqual(paymentCreates, []);
+});
+
 test("cancelacion pagada solo con fianza crea un OUT de fianza", async () => {
   const { client, paymentCreates } = makeState({
     depositCents: 5_000,
@@ -695,6 +807,7 @@ test("cancelacion pagada solo con fianza crea un OUT de fianza", async () => {
       newDepositCents: 0,
       operationType: "CANCEL",
       requestedRefundMode: "refundNow",
+      refundScope: "DEPOSIT",
       reason: "Cancelacion con devolucion de fianza",
     },
     {
@@ -792,6 +905,29 @@ test("cancelacion con leavePendingRefund de servicio y fianza no crea OUT", asyn
 
   assert.equal(result?.pendingRefundCents, 15_000);
   assert.equal(result?.pendingServiceRefundCents, 10_000);
+  assert.equal(result?.pendingDepositRefundCents, 5_000);
+  assert.deepEqual(paymentMutations, []);
+});
+
+test("cancelacion con leavePendingRefund solo de fianza no crea OUT y cancela", async () => {
+  const { client, paymentMutations } = makeState({
+    depositCents: 5_000,
+    payments: [{ id: "pay_1", amountCents: 5_000, isDeposit: true, direction: "IN" }],
+  });
+
+  const result = await commitCommercialAdjustment(client as never, "res_1", {
+    newTotalCents: 0,
+    newDepositCents: 0,
+    operationType: "CANCEL",
+    requestedRefundMode: "leavePendingRefund",
+    refundScope: "DEPOSIT",
+    reason: "Cancelacion con fianza pendiente",
+  });
+
+  assert.equal(result?.status, "CANCELED");
+  assert.equal(result?.refundNowCents, 0);
+  assert.equal(result?.pendingRefundCents, 5_000);
+  assert.equal(result?.pendingServiceRefundCents, 0);
   assert.equal(result?.pendingDepositRefundCents, 5_000);
   assert.deepEqual(paymentMutations, []);
 });

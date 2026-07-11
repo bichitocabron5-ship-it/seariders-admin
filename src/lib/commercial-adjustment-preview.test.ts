@@ -274,6 +274,33 @@ test("CANCEL con servicio y fianza pagados previsualiza devoluciones separadas",
   assert.equal(preview.refundNowCents, 15_000);
 });
 
+test("CANCEL con alcance SERVICE previsualiza solo devolucion de servicio", () => {
+  const preview = buildCommercialAdjustmentPreview(
+    baseReservation({
+      depositCents: 5_000,
+      payments: [
+        { amountCents: 10_000, isDeposit: false, direction: "IN" },
+        { amountCents: 5_000, isDeposit: true, direction: "IN" },
+      ],
+    }),
+    {
+      newTotalCents: 0,
+      newDepositCents: 0,
+      operationType: "CANCEL",
+      requestedRefundMode: "refundNow",
+      refundScope: "SERVICE",
+      reason: "Cancelacion con devolucion de servicio",
+    }
+  );
+
+  assert.equal(preview.canCommit, true);
+  assert.equal(preview.refundableServiceCents, 10_000);
+  assert.equal(preview.refundableDepositCents, 5_000);
+  assert.equal(preview.serviceRefundNowCents, 10_000);
+  assert.equal(preview.depositRefundNowCents, 0);
+  assert.equal(preview.refundNowCents, 10_000);
+});
+
 test("CANCEL con fianza retenida previsualiza warning explicito", () => {
   const preview = buildCommercialAdjustmentPreview(
     baseReservation({
