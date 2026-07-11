@@ -24,13 +24,14 @@ import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operati
 import { findCurrentShiftSession } from "@/lib/shiftSessions";
 import { prisma } from "@/lib/prisma";
 import { AppSession, sessionOptions } from "@/lib/session";
-import { requestedRefundModeForStoreCancel } from "@/lib/store-cancel-refund-mode";
+import { refundSelectionForStoreCancel } from "@/lib/store-cancel-refund-mode";
 
 export const runtime = "nodejs";
 
 const Body = z.object({
   refundMode: z.enum(["NONE", "SERVICE", "FULL"]).optional(),
   requestedRefundMode: z.enum(["refundNow", "leavePendingRefund", "none"]).optional(),
+  refundScope: z.enum(["SERVICE", "DEPOSIT", "FULL"]).optional(),
   refundMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
   refundOrigin: z.nativeEnum(PaymentOrigin).default(PaymentOrigin.STORE),
   reason: z.string().max(500).optional().nullable(),
@@ -121,7 +122,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const body = parsed.data;
   const actorUserId = session.userId as string;
-  const requestedRefundMode = requestedRefundModeForStoreCancel(body);
+  const refundSelection = refundSelectionForStoreCancel(body);
+  const { requestedRefundMode, refundScope } = refundSelection;
   const reason = normalizeCancelReason(body.reason);
 
   try {
@@ -159,6 +161,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         newDepositCents: 0,
         operationType: "CANCEL",
         requestedRefundMode,
+        refundScope,
         reason,
       },
       {
@@ -196,6 +199,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
                 reservationSource: context.reservation.source,
                 statusBefore: context.reservation.status,
                 requestedRefundMode,
+                refundScope,
                 refundMethod: body.refundMethod,
                 refundOrigin: body.refundOrigin,
                 refundNowCents: context.resultEvaluation.refundNowCents,

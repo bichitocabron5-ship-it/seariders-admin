@@ -1,6 +1,7 @@
 export type CommercialAdjustmentOperationType = "EDIT" | "CANCEL";
 
 export type CommercialAdjustmentRefundMode = "refundNow" | "leavePendingRefund";
+export type CommercialAdjustmentRefundScope = "SERVICE" | "DEPOSIT" | "FULL" | "NONE";
 
 export type CommercialAdjustmentPolicyBlocker =
   | "ADVANCED_RESERVATION_STATUS"
@@ -40,6 +41,7 @@ export type ResolveCommercialAdjustmentPolicyArgs = {
   hasPendingCommission: boolean;
   hasVoucherOrPassOrGift: boolean;
   requestedRefundMode?: CommercialAdjustmentRefundMode | null;
+  refundScope?: CommercialAdjustmentRefundScope | null;
   reason?: string | null;
   operationType: CommercialAdjustmentOperationType;
   phase?: "B3A" | "B3B" | null;
@@ -76,6 +78,15 @@ function pushUnique<T>(items: T[], item: T) {
   if (!items.includes(item)) items.push(item);
 }
 
+function normalizeRefundScope(
+  value: CommercialAdjustmentRefundScope | null | undefined
+): CommercialAdjustmentRefundScope {
+  if (value === "SERVICE" || value === "DEPOSIT" || value === "FULL" || value === "NONE") {
+    return value;
+  }
+  return "FULL";
+}
+
 export function resolveCommercialAdjustmentPolicy(
   args: ResolveCommercialAdjustmentPolicyArgs
 ): CommercialAdjustmentPolicy {
@@ -86,6 +97,8 @@ export function resolveCommercialAdjustmentPolicy(
   const status = normalizeStatus(args.reservationStatus);
   const materialTotalChange = oldTotalCents !== newTotalCents;
   const hasAnyPayment = paidServiceCents > 0 || paidDepositCents > 0;
+  const refundScope = normalizeRefundScope(args.refundScope);
+  const serviceInRefundScope = refundScope === "SERVICE" || refundScope === "FULL";
   const refundNowBlockedInB3A =
     args.phase === "B3A" && args.requestedRefundMode === "refundNow";
 
@@ -115,7 +128,7 @@ export function resolveCommercialAdjustmentPolicy(
     requiredActions.push("COLLECT_PENDING_SERVICE");
   }
 
-  if (overpaidServiceCents > 0) {
+  if (overpaidServiceCents > 0 && serviceInRefundScope) {
     if (args.requestedRefundMode === "refundNow") {
       refundNowCents = overpaidServiceCents;
       requiredActions.push("REFUND_NOW");

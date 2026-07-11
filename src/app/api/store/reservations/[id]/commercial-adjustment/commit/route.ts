@@ -28,6 +28,7 @@ const Body = z.object({
   newDepositCents: z.number().int().min(0).optional().nullable(),
   operationType: z.enum(["EDIT", "CANCEL"]),
   requestedRefundMode: z.enum(["refundNow", "leavePendingRefund", "none"]).default("none"),
+  refundScope: z.enum(["SERVICE", "DEPOSIT", "FULL"]).optional(),
   refundMethod: z.nativeEnum(PaymentMethod).default(PaymentMethod.CASH),
   refundOrigin: z.nativeEnum(PaymentOrigin).default(PaymentOrigin.STORE),
   reason: z.string().max(500).optional().nullable(),
