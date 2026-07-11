@@ -34,6 +34,7 @@ export function buildEditUpdateBody(args: {
   isLicense: boolean;
   jetskiLicenseMode: "NONE" | "GREEN_LIMITED" | "YELLOW_UNLIMITED";
   pricingTier: "STANDARD" | "RESIDENT";
+  isVoucherFormalizeFlow?: boolean;
   channelId: string;
   dateStr: string;
   timeStr: string;
@@ -57,6 +58,15 @@ export function buildEditUpdateBody(args: {
   licenseNumber: string;
   confirmSignedContractReduction?: boolean;
 }) {
+  const isVoucherFormalizeFlow = args.isVoucherFormalizeFlow === true;
+
+  if (isVoucherFormalizeFlow) {
+    return {
+      activityDate: args.dateStr,
+      time: args.timeStr?.trim() ? args.timeStr.trim() : null,
+    };
+  }
+
   const body: Record<string, unknown> = {
     pax: Number(args.pax),
     isLicense: Boolean(args.isLicense),
@@ -123,7 +133,7 @@ export function buildFormalizeBody(args: {
   customerDocType: string;
   customerDocNumber: string;
   marketingSource: string;
-  isVoucherFormalizeFlow: boolean;
+  isVoucherFormalizeFlow?: boolean;
   serviceId: string;
   optionId: string;
   channelId: string;
@@ -142,6 +152,8 @@ export function buildFormalizeBody(args: {
   promoCode?: string | null;
   confirmSignedContractReduction?: boolean;
 }) {
+  const isVoucherFormalizeFlow = args.isVoucherFormalizeFlow === true;
+
   const body: Record<string, unknown> = {
     customerName: args.customerName.trim(),
     customerPhone: args.customerPhone.trim(),
@@ -153,21 +165,21 @@ export function buildFormalizeBody(args: {
     customerDocType: args.customerDocType.trim() || null,
     customerDocNumber: args.customerDocNumber.trim() || null,
     marketing: args.marketingSource.trim() || null,
-    serviceId: args.isVoucherFormalizeFlow ? undefined : args.serviceId,
-    optionId: args.isVoucherFormalizeFlow ? undefined : args.optionId,
-    channelId: args.channelId || null,
-    quantity: args.isVoucherFormalizeFlow ? undefined : Number(args.quantity),
-    pax: args.isVoucherFormalizeFlow ? undefined : Number(args.pax),
-    companionsCount: Number(args.companions) || 0,
+    serviceId: isVoucherFormalizeFlow ? undefined : args.serviceId,
+    optionId: isVoucherFormalizeFlow ? undefined : args.optionId,
+    channelId: isVoucherFormalizeFlow ? undefined : args.channelId || null,
+    quantity: isVoucherFormalizeFlow ? undefined : Number(args.quantity),
+    pax: isVoucherFormalizeFlow ? undefined : Number(args.pax),
+    companionsCount: isVoucherFormalizeFlow ? undefined : Number(args.companions) || 0,
     activityDate: args.dateStr,
     time: args.timeStr?.trim() ? args.timeStr : null,
   };
 
-  if (args.isLicense !== undefined) body.isLicense = Boolean(args.isLicense);
-  if (args.jetskiLicenseMode !== undefined) body.jetskiLicenseMode = args.jetskiLicenseMode;
-  if (args.pricingTier !== undefined) body.pricingTier = args.pricingTier;
+  if (!isVoucherFormalizeFlow && args.isLicense !== undefined) body.isLicense = Boolean(args.isLicense);
+  if (!isVoucherFormalizeFlow && args.jetskiLicenseMode !== undefined) body.jetskiLicenseMode = args.jetskiLicenseMode;
+  if (!isVoucherFormalizeFlow && args.pricingTier !== undefined) body.pricingTier = args.pricingTier;
 
-  if (args.isLicense) {
+  if (!isVoucherFormalizeFlow && args.isLicense) {
     const licenseSchool = args.licenseSchool?.trim() || "";
     const licenseType = args.licenseType?.trim() || "";
     const licenseNumber = args.licenseNumber?.trim() || "";
@@ -175,13 +187,13 @@ export function buildFormalizeBody(args: {
     if (licenseSchool) body.licenseSchool = licenseSchool;
     if (licenseType) body.licenseType = licenseType;
     if (licenseNumber) body.licenseNumber = licenseNumber;
-  } else if (args.isLicense !== undefined) {
+  } else if (!isVoucherFormalizeFlow && args.isLicense !== undefined) {
     body.licenseSchool = null;
     body.licenseType = null;
     body.licenseNumber = null;
   }
 
-  if (!args.isVoucherFormalizeFlow) {
+  if (!isVoucherFormalizeFlow) {
     body.items = (args.cartItems && args.cartItems.length > 0
       ? args.cartItems
       : [
