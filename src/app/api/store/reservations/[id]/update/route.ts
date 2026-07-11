@@ -39,6 +39,7 @@ import {
   getCommercialCommitmentBlockers,
   hasExplicitPromoCodeChange,
   isReservationCoveredByPrepaidVoucher,
+  resolvePrepaidVoucherCommercialChange,
   sameCommercialComposition,
 } from "@/lib/reservation-commercial-snapshot";
 import {
@@ -676,13 +677,26 @@ const requestedServiceCategory =
           select: { category: true },
         })
       )?.category ?? null;
-const requestedReservationState = deriveCommercialReservationState({
+const isPrepaidVoucherReservation = isReservationCoveredByPrepaidVoucher(existing);
+const rawRequestedReservationState = deriveCommercialReservationState({
   serviceCategory: requestedServiceCategory,
   jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
   isLicense: b.isLicense,
   pricingTier: b.pricingTier ?? existing.pricingTier,
 });
-const commercialPricingChanged = commercialPricingStateChanged({
+const requestedReservationState = deriveCommercialReservationState({
+  serviceCategory: requestedServiceCategory,
+  jetskiLicenseMode: isPrepaidVoucherReservation
+    ? existing.jetskiLicenseMode
+    : rawRequestedReservationState.jetskiLicenseMode,
+  isLicense: isPrepaidVoucherReservation
+    ? existing.isLicense
+    : rawRequestedReservationState.isLicense,
+  pricingTier: isPrepaidVoucherReservation
+    ? existing.pricingTier
+    : rawRequestedReservationState.pricingTier,
+});
+const rawCommercialPricingChanged = commercialPricingStateChanged({
   current: {
     serviceCategory: existing.service?.category ?? null,
     isLicense: existing.isLicense,
@@ -696,6 +710,15 @@ const commercialPricingChanged = commercialPricingStateChanged({
     pricingTier: b.pricingTier ?? existing.pricingTier,
   },
 });
+const rawRequestedChannelId = b.channelId !== undefined ? b.channelId ?? null : existing.channelId ?? null;
+const commercialChange = resolvePrepaidVoucherCommercialChange({
+  isPrepaidVoucherReservation,
+  currentChannelId: existing.channelId,
+  requestedChannelId: rawRequestedChannelId,
+  commercialPricingChanged: rawCommercialPricingChanged,
+});
+const requestedChannelId = commercialChange.effectiveRequestedChannelId;
+const commercialPricingChanged = commercialChange.commercialPricingChanged;
 const legacyMainPriceFieldsChanged =
   (b.serviceId !== undefined && existing.serviceId !== b.serviceId) ||
   (b.optionId !== undefined && existing.optionId !== b.optionId) ||
@@ -749,7 +772,6 @@ const existingCommercialComposition = buildComparableCommercialComposition(exist
 const nextCommercialComposition = buildComparableCommercialComposition(nextComposition);
 const commercialCompositionChanged =
   !sameCommercialComposition(existingCommercialComposition, nextCommercialComposition);
-const requestedChannelId = b.channelId !== undefined ? b.channelId ?? null : existing.channelId ?? null;
 const commercialChannelChanged = (existing.channelId ?? null) !== requestedChannelId;
 const explicitRecalculatePricing = Boolean(b.recalculatePricing);
 const promoCodeChanged = hasExplicitPromoCodeChange({
@@ -766,7 +788,6 @@ const priceSensitiveChanged =
   commercialChannelChanged ||
   promoCodeChanged ||
   manualDiscountChanged;
-const isPrepaidVoucherReservation = isReservationCoveredByPrepaidVoucher(existing);
 const commercialCommitmentBlockers = getCommercialCommitmentBlockers({
   status: existing.status,
   formalizedAt: existing.formalizedAt,
@@ -973,9 +994,9 @@ if (hasProItems && priceSensitiveChanged) {
 
       const reservationState = deriveCommercialReservationState({
         serviceCategory: svc.category ?? null,
-        jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
-        isLicense: b.isLicense,
-        pricingTier: b.pricingTier ?? existing.pricingTier,
+        jetskiLicenseMode: requestedReservationState.jetskiLicenseMode,
+        isLicense: requestedReservationState.isLicense,
+        pricingTier: requestedReservationState.pricingTier,
       });
       const isVoucherIncludedBaseLine =
         isPrepaidVoucherReservation &&
@@ -1060,11 +1081,11 @@ if (hasProItems && priceSensitiveChanged) {
       })),
     });
 
-    if (compositionChanged || (b.channelId !== undefined && (b.channelId ?? null) !== (existing.channelId ?? null))) {
+    if (compositionChanged || (requestedChannelId ?? null) !== (existing.channelId ?? null)) {
       await assertServiceChannelCompatibilityTx(tx, {
         origin: compatibilityOrigin,
         serviceIds: Array.from(new Set(lineCreates.map((line) => line.serviceId))),
-        channelId: b.channelId ?? existing.channelId ?? null,
+        channelId: requestedChannelId,
       });
     }
 
@@ -1080,7 +1101,7 @@ if (hasProItems && priceSensitiveChanged) {
 
     const totalBeforeDiscounts = serviceSubtotal + extrasTotal;
 
-    const effectiveChannelId = b.channelId !== undefined ? b.channelId : existing.channelId;
+    const effectiveChannelId = requestedChannelId;
     const channel = effectiveChannelId
       ? await prisma.channel.findUnique({
           where: { id: effectiveChannelId },
@@ -1152,9 +1173,9 @@ if (hasProItems && priceSensitiveChanged) {
     const main = lineCreates[0];
     const reservationState = deriveCommercialReservationState({
       serviceCategory: main.category,
-      jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
-      isLicense: b.isLicense,
-      pricingTier: b.pricingTier ?? existing.pricingTier,
+      jetskiLicenseMode: requestedReservationState.jetskiLicenseMode,
+      isLicense: requestedReservationState.isLicense,
+      pricingTier: requestedReservationState.pricingTier,
     });
     const depositPerUnit = reservationState.isLicense ? 50000 : 10000;
     const depositCents = isPrepaidVoucherReservation
@@ -1162,7 +1183,7 @@ if (hasProItems && priceSensitiveChanged) {
       : depositPerUnit * jetskiUnits;
     // Compat main: primer item
     const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
-      channelId: b.channelId ?? null,
+      channelId: requestedChannelId,
       serviceId: main.serviceId,
       commissionBaseCents: commercial.commissionBaseCents,
       finalTotalCents: commercial.finalTotalCents,
@@ -1176,7 +1197,7 @@ if (hasProItems && priceSensitiveChanged) {
       isLicense: reservationState.isLicense,
       jetskiLicenseMode: reservationState.jetskiLicenseMode,
       pricingTier: reservationState.pricingTier,
-      channelId: b.channelId ?? null,
+      channelId: requestedChannelId,
       activityDate,
       scheduledTime,
       companionsCount: Number(b.companionsCount ?? 0),
@@ -1284,7 +1305,7 @@ if (hasProItems && priceSensitiveChanged) {
       );
     }
 
-    const nextChannelId = b.channelId !== undefined ? b.channelId ?? null : existing.channelId ?? null;
+    const nextChannelId = requestedChannelId;
     const currentChannelId = existing.channelId ?? null;
     if (nextChannelId !== currentChannelId) {
       await assertServiceChannelCompatibilityTx(prisma, {
@@ -1302,7 +1323,7 @@ if (hasProItems && priceSensitiveChanged) {
 
     const data: Prisma.ReservationUncheckedUpdateInput = {
       pax: b.pax,
-      channelId: b.channelId ?? null,
+      channelId: requestedChannelId,
       activityDate,
       scheduledTime,
 
@@ -1381,19 +1402,19 @@ if (hasProItems && priceSensitiveChanged) {
 
   const reservationState = deriveCommercialReservationState({
     serviceCategory: svc.category ?? null,
-    jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
-    isLicense: b.isLicense,
-    pricingTier: b.pricingTier ?? existing.pricingTier,
+    jetskiLicenseMode: requestedReservationState.jetskiLicenseMode,
+    isLicense: requestedReservationState.isLicense,
+    pricingTier: requestedReservationState.pricingTier,
   });
 
   if (
     (b.serviceId !== undefined && b.serviceId !== existing.serviceId) ||
-    (b.channelId !== undefined && (b.channelId ?? null) !== (existing.channelId ?? null))
+    (requestedChannelId ?? null) !== (existing.channelId ?? null)
   ) {
     await assertServiceChannelCompatibilityTx(prisma, {
       origin: compatibilityOrigin,
       serviceIds: [svc.id],
-      channelId: b.channelId ?? existing.channelId ?? null,
+      channelId: requestedChannelId,
     });
   }
 
@@ -1436,7 +1457,7 @@ if (hasProItems && priceSensitiveChanged) {
   let result: { id: string; requiredUnits: number; readyCount: number };
   try {
     result = await prisma.$transaction(async (tx) => {
-      const effectiveChannelId = b.channelId !== undefined ? b.channelId : existing.channelId;
+      const effectiveChannelId = requestedChannelId;
     const channel = effectiveChannelId
       ? await tx.channel.findUnique({
           where: { id: effectiveChannelId },
@@ -1459,7 +1480,7 @@ if (hasProItems && priceSensitiveChanged) {
     const data: Prisma.ReservationUncheckedUpdateInput = {
       serviceId: svc.id,
       optionId: opt.id,
-      channelId: b.channelId ?? null,
+      channelId: requestedChannelId,
       quantity: b.quantity,
       pax: b.pax,
       isLicense: reservationState.isLicense,
@@ -1548,7 +1569,7 @@ if (hasProItems && priceSensitiveChanged) {
       promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
     });
     const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
-      channelId: b.channelId ?? existing.channelId ?? null,
+      channelId: requestedChannelId,
       serviceId: svc.id,
       commissionBaseCents: commercial.commissionBaseCents,
       finalTotalCents: commercial.finalTotalCents,

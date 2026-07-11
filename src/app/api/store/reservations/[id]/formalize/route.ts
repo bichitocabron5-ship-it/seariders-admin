@@ -37,6 +37,7 @@ import {
   commercialPricingStateChanged,
   isReservationCoveredByPrepaidVoucher,
   netPaidServiceCents,
+  resolvePrepaidVoucherCommercialChange,
   shouldPreserveFormalizeCommercialSnapshot,
 } from "@/lib/reservation-commercial-snapshot";
 import {
@@ -725,9 +726,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
       const commercialShapeChanged = !sameCommercialShape(currentCommercialShape, requestedCommercialShape);
       const contractCompositionChanged = !sameContractContentShape(currentContractShape, requestedContractShape);
-      const channelChanged =
-        b.channelId !== undefined && (b.channelId ?? null) !== (current.channelId ?? null);
-      const licensePricingChanged = commercialPricingStateChanged({
+      const rawRequestedChannelId =
+        b.channelId !== undefined ? b.channelId ?? null : current.channelId ?? null;
+      const rawLicensePricingChanged = commercialPricingStateChanged({
         current: {
           serviceCategory: current.service?.category ?? null,
           isLicense: current.isLicense,
@@ -741,6 +742,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           pricingTier: b.pricingTier ?? current.pricingTier,
         },
       });
+      const commercialChange = resolvePrepaidVoucherCommercialChange({
+        isPrepaidVoucherReservation,
+        currentChannelId: current.channelId,
+        requestedChannelId: rawRequestedChannelId,
+        commercialPricingChanged: rawLicensePricingChanged,
+      });
+      const effectiveRequestedChannelId = commercialChange.effectiveRequestedChannelId;
+      const channelChanged = commercialChange.channelChanged;
+      const licensePricingChanged = commercialChange.commercialPricingChanged;
+      const requestedCommercialState = {
+        jetskiLicenseMode: isPrepaidVoucherReservation
+          ? current.jetskiLicenseMode
+          : b.jetskiLicenseMode ?? current.jetskiLicenseMode,
+        isLicense: isPrepaidVoucherReservation
+          ? current.isLicense
+          : b.isLicense ?? current.isLicense,
+        pricingTier: isPrepaidVoucherReservation
+          ? current.pricingTier
+          : b.pricingTier ?? current.pricingTier,
+      };
       const customerLegalFieldsChanged =
         !sameStringOrFallback(customerName, current.customerName, primaryContract?.driverName) ||
         !sameStringOrFallback(customerPhone, current.customerPhone, primaryContract?.driverPhone) ||
@@ -852,9 +873,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
         const lineState = deriveCommercialReservationState({
           serviceCategory: service.category ?? null,
-          jetskiLicenseMode: b.jetskiLicenseMode ?? current.jetskiLicenseMode,
-          isLicense: b.isLicense ?? current.isLicense,
-          pricingTier: b.pricingTier ?? current.pricingTier,
+          jetskiLicenseMode: requestedCommercialState.jetskiLicenseMode,
+          isLicense: requestedCommercialState.isLicense,
+          pricingTier: requestedCommercialState.pricingTier,
         });
         const isVoucherIncludedBaseLine =
           isPrepaidVoucherReservation &&
@@ -936,13 +957,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       ).sort();
       const shouldValidateCompatibility =
         JSON.stringify(nextServiceIds) !== JSON.stringify(currentServiceIds) ||
-        (b.channelId !== undefined && (b.channelId ?? null) !== (current.channelId ?? null));
+        (effectiveRequestedChannelId ?? null) !== (current.channelId ?? null);
 
       if (shouldValidateCompatibility) {
         await assertServiceChannelCompatibilityTx(tx, {
           origin: compatibilityOrigin,
           serviceIds: nextServiceIds,
-          channelId: b.channelId !== undefined ? b.channelId ?? null : current.channelId ?? null,
+          channelId: effectiveRequestedChannelId,
         });
       }
 
@@ -980,7 +1001,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         .reduce((sum, item) => sum + Number(item.totalPriceCents ?? 0), 0);
       const totalBeforeDiscounts = serviceSubtotal + extrasTotal;
 
-      const effectiveChannelId = b.channelId !== undefined ? b.channelId ?? null : current.channelId ?? null;
+      const effectiveChannelId = effectiveRequestedChannelId;
       const totalMainQuantity = lineCreates.reduce(
         (sum, line) => sum + Number(line.quantity ?? 0),
         0
@@ -1075,9 +1096,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       const reservationState = deriveCommercialReservationState({
         serviceCategory: mainLine.category,
-        jetskiLicenseMode: b.jetskiLicenseMode ?? current.jetskiLicenseMode,
-        isLicense: b.isLicense ?? current.isLicense,
-        pricingTier: b.pricingTier ?? current.pricingTier,
+        jetskiLicenseMode: requestedCommercialState.jetskiLicenseMode,
+        isLicense: requestedCommercialState.isLicense,
+        pricingTier: requestedCommercialState.pricingTier,
       });
       const requiredUnits = computeRequiredContractUnits({
         quantity: totalMainQuantity,

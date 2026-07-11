@@ -12,6 +12,7 @@ import {
   netPaidServiceCents,
   normalizeCommercialPricingState,
   resolveChargeableServiceDueCents,
+  resolvePrepaidVoucherCommercialChange,
   shouldPreserveFormalizeCommercialSnapshot,
 } from "./reservation-commercial-snapshot";
 import { resolveReservationPaymentStatus } from "./reservation-payment-status";
@@ -223,6 +224,54 @@ test("paid gift voucher formalization keeps service pending at zero even with st
   assert.equal(status.serviceDueCents, 0);
   assert.equal(status.pendingServiceCents, 0);
   assert.equal(status.state, "PAID");
+});
+
+test("paid gift voucher formalization ignores inferred channel and pricing changes", () => {
+  const rawPricingChanged = commercialPricingStateChanged({
+    current: {
+      serviceCategory: "JETSKI",
+      isLicense: false,
+      jetskiLicenseMode: "NONE",
+      pricingTier: "STANDARD",
+    },
+    requested: {
+      serviceCategory: "JETSKI",
+      isLicense: true,
+      jetskiLicenseMode: "YELLOW_UNLIMITED",
+      pricingTier: "STANDARD",
+    },
+  });
+
+  assert.equal(rawPricingChanged, true);
+  assert.deepEqual(
+    resolvePrepaidVoucherCommercialChange({
+      isPrepaidVoucherReservation: true,
+      currentChannelId: null,
+      requestedChannelId: "direct-channel",
+      commercialPricingChanged: rawPricingChanged,
+    }),
+    {
+      effectiveRequestedChannelId: null,
+      channelChanged: false,
+      commercialPricingChanged: false,
+    }
+  );
+});
+
+test("normal reservations keep channel and pricing changes protected", () => {
+  assert.deepEqual(
+    resolvePrepaidVoucherCommercialChange({
+      isPrepaidVoucherReservation: false,
+      currentChannelId: null,
+      requestedChannelId: "direct-channel",
+      commercialPricingChanged: true,
+    }),
+    {
+      effectiveRequestedChannelId: "direct-channel",
+      channelChanged: true,
+      commercialPricingChanged: true,
+    }
+  );
 });
 
 test("paid pass voucher formalization keeps service pending at zero", () => {

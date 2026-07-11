@@ -85,6 +85,7 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
     isLicense: Boolean(args.isLicense),
     jetskiLicenseMode: args.jetskiLicenseMode,
     pricingTier: args.pricingTier,
+    isVoucherFormalizeFlow: args.isVoucherFormalizeFlow,
     channelId: args.channelId,
     dateStr: args.dateStr,
     timeStr: args.timeStr,
