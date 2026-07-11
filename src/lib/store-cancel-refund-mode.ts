@@ -25,7 +25,7 @@ export function refundSelectionForStoreCancel(body: {
     return { requestedRefundMode: "refundNow", refundScope: "FULL" };
   }
   if (body.refundMode === "NONE") {
-    return { requestedRefundMode: "none", refundScope: "NONE" };
+    return { requestedRefundMode: "leavePendingRefund", refundScope: "FULL" };
   }
   return { requestedRefundMode: "none", refundScope: "FULL" };
 }

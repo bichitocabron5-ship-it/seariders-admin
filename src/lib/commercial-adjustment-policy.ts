@@ -10,6 +10,7 @@ export type CommercialAdjustmentPolicyBlocker =
   | "REFUND_NOW_NOT_SUPPORTED_B3A"
   | "REFUND_MODE_REQUIRED"
   | "REFUND_REASON_REQUIRED"
+  | "REFUND_SCOPE_INCOMPATIBLE"
   | "SIGNED_CONTRACT_MATERIAL_EDIT"
   | "VOUCHER_OR_PASS_OR_GIFT";
 
@@ -128,7 +129,9 @@ export function resolveCommercialAdjustmentPolicy(
     requiredActions.push("COLLECT_PENDING_SERVICE");
   }
 
-  if (overpaidServiceCents > 0 && serviceInRefundScope) {
+  if (args.operationType === "EDIT" && overpaidServiceCents > 0 && !serviceInRefundScope) {
+    blockers.push("REFUND_SCOPE_INCOMPATIBLE");
+  } else if (overpaidServiceCents > 0 && serviceInRefundScope) {
     if (args.requestedRefundMode === "refundNow") {
       refundNowCents = overpaidServiceCents;
       requiredActions.push("REFUND_NOW");

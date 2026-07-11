@@ -93,6 +93,7 @@ test("pago parcial y newTotal mayor deja pendiente", () => {
       newTotalCents: 15_000,
       operationType: "EDIT",
       requestedRefundMode: "none",
+      refundScope: "DEPOSIT",
       reason: "Ampliacion",
     }
   );
@@ -121,6 +122,27 @@ test("pago total y newTotal menor devuelve overpaid", () => {
   assert.equal(preview.pendingServiceCents, 0);
   assert.equal(preview.overpaidServiceCents, 2_000);
   assert.ok(preview.blockers.includes("REFUND_MODE_REQUIRED"));
+});
+
+test("EDIT con sobrepago de servicio y refundScope DEPOSIT bloquea", () => {
+  const preview = buildCommercialAdjustmentPreview(
+    baseReservation({
+      payments: [{ amountCents: 10_000, isDeposit: false, direction: "IN" }],
+    }),
+    {
+      newTotalCents: 8_000,
+      operationType: "EDIT",
+      requestedRefundMode: "refundNow",
+      refundScope: "DEPOSIT",
+      reason: "Devolucion aprobada",
+    }
+  );
+
+  assert.equal(preview.canCommit, false);
+  assert.equal(preview.overpaidServiceCents, 2_000);
+  assert.equal(preview.refundNowCents, 0);
+  assert.equal(preview.pendingRefundCents, 0);
+  assert.ok(preview.blockers.includes("REFUND_SCOPE_INCOMPATIBLE"));
 });
 
 test("refundNow devuelve refundNowCents", () => {
@@ -158,6 +180,7 @@ test("leavePendingRefund devuelve pendingRefundCents", () => {
   assert.equal(preview.canCommit, true);
   assert.equal(preview.refundNowCents, 0);
   assert.equal(preview.pendingRefundCents, 2_000);
+  assert.equal(preview.pendingServiceRefundCents, 2_000);
   assert.ok(preview.requiredActions.includes("LEAVE_PENDING_REFUND"));
 });
 

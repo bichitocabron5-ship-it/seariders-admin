@@ -113,7 +113,43 @@ test("pago total y nuevo total menor requiere elegir politica de devolucion", ()
   assert.deepEqual(policy.blockers, ["REFUND_MODE_REQUIRED"]);
 });
 
-test("alcance sin servicio no exige modo por sobrepago de servicio", () => {
+test("EDIT con sobrepago de servicio y alcance DEPOSIT bloquea", () => {
+  const policy = resolveCommercialAdjustmentPolicy(
+    basePolicyArgs({
+      oldTotalCents: 10_000,
+      newTotalCents: 8_000,
+      paidServiceCents: 10_000,
+      requestedRefundMode: "refundNow",
+      refundScope: "DEPOSIT",
+      reason: "Devolucion aprobada",
+      operationType: "EDIT",
+    })
+  );
+
+  assert.equal(policy.canCommit, false);
+  assert.equal(policy.overpaidServiceCents, 2_000);
+  assert.deepEqual(policy.blockers, ["REFUND_SCOPE_INCOMPATIBLE"]);
+  assert.equal(policy.refundNowCents, 0);
+  assert.equal(policy.pendingRefundCents, 0);
+});
+
+test("EDIT sin sobrepago de servicio permite alcance DEPOSIT", () => {
+  const policy = resolveCommercialAdjustmentPolicy(
+    basePolicyArgs({
+      oldTotalCents: 10_000,
+      newTotalCents: 12_000,
+      paidServiceCents: 10_000,
+      refundScope: "DEPOSIT",
+      operationType: "EDIT",
+    })
+  );
+
+  assert.equal(policy.canCommit, true);
+  assert.equal(policy.overpaidServiceCents, 0);
+  assert.deepEqual(policy.blockers, []);
+});
+
+test("CANCEL con alcance sin servicio no exige modo por sobrepago de servicio", () => {
   const policy = resolveCommercialAdjustmentPolicy(
     basePolicyArgs({
       oldTotalCents: 10_000,

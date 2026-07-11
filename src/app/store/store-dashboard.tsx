@@ -836,6 +836,8 @@ function cancelBlockerLabel(blocker: string) {
       return "Indica el motivo de la cancelacion.";
     case "REFUND_MODE_REQUIRED":
       return "Elige devolver ahora o dejar la devolucion pendiente.";
+    case "REFUND_SCOPE_INCOMPATIBLE":
+      return "El alcance de devolucion debe incluir servicio.";
     case "REFUND_REASON_REQUIRED":
       return "La devolucion requiere motivo.";
     case "PAID_COMMISSION":
