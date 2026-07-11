@@ -247,3 +247,52 @@ test("SIGNED con CANCEL permite si la politica lo permite", () => {
   assert.ok(preview.warnings.includes("SIGNED_CONTRACT_HISTORY_PRESERVED"));
   assert.ok(preview.requiredActions.includes("KEEP_SIGNED_CONTRACT_HISTORY"));
 });
+
+test("CANCEL con servicio y fianza pagados previsualiza devoluciones separadas", () => {
+  const preview = buildCommercialAdjustmentPreview(
+    baseReservation({
+      depositCents: 5_000,
+      payments: [
+        { amountCents: 10_000, isDeposit: false, direction: "IN" },
+        { amountCents: 5_000, isDeposit: true, direction: "IN" },
+      ],
+    }),
+    {
+      newTotalCents: 0,
+      newDepositCents: 0,
+      operationType: "CANCEL",
+      requestedRefundMode: "refundNow",
+      reason: "Cancelacion con devolucion completa",
+    }
+  );
+
+  assert.equal(preview.canCommit, true);
+  assert.equal(preview.refundableServiceCents, 10_000);
+  assert.equal(preview.refundableDepositCents, 5_000);
+  assert.equal(preview.serviceRefundNowCents, 10_000);
+  assert.equal(preview.depositRefundNowCents, 5_000);
+  assert.equal(preview.refundNowCents, 15_000);
+});
+
+test("CANCEL con fianza retenida previsualiza warning explicito", () => {
+  const preview = buildCommercialAdjustmentPreview(
+    baseReservation({
+      depositCents: 5_000,
+      depositHeld: true,
+      payments: [{ amountCents: 5_000, isDeposit: true, direction: "IN" }],
+    }),
+    {
+      newTotalCents: 0,
+      newDepositCents: 0,
+      operationType: "CANCEL",
+      requestedRefundMode: "refundNow",
+      reason: "Cancelacion con fianza retenida",
+    }
+  );
+
+  assert.equal(preview.canCommit, true);
+  assert.equal(preview.depositRefundNowCents, 0);
+  assert.equal(preview.depositRefundHeldCents, 5_000);
+  assert.equal(preview.depositRefundBlockedReason, "DEPOSIT_HELD");
+  assert.ok(preview.warnings.includes("DEPOSIT_HELD_NOT_REFUNDED"));
+});

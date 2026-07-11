@@ -8,6 +8,7 @@ import {
   CommercialAdjustmentCommitBlockedError,
   commitCommercialAdjustment,
 } from "@/lib/commercial-adjustment-commit";
+import { validateGenericCommercialAdjustmentCommitOperation } from "@/lib/commercial-adjustment-endpoints";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import { findCurrentShiftSession } from "@/lib/shiftSessions";
 import { prisma } from "@/lib/prisma";
@@ -42,6 +43,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!parsed.success) return NextResponse.json({ error: "Body invalido" }, { status: 400 });
 
   try {
+    const operationValidation = validateGenericCommercialAdjustmentCommitOperation(parsed.data.operationType);
+    if (!operationValidation.ok) {
+      return NextResponse.json(
+        { error: operationValidation.error },
+        { status: operationValidation.status }
+      );
+    }
+
     const actorUserId = session.userId as string;
     const refundShiftSession =
       parsed.data.requestedRefundMode === "refundNow"

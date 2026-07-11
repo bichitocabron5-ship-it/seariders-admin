@@ -6,6 +6,7 @@ import {
   CommercialAdjustmentCommitBlockedError,
   commitCommercialAdjustment,
 } from "./commercial-adjustment-commit";
+import { resolveReservationPaymentStatus } from "./reservation-payment-status";
 
 type PaymentRow = {
   id: string;
@@ -603,6 +604,8 @@ test("cancelacion con refundNow crea OUT y conserva contratos SIGNED", async () 
 
   assert.equal(result?.status, "CANCELED");
   assert.equal(result?.refundNowCents, 10_000);
+  assert.equal(result?.serviceRefundNowCents, 10_000);
+  assert.equal(result?.depositRefundNowCents, 0);
   assert.equal(result?.paidServiceCents, 0);
   assert.equal(result?.overpaidServiceCents, 0);
   assert.equal(paymentCreates.length, 1);
@@ -611,6 +614,132 @@ test("cancelacion con refundNow crea OUT y conserva contratos SIGNED", async () 
   assert.equal(paymentCreates[0]?.description, "Devolucion por cancelacion comercial");
   assert.equal(reservation.contracts.find((contract) => contract.id === "signed_1")?.status, "SIGNED");
   assert.equal(reservation.contracts.find((contract) => contract.id === "draft_2")?.status, "VOID");
+});
+
+test("cancelacion pagada con servicio y fianza crea dos OUT separados", async () => {
+  const servicePayment = { id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" as const };
+  const depositPayment = { id: "pay_2", amountCents: 5_000, isDeposit: true, direction: "IN" as const };
+  const { client, reservation, paymentCreates } = makeState({
+    depositCents: 5_000,
+    payments: [servicePayment, depositPayment],
+  });
+  const beforeServicePayment = { ...servicePayment };
+  const beforeDepositPayment = { ...depositPayment };
+
+  const result = await commitCommercialAdjustment(
+    client as never,
+    "res_1",
+    {
+      newTotalCents: 0,
+      newDepositCents: 0,
+      operationType: "CANCEL",
+      requestedRefundMode: "refundNow",
+      reason: "Cancelacion con devolucion completa",
+    },
+    {
+      actorUserId: "user_1",
+      refundMethod: PaymentMethod.CASH,
+      refundOrigin: PaymentOrigin.STORE,
+      assertRefundCashOpen: async () => undefined,
+    }
+  );
+
+  assert.equal(result?.refundNowCents, 15_000);
+  assert.equal(result?.serviceRefundNowCents, 10_000);
+  assert.equal(result?.depositRefundNowCents, 5_000);
+  assert.equal(result?.paidServiceCents, 0);
+  assert.equal(result?.paidDepositCents, 0);
+  assert.deepEqual(reservation.payments[0], beforeServicePayment);
+  assert.deepEqual(reservation.payments[1], beforeDepositPayment);
+  assert.equal(paymentCreates.length, 2);
+  assert.deepEqual(
+    paymentCreates.map((payment) => ({
+      amountCents: payment.amountCents,
+      isDeposit: payment.isDeposit,
+      direction: payment.direction,
+    })),
+    [
+      { amountCents: 10_000, isDeposit: false, direction: "OUT" },
+      { amountCents: 5_000, isDeposit: true, direction: "OUT" },
+    ]
+  );
+
+  const paymentStatus = resolveReservationPaymentStatus({
+    reservationStatus: reservation.status,
+    totalPriceCents: reservation.totalPriceCents,
+    depositCents: reservation.depositCents,
+    quantity: reservation.quantity,
+    isLicense: reservation.isLicense,
+    serviceCategory: reservation.service.category,
+    items: reservation.items,
+    payments: reservation.payments,
+  });
+
+  assert.equal(paymentStatus.paidServiceCents, 0);
+  assert.equal(paymentStatus.paidDepositCents, 0);
+  assert.equal(paymentStatus.overpaidServiceCents, 0);
+  assert.equal(paymentStatus.overpaidDepositCents, 0);
+});
+
+test("cancelacion pagada solo con fianza crea un OUT de fianza", async () => {
+  const { client, paymentCreates } = makeState({
+    depositCents: 5_000,
+    payments: [{ id: "pay_1", amountCents: 5_000, isDeposit: true, direction: "IN" }],
+  });
+
+  const result = await commitCommercialAdjustment(
+    client as never,
+    "res_1",
+    {
+      newTotalCents: 0,
+      newDepositCents: 0,
+      operationType: "CANCEL",
+      requestedRefundMode: "refundNow",
+      reason: "Cancelacion con devolucion de fianza",
+    },
+    {
+      assertRefundCashOpen: async () => undefined,
+    }
+  );
+
+  assert.equal(result?.refundNowCents, 5_000);
+  assert.equal(result?.serviceRefundNowCents, 0);
+  assert.equal(result?.depositRefundNowCents, 5_000);
+  assert.equal(paymentCreates.length, 1);
+  assert.equal(paymentCreates[0]?.amountCents, 5_000);
+  assert.equal(paymentCreates[0]?.isDeposit, true);
+  assert.equal(paymentCreates[0]?.direction, "OUT");
+});
+
+test("cancelacion con fianza retenida no devuelve la fianza", async () => {
+  const { client, paymentCreates } = makeState({
+    depositCents: 5_000,
+    depositHeld: true,
+    depositHoldReason: "Dano pendiente de revisar",
+    payments: [{ id: "pay_1", amountCents: 5_000, isDeposit: true, direction: "IN" }],
+  });
+
+  const result = await commitCommercialAdjustment(
+    client as never,
+    "res_1",
+    {
+      newTotalCents: 0,
+      newDepositCents: 0,
+      operationType: "CANCEL",
+      requestedRefundMode: "refundNow",
+      reason: "Cancelacion con fianza retenida",
+    },
+    {
+      assertRefundCashOpen: async () => undefined,
+    }
+  );
+
+  assert.equal(result?.refundNowCents, 0);
+  assert.equal(result?.depositRefundNowCents, 0);
+  assert.equal(result?.depositRefundHeldCents, 5_000);
+  assert.equal(result?.depositRefundBlockedReason, "DEPOSIT_HELD");
+  assert.ok(result?.warnings.includes("DEPOSIT_HELD_NOT_REFUNDED"));
+  assert.deepEqual(paymentCreates, []);
 });
 
 test("cancelacion con refundNow bloquea si la caja esta cerrada", async () => {
@@ -644,6 +773,29 @@ test("cancelacion con refundNow bloquea si la caja esta cerrada", async () => {
   assert.equal(reservation.contracts.find((contract) => contract.id === "signed_1")?.status, "SIGNED");
 });
 
+test("cancelacion con leavePendingRefund de servicio y fianza no crea OUT", async () => {
+  const { client, paymentMutations } = makeState({
+    depositCents: 5_000,
+    payments: [
+      { id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" },
+      { id: "pay_2", amountCents: 5_000, isDeposit: true, direction: "IN" },
+    ],
+  });
+
+  const result = await commitCommercialAdjustment(client as never, "res_1", {
+    newTotalCents: 0,
+    newDepositCents: 0,
+    operationType: "CANCEL",
+    requestedRefundMode: "leavePendingRefund",
+    reason: "Cancelacion con devolucion pendiente",
+  });
+
+  assert.equal(result?.pendingRefundCents, 15_000);
+  assert.equal(result?.pendingServiceRefundCents, 10_000);
+  assert.equal(result?.pendingDepositRefundCents, 5_000);
+  assert.deepEqual(paymentMutations, []);
+});
+
 test("cancelacion con leavePendingRefund no crea OUT", async () => {
   const { client, reservation, paymentMutations } = makeState({
     payments: [{ id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" }],
@@ -663,6 +815,74 @@ test("cancelacion con leavePendingRefund no crea OUT", async () => {
   assert.equal(result?.overpaidServiceCents, 10_000);
   assert.deepEqual(paymentMutations, []);
   assert.equal(reservation.contracts.find((contract) => contract.id === "signed_1")?.status, "SIGNED");
+});
+
+test("cancelacion concurrente con servicio y fianza no duplica devoluciones", async () => {
+  const { client, reservation, paymentCreates } = makeState({
+    depositCents: 5_000,
+    payments: [
+      { id: "pay_1", amountCents: 10_000, isDeposit: false, direction: "IN" },
+      { id: "pay_2", amountCents: 5_000, isDeposit: true, direction: "IN" },
+    ],
+  });
+
+  const proposal = {
+    newTotalCents: 0,
+    newDepositCents: 0,
+    operationType: "CANCEL" as const,
+    requestedRefundMode: "refundNow" as const,
+    reason: "Cancelacion con devolucion completa",
+  };
+
+  const attempts = await Promise.allSettled([
+    commitCommercialAdjustment(client as never, "res_1", proposal, {
+      assertRefundCashOpen: async () => undefined,
+    }),
+    commitCommercialAdjustment(client as never, "res_1", proposal, {
+      assertRefundCashOpen: async () => undefined,
+    }),
+  ]);
+
+  assert.equal(attempts.filter((attempt) => attempt.status === "fulfilled").length, 1);
+  assert.equal(paymentCreates.length, 2);
+  assert.equal(paymentCreates.filter((payment) => !payment.isDeposit && payment.direction === "OUT").length, 1);
+  assert.equal(paymentCreates.filter((payment) => payment.isDeposit && payment.direction === "OUT").length, 1);
+  assert.equal(reservation.payments.filter((payment) => payment.direction === "OUT").length, 2);
+});
+
+test("cancelacion con SIGNED ejecuta hooks transaccionales para checks y logging", async () => {
+  const { client } = makeState({
+    contracts: [baseContract("signed_1", "SIGNED", 1)],
+  });
+  const calls: string[] = [];
+
+  const result = await commitCommercialAdjustment(
+    client as never,
+    "res_1",
+    {
+      newTotalCents: 0,
+      newDepositCents: 0,
+      operationType: "CANCEL",
+      requestedRefundMode: "none",
+      reason: "Cancelacion operativa revisada",
+    },
+    {
+      beforeMutationTx: async (_tx, context) => {
+        calls.push("before-operational-check");
+        assert.equal(context.proposal.operationType, "CANCEL");
+        assert.equal(context.reservation.status, "WAITING");
+      },
+      afterMutationTx: async (_tx, context) => {
+        calls.push("after-operational-log");
+        assert.equal(context.updated.status, "CANCELED");
+        assert.equal(context.resultEvaluation.refundNowCents, 0);
+        assert.ok(context.resultEvaluation.warnings.includes("SIGNED_CONTRACT_HISTORY_PRESERVED"));
+      },
+    }
+  );
+
+  assert.equal(result?.status, "CANCELED");
+  assert.deepEqual(calls, ["before-operational-check", "after-operational-log"]);
 });
 
 test("comision PAID bloquea", async () => {

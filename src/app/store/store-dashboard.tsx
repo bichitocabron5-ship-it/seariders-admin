@@ -41,10 +41,22 @@ type CancelPreview = {
   warnings: string[];
   oldTotalCents: number;
   newTotalCents: number;
+  oldDepositCents?: number;
+  newDepositCents?: number;
   paidServiceCents: number;
   paidDepositCents: number;
   pendingServiceCents: number;
+  pendingDepositCents?: number;
   overpaidServiceCents: number;
+  overpaidDepositCents?: number;
+  refundableServiceCents?: number;
+  refundableDepositCents?: number;
+  serviceRefundNowCents?: number;
+  depositRefundNowCents?: number;
+  pendingServiceRefundCents?: number;
+  pendingDepositRefundCents?: number;
+  depositRefundHeldCents?: number;
+  depositRefundBlockedReason?: "DEPOSIT_HELD" | null;
   refundNowCents: number;
   pendingRefundCents: number;
   requiredActions: string[];
@@ -70,7 +82,8 @@ async function responseErrorMessage(res: Response, fallbackMessage: string) {
 
 function defaultCancelRefundMode(reservation: ReservationRow): CancelRefundMode {
   const paidServiceCents = Math.max(0, Number(reservation.paidServiceCents ?? reservation.paidCents ?? 0));
-  return paidServiceCents > 0 ? "leavePendingRefund" : "none";
+  const paidDepositCents = Math.max(0, Number(reservation.paidDepositCents ?? 0));
+  return paidServiceCents + paidDepositCents > 0 ? "leavePendingRefund" : "none";
 }
 
 export default function StoreDashboard() {
@@ -833,8 +846,16 @@ function CancelReservationModal({
     0,
     Number(draft.reservation.paidServiceCents ?? draft.reservation.paidCents ?? 0)
   );
-  const hasRefundableService =
-    Math.max(0, Number(preview?.overpaidServiceCents ?? paidServiceFallback)) > 0;
+  const paidDepositFallback = Math.max(0, Number(draft.reservation.paidDepositCents ?? 0));
+  const refundableServiceCents = Math.max(
+    0,
+    Number(preview?.refundableServiceCents ?? preview?.overpaidServiceCents ?? paidServiceFallback)
+  );
+  const refundableDepositCents = Math.max(
+    0,
+    Number(preview?.refundableDepositCents ?? paidDepositFallback)
+  );
+  const hasRefundableAmount = refundableServiceCents + refundableDepositCents > 0;
   const canConfirm =
     Boolean(draft.reason.trim()) &&
     Boolean(preview?.canCommit) &&
@@ -843,8 +864,10 @@ function CancelReservationModal({
     !(draft.refundMode === "refundNow" && isCashClosed);
   const oldTotalCents = Number(preview?.oldTotalCents ?? draft.reservation.finalTotalCents ?? draft.reservation.totalPriceCents ?? 0);
   const paidServiceCents = Number(preview?.paidServiceCents ?? paidServiceFallback);
+  const paidDepositCents = Number(preview?.paidDepositCents ?? paidDepositFallback);
   const refundNowCents = Number(preview?.refundNowCents ?? 0);
   const pendingRefundCents = Number(preview?.pendingRefundCents ?? 0);
+  const depositRefundHeldCents = Number(preview?.depositRefundHeldCents ?? 0);
 
   return (
     <div style={modalBackdrop}>
@@ -865,7 +888,7 @@ function CancelReservationModal({
 
         <div style={{ display: "grid", gap: 10 }}>
           <div style={{ fontWeight: 900 }}>Modo de devolucion</div>
-          {hasRefundableService ? (
+          {hasRefundableAmount ? (
             <div style={{ display: "grid", gap: 8 }}>
               <label style={radioRowStyle}>
                 <input
@@ -894,7 +917,7 @@ function CancelReservationModal({
             <label style={radioRowStyle}>
               <input
                 type="radio"
-                checked={!hasRefundableService || draft.refundMode === "none"}
+                checked={!hasRefundableAmount || draft.refundMode === "none"}
                 onChange={() => onChange({ refundMode: "none" })}
               />
               <span>Sin devolucion</span>
@@ -902,7 +925,7 @@ function CancelReservationModal({
           )}
         </div>
 
-        {draft.refundMode === "refundNow" && hasRefundableService ? (
+        {draft.refundMode === "refundNow" && hasRefundableAmount ? (
           <div style={{ display: "grid", gap: 6 }}>
             <label htmlFor="cancel-refund-method" style={{ fontWeight: 900 }}>
               Metodo
@@ -946,6 +969,10 @@ function CancelReservationModal({
             <div style={summaryValueStyle}>{euros(paidServiceCents)}</div>
           </div>
           <div>
+            <div style={summaryLabelStyle}>paidDepositCents</div>
+            <div style={summaryValueStyle}>{euros(paidDepositCents)}</div>
+          </div>
+          <div>
             <div style={summaryLabelStyle}>refundNowCents</div>
             <div style={summaryValueStyle}>{euros(refundNowCents)}</div>
           </div>
@@ -969,6 +996,11 @@ function CancelReservationModal({
         {preview?.warnings.includes("SIGNED_CONTRACT_HISTORY_PRESERVED") ? (
           <AlertBanner tone="info" title="Contrato firmado">
             Los contratos firmados se conservan intactos como historico legal.
+          </AlertBanner>
+        ) : null}
+        {preview?.warnings.includes("DEPOSIT_HELD_NOT_REFUNDED") ? (
+          <AlertBanner tone="warning" title="Fianza retenida">
+            La fianza retenida ({euros(depositRefundHeldCents)}) no se devuelve en la cancelacion.
           </AlertBanner>
         ) : null}
 
