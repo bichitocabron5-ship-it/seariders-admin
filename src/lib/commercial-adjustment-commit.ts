@@ -54,6 +54,8 @@ type CommitReservation = {
   customerName?: string | null;
   totalPriceCents?: number | null;
   depositCents?: number | null;
+  depositHeld?: boolean | null;
+  depositHoldReason?: string | null;
   giftVoucherId?: string | null;
   passVoucherId?: string | null;
   passConsumeId?: string | null;
@@ -90,6 +92,15 @@ export type CommercialAdjustmentCommitSummary = {
   pendingServiceCents: number;
   pendingDepositCents: number;
   overpaidServiceCents: number;
+  overpaidDepositCents: number;
+  refundableServiceCents: number;
+  refundableDepositCents: number;
+  serviceRefundNowCents: number;
+  depositRefundNowCents: number;
+  pendingServiceRefundCents: number;
+  pendingDepositRefundCents: number;
+  depositRefundHeldCents: number;
+  depositRefundBlockedReason: "DEPOSIT_HELD" | null;
   pendingRefundCents: number;
   refundNowCents: number;
   blockers: ReturnType<typeof resolveCommercialAdjustmentPolicy>["blockers"];
@@ -160,6 +171,8 @@ export const commercialAdjustmentCommitReservationSelect = {
   customerName: true,
   totalPriceCents: true,
   depositCents: true,
+  depositHeld: true,
+  depositHoldReason: true,
   giftVoucherId: true,
   passVoucherId: true,
   passConsumeId: true,
@@ -272,6 +285,7 @@ function buildRefundDescription(operationType: CommercialAdjustmentOperationType
 function buildRefundNotes(args: {
   reason: string;
   operationType: CommercialAdjustmentOperationType;
+  refundKind: "SERVICE" | "DEPOSIT";
   oldTotalCents: number;
   newTotalCents: number;
   refundNowCents: number;
@@ -279,6 +293,7 @@ function buildRefundNotes(args: {
   return [
     `Motivo: ${args.reason}`,
     `Operacion: ${args.operationType}`,
+    `Tipo: ${args.refundKind}`,
     `Total anterior: ${args.oldTotalCents}`,
     `Total nuevo: ${args.newTotalCents}`,
     `Devolucion: ${args.refundNowCents}`,
@@ -290,12 +305,16 @@ function buildPostCommitEvaluation(
 ) {
   if (evaluation.refundNowCents <= 0) return evaluation;
 
-  const paidServiceCents = Math.max(0, evaluation.paidServiceCents - evaluation.refundNowCents);
+  const paidServiceCents = Math.max(0, evaluation.paidServiceCents - evaluation.serviceRefundNowCents);
+  const paidDepositCents = Math.max(0, evaluation.paidDepositCents - evaluation.depositRefundNowCents);
   return {
     ...evaluation,
     paidServiceCents,
+    paidDepositCents,
     pendingServiceCents: Math.max(0, evaluation.newTotalCents - paidServiceCents),
+    pendingDepositCents: Math.max(0, evaluation.newDepositCents - paidDepositCents),
     overpaidServiceCents: Math.max(0, paidServiceCents - evaluation.newTotalCents),
+    overpaidDepositCents: Math.max(0, paidDepositCents - evaluation.newDepositCents),
     pendingRefundCents: 0,
   };
 }
@@ -368,6 +387,24 @@ function buildCommercialAdjustmentCommitEvaluation(
   const newDepositCents = normalizeCents(proposal.newDepositCents ?? reservation.depositCents);
   const paidServiceCents = Math.max(0, normalizeCents(netPaidServiceCents(reservation.payments)));
   const paidDepositCents = Math.max(0, normalizeCents(netPaidDepositCents(reservation.payments)));
+  const requestedRefundMode = normalizeRequestedRefundMode(proposal.requestedRefundMode);
+  const refundableServiceCents = Math.max(0, paidServiceCents - newTotalCents);
+  const refundableDepositCents =
+    proposal.operationType === "CANCEL" ? Math.max(0, paidDepositCents - newDepositCents) : 0;
+  const depositRefundBlockedReason =
+    refundableDepositCents > 0 && reservation.depositHeld ? ("DEPOSIT_HELD" as const) : null;
+  const serviceRefundNowCents = requestedRefundMode === "refundNow" ? refundableServiceCents : 0;
+  const depositRefundNowCents =
+    requestedRefundMode === "refundNow" && !depositRefundBlockedReason
+      ? refundableDepositCents
+      : 0;
+  const pendingServiceRefundCents =
+    requestedRefundMode === "leavePendingRefund" ? refundableServiceCents : 0;
+  const pendingDepositRefundCents =
+    requestedRefundMode === "leavePendingRefund" && !depositRefundBlockedReason
+      ? refundableDepositCents
+      : 0;
+  const depositRefundHeldCents = depositRefundBlockedReason ? refundableDepositCents : 0;
   const requiredUnits = computeRequiredContractUnits({
     quantity: reservation.quantity ?? 0,
     isLicense: Boolean(reservation.isLicense),
@@ -391,11 +428,37 @@ function buildCommercialAdjustmentCommitEvaluation(
     hasVoucherOrPassOrGift: Boolean(
       reservation.giftVoucherId || reservation.passVoucherId || reservation.passConsumeId
     ),
-    requestedRefundMode: normalizeRequestedRefundMode(proposal.requestedRefundMode),
+    requestedRefundMode,
     reason: proposal.reason,
     operationType: proposal.operationType,
     phase,
   });
+  const blockers = [...policy.blockers];
+  const warnings = [...policy.warnings];
+  const requiredActions = [...policy.requiredActions];
+
+  if (
+    proposal.operationType === "CANCEL" &&
+    refundableDepositCents > 0 &&
+    !depositRefundBlockedReason &&
+    requestedRefundMode !== "refundNow" &&
+    requestedRefundMode !== "leavePendingRefund" &&
+    !blockers.includes("REFUND_MODE_REQUIRED")
+  ) {
+    blockers.push("REFUND_MODE_REQUIRED");
+  }
+
+  if (depositRefundBlockedReason) {
+    warnings.push("DEPOSIT_HELD_NOT_REFUNDED");
+  }
+
+  if (depositRefundNowCents > 0 && !requiredActions.includes("REFUND_NOW")) {
+    requiredActions.push("REFUND_NOW");
+  }
+
+  if (pendingDepositRefundCents > 0 && !requiredActions.includes("LEAVE_PENDING_REFUND")) {
+    requiredActions.push("LEAVE_PENDING_REFUND");
+  }
 
   return {
     operationType: proposal.operationType,
@@ -408,11 +471,20 @@ function buildCommercialAdjustmentCommitEvaluation(
     pendingServiceCents: policy.pendingServiceCents,
     pendingDepositCents: Math.max(0, newDepositCents - paidDepositCents),
     overpaidServiceCents: policy.overpaidServiceCents,
-    refundNowCents: policy.refundNowCents,
-    pendingRefundCents: policy.pendingRefundCents,
-    blockers: policy.blockers,
-    warnings: policy.warnings,
-    requiredActions: policy.requiredActions,
+    overpaidDepositCents: refundableDepositCents,
+    refundableServiceCents,
+    refundableDepositCents,
+    serviceRefundNowCents,
+    depositRefundNowCents,
+    pendingServiceRefundCents,
+    pendingDepositRefundCents,
+    depositRefundHeldCents,
+    depositRefundBlockedReason,
+    refundNowCents: serviceRefundNowCents + depositRefundNowCents,
+    pendingRefundCents: pendingServiceRefundCents + pendingDepositRefundCents,
+    blockers,
+    warnings,
+    requiredActions,
   };
 }
 
@@ -619,27 +691,43 @@ export async function commitCommercialAdjustment(
     }
 
     if (evaluation.refundNowCents > 0 && reason) {
-      await tx.payment.create({
-        data: {
-          reservationId,
-          origin: options.refundOrigin ?? PaymentOrigin.STORE,
-          method: options.refundMethod ?? PaymentMethod.CASH,
-          amountCents: evaluation.refundNowCents,
+      const refundLines = [
+        {
+          amountCents: evaluation.serviceRefundNowCents,
           isDeposit: false,
-          direction: PaymentDirection.OUT,
-          customerName: reservation.customerName ?? null,
-          createdByUserId: options.actorUserId ?? null,
-          shiftSessionId: options.refundShiftSessionId ?? null,
-          description: buildRefundDescription(proposal.operationType),
-          notes: buildRefundNotes({
-            reason,
-            operationType: proposal.operationType,
-            oldTotalCents: evaluation.oldTotalCents,
-            newTotalCents: evaluation.newTotalCents,
-            refundNowCents: evaluation.refundNowCents,
-          }),
+          refundKind: "SERVICE" as const,
         },
-      });
+        {
+          amountCents: evaluation.depositRefundNowCents,
+          isDeposit: true,
+          refundKind: "DEPOSIT" as const,
+        },
+      ].filter((line) => line.amountCents > 0);
+
+      for (const line of refundLines) {
+        await tx.payment.create({
+          data: {
+            reservationId,
+            origin: options.refundOrigin ?? PaymentOrigin.STORE,
+            method: options.refundMethod ?? PaymentMethod.CASH,
+            amountCents: line.amountCents,
+            isDeposit: line.isDeposit,
+            direction: PaymentDirection.OUT,
+            customerName: reservation.customerName ?? null,
+            createdByUserId: options.actorUserId ?? null,
+            shiftSessionId: options.refundShiftSessionId ?? null,
+            description: buildRefundDescription(proposal.operationType),
+            notes: buildRefundNotes({
+              reason,
+              operationType: proposal.operationType,
+              refundKind: line.refundKind,
+              oldTotalCents: evaluation.oldTotalCents,
+              newTotalCents: evaluation.newTotalCents,
+              refundNowCents: line.amountCents,
+            }),
+          },
+        });
+      }
     }
 
     const contracts = shouldCancel

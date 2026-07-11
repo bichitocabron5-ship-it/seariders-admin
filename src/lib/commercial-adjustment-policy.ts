@@ -14,6 +14,7 @@ export type CommercialAdjustmentPolicyBlocker =
 
 export type CommercialAdjustmentPolicyWarning =
   | "DEPOSIT_PAYMENT_UNCHANGED"
+  | "DEPOSIT_HELD_NOT_REFUNDED"
   | "PAYMENT_HISTORY_PRESERVED"
   | "PENDING_COMMISSION_RECALCULATION"
   | "SIGNED_CONTRACT_HISTORY_PRESERVED";

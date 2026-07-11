@@ -17,7 +17,6 @@ import { getIronSession } from "iron-session";
 import {
   CommercialAdjustmentCommitBlockedError,
   commitCommercialAdjustment,
-  type CommercialAdjustmentCommitProposal,
 } from "@/lib/commercial-adjustment-commit";
 import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
@@ -25,6 +24,7 @@ import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operati
 import { findCurrentShiftSession } from "@/lib/shiftSessions";
 import { prisma } from "@/lib/prisma";
 import { AppSession, sessionOptions } from "@/lib/session";
+import { requestedRefundModeForStoreCancel } from "@/lib/store-cancel-refund-mode";
 
 export const runtime = "nodejs";
 
@@ -35,8 +35,6 @@ const Body = z.object({
   refundOrigin: z.nativeEnum(PaymentOrigin).default(PaymentOrigin.STORE),
   reason: z.string().max(500).optional().nullable(),
 });
-
-type StoreCancelBody = z.infer<typeof Body>;
 
 async function requireStoreOrAdmin() {
   const cookieStore = await cookies();
@@ -49,15 +47,6 @@ async function requireStoreOrAdmin() {
 function normalizeCancelReason(value: string | null | undefined) {
   const text = String(value ?? "").trim();
   return text.length > 0 ? text.slice(0, 500) : null;
-}
-
-function requestedRefundModeForCancel(
-  body: Pick<StoreCancelBody, "refundMode" | "requestedRefundMode">
-): CommercialAdjustmentCommitProposal["requestedRefundMode"] {
-  if (body.requestedRefundMode) return body.requestedRefundMode;
-  if (body.refundMode === "FULL" || body.refundMode === "SERVICE") return "refundNow";
-  if (body.refundMode === "NONE") return "leavePendingRefund";
-  return "none";
 }
 
 async function assertStoreCancellationOperationalStateTx(
@@ -132,7 +121,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const body = parsed.data;
   const actorUserId = session.userId as string;
-  const requestedRefundMode = requestedRefundModeForCancel(body);
+  const requestedRefundMode = requestedRefundModeForStoreCancel(body);
   const reason = normalizeCancelReason(body.reason);
 
   try {
@@ -212,6 +201,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
                 refundNowCents: context.resultEvaluation.refundNowCents,
                 pendingRefundCents: context.resultEvaluation.pendingRefundCents,
                 paidServiceCents: context.evaluation.paidServiceCents,
+                paidDepositCents: context.evaluation.paidDepositCents,
+                refundableServiceCents: context.evaluation.refundableServiceCents,
+                refundableDepositCents: context.evaluation.refundableDepositCents,
+                refundedServiceCents: context.resultEvaluation.serviceRefundNowCents,
+                refundedDepositCents: context.resultEvaluation.depositRefundNowCents,
+                depositRefundHeldCents: context.resultEvaluation.depositRefundHeldCents,
+                depositRefundBlockedReason: context.resultEvaluation.depositRefundBlockedReason,
               },
             },
             tx
@@ -225,8 +221,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({
       ...result,
       alreadyCanceled: false,
-      refundedServiceCents: result.refundNowCents,
-      refundedDepositCents: 0,
+      refundedServiceCents: result.serviceRefundNowCents,
+      refundedDepositCents: result.depositRefundNowCents,
     });
   } catch (error: unknown) {
     if (error instanceof CommercialAdjustmentCommitBlockedError) {
