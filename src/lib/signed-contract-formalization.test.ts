@@ -8,6 +8,7 @@ import {
   sameContractComposition,
   shouldSyncReservationBeforeFormalize,
 } from "./signed-contract-formalization";
+import { resolvePrepaidVoucherCommercialChange } from "./reservation-commercial-snapshot";
 
 test("reserva WEB pagada con contrato SIGNED y sin cambios pendientes formaliza sin sync de edicion", () => {
   assert.equal(
@@ -146,6 +147,137 @@ test("reserva legacy SIGNED sigue bloqueando cambios reales de composicion", () 
       optionId: "option-60",
       quantity: 2,
       pax: 2,
+    },
+  ]);
+  const compositionChanged = !sameContractComposition(existingComposition, nextComposition);
+
+  assert.equal(compositionChanged, true);
+  assert.equal(
+    hasSignedContractBlockingChange({
+      hasSignedContracts: true,
+      compositionChanged,
+      protectedNonScheduleFieldsChanged: false,
+    }),
+    true
+  );
+});
+
+test("regalo pagado SIGNED sin cambios no bloquea por canal autoinferido", () => {
+  const existingComposition = buildExistingReservationContractComposition({
+    serviceId: "service-gift",
+    optionId: "option-30",
+    quantity: 1,
+    pax: 1,
+    items: [
+      {
+        serviceId: "service-gift",
+        optionId: "option-30",
+        quantity: 1,
+        pax: 1,
+        isExtra: false,
+      },
+    ],
+  });
+  const nextComposition = buildComparableContractComposition([
+    {
+      serviceId: "service-gift",
+      optionId: "option-30",
+      quantity: 1,
+      pax: 1,
+    },
+  ]);
+  const compositionChanged = !sameContractComposition(existingComposition, nextComposition);
+  const commercialChange = resolvePrepaidVoucherCommercialChange({
+    isPrepaidVoucherReservation: true,
+    currentChannelId: null,
+    requestedChannelId: "direct-channel",
+    commercialPricingChanged: true,
+  });
+  const protectedNonScheduleFieldsChanged =
+    commercialChange.channelChanged || commercialChange.commercialPricingChanged;
+
+  assert.equal(compositionChanged, false);
+  assert.equal(protectedNonScheduleFieldsChanged, false);
+  assert.equal(
+    hasSignedContractBlockingChange({
+      hasSignedContracts: true,
+      compositionChanged,
+      protectedNonScheduleFieldsChanged,
+    }),
+    false
+  );
+});
+
+test("regalo pagado SIGNED con solo fecha/hora no bloquea", () => {
+  assert.equal(
+    hasSignedContractBlockingChange({
+      hasSignedContracts: true,
+      compositionChanged: false,
+      protectedNonScheduleFieldsChanged: false,
+    }),
+    false
+  );
+});
+
+test("regalo pagado SIGNED con cambio de cantidad bloquea", () => {
+  const existingComposition = buildExistingReservationContractComposition({
+    serviceId: "service-gift",
+    optionId: "option-30",
+    quantity: 1,
+    pax: 1,
+    items: [
+      {
+        serviceId: "service-gift",
+        optionId: "option-30",
+        quantity: 1,
+        pax: 1,
+        isExtra: false,
+      },
+    ],
+  });
+  const nextComposition = buildComparableContractComposition([
+    {
+      serviceId: "service-gift",
+      optionId: "option-30",
+      quantity: 2,
+      pax: 1,
+    },
+  ]);
+  const compositionChanged = !sameContractComposition(existingComposition, nextComposition);
+
+  assert.equal(compositionChanged, true);
+  assert.equal(
+    hasSignedContractBlockingChange({
+      hasSignedContracts: true,
+      compositionChanged,
+      protectedNonScheduleFieldsChanged: false,
+    }),
+    true
+  );
+});
+
+test("regalo pagado SIGNED con cambio de actividad bloquea", () => {
+  const existingComposition = buildExistingReservationContractComposition({
+    serviceId: "service-gift",
+    optionId: "option-30",
+    quantity: 1,
+    pax: 1,
+    items: [
+      {
+        serviceId: "service-gift",
+        optionId: "option-30",
+        quantity: 1,
+        pax: 1,
+        isExtra: false,
+      },
+    ],
+  });
+  const nextComposition = buildComparableContractComposition([
+    {
+      serviceId: "service-other",
+      optionId: "option-30",
+      quantity: 1,
+      pax: 1,
     },
   ]);
   const compositionChanged = !sameContractComposition(existingComposition, nextComposition);

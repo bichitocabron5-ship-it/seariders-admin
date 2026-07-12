@@ -12,7 +12,7 @@ export function validateBeforeSubmit(args: {
   customerDocNumber: string;
   quantity: number;
   pax: number;
-  isVoucherFormalizeFlow: boolean;
+  isVoucherFormalizeFlow?: boolean;
   serviceId: string;
   optionId: string;
   channelId: string;
@@ -28,7 +28,6 @@ export function validateBeforeSubmit(args: {
     customerPhone,
     quantity,
     pax,
-    isVoucherFormalizeFlow,
     serviceId,
     optionId,
     channelId,
@@ -38,6 +37,7 @@ export function validateBeforeSubmit(args: {
     dateStr,
     todayYmd,
   } = args;
+  const isVoucherFormalizeFlow = args.isVoucherFormalizeFlow === true;
 
   if (!customerName.trim()) throwValidationError("Nombre requerido");
   if (!customerPhone.trim()) throwValidationError("Telefono requerido");

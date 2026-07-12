@@ -239,6 +239,27 @@ export function commercialPricingStateChanged(args: {
   );
 }
 
+export function resolvePrepaidVoucherCommercialChange(args: {
+  isPrepaidVoucherReservation: boolean;
+  currentChannelId?: string | null;
+  requestedChannelId?: string | null;
+  commercialPricingChanged: boolean;
+}) {
+  const currentChannelId = args.currentChannelId ?? null;
+  const requestedChannelId = args.requestedChannelId ?? null;
+  const effectiveRequestedChannelId = args.isPrepaidVoucherReservation
+    ? currentChannelId
+    : requestedChannelId;
+
+  return {
+    effectiveRequestedChannelId,
+    channelChanged: currentChannelId !== effectiveRequestedChannelId,
+    commercialPricingChanged: args.isPrepaidVoucherReservation
+      ? false
+      : args.commercialPricingChanged,
+  };
+}
+
 export function normalizePromoCode(value: string | null | undefined) {
   const normalized = String(value ?? "").trim().toUpperCase();
   return normalized.length > 0 ? normalized : null;

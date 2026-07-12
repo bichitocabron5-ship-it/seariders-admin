@@ -8,7 +8,7 @@ type SharedArgs = {
   customerName: string;
   quantity: number;
   pax: number;
-  isVoucherFormalizeFlow: boolean;
+  isVoucherFormalizeFlow?: boolean;
   serviceId: string;
   optionId: string;
   channelId: string;
@@ -59,6 +59,8 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
   confirmSignedContractReduction?: boolean;
   promoCode?: string | null;
 }) {
+  const isVoucherFormalizeFlow = args.isVoucherFormalizeFlow === true;
+
   validateBeforeSubmit({
     flow: "EDIT",
     customerName: args.customerName,
@@ -69,7 +71,7 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
     customerDocNumber: args.customerDocNumber,
     quantity: args.quantity,
     pax: args.pax,
-    isVoucherFormalizeFlow: args.isVoucherFormalizeFlow,
+    isVoucherFormalizeFlow,
     serviceId: args.serviceId,
     optionId: args.optionId,
     channelId: args.channelId,
@@ -85,6 +87,7 @@ export async function submitStoreCreateEditFlow(args: SharedArgs & {
     isLicense: Boolean(args.isLicense),
     jetskiLicenseMode: args.jetskiLicenseMode,
     pricingTier: args.pricingTier,
+    isVoucherFormalizeFlow,
     channelId: args.channelId,
     dateStr: args.dateStr,
     timeStr: args.timeStr,
@@ -144,6 +147,8 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
   confirmSignedContractReduction?: boolean;
   promoCode?: string | null;
 }) {
+  const isVoucherFormalizeFlow = args.isVoucherFormalizeFlow === true;
+
   validateBeforeSubmit({
     flow: "MIGRATE",
     customerName: args.customerName,
@@ -154,7 +159,7 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
     customerDocNumber: args.customerDocNumber,
     quantity: args.quantity,
     pax: args.pax,
-    isVoucherFormalizeFlow: args.isVoucherFormalizeFlow,
+    isVoucherFormalizeFlow,
     serviceId: args.serviceId,
     optionId: args.optionId,
     channelId: args.channelId,
@@ -176,7 +181,7 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
     customerDocType: args.customerDocType,
     customerDocNumber: args.customerDocNumber,
     marketingSource: args.marketingSource,
-    isVoucherFormalizeFlow: args.isVoucherFormalizeFlow,
+    isVoucherFormalizeFlow,
     serviceId: args.serviceId,
     optionId: args.optionId,
     channelId: args.channelId,
@@ -234,6 +239,8 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
   promoCode?: string | null;
   router: AppRouterInstance;
 }) {
+  const isVoucherFormalizeFlow = args.isVoucherFormalizeFlow === true;
+
   validateBeforeSubmit({
     flow: "CREATE",
     customerName: args.customerName,
@@ -244,7 +251,7 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
     customerDocNumber: args.customerDocNumber,
     quantity: args.quantity,
     pax: args.pax,
-    isVoucherFormalizeFlow: args.isVoucherFormalizeFlow,
+    isVoucherFormalizeFlow,
     serviceId: args.serviceId,
     optionId: args.optionId,
     channelId: args.channelId,
