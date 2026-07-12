@@ -54,6 +54,24 @@ export function resolveManualDiscountCentsForQuantityChange(args: ManualDiscount
   return Math.min(requestedManualDiscountCents, newSubtotalCents);
 }
 
+export function resolveManualDiscountReasonForPersistence(args: {
+  currentManualDiscountReason: string | null | undefined;
+  explicitManualDiscountCents?: number | null;
+  manualDiscountReason?: string | null;
+}) {
+  if (args.explicitManualDiscountCents === undefined) {
+    return args.currentManualDiscountReason ?? null;
+  }
+
+  if (nonNegativeInt(args.explicitManualDiscountCents) <= 0) {
+    return null;
+  }
+
+  return args.manualDiscountReason === undefined
+    ? args.currentManualDiscountReason ?? null
+    : args.manualDiscountReason;
+}
+
 export function sumMainReservationQuantity(
   items: Array<{ quantity?: number | null; isExtra?: boolean | null }> | null | undefined,
   fallbackQuantity?: number | null

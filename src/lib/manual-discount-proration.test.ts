@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   prorateManualDiscountCents,
   resolveManualDiscountCentsForQuantityChange,
+  resolveManualDiscountReasonForPersistence,
   sumMainReservationQuantity,
 } from "./manual-discount-proration";
 
@@ -58,6 +59,104 @@ test("manual discount is capped at new subtotal", () => {
       newSubtotalCents: 40_000,
     }),
     40_000
+  );
+});
+
+test("explicit manual discount with a new reason persists both values", () => {
+  assert.equal(
+    resolveManualDiscountCentsForQuantityChange({
+      currentManualDiscountCents: 0,
+      oldQuantity: 1,
+      newQuantity: 1,
+      newSubtotalCents: 10_000,
+      explicitManualDiscountCents: 1_500,
+    }),
+    1_500
+  );
+  assert.equal(
+    resolveManualDiscountReasonForPersistence({
+      currentManualDiscountReason: "motivo anterior",
+      explicitManualDiscountCents: 1_500,
+      manualDiscountReason: "motivo nuevo",
+    }),
+    "motivo nuevo"
+  );
+});
+
+test("explicit manual discount change without a reason preserves the existing reason", () => {
+  assert.equal(
+    resolveManualDiscountCentsForQuantityChange({
+      currentManualDiscountCents: 1_000,
+      oldQuantity: 1,
+      newQuantity: 1,
+      newSubtotalCents: 10_000,
+      explicitManualDiscountCents: 2_000,
+    }),
+    2_000
+  );
+  assert.equal(
+    resolveManualDiscountReasonForPersistence({
+      currentManualDiscountReason: "motivo existente",
+      explicitManualDiscountCents: 2_000,
+    }),
+    "motivo existente"
+  );
+});
+
+test("explicit zero or null manual discount clears discount reason", () => {
+  assert.equal(
+    resolveManualDiscountCentsForQuantityChange({
+      currentManualDiscountCents: 1_000,
+      oldQuantity: 1,
+      newQuantity: 1,
+      newSubtotalCents: 10_000,
+      explicitManualDiscountCents: 0,
+    }),
+    0
+  );
+  assert.equal(
+    resolveManualDiscountReasonForPersistence({
+      currentManualDiscountReason: "motivo residual",
+      explicitManualDiscountCents: 0,
+      manualDiscountReason: "ignorado",
+    }),
+    null
+  );
+  assert.equal(
+    resolveManualDiscountCentsForQuantityChange({
+      currentManualDiscountCents: 1_000,
+      oldQuantity: 1,
+      newQuantity: 1,
+      newSubtotalCents: 10_000,
+      explicitManualDiscountCents: null,
+    }),
+    0
+  );
+  assert.equal(
+    resolveManualDiscountReasonForPersistence({
+      currentManualDiscountReason: "motivo residual",
+      explicitManualDiscountCents: null,
+    }),
+    null
+  );
+});
+
+test("quantity changes without explicit manual discount prorate discount and preserve reason", () => {
+  assert.equal(
+    resolveManualDiscountCentsForQuantityChange({
+      currentManualDiscountCents: 1_000,
+      oldQuantity: 1,
+      newQuantity: 2,
+      newSubtotalCents: 10_000,
+    }),
+    2_000
+  );
+  assert.equal(
+    resolveManualDiscountReasonForPersistence({
+      currentManualDiscountReason: "motivo existente",
+      manualDiscountReason: "motivo ignorado",
+    }),
+    "motivo existente"
   );
 });
 
