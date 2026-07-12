@@ -19,6 +19,10 @@ import {
 } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import {
+  resolveManualDiscountCentsForQuantityChange,
+  sumMainReservationQuantity,
+} from "@/lib/manual-discount-proration";
+import {
   countLockedVisibleContracts,
   pickVisibleContractsByLogicalUnit,
 } from "@/lib/contracts/active-contracts";
@@ -564,6 +568,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       licenseNumber: true,
 
       manualDiscountCents: true,
+      manualDiscountReason: true,
       discountResponsibility: true,
       promoterDiscountShareBps: true,
       commissionBaseCents: true,
@@ -678,6 +683,7 @@ const requestedServiceCategory =
         })
       )?.category ?? null;
 const isPrepaidVoucherReservation = isReservationCoveredByPrepaidVoucher(existing);
+const existingMainQuantity = sumMainReservationQuantity(existing.items ?? [], existing.quantity);
 const rawRequestedReservationState = deriveCommercialReservationState({
   serviceCategory: requestedServiceCategory,
   jetskiLicenseMode: b.jetskiLicenseMode ?? existing.jetskiLicenseMode,
@@ -1133,17 +1139,23 @@ if (hasProItems && priceSensitiveChanged) {
           : sum,
       0
     );
+    const totalMainQuantity = lineCreates.reduce(
+      (sum, line) => sum + Number(line.quantity ?? 0),
+      0
+    );
     const incomingManual =
       existingPack.source === "BOOTH"
         ? getScaledBoothDiscountCents({
             boothUnitDiscountCents,
             nextMatchingQuantity: matchingBoothLineQty,
           })
-        : (b.manualDiscountCents !== undefined ? Number(b.manualDiscountCents) : Number(existingPack.manualDiscountCents ?? 0));
-    const totalMainQuantity = lineCreates.reduce(
-      (sum, line) => sum + Number(line.quantity ?? 0),
-      0
-    );
+        : resolveManualDiscountCentsForQuantityChange({
+            currentManualDiscountCents: existingPack.manualDiscountCents,
+            oldQuantity: existingMainQuantity,
+            newQuantity: totalMainQuantity,
+            newSubtotalCents: totalBeforeDiscounts,
+            explicitManualDiscountCents: b.manualDiscountCents,
+          });
     const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
       channel,
       quantity: totalMainQuantity,
@@ -1221,7 +1233,7 @@ if (hasProItems && priceSensitiveChanged) {
       promoterDiscountShareBps: commercial.promoterDiscountShareBps,
       promoterDiscountCents: commercial.promoterDiscountCents,
       companyDiscountCents: commercial.companyDiscountCents,
-      manualDiscountReason: b.manualDiscountReason ?? null,
+      manualDiscountReason: b.manualDiscountReason === undefined ? existing.manualDiscountReason : b.manualDiscountReason,
       promoCode: commercial.promoCode,
       totalPriceCents: commercial.finalTotalCents,
     };
@@ -1542,7 +1554,13 @@ if (hasProItems && priceSensitiveChanged) {
           boothUnitDiscountCents,
           nextMatchingQuantity: existing.serviceId === b.serviceId && existing.optionId === b.optionId ? b.quantity : 0,
         })
-      : Number(existing.manualDiscountCents ?? 0);
+      : resolveManualDiscountCentsForQuantityChange({
+          currentManualDiscountCents: existing.manualDiscountCents,
+          oldQuantity: existingMainQuantity,
+          newQuantity: Number(b.quantity),
+          newSubtotalCents: totalBeforeDiscounts,
+          explicitManualDiscountCents: b.manualDiscountCents,
+        });
     const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
       channel,
       quantity: Number(b.quantity),

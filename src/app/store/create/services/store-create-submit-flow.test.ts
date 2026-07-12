@@ -234,3 +234,83 @@ test("sync previo de regalo usa payload solo fecha hora y no puede recalcular ni
     globalThis.fetch = originalFetch;
   }
 });
+
+test("edit submit no envia descuento manual para que backend proratee el snapshot guardado", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedInit: RequestInit | undefined;
+
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    requestedInit = init;
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        id: "reservation-1",
+        requiredUnits: 1,
+        readyCount: 0,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    await submitStoreCreateEditFlow({
+      editReservationId: "reservation-1",
+      customerName: "Laura",
+      quantity: 1,
+      pax: 1,
+      isVoucherFormalizeFlow: false,
+      serviceId: "service-1",
+      optionId: "option-1",
+      channelId: "channel-1",
+      cartItemsLength: 1,
+      canCreate: true,
+      uiMode: "EDIT",
+      dateStr: "2026-07-03",
+      todayYmd: "2026-07-03",
+      isLicense: false,
+      jetskiLicenseMode: "NONE",
+      pricingTier: "STANDARD",
+      timeStr: "10:00",
+      companions: 0,
+      cartItems: [
+        {
+          serviceId: "service-1",
+          optionId: "option-1",
+          quantity: 1,
+          pax: 1,
+          promoCode: "MAYO",
+        },
+      ],
+      customerPhone: "600000000",
+      customerEmail: "",
+      customerCountry: "ES",
+      customerAddress: "",
+      customerPostalCode: "",
+      customerBirthDate: "",
+      customerDocType: "",
+      customerDocNumber: "",
+      marketingSource: "",
+      licenseSchool: "",
+      licenseType: "",
+      licenseNumber: "",
+    });
+
+    const body = JSON.parse(String(requestedInit?.body ?? "{}")) as Record<string, unknown>;
+    assert.equal("manualDiscountCents" in body, false);
+    assert.deepEqual(body.items, [
+      {
+        serviceId: "service-1",
+        optionId: "option-1",
+        quantity: 1,
+        pax: 1,
+        promoCode: "MAYO",
+      },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

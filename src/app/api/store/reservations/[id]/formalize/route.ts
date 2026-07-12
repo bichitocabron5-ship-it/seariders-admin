@@ -27,6 +27,10 @@ import {
   resolveDiscountPolicy,
 } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
+import {
+  resolveManualDiscountCentsForQuantityChange,
+  sumMainReservationQuantity,
+} from "@/lib/manual-discount-proration";
 import { syncReservationContractsTx } from "@/lib/reservation-contract-sync";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
@@ -1006,6 +1010,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         (sum, line) => sum + Number(line.quantity ?? 0),
         0
       );
+      const currentMainQuantity = sumMainReservationQuantity(current.items ?? [], current.quantity);
 
       let customerDiscountSnapshot = {
         customerDiscountMode: current.customerDiscountMode,
@@ -1064,7 +1069,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
                 boothUnitDiscountCents,
                 nextMatchingQuantity: matchingBoothLineQty,
               })
-            : Number(current.manualDiscountCents ?? 0);
+            : resolveManualDiscountCentsForQuantityChange({
+                currentManualDiscountCents: current.manualDiscountCents,
+                oldQuantity: currentMainQuantity,
+                newQuantity: totalMainQuantity,
+                newSubtotalCents: totalBeforeDiscounts,
+              });
         customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
           channel,
           quantity: totalMainQuantity,
