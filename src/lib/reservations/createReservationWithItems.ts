@@ -2,7 +2,6 @@
 import { JetskiLicenseMode, PricingTier, type Prisma } from "@prisma/client";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz, shouldAutoFormalize, todayYmdInTz } from "@/lib/tz-business";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
@@ -13,6 +12,7 @@ import {
 } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
+import { buildReservationContractRequirements } from "@/lib/reservation-contract-requirements";
 
 type CreateItemInput = {
   serviceIdOrCode: string;
@@ -347,6 +347,8 @@ export async function createReservationWithItems(params: {
     servicePriceId: string | null;
     unitPriceCents: number;
     totalPriceCents: number;
+    category: string | null;
+    durationMinutes: number | null;
     isPackParent?: boolean; // 👈 NUEVO
   };
 
@@ -383,6 +385,8 @@ export async function createReservationWithItems(params: {
       servicePriceId: price.id ?? null,
       unitPriceCents,
       totalPriceCents: lineTotal,
+      category: it.category ?? null,
+      durationMinutes: it.durationMinutes ?? null,
     });
     } else if (input.pricing.mode === "CART_MULTI_ITEM" || input.pricing.mode === "PACK_FIXED_TOTAL") {
       // precio real por línea
@@ -415,6 +419,8 @@ export async function createReservationWithItems(params: {
           servicePriceId: price.id ?? null,
           unitPriceCents,
           totalPriceCents: lineTotal,
+          category: it.category ?? null,
+          durationMinutes: it.durationMinutes ?? null,
           // si quieres marcar el “main” para UI: isPackParent no aplica aquí
         });
       }
@@ -541,8 +547,10 @@ export async function createReservationWithItems(params: {
         select: { id: true },
       });
 
+    const createdContractItems = [];
+
     for (const it of itemCreates) {
-      await tx.reservationItem.create({
+      const createdItem = await tx.reservationItem.create({
         data: {
           reservationId: reservation.id,
           serviceId: it.serviceId,
@@ -555,6 +563,18 @@ export async function createReservationWithItems(params: {
           isExtra: false, // ✅ actividades reales
           isPackParent: Boolean(it.isPackParent), // 👈 NUEVO
         },
+        select: { id: true },
+      });
+      createdContractItems.push({
+        id: createdItem.id,
+        serviceId: it.serviceId,
+        optionId: it.optionId,
+        quantity: it.quantity,
+        pax: it.pax,
+        totalPriceCents: it.totalPriceCents,
+        isExtra: false,
+        service: { category: it.category },
+        option: { durationMinutes: it.durationMinutes },
       });
     }
 
@@ -566,25 +586,28 @@ export async function createReservationWithItems(params: {
       });
     }
 
-    const requiredContractUnits = computeRequiredContractUnits({
+    const contractRequirements = buildReservationContractRequirements({
       quantity: reservationQuantity,
       isLicense,
       serviceCategory: resolvedItems[0]?.category ?? null,
-      items: resolvedItems.map((it) => ({
-        quantity: Number(it.quantity ?? 0),
-        isExtra: false,
-        service: { category: it.category ?? null },
-      })),
+      serviceId: itemCreates[0]?.serviceId ?? null,
+      optionId: itemCreates[0]?.optionId ?? null,
+      pax: input.pax,
+      totalPriceCents: commercial.finalTotalCents,
+      items: createdContractItems,
     });
+    const requiredContractUnits = contractRequirements.length;
 
     if (shouldFormalize && requiredContractUnits > 0) {
       await tx.reservationContract.createMany({
-        data: Array.from({ length: requiredContractUnits }, (_, idx) => {
+        data: contractRequirements.map((requirement, idx) => {
           const isPrimaryContract = idx === 0;
           return {
             reservationId: reservation.id,
+            reservationItemId: requirement.reservationItemId,
             unitIndex: idx + 1,
-            logicalUnitIndex: idx + 1,
+            logicalUnitIndex: requirement.logicalUnitIndex,
+            templateCode: requirement.templateCode,
             driverName: isPrimaryContract ? input.customerName : null,
             driverPhone: isPrimaryContract ? customerPhone : null,
             driverEmail: isPrimaryContract ? customerEmail : null,

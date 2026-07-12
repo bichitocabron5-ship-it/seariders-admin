@@ -3,12 +3,15 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { prisma } from "@/lib/prisma";
 import { sessionOptions, type AppSession } from "@/lib/session";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
-import { listMissingLogicalUnits } from "@/lib/contracts/active-contracts";
 import {
   createReservationCheckinToken,
   DEFAULT_RESERVATION_CHECKIN_LINK_TTL_MINUTES,
 } from "@/lib/reservations/public-checkin-link";
+import {
+  buildReservationContractRequirements,
+  reservationContractRequirementsToSyncTargets,
+} from "@/lib/reservation-contract-requirements";
+import { syncReservationContractsTx } from "@/lib/reservation-contract-sync";
 
 export const runtime = "nodejs";
 
@@ -34,17 +37,30 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           id: true,
           quantity: true,
           isLicense: true,
-          service: { select: { category: true } },
+          serviceId: true,
+          optionId: true,
+          pax: true,
+          totalPriceCents: true,
+          service: { select: { name: true, category: true } },
+          option: { select: { durationMinutes: true } },
           items: {
+            orderBy: { createdAt: "asc" },
             select: {
+              id: true,
+              serviceId: true,
+              optionId: true,
               quantity: true,
+              pax: true,
+              totalPriceCents: true,
               isExtra: true,
-              service: { select: { category: true, code: true } },
+              service: { select: { name: true, category: true, code: true } },
+              option: { select: { durationMinutes: true } },
             },
           },
           contracts: {
             select: {
               id: true,
+              reservationItemId: true,
               unitIndex: true,
               logicalUnitIndex: true,
               status: true,
@@ -60,16 +76,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
       if (!current) throw new Error("Reserva no existe");
 
-      const requiredUnits = computeRequiredContractUnits({
+      const contractRequirements = buildReservationContractRequirements({
         quantity: current.quantity ?? 0,
         isLicense: Boolean(current.isLicense),
         serviceCategory: current.service?.category ?? null,
-        items: (current.items ?? []).map((item) => ({
-          quantity: item.quantity ?? 0,
-          isExtra: Boolean(item.isExtra),
-          service: item.service ? { category: item.service.category ?? null, code: item.service.code ?? null } : null,
-        })),
+        serviceId: current.serviceId,
+        optionId: current.optionId,
+        serviceName: current.service?.name ?? null,
+        durationMinutes: current.option?.durationMinutes ?? null,
+        pax: current.pax,
+        totalPriceCents: current.totalPriceCents,
+        items: current.items ?? [],
       });
+      const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+      const requiredUnits = contractRequirements.length;
 
       if (requiredUnits > 0) {
         const existing = current.contracts ?? [];
@@ -88,29 +108,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           }
         }
 
-        const refreshedContracts = await tx.reservationContract.findMany({
-          where: { reservationId: current.id },
-          select: {
-            unitIndex: true,
-            logicalUnitIndex: true,
-            status: true,
-            supersededAt: true,
-            createdAt: true,
-          },
+        await syncReservationContractsTx(tx, {
+          reservationId: current.id,
+          requiredUnits,
+          targets: syncTargets,
         });
-        const missingSlots = listMissingLogicalUnits(refreshedContracts, requiredUnits);
-        const maxUnitIndex = Math.max(0, ...refreshedContracts.map((contract) => Number(contract.unitIndex ?? 0)));
-
-        if (missingSlots.length > 0) {
-          await tx.reservationContract.createMany({
-            data: missingSlots.map((slot, idx) => ({
-              reservationId: current.id,
-              unitIndex: maxUnitIndex + idx + 1,
-              logicalUnitIndex: slot,
-            })),
-            skipDuplicates: true,
-          });
-        }
       }
 
       return {

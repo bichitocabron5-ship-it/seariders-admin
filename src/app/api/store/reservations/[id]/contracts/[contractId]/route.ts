@@ -103,6 +103,11 @@ export async function PATCH(
           status: true,
           templateCode: true,
           driverName: true,
+          reservationItem: {
+            select: {
+              service: { select: { category: true } },
+            },
+          },
           reservation: {
             select: {
               id: true,
@@ -127,7 +132,10 @@ export async function PATCH(
       const preparedSelectorKind = resolvePreparedResourceSelector({
         templateCode: current.templateCode,
         isLicense: Boolean(current.reservation.isLicense),
-        serviceCategory: current.reservation.service?.category ?? null,
+        serviceCategory:
+          current.reservationItem?.service?.category ??
+          current.reservation.service?.category ??
+          null,
       });
 
       const data: Prisma.ReservationContractUpdateInput = {};

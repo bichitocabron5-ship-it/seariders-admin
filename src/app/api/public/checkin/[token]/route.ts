@@ -9,12 +9,16 @@ import {
 } from "@/lib/contracts/render-contract";
 import { normalizePublicLanguage, type PublicLanguage } from "@/lib/public-links/i18n";
 import { verifyReservationCheckinToken } from "@/lib/reservations/public-checkin-link";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import {
-  countReadyVisibleContracts,
-  pickVisibleContractsByLogicalUnit,
+  countReadyVisibleContractsByTargets,
+  pickVisibleContractsByTargets,
 } from "@/lib/contracts/active-contracts";
 import { resolveCountryIso2 } from "@/lib/countries";
+import {
+  buildReservationContractRequirements,
+  findContractRequirementForContract,
+  reservationContractRequirementsToSyncTargets,
+} from "@/lib/reservation-contract-requirements";
 
 export const runtime = "nodejs";
 
@@ -112,21 +116,31 @@ async function getReservationSnapshot(reservationId: string, language: ReturnTyp
       quantity: true,
       pax: true,
       totalPriceCents: true,
+      serviceId: true,
+      optionId: true,
       activityDate: true,
       scheduledTime: true,
       service: { select: { name: true, category: true } },
       option: { select: { durationMinutes: true } },
       items: {
+        orderBy: { createdAt: "asc" },
         select: {
+          id: true,
+          serviceId: true,
+          optionId: true,
           quantity: true,
+          pax: true,
+          totalPriceCents: true,
           isExtra: true,
-          service: { select: { category: true, code: true } },
+          service: { select: { name: true, category: true, code: true } },
+          option: { select: { durationMinutes: true } },
         },
       },
       contracts: {
         orderBy: { unitIndex: "asc" },
         select: {
           id: true,
+          reservationItemId: true,
           unitIndex: true,
           logicalUnitIndex: true,
           status: true,
@@ -155,6 +169,7 @@ async function getReservationSnapshot(reservationId: string, language: ReturnTyp
           renderedHtml: true,
           renderedPdfKey: true,
           renderedPdfUrl: true,
+          templateCode: true,
           preparedJetski: {
             select: {
               id: true,
@@ -178,32 +193,38 @@ async function getReservationSnapshot(reservationId: string, language: ReturnTyp
 
   if (!reservation) return null;
 
-  const requiredUnits = computeRequiredContractUnits({
+  const contractRequirements = buildReservationContractRequirements({
     quantity: reservation.quantity ?? 0,
     isLicense: Boolean(reservation.isLicense),
     serviceCategory: reservation.service?.category ?? null,
-    items: (reservation.items ?? []).map((item) => ({
-      quantity: item.quantity ?? 0,
-      isExtra: Boolean(item.isExtra),
-      service: item.service ? { category: item.service.category ?? null, code: item.service.code ?? null } : null,
-    })),
+    serviceId: reservation.serviceId,
+    optionId: reservation.optionId,
+    serviceName: reservation.service?.name ?? null,
+    durationMinutes: reservation.option?.durationMinutes ?? null,
+    pax: reservation.pax,
+    totalPriceCents: reservation.totalPriceCents,
+    items: reservation.items ?? [],
   });
+  const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+  const requiredUnits = contractRequirements.length;
 
-  const visibleContracts = pickVisibleContractsByLogicalUnit(reservation.contracts ?? [], requiredUnits);
-  const readyCount = countReadyVisibleContracts(reservation.contracts ?? [], requiredUnits);
+  const visibleContracts = pickVisibleContractsByTargets(reservation.contracts ?? [], syncTargets);
+  const readyCount = countReadyVisibleContractsByTargets(reservation.contracts ?? [], syncTargets);
   const signedCount = visibleContracts.filter((contract) => String(contract.status) === "SIGNED").length;
   const logoSrc = await loadLogoSrc();
 
   const contracts = visibleContracts.map((contract) => {
-    const hasLicense =
-      Boolean(contract.licenseNumber?.trim()) ||
-      Boolean(reservation.isLicense);
+    const requirement = findContractRequirementForContract(contractRequirements, contract);
+    const templateCode =
+      contract.templateCode ??
+      requirement?.templateCode ??
+      templateCodeForContract({
+        category: reservation.service?.category ?? null,
+        hasLicense: Boolean(contract.licenseNumber?.trim()) || Boolean(reservation.isLicense),
+      });
 
     const renderedHtml = buildContractHtml({
-      templateCode: templateCodeForContract({
-        category: reservation.service?.category ?? null,
-        hasLicense,
-      }),
+      templateCode,
       templateVersion: "v1",
       language,
       logoSrc,
@@ -215,12 +236,12 @@ async function getReservationSnapshot(reservationId: string, language: ReturnTyp
         customerEmail: reservation.customerEmail,
         customerPhone: reservation.customerPhone,
         customerCountry: reservation.customerCountry,
-        serviceName: reservation.service?.name ?? null,
-        serviceCategory: reservation.service?.category ?? null,
-        quantity: reservation.quantity,
-        pax: reservation.pax,
-        durationMinutes: reservation.option?.durationMinutes ?? null,
-        totalPriceCents: reservation.totalPriceCents,
+        serviceName: requirement?.serviceName ?? reservation.service?.name ?? null,
+        serviceCategory: requirement?.serviceCategory ?? reservation.service?.category ?? null,
+        quantity: requirement?.quantity ?? reservation.quantity,
+        pax: requirement?.pax ?? reservation.pax,
+        durationMinutes: requirement?.durationMinutes ?? reservation.option?.durationMinutes ?? null,
+        totalPriceCents: requirement?.totalPriceCents ?? reservation.totalPriceCents,
       },
       contract: {
         id: contract.id,

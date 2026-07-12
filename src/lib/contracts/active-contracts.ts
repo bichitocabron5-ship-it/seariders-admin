@@ -1,9 +1,15 @@
 export type ContractLike = {
   unitIndex: number | null | undefined;
   logicalUnitIndex?: number | null | undefined;
+  reservationItemId?: string | null | undefined;
   status?: string | null | undefined;
   supersededAt?: Date | string | null | undefined;
   createdAt?: Date | string | null | undefined;
+};
+
+export type ContractVisibilityTarget = {
+  logicalUnitIndex: number;
+  reservationItemId?: string | null | undefined;
 };
 
 function toMillis(value: Date | string | null | undefined) {
@@ -81,6 +87,88 @@ export function canEditReservationLegalContent<T extends ContractLike>(
   return countLockedVisibleContracts(contracts, requiredUnits) === 0;
 }
 
+function targetReservationItemId(target: ContractVisibilityTarget) {
+  const value = String(target.reservationItemId ?? "").trim();
+  return value.length ? value : null;
+}
+
+function contractReservationItemId(contract: ContractLike) {
+  const value = String(contract.reservationItemId ?? "").trim();
+  return value.length ? value : null;
+}
+
+function sortVisibleCandidates<T extends ContractLike>(candidates: T[]) {
+  return [...candidates].sort((a, b) => {
+    const aSigned = String(a.status ?? "").toUpperCase() === "SIGNED";
+    const bSigned = String(b.status ?? "").toUpperCase() === "SIGNED";
+    if (aSigned !== bSigned) return aSigned ? -1 : 1;
+
+    const aReady = String(a.status ?? "").toUpperCase() === "READY";
+    const bReady = String(b.status ?? "").toUpperCase() === "READY";
+    if (aReady !== bReady) return aReady ? -1 : 1;
+
+    const timeDiff = toMillis(b.createdAt) - toMillis(a.createdAt);
+    if (timeDiff !== 0) return timeDiff;
+    return Number(b.unitIndex ?? 0) - Number(a.unitIndex ?? 0);
+  });
+}
+
+export function pickVisibleContractsByTargets<T extends ContractLike>(
+  contracts: T[],
+  targets: readonly ContractVisibilityTarget[]
+) {
+  const activeContracts = contracts.filter((contract) => !isContractSuperseded(contract));
+  const usedIds = new Set<T>();
+  const visible: T[] = [];
+
+  for (const target of [...targets].sort((a, b) => a.logicalUnitIndex - b.logicalUnitIndex)) {
+    const targetItemId = targetReservationItemId(target);
+    const targetSlot = Number(target.logicalUnitIndex ?? 0);
+    const exactCandidates = activeContracts.filter(
+      (contract) =>
+        !usedIds.has(contract) &&
+        contractReservationItemId(contract) === targetItemId &&
+        contractLogicalUnitIndex(contract) === targetSlot
+    );
+    const itemCandidates =
+      targetItemId && exactCandidates.length === 0
+        ? activeContracts.filter(
+            (contract) =>
+              !usedIds.has(contract) &&
+              contractReservationItemId(contract) === targetItemId
+          )
+        : [];
+
+    const candidates = sortVisibleCandidates([...exactCandidates, ...itemCandidates]);
+    const selected = candidates[0];
+    if (!selected) continue;
+
+    usedIds.add(selected);
+    visible.push(selected);
+  }
+
+  visible.sort((a, b) => contractLogicalUnitIndex(a) - contractLogicalUnitIndex(b));
+  return visible;
+}
+
+export function countReadyVisibleContractsByTargets<T extends ContractLike>(
+  contracts: T[],
+  targets: readonly ContractVisibilityTarget[]
+) {
+  return pickVisibleContractsByTargets(contracts, targets).filter(
+    (contract) => contract.status === "READY" || contract.status === "SIGNED"
+  ).length;
+}
+
+export function countLockedVisibleContractsByTargets<T extends ContractLike>(
+  contracts: T[],
+  targets: readonly ContractVisibilityTarget[]
+) {
+  return pickVisibleContractsByTargets(contracts, targets).filter(
+    (contract) => contract.status === "SIGNED"
+  ).length;
+}
+
 export function listMissingLogicalUnits<T extends ContractLike>(
   contracts: T[],
   requiredUnits: number
@@ -92,4 +180,22 @@ export function listMissingLogicalUnits<T extends ContractLike>(
     if (!slots.has(slot)) missing.push(slot);
   }
   return missing;
+}
+
+export function listMissingContractTargets<T extends ContractLike>(
+  contracts: T[],
+  targets: readonly ContractVisibilityTarget[]
+) {
+  const visible = pickVisibleContractsByTargets(contracts, targets);
+  const visibleKeys = new Set(
+    visible.map((contract) => {
+      const itemId = contractReservationItemId(contract);
+      return `${itemId ?? "legacy"}:${contractLogicalUnitIndex(contract)}`;
+    })
+  );
+
+  return targets.filter((target) => {
+    const itemId = targetReservationItemId(target);
+    return !visibleKeys.has(`${itemId ?? "legacy"}:${Number(target.logicalUnitIndex ?? 0)}`);
+  });
 }

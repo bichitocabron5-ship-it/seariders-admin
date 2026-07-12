@@ -4,13 +4,18 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
-import { countReadyVisibleContracts, pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
+import {
+  countReadyVisibleContractsByTargets,
+  pickVisibleContractsByTargets,
+} from "@/lib/contracts/active-contracts";
 import {
   ReservationContractSyncBlockedError,
-  resolveReservationContractSyncTarget,
   syncReservationContractsTx,
 } from "@/lib/reservation-contract-sync";
+import {
+  buildReservationContractRequirements,
+  reservationContractRequirementsToSyncTargets,
+} from "@/lib/reservation-contract-requirements";
 
 export const runtime = "nodejs";
 
@@ -53,17 +58,30 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
           licenseSchool: true,
           licenseType: true,
           licenseNumber: true,
-          service: { select: { category: true } },
+          serviceId: true,
+          optionId: true,
+          pax: true,
+          totalPriceCents: true,
+          service: { select: { name: true, category: true } },
+          option: { select: { durationMinutes: true } },
           items: {
+            orderBy: { createdAt: "asc" },
             select: {
+              id: true,
+              serviceId: true,
+              optionId: true,
               quantity: true,
+              pax: true,
+              totalPriceCents: true,
               isExtra: true,
-              service: { select: { category: true, code: true } },
+              service: { select: { name: true, category: true, code: true } },
+              option: { select: { durationMinutes: true } },
             },
           },
           contracts: {
             select: {
               id: true,
+              reservationItemId: true,
               unitIndex: true,
               logicalUnitIndex: true,
               status: true,
@@ -88,16 +106,20 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
       if (!res) throw new Error("Reserva no existe");
 
-      const requiredUnits = computeRequiredContractUnits({
+      const contractRequirements = buildReservationContractRequirements({
         quantity: res.quantity ?? 0,
         isLicense: Boolean(res.isLicense),
         serviceCategory: res.service?.category ?? null,
-        items: (res.items ?? []).map((it) => ({
-          quantity: it.quantity ?? 0,
-          isExtra: Boolean(it.isExtra),
-          service: it.service ? { category: it.service.category ?? null, code: it.service.code ?? null } : null,
-        })),
+        serviceId: res.serviceId,
+        optionId: res.optionId,
+        serviceName: res.service?.name ?? null,
+        durationMinutes: res.option?.durationMinutes ?? null,
+        pax: res.pax,
+        totalPriceCents: res.totalPriceCents,
+        items: res.items ?? [],
       });
+      const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+      const requiredUnits = contractRequirements.length;
 
       const existingContracts = res.contracts ?? [];
       const hasUnitOne = existingContracts.some((c) => Number(c.unitIndex) === 1);
@@ -119,10 +141,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       await syncReservationContractsTx(tx, {
         reservationId: id,
         requiredUnits,
-        ...resolveReservationContractSyncTarget({
-          serviceCategory: res.service?.category ?? null,
-          isLicense: Boolean(res.isLicense),
-        }),
+        targets: syncTargets,
       });
 
       const rowsAfterSync = await tx.reservationContract.findMany({
@@ -130,6 +149,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
         orderBy: { unitIndex: "asc" },
         select: {
           id: true,
+          reservationItemId: true,
           unitIndex: true,
           logicalUnitIndex: true,
           status: true,
@@ -151,8 +171,11 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       });
 
       const visibleDraftContracts = rowsAfterSync.filter((contract) => {
-        const slot = Number(contract.logicalUnitIndex ?? contract.unitIndex ?? 0);
-        return !contract.supersededAt && contract.status === "DRAFT" && slot >= 1 && slot <= requiredUnits;
+        return (
+          !contract.supersededAt &&
+          contract.status === "DRAFT" &&
+          pickVisibleContractsByTargets([contract], syncTargets).length > 0
+        );
       });
 
       await Promise.all(
@@ -207,11 +230,19 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       const contracts = await tx.reservationContract.findMany({
         where: { reservationId: id },
         orderBy: { unitIndex: "asc" },
-        select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+        select: {
+          id: true,
+          reservationItemId: true,
+          unitIndex: true,
+          logicalUnitIndex: true,
+          status: true,
+          supersededAt: true,
+          createdAt: true,
+        },
       });
 
-      const visibleContracts = pickVisibleContractsByLogicalUnit(contracts, requiredUnits);
-      const readyCount = countReadyVisibleContracts(contracts, requiredUnits);
+      const visibleContracts = pickVisibleContractsByTargets(contracts, syncTargets);
+      const readyCount = countReadyVisibleContractsByTargets(contracts, syncTargets);
 
       return { reservationId: id, requiredUnits, readyCount, contracts: visibleContracts };
     });

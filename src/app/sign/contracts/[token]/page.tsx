@@ -5,9 +5,9 @@ import { verifyContractSignatureToken } from "@/lib/contracts/signature-link";
 import {
   buildContractHtml,
   loadLogoSrc,
-  templateCodeForContract,
 } from "@/lib/contracts/render-contract";
 import { resolveContractRenderLanguage } from "@/lib/contracts/language";
+import { resolveContractRenderContext } from "@/lib/contracts/render-context";
 import { buildPublicPageMetadata } from "@/lib/metadata";
 import { normalizePublicLanguage } from "@/lib/public-links/i18n";
 import { SignContractPageClient } from "./sign-contract-page-client";
@@ -44,6 +44,7 @@ export default async function SignContractPage({
     where: { id: payload.contractId },
     select: {
       id: true,
+      templateCode: true,
       unitIndex: true,
       logicalUnitIndex: true,
       status: true,
@@ -92,6 +93,8 @@ export default async function SignContractPage({
           customerPhone: true,
           customerCountry: true,
           option: { select: { durationMinutes: true } },
+          serviceId: true,
+          optionId: true,
           quantity: true,
           pax: true,
           totalPriceCents: true,
@@ -99,6 +102,18 @@ export default async function SignContractPage({
           service: { select: { name: true, category: true } },
           activityDate: true,
           scheduledTime: true,
+        },
+      },
+      reservationItem: {
+        select: {
+          id: true,
+          serviceId: true,
+          optionId: true,
+          quantity: true,
+          pax: true,
+          totalPriceCents: true,
+          option: { select: { durationMinutes: true } },
+          service: { select: { name: true, category: true } },
         },
       },
     },
@@ -112,31 +127,13 @@ export default async function SignContractPage({
   });
 
   const logoSrc = await loadLogoSrc();
-  const hasLicense =
-    Boolean(contract.licenseNumber?.trim()) || Boolean(contract.reservation.isLicense);
+  const renderContext = resolveContractRenderContext(contract);
   const renderedHtml = buildContractHtml({
-    templateCode: templateCodeForContract({
-      category: contract.reservation.service?.category ?? null,
-      hasLicense,
-    }),
+    templateCode: renderContext.templateCode,
     templateVersion: "v1",
     language,
     logoSrc,
-    reservation: {
-      id: contract.reservation.id,
-      activityDate: contract.reservation.activityDate,
-      scheduledTime: contract.reservation.scheduledTime,
-      customerName: contract.reservation.customerName,
-      customerEmail: contract.reservation.customerEmail,
-      customerPhone: contract.reservation.customerPhone,
-      customerCountry: contract.reservation.customerCountry,
-      serviceName: contract.reservation.service?.name ?? null,
-      serviceCategory: contract.reservation.service?.category ?? null,
-      quantity: contract.reservation.quantity,
-      pax: contract.reservation.pax,
-      durationMinutes: contract.reservation.option?.durationMinutes ?? null,
-      totalPriceCents: contract.reservation.totalPriceCents,
-    },
+    reservation: renderContext.reservation,
     contract: {
       id: contract.id,
       unitIndex: contract.unitIndex,

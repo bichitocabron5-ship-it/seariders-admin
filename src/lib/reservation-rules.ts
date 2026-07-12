@@ -13,6 +13,14 @@ export function needsContractForCategory(categoryRaw: string | null | undefined,
   return isJetski || (isBoat && isLicense) || Boolean(isLicense);
 }
 
+export function needsContractForReservationItemCategory(
+  categoryRaw: string | null | undefined,
+  isLicense: boolean
+) {
+  const cat = String(categoryRaw ?? "").toUpperCase();
+  return cat === "JETSKI" || (cat === "BOAT" && isLicense);
+}
+
 export function computeRequiredContractUnits(input: {
   quantity: number | null;
   isLicense: boolean;
@@ -25,7 +33,7 @@ export function computeRequiredContractUnits(input: {
     for (const it of mainItems) {
       const qty = Number(it.quantity ?? 0);
       const cat = it.service?.category ?? "";
-      if (needsContractForCategory(cat, input.isLicense)) sum += qty;
+      if (needsContractForReservationItemCategory(cat, input.isLicense)) sum += qty;
     }
     if (sum > 0) return sum;
   }

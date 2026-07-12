@@ -1,8 +1,11 @@
 import { ReservationStatus } from "@prisma/client";
 
-import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
+import { countReadyVisibleContractsByTargets } from "@/lib/contracts/active-contracts";
 import { getReservationPaymentStatus } from "@/lib/reservation-payment-status";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import {
+  buildReservationContractRequirements,
+  reservationContractRequirementsToSyncTargets,
+} from "@/lib/reservation-contract-requirements";
 
 type ReadyReservation = {
   status: ReservationStatus;
@@ -13,15 +16,26 @@ type ReadyReservation = {
   totalPriceCents: number | null;
   depositCents: number | null;
   quantity: number | null;
+  serviceId?: string | null;
+  optionId?: string | null;
+  pax?: number | null;
   isLicense: boolean;
-  service: { category: string | null } | null;
+  service: { name?: string | null; category: string | null } | null;
+  option?: { durationMinutes?: number | null } | null;
   items: Array<{
+    id?: string | null;
+    serviceId?: string | null;
+    optionId?: string | null;
     quantity: number | null;
+    pax?: number | null;
     isExtra: boolean;
     totalPriceCents?: number | null;
-    service: { category: string | null } | null;
+    service: { name?: string | null; category: string | null } | null;
+    option?: { durationMinutes?: number | null } | null;
   }>;
   contracts: Array<{
+    id?: string | null;
+    reservationItemId?: string | null;
     unitIndex: number;
     logicalUnitIndex?: number | null;
     status: string;
@@ -48,14 +62,22 @@ export function evaluateReadyForPlatform(reservation: ReadyReservation) {
     return { ok: false as const, error: "La reserva no está formalizada." };
   }
 
-  const requiredUnits = computeRequiredContractUnits({
+  const contractRequirements = buildReservationContractRequirements({
     quantity: reservation.quantity,
     isLicense: Boolean(reservation.isLicense),
     serviceCategory: reservation.service?.category ?? null,
+    serviceId: reservation.serviceId ?? null,
+    optionId: reservation.optionId ?? null,
+    serviceName: reservation.service?.name ?? null,
+    durationMinutes: reservation.option?.durationMinutes ?? null,
+    pax: reservation.pax ?? null,
+    totalPriceCents: reservation.totalPriceCents,
     items: reservation.items ?? [],
   });
+  const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+  const requiredUnits = contractRequirements.length;
 
-  const readyCount = countReadyVisibleContracts(reservation.contracts ?? [], requiredUnits);
+  const readyCount = countReadyVisibleContractsByTargets(reservation.contracts ?? [], syncTargets);
 
   if (requiredUnits > 0 && readyCount < requiredUnits) {
     return {

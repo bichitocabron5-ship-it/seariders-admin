@@ -16,13 +16,15 @@ import {
 } from "./commercial-adjustment-policy";
 import { syncChannelCommissionLineFromReservationTx } from "./channel-commission-lines";
 import { getAppliedCommercialSnapshotTx } from "./commission";
-import { pickVisibleContractsByLogicalUnit } from "./contracts/active-contracts";
+import { pickVisibleContractsByTargets } from "./contracts/active-contracts";
 import { netPaidDepositCents, netPaidServiceCents } from "./reservation-commercial-snapshot";
 import {
-  resolveReservationContractSyncTarget,
   syncReservationContractsTx,
 } from "./reservation-contract-sync";
-import { computeRequiredContractUnits } from "./reservation-rules";
+import {
+  buildReservationContractRequirements,
+  reservationContractRequirementsToSyncTargets,
+} from "./reservation-contract-requirements";
 
 type PaymentLike = {
   id?: string | null;
@@ -33,6 +35,7 @@ type PaymentLike = {
 
 type ContractLike = {
   id: string;
+  reservationItemId?: string | null;
   unitIndex: number | null;
   logicalUnitIndex?: number | null;
   status?: string | null;
@@ -42,10 +45,14 @@ type ContractLike = {
 
 type ReservationItemLike = {
   id: string;
+  serviceId?: string | null;
+  optionId?: string | null;
   quantity: number | null;
+  pax?: number | null;
   isExtra: boolean;
   totalPriceCents?: number | null;
-  service: { category: string | null } | null;
+  service: { name?: string | null; category: string | null } | null;
+  option?: { durationMinutes?: number | null } | null;
 };
 
 type CommitReservation = {
@@ -61,10 +68,13 @@ type CommitReservation = {
   passVoucherId?: string | null;
   passConsumeId?: string | null;
   serviceId?: string | null;
+  optionId?: string | null;
   channelId?: string | null;
   quantity?: number | null;
+  pax?: number | null;
   isLicense?: boolean | null;
-  service?: { category?: string | null } | null;
+  service?: { name?: string | null; category?: string | null } | null;
+  option?: { durationMinutes?: number | null } | null;
   items?: ReservationItemLike[] | null;
   payments?: PaymentLike[] | null;
   contracts?: ContractLike[] | null;
@@ -179,18 +189,25 @@ export const commercialAdjustmentCommitReservationSelect = {
   passVoucherId: true,
   passConsumeId: true,
   serviceId: true,
+  optionId: true,
   channelId: true,
   quantity: true,
+  pax: true,
   isLicense: true,
-  service: { select: { category: true } },
+  service: { select: { name: true, category: true } },
+  option: { select: { durationMinutes: true } },
   items: {
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
+      serviceId: true,
+      optionId: true,
       quantity: true,
+      pax: true,
       isExtra: true,
       totalPriceCents: true,
-      service: { select: { category: true } },
+      service: { select: { name: true, category: true } },
+      option: { select: { durationMinutes: true } },
     },
   },
   payments: {
@@ -206,6 +223,7 @@ export const commercialAdjustmentCommitReservationSelect = {
     orderBy: { unitIndex: "asc" },
     select: {
       id: true,
+      reservationItemId: true,
       unitIndex: true,
       logicalUnitIndex: true,
       status: true,
@@ -433,13 +451,20 @@ function buildCommercialAdjustmentCommitEvaluation(
       ? refundableDepositCents
       : 0;
   const depositRefundHeldCents = refundDeposit && depositRefundBlockedReason ? refundableDepositCents : 0;
-  const requiredUnits = computeRequiredContractUnits({
+  const contractRequirements = buildReservationContractRequirements({
     quantity: reservation.quantity ?? 0,
     isLicense: Boolean(reservation.isLicense),
     serviceCategory: reservation.service?.category ?? null,
+    serviceId: reservation.serviceId,
+    optionId: reservation.optionId,
+    serviceName: reservation.service?.name ?? null,
+    durationMinutes: reservation.option?.durationMinutes ?? null,
+    pax: reservation.pax,
+    totalPriceCents: reservation.totalPriceCents,
     items: reservation.items ?? [],
   });
-  const visibleContracts = pickVisibleContractsByLogicalUnit(reservation.contracts ?? [], requiredUnits);
+  const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+  const visibleContracts = pickVisibleContractsByTargets(reservation.contracts ?? [], syncTargets);
   const hasSignedContracts =
     (reservation.contracts ?? []).some(isActiveSignedContract) ||
     visibleContracts.some((contract) => String(contract.status ?? "").toUpperCase() === "SIGNED");
@@ -760,19 +785,26 @@ export async function commitCommercialAdjustment(
       }
     }
 
+    const contractRequirementsForSync = buildReservationContractRequirements({
+      quantity: reservation.quantity ?? 0,
+      isLicense: Boolean(reservation.isLicense),
+      serviceCategory: reservation.service?.category ?? null,
+      serviceId: reservation.serviceId,
+      optionId: reservation.optionId,
+      serviceName: reservation.service?.name ?? null,
+      durationMinutes: reservation.option?.durationMinutes ?? null,
+      pax: reservation.pax,
+      totalPriceCents: reservation.totalPriceCents,
+      items: reservation.items ?? [],
+    });
+
     const contracts = shouldCancel
       ? await voidUnsignedContractsForCancelTx(tx, reservationId, now)
       : await syncReservationContractsTx(tx, {
           reservationId,
-          requiredUnits: computeRequiredContractUnits({
-            quantity: reservation.quantity ?? 0,
-            isLicense: Boolean(reservation.isLicense),
-            serviceCategory: reservation.service?.category ?? null,
-            items: reservation.items ?? [],
-          }),
-          ...resolveReservationContractSyncTarget({
-            serviceCategory: reservation.service?.category ?? null,
-            isLicense: Boolean(reservation.isLicense),
+          requiredUnits: contractRequirementsForSync.length,
+          targets: reservationContractRequirementsToSyncTargets(contractRequirementsForSync, {
+            materialChange: evaluation.oldTotalCents !== evaluation.newTotalCents,
           }),
           materialChange: evaluation.oldTotalCents !== evaluation.newTotalCents,
         });

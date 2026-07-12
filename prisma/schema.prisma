@@ -492,6 +492,7 @@ model ReservationItem {
   // ✅ la reserva hija a la que apunta este item tras el split
   splitReservation Reservation? @relation("ReservationItemSplit", fields: [splitReservationId], references: [id])
   reservation      Reservation  @relation("ReservationItems", fields: [reservationId], references: [id], onDelete: Cascade)
+  contracts        ReservationContract[]
 
   service Service        @relation(fields: [serviceId], references: [id])
   option  ServiceOption? @relation(fields: [optionId], references: [id])
@@ -552,6 +553,8 @@ model ReservationContract {
   id            String      @id @default(cuid())
   reservationId String
   reservation   Reservation @relation(fields: [reservationId], references: [id])
+  reservationItemId String?
+  reservationItem   ReservationItem? @relation(fields: [reservationItemId], references: [id], onDelete: SetNull)
 
   unitIndex        Int // identificador físico/versionado
   logicalUnitIndex Int? // slot lógico 1..N que representa la unidad contractual
@@ -624,6 +627,8 @@ model ReservationContract {
   @@index([reservationId])
   @@index([status])
   @@index([reservationId, logicalUnitIndex])
+  @@index([reservationItemId])
+  @@index([reservationId, reservationItemId, logicalUnitIndex])
   @@index([preparedJetskiId])
   @@index([preparedAssetId])
 }

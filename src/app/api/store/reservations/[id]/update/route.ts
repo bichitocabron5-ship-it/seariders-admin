@@ -7,7 +7,6 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
 import { JetskiLicenseMode, PricingTier, ReservationStatus } from "@prisma/client";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import type { Prisma } from "@prisma/client";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
@@ -23,14 +22,10 @@ import {
   resolveManualDiscountReasonForPersistence,
   sumMainReservationQuantity,
 } from "@/lib/manual-discount-proration";
-import {
-  countLockedVisibleContracts,
-  pickVisibleContractsByLogicalUnit,
-} from "@/lib/contracts/active-contracts";
-import { buildReservationContractProgress } from "@/lib/contracts/reservation-contract-progress";
+import { pickVisibleContractsByTargets } from "@/lib/contracts/active-contracts";
+import { buildReservationContractProgressForTargets } from "@/lib/contracts/reservation-contract-progress";
 import {
   ReservationContractSyncBlockedError,
-  resolveReservationContractSyncTarget,
   syncReservationContractsTx,
 } from "@/lib/reservation-contract-sync";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
@@ -54,6 +49,14 @@ import {
   hasSignedContractBlockingChange,
   sameContractComposition,
 } from "@/lib/signed-contract-formalization";
+import {
+  buildReservationContractRequirements,
+  reservationContractRequirementsToSyncTargets,
+} from "@/lib/reservation-contract-requirements";
+import {
+  deleteRemovedReservationMainItemsTx,
+  replaceReservationMainItemsTx,
+} from "@/lib/reservations/replaceReservationMainItems";
 
 export const runtime = "nodejs";
 
@@ -166,48 +169,81 @@ async function ensureContractsTx(
       id: true,
       quantity: true,
       isLicense: true,
-      service: { select: { category: true } },
+      serviceId: true,
+      optionId: true,
+      pax: true,
+      totalPriceCents: true,
+      service: { select: { name: true, category: true } },
+      option: { select: { durationMinutes: true } },
       items: {
+        orderBy: { createdAt: "asc" },
         select: {
+          id: true,
+          serviceId: true,
+          optionId: true,
           quantity: true,
+          pax: true,
+          totalPriceCents: true,
           isExtra: true,
-          service: { select: { category: true } },
+          service: { select: { name: true, category: true } },
+          option: { select: { durationMinutes: true } },
         },
       },
       contracts: {
-        select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+        select: {
+          id: true,
+          reservationItemId: true,
+          unitIndex: true,
+          logicalUnitIndex: true,
+          status: true,
+          supersededAt: true,
+          createdAt: true,
+        },
       },
     },
   });
 
   if (!reservation) throw new Error("Reserva no existe");
 
-  const requiredUnits = computeRequiredContractUnits({
+  const contractRequirements = buildReservationContractRequirements({
     quantity: reservation.quantity ?? 0,
     isLicense: Boolean(reservation.isLicense),
     serviceCategory: reservation.service?.category ?? null,
+    serviceId: reservation.serviceId,
+    optionId: reservation.optionId,
+    serviceName: reservation.service?.name ?? null,
+    durationMinutes: reservation.option?.durationMinutes ?? null,
+    pax: reservation.pax,
+    totalPriceCents: reservation.totalPriceCents,
     items: reservation.items ?? [],
   });
-
-  const syncTarget = resolveReservationContractSyncTarget({
-    serviceCategory: reservation.service?.category ?? null,
-    isLicense: Boolean(reservation.isLicense),
+  const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements, {
+    materialChange: Boolean(options.materialChange),
   });
+  const requiredUnits = contractRequirements.length;
 
   await syncReservationContractsTx(tx, {
     reservationId,
     requiredUnits,
-    ...syncTarget,
+    targets: syncTargets,
     materialChange: Boolean(options.materialChange),
   });
 
   const contracts = await tx.reservationContract.findMany({
     where: { reservationId },
     orderBy: { unitIndex: "asc" },
-    select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+    select: {
+      id: true,
+      reservationItemId: true,
+      unitIndex: true,
+      logicalUnitIndex: true,
+      status: true,
+      supersededAt: true,
+      createdAt: true,
+    },
   });
 
-  return buildReservationContractProgress(contracts, requiredUnits);
+  return buildReservationContractProgressForTargets(contracts, syncTargets);
 }
 
 // mismo contrato que formalize
@@ -362,19 +398,31 @@ async function rescheduleReservationOnly(args: {
         activityDate: true,
         scheduledTime: true,
         quantity: true,
+        serviceId: true,
+        optionId: true,
+        pax: true,
+        totalPriceCents: true,
         isLicense: true,
-        service: { select: { category: true } },
+        service: { select: { name: true, category: true } },
+        option: { select: { durationMinutes: true } },
         items: {
+          orderBy: { createdAt: "asc" },
           select: {
+            id: true,
+            serviceId: true,
+            optionId: true,
             quantity: true,
+            pax: true,
+            totalPriceCents: true,
             isExtra: true,
-            service: { select: { category: true } },
+            service: { select: { name: true, category: true } },
             option: { select: { durationMinutes: true } },
           },
         },
         contracts: {
           select: {
             id: true,
+            reservationItemId: true,
             unitIndex: true,
             logicalUnitIndex: true,
             status: true,
@@ -462,13 +510,20 @@ async function rescheduleReservationOnly(args: {
       );
     }
 
-    const requiredUnits = computeRequiredContractUnits({
+    const contractRequirements = buildReservationContractRequirements({
       quantity: current.quantity ?? 0,
       isLicense: Boolean(current.isLicense),
       serviceCategory: current.service?.category ?? null,
+      serviceId: current.serviceId,
+      optionId: current.optionId,
+      serviceName: current.service?.name ?? null,
+      durationMinutes: current.option?.durationMinutes ?? null,
+      pax: current.pax,
+      totalPriceCents: current.totalPriceCents,
       items: current.items ?? [],
     });
-    const visibleContracts = pickVisibleContractsByLogicalUnit(current.contracts ?? [], requiredUnits);
+    const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+    const visibleContracts = pickVisibleContractsByTargets(current.contracts ?? [], syncTargets);
     const signedContractsCount = visibleContracts.filter((contract) => contract.status === "SIGNED").length;
     const contracts = await ensureContractsTx(tx, reservationId, { materialChange: scheduleChanged });
 
@@ -533,7 +588,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       isLicense: true,
       jetskiLicenseMode: true,
       pricingTier: true,
-      service: { select: { category: true } },
+      service: { select: { name: true, category: true } },
+      option: { select: { durationMinutes: true } },
       channelId: true,
       activityDate: true,
       scheduledTime: true,
@@ -582,7 +638,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       passVoucherId: true,
       passConsumeId: true,
       items: {
+        orderBy: { createdAt: "asc" },
         select: {
+          id: true,
           serviceId: true,
           optionId: true,
           quantity: true,
@@ -590,7 +648,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           unitPriceCents: true,
           totalPriceCents: true,
           isExtra: true,
-          service: { select: { category: true } },
+          service: { select: { name: true, category: true } },
           option: { select: { durationMinutes: true } },
         },
       },
@@ -604,6 +662,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       contracts: {
         select: {
           id: true,
+          reservationItemId: true,
           unitIndex: true,
           logicalUnitIndex: true,
           status: true,
@@ -637,14 +696,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   ) {
     return new NextResponse("La reserva cancelada, en curso o completada no se puede editar.", { status: 409 });
   }
-  const existingRequiredUnits = computeRequiredContractUnits({
+  const existingContractRequirements = buildReservationContractRequirements({
     quantity: existing.quantity ?? 0,
     isLicense: Boolean(existing.isLicense),
     serviceCategory: existing.service?.category ?? null,
+    serviceId: existing.serviceId,
+    optionId: existing.optionId,
+    serviceName: existing.service?.name ?? null,
+    durationMinutes: existing.option?.durationMinutes ?? null,
+    pax: existing.pax,
+    totalPriceCents: existing.totalPriceCents,
     items: existing.items ?? [],
   });
+  const existingSyncTargets = reservationContractRequirementsToSyncTargets(existingContractRequirements);
 
-  const existingVisibleContracts = pickVisibleContractsByLogicalUnit(existing.contracts ?? [], existingRequiredUnits);
+  const existingVisibleContracts = pickVisibleContractsByTargets(existing.contracts ?? [], existingSyncTargets);
   const primaryContractFallback = existingVisibleContracts[0] ?? null;
   const completeLicenseContractFallback =
     existingVisibleContracts.find(
@@ -653,7 +719,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         Boolean(String(contract.licenseType ?? "").trim()) &&
         Boolean(String(contract.licenseNumber ?? "").trim())
     ) ?? null;
-  const lockedContractsCount = countLockedVisibleContracts(existing.contracts ?? [], existingRequiredUnits);
+  const lockedContractsCount = existingVisibleContracts.filter((contract) => contract.status === "SIGNED").length;
   const signedContractsCount = lockedContractsCount;
   const desiredReadyAt =
     existing.status === ReservationStatus.READY_FOR_PLATFORM
@@ -844,7 +910,7 @@ const protectedNonScheduleFieldsChanged =
   customerLegalFieldsChanged ||
   licenseFieldsChanged;
 const isScheduleOnlyChange = scheduleChanged && !compositionChanged && !protectedNonScheduleFieldsChanged;
-const materialContractChange = scheduleChanged || compositionChanged || protectedNonScheduleFieldsChanged;
+const reservationWideMaterialContractChange = scheduleChanged || protectedNonScheduleFieldsChanged;
 
 if (
   hasSignedContractBlockingChange({
@@ -1070,23 +1136,46 @@ if (hasProItems && priceSensitiveChanged) {
       }
     }
 
-    // Borrar items reales antiguos
-    await tx.reservationItem.deleteMany({ where: { reservationId: id, isExtra: false } });
-
-    // Crear items reales nuevos
-    await tx.reservationItem.createMany({
-      data: lineCreates.map(l => ({
-        reservationId: id,
-        serviceId: l.serviceId,
-        optionId: l.optionId,
-        servicePriceId: l.servicePriceId,
-        quantity: l.quantity,
-        pax: l.pax,
-        unitPriceCents: l.unitPriceCents,
-        totalPriceCents: l.totalPriceCents,
-        isExtra: false,
+    const itemReplacement = await replaceReservationMainItemsTx(tx, {
+      reservationId: id,
+      existingItems: existing.items ?? [],
+      nextItems: lineCreates.map((line) => ({
+        serviceId: line.serviceId,
+        optionId: line.optionId,
+        servicePriceId: line.servicePriceId,
+        quantity: line.quantity,
+        pax: line.pax,
+        unitPriceCents: line.unitPriceCents,
+        totalPriceCents: line.totalPriceCents,
       })),
     });
+    const nextContractItems = lineCreates.map((line, index) => ({
+      id: itemReplacement.nextReservationItemIds[index] ?? null,
+      serviceId: line.serviceId,
+      optionId: line.optionId,
+      quantity: line.quantity,
+      pax: line.pax,
+      totalPriceCents: line.totalPriceCents,
+      isExtra: false,
+      service: { category: line.category },
+      option: { durationMinutes: line.durationMinutes },
+    }));
+    const contractRequirements = buildReservationContractRequirements({
+      quantity: lineCreates.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0),
+      isLicense: requestedReservationState.isLicense,
+      serviceCategory: lineCreates[0]?.category ?? null,
+      items: nextContractItems,
+    });
+    await syncReservationContractsTx(tx, {
+      reservationId: id,
+      requiredUnits: contractRequirements.length,
+      targets: reservationContractRequirementsToSyncTargets(contractRequirements, {
+        changedReservationItemIds: itemReplacement.changedReservationItemIds,
+        materialChange: reservationWideMaterialContractChange,
+      }),
+      blockSignedOnMaterialChange: true,
+    });
+    await deleteRemovedReservationMainItemsTx(tx, itemReplacement.removedReservationItemIds);
 
     if (compositionChanged || (requestedChannelId ?? null) !== (existing.channelId ?? null)) {
       await assertServiceChannelCompatibilityTx(tx, {
@@ -1276,7 +1365,7 @@ if (hasProItems && priceSensitiveChanged) {
       desiredReadyAt
     );
     await syncChannelCommissionLineFromReservationTx(tx, id);
-    const contracts = await ensureContractsTx(tx, id, { materialChange: materialContractChange });
+    const contracts = await ensureContractsTx(tx, id, { materialChange: reservationWideMaterialContractChange });
 
       return { id, ...contracts };
     });
@@ -1401,7 +1490,7 @@ if (hasProItems && priceSensitiveChanged) {
           select: { id: true },
         });
         await syncChannelCommissionLineFromReservationTx(tx, id);
-        return await ensureContractsTx(tx, id, { materialChange: materialContractChange });
+        return await ensureContractsTx(tx, id, { materialChange: reservationWideMaterialContractChange });
       });
     } catch (error: unknown) {
       return toRouteErrorResponse(error);
@@ -1422,7 +1511,7 @@ if (hasProItems && priceSensitiveChanged) {
   // --- Recalcular como create-quick ---
   const svc = await prisma.service.findUnique({
     where: { id: b.serviceId },
-    select: { id: true, category: true },
+    select: { id: true, name: true, category: true },
   });
   if (!svc) return new NextResponse("Servicio no existe", { status: 400 });
 
@@ -1439,6 +1528,8 @@ if (hasProItems && priceSensitiveChanged) {
     isLicense: requestedReservationState.isLicense,
     pricingTier: requestedReservationState.pricingTier,
   });
+  const requestedQuantity = Number(b.quantity ?? existing.quantity ?? 1);
+  const requestedPax = Number(b.pax ?? existing.pax ?? 1);
 
   if (
     (b.serviceId !== undefined && b.serviceId !== existing.serviceId) ||
@@ -1481,12 +1572,12 @@ if (hasProItems && priceSensitiveChanged) {
   }
 
   const unitPriceCents = isVoucherIncludedBaseLine ? 0 : Number(price!.basePriceCents) || 0;
-  const principalCents = unitPriceCents * Number(b.quantity);
+  const principalCents = unitPriceCents * requestedQuantity;
 
   const depositPerUnit = reservationState.isLicense ? 50000 : 10000;
   const depositCents = isPrepaidVoucherReservation
     ? Number(existing.depositCents ?? 0)
-    : depositPerUnit * Number(b.quantity);
+    : depositPerUnit * requestedQuantity;
   let result: { id: string; requiredUnits: number; readyCount: number };
   try {
     result = await prisma.$transaction(async (tx) => {
@@ -1514,8 +1605,8 @@ if (hasProItems && priceSensitiveChanged) {
       serviceId: svc.id,
       optionId: opt.id,
       channelId: requestedChannelId,
-      quantity: b.quantity,
-      pax: b.pax,
+      quantity: requestedQuantity,
+      pax: requestedPax,
       isLicense: reservationState.isLicense,
       jetskiLicenseMode: reservationState.jetskiLicenseMode,
       pricingTier: reservationState.pricingTier,
@@ -1540,23 +1631,55 @@ if (hasProItems && priceSensitiveChanged) {
       select: { id: true },
     });
 
-    await tx.reservationItem.deleteMany({
-      where: { reservationId: id, isExtra: false },
+    const itemReplacement = await replaceReservationMainItemsTx(tx, {
+      reservationId: id,
+      existingItems: existing.items ?? [],
+      nextItems: [
+        {
+          serviceId: svc.id,
+          optionId: opt.id,
+          servicePriceId: isVoucherIncludedBaseLine ? null : price!.id ?? null,
+          quantity: requestedQuantity,
+          pax: requestedPax,
+          unitPriceCents,
+          totalPriceCents: principalCents,
+        },
+      ],
     });
-
-    await tx.reservationItem.create({
-      data: {
-        reservationId: id,
-        serviceId: svc.id,
-        optionId: opt.id,
-        servicePriceId: isVoucherIncludedBaseLine ? null : price!.id ?? null,
-        quantity: b.quantity,
-        pax: b.pax,
-        unitPriceCents,
-        totalPriceCents: principalCents,
-        isExtra: false,
-      },
+    const contractRequirements = buildReservationContractRequirements({
+      quantity: requestedQuantity,
+      isLicense: reservationState.isLicense,
+      serviceCategory: svc.category ?? null,
+      serviceId: svc.id,
+      optionId: opt.id,
+      serviceName: svc.name ?? null,
+      durationMinutes: opt.durationMinutes ?? null,
+      pax: requestedPax,
+      totalPriceCents: principalCents,
+      items: [
+        {
+          id: itemReplacement.nextReservationItemIds[0] ?? null,
+          serviceId: svc.id,
+          optionId: opt.id,
+          quantity: requestedQuantity,
+          pax: requestedPax,
+          totalPriceCents: principalCents,
+          isExtra: false,
+          service: { name: svc.name ?? null, category: svc.category ?? null },
+          option: { durationMinutes: opt.durationMinutes ?? null },
+        },
+      ],
     });
+    await syncReservationContractsTx(tx, {
+      reservationId: id,
+      requiredUnits: contractRequirements.length,
+      targets: reservationContractRequirementsToSyncTargets(contractRequirements, {
+        changedReservationItemIds: itemReplacement.changedReservationItemIds,
+        materialChange: reservationWideMaterialContractChange,
+      }),
+      blockSignedOnMaterialChange: true,
+    });
+    await deleteRemovedReservationMainItemsTx(tx, itemReplacement.removedReservationItemIds);
 
     const mainSum = await tx.reservationItem.aggregate({
       where: { reservationId: id, isExtra: false },
@@ -1670,7 +1793,7 @@ if (hasProItems && priceSensitiveChanged) {
       desiredReadyAt
     );
     await syncChannelCommissionLineFromReservationTx(tx, id);
-    const contracts = await ensureContractsTx(tx, id, { materialChange: materialContractChange });
+    const contracts = await ensureContractsTx(tx, id, { materialChange: reservationWideMaterialContractChange });
 
       return { id, ...contracts };
     });
