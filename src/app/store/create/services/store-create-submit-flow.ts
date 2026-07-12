@@ -214,6 +214,7 @@ export async function submitStoreCreateMigrateFlow(args: SharedArgs & {
 
 export async function submitStoreCreateCreateFlow(args: SharedArgs & {
   isPackMode: boolean;
+  packId?: string | null;
   cartItems: SubmitCartItem[];
   timeStr: string;
   customerPhone: string;
@@ -266,6 +267,9 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
   if (!/^\d{2}:\d{2}$/.test(time)) {
     throwValidationError("Hora requerida (HH:MM)");
   }
+  if (args.isPackMode && !String(args.packId ?? "").trim()) {
+    throwValidationError("Pack no disponible para este servicio");
+  }
 
   const itemsToSend = buildItemsToSend({
     isPackMode: args.isPackMode,
@@ -280,6 +284,7 @@ export async function submitStoreCreateCreateFlow(args: SharedArgs & {
   validateItemsForCreate(itemsToSend);
 
   const body = buildCreateBody({
+    packId: args.isPackMode ? args.packId ?? null : null,
     customerName: args.customerName,
     customerPhone: args.customerPhone,
     customerEmail: args.customerEmail,

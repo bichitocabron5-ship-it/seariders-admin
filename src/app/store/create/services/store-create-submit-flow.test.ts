@@ -1,7 +1,246 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { submitStoreCreateEditFlow, submitStoreCreateMigrateFlow } from "./store-create-submit-flow";
+import { submitStoreCreateCreateFlow, submitStoreCreateEditFlow, submitStoreCreateMigrateFlow } from "./store-create-submit-flow";
+
+function createRouterProbe() {
+  let pushedUrl = "";
+  const router = {
+    push(url: string) {
+      pushedUrl = url;
+    },
+    replace() {},
+    refresh() {},
+    back() {},
+    forward() {},
+    prefetch() {},
+  } as Parameters<typeof submitStoreCreateCreateFlow>[0]["router"];
+
+  return {
+    router,
+    get pushedUrl() {
+      return pushedUrl;
+    },
+  };
+}
+
+function baseCreateArgs(router: Parameters<typeof submitStoreCreateCreateFlow>[0]["router"]) {
+  return {
+    customerName: "Laura",
+    quantity: 1,
+    pax: 2,
+    isVoucherFormalizeFlow: false,
+    serviceId: "service-1",
+    optionId: "option-1",
+    channelId: "channel-1",
+    cartItemsLength: 0,
+    canCreate: true,
+    uiMode: "CREATE" as const,
+    dateStr: "2026-07-03",
+    todayYmd: "2026-07-02",
+    isPackMode: false,
+    cartItems: [],
+    timeStr: "10:00",
+    customerPhone: "600000000",
+    customerEmail: "",
+    customerCountry: "ES",
+    customerAddress: "",
+    customerPostalCode: "",
+    customerBirthDate: "",
+    customerDocType: "",
+    customerDocNumber: "",
+    marketingSource: "",
+    isLicense: false,
+    jetskiLicenseMode: "NONE" as const,
+    pricingTier: "STANDARD" as const,
+    licenseSchool: "",
+    licenseType: "",
+    licenseNumber: "",
+    companions: 0,
+    manualDiscountCents: 0,
+    manualDiscountReason: "",
+    discountResponsibility: "COMPANY" as const,
+    promoterDiscountShareBps: 0,
+    router,
+  };
+}
+
+test("create submit en modo pack envia packId y no componentes calculados por frontend", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = "";
+  let requestedInit: RequestInit | undefined;
+  const routerProbe = createRouterProbe();
+
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    requestedUrl = String(input);
+    requestedInit = init;
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        id: "reservation-pack-1",
+        autoFormalized: false,
+        requiredContractUnits: 0,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    await submitStoreCreateCreateFlow({
+      ...baseCreateArgs(routerProbe.router),
+      isPackMode: true,
+      packId: "pack-jetski-banana",
+      serviceId: "pack-service",
+      optionId: "pack-option",
+      quantity: 1,
+      pax: 2,
+    });
+
+    assert.equal(requestedUrl, "/api/store/reservations/create");
+    const body = JSON.parse(String(requestedInit?.body ?? "{}")) as {
+      packId?: string;
+      totalBeforeDiscountsCents?: number;
+      items?: Array<{ serviceId?: string; optionId?: string; quantity?: number; pax?: number }>;
+    };
+    assert.equal(body.packId, "pack-jetski-banana");
+    assert.equal("totalBeforeDiscountsCents" in body, false);
+    assert.deepEqual(body.items, [
+      {
+        serviceId: "pack-service",
+        optionId: "pack-option",
+        quantity: 1,
+        pax: 2,
+        promoCode: null,
+      },
+    ]);
+    assert.equal(routerProbe.pushedUrl, "/store/create?editFrom=reservation-pack-1#payments");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("create submit con carrito conserva todas las lineas reales y descuentos por linea", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedInit: RequestInit | undefined;
+  const routerProbe = createRouterProbe();
+
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    requestedInit = init;
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        id: "reservation-cart-1",
+        autoFormalized: true,
+        requiredContractUnits: 0,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    await submitStoreCreateCreateFlow({
+      ...baseCreateArgs(routerProbe.router),
+      cartItemsLength: 2,
+      manualDiscountCents: 1_000,
+      manualDiscountReason: "Ajuste comercial",
+      cartItems: [
+        {
+          serviceId: "banana-service",
+          optionId: "banana-15",
+          quantity: 1,
+          pax: 2,
+          promoCode: "SUMMER",
+        },
+        {
+          serviceId: "jetski-service",
+          optionId: "jetski-20",
+          quantity: 2,
+          pax: 2,
+          promoCode: null,
+        },
+      ],
+    });
+
+    const body = JSON.parse(String(requestedInit?.body ?? "{}")) as Record<string, unknown>;
+    assert.equal("packId" in body, false);
+    assert.equal(body.manualDiscountCents, 1_000);
+    assert.equal(body.manualDiscountReason, "Ajuste comercial");
+    assert.deepEqual(body.items, [
+      {
+        serviceId: "banana-service",
+        optionId: "banana-15",
+        quantity: 1,
+        pax: 2,
+        promoCode: "SUMMER",
+      },
+      {
+        serviceId: "jetski-service",
+        optionId: "jetski-20",
+        quantity: 2,
+        pax: 2,
+        promoCode: null,
+      },
+    ]);
+    assert.equal(routerProbe.pushedUrl, "/store/create?editFrom=reservation-cart-1");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("create submit simple sigue enviando una unica linea", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedInit: RequestInit | undefined;
+  const routerProbe = createRouterProbe();
+
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    requestedInit = init;
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        id: "reservation-simple-1",
+        autoFormalized: true,
+        requiredContractUnits: 0,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }) as typeof fetch;
+
+  try {
+    await submitStoreCreateCreateFlow({
+      ...baseCreateArgs(routerProbe.router),
+      serviceId: "banana-service",
+      optionId: "banana-15",
+      quantity: 1,
+      pax: 2,
+    });
+
+    const body = JSON.parse(String(requestedInit?.body ?? "{}")) as Record<string, unknown>;
+    assert.equal("packId" in body, false);
+    assert.deepEqual(body.items, [
+      {
+        serviceId: "banana-service",
+        optionId: "banana-15",
+        quantity: 1,
+        pax: 2,
+        promoCode: null,
+      },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test("formalize submit devuelve progreso del endpoint sin navegar internamente", async () => {
   const originalFetch = globalThis.fetch;

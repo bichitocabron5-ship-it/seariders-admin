@@ -60,9 +60,84 @@ type CreateReservationInput = {
   // modo de pricing
   pricing:
   | { mode: "QUICK_SINGLE_ITEM" }
-  | { mode: "PACK_FIXED_TOTAL"; totalBeforeDiscountsCents: number }
+  | { mode: "PACK_FIXED_TOTAL"; totalBeforeDiscountsCents?: number | null }
   | { mode: "CART_MULTI_ITEM" }; // ✅ NUEVO
 };
+
+type PackExpansionPack = {
+  id: string;
+  code: string;
+  isActive: boolean;
+  serviceId: string | null;
+  packOptionId: string | null;
+  pricePerPersonCents: number;
+  minPax: number;
+  maxPax: number | null;
+  items: Array<{
+    serviceId: string;
+    optionId: string | null;
+    quantity: number | null;
+    service: { id: string; name?: string | null; isActive: boolean } | null;
+    option: { id: string; serviceId: string; isActive: boolean; durationMinutes?: number | null } | null;
+  }>;
+};
+
+function toPositiveInt(value: unknown, fallback = 1) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(1, Math.trunc(n));
+}
+
+export function expandPackForReservationCreate(args: {
+  pack: PackExpansionPack | null;
+  packQty?: number | null;
+  pax: number;
+}) {
+  const { pack } = args;
+  const packQty = toPositiveInt(args.packQty, 1);
+  const pax = toPositiveInt(args.pax, 1);
+
+  if (!pack || !pack.isActive) throw new Error("Pack no existe o está inactivo");
+  if (!pack.serviceId || !pack.packOptionId) throw new Error("Pack sin serviceId/packOptionId (Admin Packs)");
+  if (pack.items.length === 0) throw new Error("Pack sin componentes");
+  if (pax < toPositiveInt(pack.minPax, 1)) throw new Error("PAX inferior al mínimo del pack");
+  if (pack.maxPax != null && pax > toPositiveInt(pack.maxPax, 1)) throw new Error("PAX superior al máximo del pack");
+
+  const unitPackPriceCents = Math.max(0, Number(pack.pricePerPersonCents ?? 0));
+  if (unitPackPriceCents <= 0) throw new Error("Pack sin precio vigente");
+
+  const items = pack.items.map((pi, idx): CreateItemInput => {
+    if (!pi.serviceId || !pi.service || !pi.service.isActive) {
+      throw new Error(`Pack componente inactivo o inválido: línea ${idx + 1}`);
+    }
+    if (!pi.optionId || !pi.option || !pi.option.isActive) {
+      throw new Error(`Pack componente sin opción activa: línea ${idx + 1}`);
+    }
+    if (pi.option.serviceId !== pi.serviceId) {
+      throw new Error(`Pack componente con opción de otro servicio: línea ${idx + 1}`);
+    }
+
+    return {
+      serviceIdOrCode: pi.serviceId,
+      optionIdOrCode: pi.optionId,
+      quantity: toPositiveInt(pi.quantity, 1) * packQty,
+      pax,
+      promoCode: null,
+    };
+  });
+
+  return {
+    packMeta: {
+      id: pack.id,
+      code: pack.code,
+      serviceId: pack.serviceId,
+      packOptionId: pack.packOptionId,
+    },
+    packQty,
+    totalBeforeDiscountsCents: unitPackPriceCents * pax * packQty,
+    items,
+  };
+}
 
 export async function createReservationWithItems(params: {
   tx: Prisma.TransactionClient;
@@ -129,10 +204,11 @@ export async function createReservationWithItems(params: {
     channel: ch,
   });
 
-  const packQty = Math.max(1, Number(input.packQty ?? 1));
+  const packQty = toPositiveInt(input.packQty, 1);
 
   // Si viene packId, el servidor decide la composición real
   let packMeta: { id: string; code: string; serviceId: string; packOptionId: string } | null = null;
+  let packFixedTotalCents: number | null = null;
 
   if (input.packId) {
     const pack = await tx.pack.findUnique({
@@ -143,22 +219,36 @@ export async function createReservationWithItems(params: {
         isActive: true,
         serviceId: true,
         packOptionId: true,
-        items: { select: { serviceId: true, optionId: true, quantity: true } },
+        pricePerPersonCents: true,
+        minPax: true,
+        maxPax: true,
+        items: {
+          orderBy: { id: "asc" },
+          select: {
+            serviceId: true,
+            optionId: true,
+            quantity: true,
+            service: { select: { id: true, name: true, isActive: true } },
+            option: { select: { id: true, serviceId: true, isActive: true, durationMinutes: true } },
+          },
+        },
       },
     });
 
     if (!pack || !pack.isActive) throw new Error("Pack no existe o está inactivo");
     if (!pack.serviceId || !pack.packOptionId) throw new Error("Pack sin serviceId/packOptionId (Admin Packs)");
 
-    packMeta = { id: pack.id, code: pack.code, serviceId: pack.serviceId, packOptionId: pack.packOptionId };
+    const expandedPack = expandPackForReservationCreate({
+      pack,
+      packQty,
+      pax: input.pax,
+    });
+
+    packMeta = expandedPack.packMeta;
+    packFixedTotalCents = expandedPack.totalBeforeDiscountsCents;
 
     // ✅ sustituimos input.items por los items reales del pack (server-truth)
-    input.items = pack.items.map((pi) => ({
-      serviceIdOrCode: pi.serviceId,
-      optionIdOrCode: pi.optionId ?? "", // OJO: si permites optionId null, aquí deberías resolver default option
-      quantity: Math.max(1, Number(pi.quantity ?? 1)) * packQty,
-      pax: Math.max(1, Number(input.pax ?? 1)),
-    }));
+    input.items = expandedPack.items;
   }
   
   // Resolver services/options de todos los items
@@ -330,7 +420,11 @@ export async function createReservationWithItems(params: {
       }
 
       if (input.pricing.mode === "PACK_FIXED_TOTAL") {
-        totalBeforeDiscounts = Math.max(0, Number(input.pricing.totalBeforeDiscountsCents ?? 0));
+        totalBeforeDiscounts = Math.max(
+          0,
+          Number(packFixedTotalCents ?? input.pricing.totalBeforeDiscountsCents ?? 0)
+        );
+        if (totalBeforeDiscounts <= 0) throw new Error("totalBeforeDiscountsCents requerido para pack");
         basePriceCents = totalBeforeDiscounts;
       }
     }

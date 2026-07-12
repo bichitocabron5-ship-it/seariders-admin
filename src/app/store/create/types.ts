@@ -315,6 +315,10 @@ export type PackPreviewItem = {
 };
 
 export type PackPreview = {
+  id?: string | null;
+  code?: string | null;
+  name?: string | null;
+  pricePerPersonCents?: number | null;
   items?: PackPreviewItem[];
 };
 
