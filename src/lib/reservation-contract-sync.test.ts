@@ -11,6 +11,7 @@ import {
 type Row = {
   id: string;
   reservationId: string;
+  reservationItemId: string | null;
   unitIndex: number;
   logicalUnitIndex: number | null;
   status: "DRAFT" | "READY" | "SIGNED" | "VOID";
@@ -38,6 +39,7 @@ function row(
   return {
     id,
     reservationId: "reservation-1",
+    reservationItemId: null,
     unitIndex: logicalUnitIndex,
     logicalUnitIndex,
     status,
@@ -89,6 +91,7 @@ function makeTx(initialRows: Row[]) {
         reservationId: string;
         unitIndex: number;
         logicalUnitIndex: number;
+        reservationItemId?: string | null;
         templateCode?: string | null;
       }>;
     }) => {
@@ -96,6 +99,7 @@ function makeTx(initialRows: Row[]) {
         rows.push(
           row(`created-${item.logicalUnitIndex}`, "DRAFT", item.logicalUnitIndex, {
             reservationId: item.reservationId,
+            reservationItemId: item.reservationItemId ?? null,
             unitIndex: item.unitIndex,
             templateCode: item.templateCode ?? null,
             templateVersion: null,
@@ -329,4 +333,143 @@ test("sync a contrato sin licencia limpia licencia sin borrar prepared resource 
   assert.equal(contract?.licenseNumber, null);
   assert.equal(contract?.preparedJetskiId, "jetski-a");
   assert.equal(contract?.renderedHtml, null);
+});
+
+test("sync por targets asocia dos lineas Jetski distintas a su ReservationItem", async () => {
+  const { tx, rows } = makeTx([]);
+
+  const result = await syncReservationContractsTx(tx, {
+    reservationId: "reservation-1",
+    requiredUnits: 2,
+    targets: [
+      {
+        reservationItemId: "item-jetski-20",
+        logicalUnitIndex: 1,
+        templateCode: "JETSKI_NO_LICENSE",
+        requiresLicense: false,
+        expectedResourceKind: null,
+        expectedAssetType: null,
+      },
+      {
+        reservationItemId: "item-jetski-40",
+        logicalUnitIndex: 2,
+        templateCode: "JETSKI_NO_LICENSE",
+        requiresLicense: false,
+        expectedResourceKind: null,
+        expectedAssetType: null,
+      },
+    ],
+  });
+
+  assert.equal(result.createdContracts, 2);
+  assert.deepEqual(
+    rows.map((item) => [item.reservationItemId, item.logicalUnitIndex, item.templateCode]),
+    [
+      ["item-jetski-20", 1, "JETSKI_NO_LICENSE"],
+      ["item-jetski-40", 2, "JETSKI_NO_LICENSE"],
+    ]
+  );
+});
+
+test("sync por targets no invalida Jetski si Banana no requiere contrato", async () => {
+  const { tx, rows } = makeTx([
+    row("jetski-contract", "READY", 1, {
+      reservationItemId: "item-jetski",
+      templateCode: "JETSKI_NO_LICENSE",
+      renderedHtml: "<html>jetski</html>",
+    }),
+  ]);
+
+  const result = await syncReservationContractsTx(tx, {
+    reservationId: "reservation-1",
+    requiredUnits: 1,
+    targets: [
+      {
+        reservationItemId: "item-jetski",
+        logicalUnitIndex: 1,
+        templateCode: "JETSKI_NO_LICENSE",
+        requiresLicense: false,
+        expectedResourceKind: null,
+        expectedAssetType: null,
+        materialChange: false,
+      },
+    ],
+  });
+
+  assert.equal(result.voidedContracts, 0);
+  assert.equal(result.resetContracts, 0);
+  const contract = rows.find((item) => item.id === "jetski-contract");
+  assert.equal(contract?.status, "READY");
+  assert.equal(contract?.renderedHtml, "<html>jetski</html>");
+});
+
+test("sync por targets al retirar una linea no firmada invalida solo sus contratos", async () => {
+  const { tx, rows } = makeTx([
+    row("jetski-20-contract", "READY", 1, {
+      reservationItemId: "item-jetski-20",
+      templateCode: "JETSKI_NO_LICENSE",
+    }),
+    row("jetski-40-contract", "READY", 2, {
+      reservationItemId: "item-jetski-40",
+      templateCode: "JETSKI_NO_LICENSE",
+    }),
+  ]);
+
+  const result = await syncReservationContractsTx(tx, {
+    reservationId: "reservation-1",
+    requiredUnits: 1,
+    targets: [
+      {
+        reservationItemId: "item-jetski-20",
+        logicalUnitIndex: 1,
+        templateCode: "JETSKI_NO_LICENSE",
+        requiresLicense: false,
+        expectedResourceKind: null,
+        expectedAssetType: null,
+      },
+    ],
+  });
+
+  assert.equal(result.voidedContracts, 1);
+  assert.equal(rows.find((item) => item.id === "jetski-20-contract")?.status, "READY");
+  assert.equal(rows.find((item) => item.id === "jetski-40-contract")?.status, "VOID");
+});
+
+test("sync por targets bloquea al retirar una linea con contrato firmado sin tocar otra linea", async () => {
+  const { tx, rows } = makeTx([
+    row("jetski-20-contract", "READY", 1, {
+      reservationItemId: "item-jetski-20",
+      templateCode: "JETSKI_NO_LICENSE",
+    }),
+    row("jetski-40-contract", "SIGNED", 2, {
+      reservationItemId: "item-jetski-40",
+      templateCode: "JETSKI_NO_LICENSE",
+    }),
+  ]);
+
+  await assert.rejects(
+    () =>
+      syncReservationContractsTx(tx, {
+        reservationId: "reservation-1",
+        requiredUnits: 1,
+        targets: [
+          {
+            reservationItemId: "item-jetski-20",
+            logicalUnitIndex: 1,
+            templateCode: "JETSKI_NO_LICENSE",
+            requiresLicense: false,
+            expectedResourceKind: null,
+            expectedAssetType: null,
+          },
+        ],
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ReservationContractSyncBlockedError);
+      assert.equal(error.code, "SIGNED_CONTRACT_OUT_OF_RANGE");
+      return true;
+    }
+  );
+
+  assert.equal(rows.find((item) => item.id === "jetski-20-contract")?.status, "READY");
+  assert.equal(rows.find((item) => item.id === "jetski-40-contract")?.status, "SIGNED");
 });

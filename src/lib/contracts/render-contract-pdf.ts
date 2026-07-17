@@ -10,10 +10,10 @@ import {
 import {
   buildContractHtml,
   loadLogoSrc,
-  templateCodeForContract,
 } from "@/lib/contracts/render-contract";
 import { resolveContractRenderLanguage } from "@/lib/contracts/language";
 import type { PublicLanguage } from "@/lib/public-links/i18n";
+import { resolveContractRenderContext } from "@/lib/contracts/render-context";
 
 async function launchBrowser() {
   return puppeteer.launch({
@@ -112,6 +112,7 @@ export async function regenerateSignedContractPdf(
     where: { id: contractId },
     select: {
       id: true,
+      templateCode: true,
       reservationId: true,
       unitIndex: true,
       logicalUnitIndex: true,
@@ -178,6 +179,27 @@ export async function regenerateSignedContractPdf(
           },
         },
       },
+      reservationItem: {
+        select: {
+          id: true,
+          serviceId: true,
+          optionId: true,
+          quantity: true,
+          pax: true,
+          totalPriceCents: true,
+          option: {
+            select: {
+              durationMinutes: true,
+            },
+          },
+          service: {
+            select: {
+              name: true,
+              category: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -188,14 +210,8 @@ export async function regenerateSignedContractPdf(
     signedLanguage: contract.signedLanguage,
   });
 
-  const hasLicense =
-    Boolean(contract.licenseNumber?.trim()) ||
-    Boolean(contract.reservation.isLicense);
-
-  const templateCode = templateCodeForContract({
-    category: contract.reservation.service?.category ?? null,
-    hasLicense,
-  });
+  const renderContext = resolveContractRenderContext(contract);
+  const templateCode = renderContext.templateCode;
 
   const templateVersion = "v1";
   const signatureImageSrc = await resolveSignatureImageSrc({
@@ -208,21 +224,7 @@ export async function regenerateSignedContractPdf(
     templateVersion,
     language: renderLanguage,
     logoSrc,
-    reservation: {
-      id: contract.reservation.id,
-      activityDate: contract.reservation.activityDate,
-      scheduledTime: contract.reservation.scheduledTime,
-      customerName: contract.reservation.customerName,
-      customerEmail: contract.reservation.customerEmail,
-      customerPhone: contract.reservation.customerPhone,
-      customerCountry: contract.reservation.customerCountry,
-      serviceName: contract.reservation.service?.name ?? null,
-      serviceCategory: contract.reservation.service?.category ?? null,
-      quantity: contract.reservation.quantity,
-      pax: contract.reservation.pax,
-      durationMinutes: contract.reservation.option?.durationMinutes ?? null,
-      totalPriceCents: contract.reservation.totalPriceCents,
-    },
+    reservation: renderContext.reservation,
     contract: {
       id: contract.id,
       unitIndex: contract.unitIndex,

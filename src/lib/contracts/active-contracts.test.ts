@@ -5,14 +5,22 @@ import {
   canEditReservationLegalContent,
   countLockedVisibleContracts,
   countReadyVisibleContracts,
+  countReadyVisibleContractsByTargets,
   listMissingLogicalUnits,
   pickVisibleContractsByLogicalUnit,
+  pickVisibleContractsByTargets,
 } from "./active-contracts";
 
-function contract(status: "DRAFT" | "READY" | "SIGNED" | "VOID", logicalUnitIndex = 1) {
+function contract(
+  status: "DRAFT" | "READY" | "SIGNED" | "VOID",
+  logicalUnitIndex = 1,
+  patch: { id?: string; reservationItemId?: string | null } = {}
+) {
   return {
+    id: patch.id ?? `contract-${logicalUnitIndex}-${status}`,
     unitIndex: logicalUnitIndex,
     logicalUnitIndex,
+    reservationItemId: patch.reservationItemId ?? null,
     status,
     supersededAt: null,
     createdAt: new Date(`2026-06-30T10:0${logicalUnitIndex}:00.000Z`),
@@ -65,4 +73,40 @@ test("requiredUnits 0 no expone contratos activos aunque existan filas antiguas"
   assert.deepEqual(listMissingLogicalUnits(contracts, 0), []);
   assert.equal(countReadyVisibleContracts(contracts, 0), 0);
   assert.equal(countLockedVisibleContracts(contracts, 0), 0);
+});
+
+test("visibilidad por targets no cuenta contrato de otra linea", () => {
+  const visible = pickVisibleContractsByTargets(
+    [
+      contract("READY", 1, { id: "jetski-20-contract", reservationItemId: "jetski-20" }),
+      contract("READY", 2, { id: "jetski-20-duplicate", reservationItemId: "jetski-20" }),
+    ],
+    [
+      { logicalUnitIndex: 1, reservationItemId: "jetski-20" },
+      { logicalUnitIndex: 2, reservationItemId: "jetski-40" },
+    ]
+  );
+
+  assert.deepEqual(
+    visible.map((item) => item.id),
+    ["jetski-20-contract"]
+  );
+});
+
+test("ready por targets exige todas las lineas requeridas", () => {
+  assert.equal(
+    countReadyVisibleContractsByTargets(
+      [
+        contract("READY", 1, {
+          id: "jetski-20-contract",
+          reservationItemId: "jetski-20",
+        }),
+      ],
+      [
+        { logicalUnitIndex: 1, reservationItemId: "jetski-20" },
+        { logicalUnitIndex: 2, reservationItemId: "jetski-40" },
+      ]
+    ),
+    1
+  );
 });

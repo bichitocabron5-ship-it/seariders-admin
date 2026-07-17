@@ -1,7 +1,7 @@
 ﻿// src/app/store/gifts/page.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { StoreHero, storeStyles } from "@/components/store-ui";
 
@@ -42,6 +42,7 @@ const labelStyle: React.CSSProperties = { display: "grid", gap: 6, fontSize: 13,
 const inputStyle: React.CSSProperties = storeStyles.input;
 const primaryButtonStyle: React.CSSProperties = storeStyles.primaryButton;
 const secondaryButtonStyle: React.CSSProperties = storeStyles.secondaryButton;
+const GIFTS_POLL_MS = 10_000;
 
 export default function StoreGiftsPage() {
   const [products, setProducts] = useState<GiftProduct[]>([]);
@@ -59,11 +60,12 @@ export default function StoreGiftsPage() {
 
   const [code, setCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
+  const pollIntervalRef = useRef<number | null>(null);
   const router = useRouter();
 
   const selectedProduct = useMemo(() => products.find((p) => p.id === productId) ?? null, [products, productId]);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setErr(null);
     try {
@@ -87,7 +89,7 @@ export default function StoreGiftsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   async function sell() {
     if (!productId) return;
@@ -147,10 +149,44 @@ export default function StoreGiftsPage() {
   }
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 10000);
-    return () => clearInterval(t);
-  }, []);
+    let disposed = false;
+
+    const stopPolling = () => {
+      if (pollIntervalRef.current == null) return;
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    };
+
+    const runIfVisible = () => {
+      if (disposed || document.visibilityState === "hidden") return;
+      void load();
+    };
+
+    const startPolling = () => {
+      if (pollIntervalRef.current != null || document.visibilityState === "hidden") return;
+      pollIntervalRef.current = window.setInterval(runIfVisible, GIFTS_POLL_MS);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        stopPolling();
+        return;
+      }
+
+      runIfVisible();
+      startPolling();
+    };
+
+    runIfVisible();
+    startPolling();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      disposed = true;
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [load]);
 
   return (
     <div style={shellStyle}>

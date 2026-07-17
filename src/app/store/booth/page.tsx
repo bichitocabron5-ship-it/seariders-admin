@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { StoreHero, StoreMetricCard, StoreMetricGrid, storeStyles } from "@/components/store-ui";
 import BoothReceptionValidatorSection from "@/app/store/booth/_components/BoothReceptionValidatorSection";
@@ -55,6 +55,8 @@ function todayMadridYMD() {
   return fmt.format(new Date());
 }
 
+const STORE_BOOTH_POLL_MS = 30_000;
+
 export default function StoreBoothPage() {
   const [rows, setRows] = useState<BoothRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,9 +64,10 @@ export default function StoreBoothPage() {
   const [code, setCode] = useState("");
   const [marking, setMarking] = useState(false);
   const [lastMarkedId, setLastMarkedId] = useState<string | null>(null);
+  const pollIntervalRef = useRef<number | null>(null);
   const router = useRouter();
 
-  async function load() {
+  const load = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
@@ -77,7 +80,7 @@ export default function StoreBoothPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
 function hhmm(d?: string | null) {
   if (!d) return "--:--";
@@ -131,10 +134,44 @@ function boatLabel(boat?: string | null) {
   }
 
   useEffect(() => {
-    void load();
-    const t = setInterval(() => void load(), 8000);
-    return () => clearInterval(t);
-  }, []);
+    let disposed = false;
+
+    const stopPolling = () => {
+      if (pollIntervalRef.current == null) return;
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    };
+
+    const runIfVisible = () => {
+      if (disposed || document.visibilityState === "hidden") return;
+      void load();
+    };
+
+    const startPolling = () => {
+      if (pollIntervalRef.current != null || document.visibilityState === "hidden") return;
+      pollIntervalRef.current = window.setInterval(runIfVisible, STORE_BOOTH_POLL_MS);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        stopPolling();
+        return;
+      }
+
+      runIfVisible();
+      startPolling();
+    };
+
+    runIfVisible();
+    startPolling();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      disposed = true;
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [load]);
 
   const enCamino = useMemo(
     () => rows.filter((r) => r.taxiboatDepartedAt && !r.arrivedStoreAt),

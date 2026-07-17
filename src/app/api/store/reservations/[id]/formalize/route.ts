@@ -6,14 +6,8 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { JetskiLicenseMode, PricingTier, ReservationStatus, type Prisma } from "@prisma/client";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { validateReusableAssetsAvailability } from "@/lib/store-rental-assets";
 import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
-import {
-  countReadyVisibleContracts,
-  listMissingLogicalUnits,
-  pickVisibleContractsByLogicalUnit,
-} from "@/lib/contracts/active-contracts";
 import {
   resolveReservationLicenseDetails,
   type ReservationLicenseContractLike,
@@ -32,6 +26,15 @@ import {
   sumMainReservationQuantity,
 } from "@/lib/manual-discount-proration";
 import { syncReservationContractsTx } from "@/lib/reservation-contract-sync";
+import {
+  buildReservationContractRequirements,
+  reservationContractRequirementsToSyncTargets,
+} from "@/lib/reservation-contract-requirements";
+import {
+  deleteRemovedReservationMainItemsTx,
+  replaceReservationMainItemsTx,
+} from "@/lib/reservations/replaceReservationMainItems";
+import { buildReservationContractProgressForTargets } from "@/lib/contracts/reservation-contract-progress";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
@@ -161,6 +164,12 @@ function sameDateOrFallback(
   );
 }
 
+function sameInstant(a: Date | null | undefined, b: Date | null | undefined) {
+  const at = a?.getTime() ?? null;
+  const bt = b?.getTime() ?? null;
+  return at === bt;
+}
+
 function fallbackOptionalString(...values: Array<string | null | undefined>) {
   for (const value of values) {
     const normalized = normalizeOptionalString(value);
@@ -251,6 +260,7 @@ function toRouteErrorResponse(error: unknown) {
 
 type ReservationContractSnapshot = {
   id: string;
+  reservationItemId?: string | null;
   unitIndex: number | null;
   logicalUnitIndex: number | null;
   status: string | null;
@@ -273,27 +283,45 @@ type ReservationContractSnapshot = {
 function computeContractProgress(args: {
   quantity: number | null | undefined;
   isLicense: boolean;
+  serviceId?: string | null;
+  optionId?: string | null;
+  serviceName?: string | null;
+  durationMinutes?: number | null;
+  pax?: number | null;
+  totalPriceCents?: number | null;
   serviceCategory?: string | null;
   items: Array<{
+    id?: string | null;
+    serviceId?: string | null;
+    optionId?: string | null;
     quantity: number | null | undefined;
+    pax?: number | null;
+    totalPriceCents?: number | null;
     isExtra?: boolean | null;
-    service?: { category?: string | null } | null;
+    service?: { name?: string | null; category?: string | null } | null;
+    option?: { durationMinutes?: number | null } | null;
   }>;
   contracts: ReservationContractSnapshot[];
 }) {
-  const requiredUnits = computeRequiredContractUnits({
+  const contractRequirements = buildReservationContractRequirements({
     quantity: args.quantity ?? 0,
     isLicense: args.isLicense,
     serviceCategory: args.serviceCategory ?? null,
-    items: args.items.map((item) => ({
-      quantity: item.quantity ?? null,
-      isExtra: item.isExtra ?? false,
-      service: item.service ? { category: item.service.category ?? null } : null,
-    })),
+    serviceId: args.serviceId ?? null,
+    optionId: args.optionId ?? null,
+    serviceName: args.serviceName ?? null,
+    durationMinutes: args.durationMinutes ?? null,
+    pax: args.pax ?? null,
+    totalPriceCents: args.totalPriceCents ?? null,
+    items: args.items,
   });
-  const readyCount = countReadyVisibleContracts(args.contracts, requiredUnits);
-  const visibleContracts = pickVisibleContractsByLogicalUnit(args.contracts, requiredUnits);
-  return { requiredUnits, readyCount, visibleContracts };
+  const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+  const progress = buildReservationContractProgressForTargets(args.contracts, syncTargets);
+  return {
+    requiredUnits: progress.requiredUnits,
+    readyCount: progress.readyCount,
+    visibleContracts: progress.contracts,
+  };
 }
 
 function buildCommercialShape(
@@ -360,27 +388,55 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
       id: true,
       quantity: true,
       isLicense: true,
-      service: { select: { category: true } },
+      serviceId: true,
+      optionId: true,
+      pax: true,
+      totalPriceCents: true,
+      service: { select: { name: true, category: true } },
+      option: { select: { durationMinutes: true } },
       items: {
+        orderBy: { createdAt: "asc" },
         select: {
+          id: true,
+          serviceId: true,
+          optionId: true,
           quantity: true,
+          pax: true,
+          totalPriceCents: true,
           isExtra: true,
-          service: { select: { category: true } },
+          service: { select: { name: true, category: true } },
+          option: { select: { durationMinutes: true } },
         },
       },
       contracts: {
-        select: { id: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+        select: {
+          id: true,
+          reservationItemId: true,
+          unitIndex: true,
+          logicalUnitIndex: true,
+          status: true,
+          supersededAt: true,
+          createdAt: true,
+        },
       },
     },
   });
   if (!res) throw new Error("Reserva no existe");
 
-  const requiredUnits = computeRequiredContractUnits({
+  const contractRequirements = buildReservationContractRequirements({
     quantity: res.quantity ?? 0,
     isLicense: Boolean(res.isLicense),
     serviceCategory: res.service?.category ?? null,
+    serviceId: res.serviceId,
+    optionId: res.optionId,
+    serviceName: res.service?.name ?? null,
+    durationMinutes: res.option?.durationMinutes ?? null,
+    pax: res.pax,
+    totalPriceCents: res.totalPriceCents,
     items: res.items ?? [],
   });
+  const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+  const requiredUnits = contractRequirements.length;
 
   if (requiredUnits <= 0) return { requiredUnits: 0, readyCount: 0 };
 
@@ -400,32 +456,27 @@ async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: st
     }
   }
 
-  const existingRows = await tx.reservationContract.findMany({
-    where: { reservationId },
-    select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
-  });
-  const missingSlots = listMissingLogicalUnits(existingRows, requiredUnits);
-  const maxUnitIndex = Math.max(0, ...existingRows.map((c) => Number(c.unitIndex ?? 0)));
-  const toCreate = missingSlots.map((slot, idx) => ({
+  await syncReservationContractsTx(tx, {
     reservationId,
-    unitIndex: maxUnitIndex + idx + 1,
-    logicalUnitIndex: slot,
-  }));
-
-  if (toCreate.length) {
-    await tx.reservationContract.createMany({
-      data: toCreate,
-      skipDuplicates: true,
-    });
-  }
+    requiredUnits,
+    targets: syncTargets,
+  });
 
   const all = await tx.reservationContract.findMany({
     where: { reservationId },
     orderBy: { unitIndex: "asc" },
-    select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+    select: {
+      id: true,
+      reservationItemId: true,
+      unitIndex: true,
+      logicalUnitIndex: true,
+      status: true,
+      supersededAt: true,
+      createdAt: true,
+    },
   });
 
-  const readyCount = countReadyVisibleContracts(all, requiredUnits);
+  const readyCount = buildReservationContractProgressForTargets(all, syncTargets).readyCount;
 
   return { requiredUnits, readyCount };
 }
@@ -470,7 +521,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           marketing: true,
           serviceId: true,
           optionId: true,
-          service: { select: { category: true } },
+          service: { select: { name: true, category: true } },
+          option: { select: { durationMinutes: true } },
           channelId: true,
           quantity: true,
           pax: true,
@@ -502,7 +554,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           activityDate: true,
           scheduledTime: true,
           items: {
+            orderBy: { createdAt: "asc" },
             select: {
+              id: true,
               serviceId: true,
               optionId: true,
               servicePriceId: true,
@@ -524,6 +578,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             orderBy: { unitIndex: "asc" },
             select: {
               id: true,
+              reservationItemId: true,
               unitIndex: true,
               logicalUnitIndex: true,
               status: true,
@@ -565,6 +620,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         quantity: current.quantity,
         isLicense: Boolean(current.isLicense),
         serviceCategory: current.service?.category ?? null,
+        serviceId: current.serviceId,
+        optionId: current.optionId,
+        serviceName: current.service?.name ?? null,
+        durationMinutes: current.option?.durationMinutes ?? null,
+        pax: current.pax,
+        totalPriceCents: current.totalPriceCents,
         items: current.items ?? [],
         contracts: current.contracts,
       });
@@ -795,6 +856,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         companionsChanged ||
         customerLegalFieldsChanged ||
         licenseFieldsChanged;
+      const scheduleChanged =
+        !sameInstant(current.activityDate, activityDate) ||
+        !sameInstant(current.scheduledTime, scheduledTime);
+      const reservationWideMaterialContractChange =
+        scheduleChanged || protectedNonScheduleFieldsChanged;
 
       if (
         hasSignedContractBlockingChange({
@@ -1110,17 +1176,39 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         isLicense: requestedCommercialState.isLicense,
         pricingTier: requestedCommercialState.pricingTier,
       });
-      const requiredUnits = computeRequiredContractUnits({
+      const currentContractRequirements = buildReservationContractRequirements({
         quantity: totalMainQuantity,
         isLicense: reservationState.isLicense,
         serviceCategory: mainLine.category,
+        serviceId: current.serviceId,
+        optionId: current.optionId,
+        serviceName: current.service?.name ?? null,
+        durationMinutes: current.option?.durationMinutes ?? null,
+        pax: current.pax,
+        totalPriceCents: current.totalPriceCents,
         items: lineCreates.map((line) => ({
+          id:
+            current.items.find(
+              (item) =>
+                !item.isExtra &&
+                item.serviceId === line.serviceId &&
+                item.optionId === line.optionId
+            )?.id ?? null,
+          serviceId: line.serviceId,
+          optionId: line.optionId,
           quantity: line.quantity,
           isExtra: false,
-          service: { category: line.category },
+          pax: line.pax,
+          totalPriceCents: line.totalPriceCents,
+          service: { name: line.serviceName, category: line.category },
+          option: { durationMinutes: line.durationMinutes },
         })),
       });
-      const visibleContracts = pickVisibleContractsByLogicalUnit(current.contracts, requiredUnits);
+      const currentSyncTargets = reservationContractRequirementsToSyncTargets(currentContractRequirements);
+      const visibleContracts = buildReservationContractProgressForTargets(
+        current.contracts,
+        currentSyncTargets
+      ).contracts;
       const resolvedLicense = resolveReservationLicenseDetails({
         isLicense: reservationState.isLicense,
         body: {
@@ -1166,17 +1254,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             id: true,
             quantity: true,
             isLicense: true,
-            service: { select: { category: true } },
+            serviceId: true,
+            optionId: true,
+            pax: true,
+            totalPriceCents: true,
+            service: { select: { name: true, category: true } },
+            option: { select: { durationMinutes: true } },
             items: {
+              orderBy: { createdAt: "asc" },
               select: {
+                id: true,
+                serviceId: true,
+                optionId: true,
                 quantity: true,
+                pax: true,
+                totalPriceCents: true,
                 isExtra: true,
-                service: { select: { category: true } },
+                service: { select: { name: true, category: true } },
+                option: { select: { durationMinutes: true } },
               },
             },
             contracts: {
               select: {
                 id: true,
+                reservationItemId: true,
                 unitIndex: true,
                 logicalUnitIndex: true,
                 status: true,
@@ -1204,6 +1305,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: latest.quantity,
           isLicense: Boolean(latest.isLicense),
           serviceCategory: latest.service?.category ?? null,
+          serviceId: latest.serviceId,
+          optionId: latest.optionId,
+          serviceName: latest.service?.name ?? null,
+          durationMinutes: latest.option?.durationMinutes ?? null,
+          pax: latest.pax,
+          totalPriceCents: latest.totalPriceCents,
           items: latest.items ?? [],
           contracts: latest.contracts,
         });
@@ -1237,16 +1344,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
               quantity: line.quantity,
             })),
           });
-      const nextRequiredContractUnits = computeRequiredContractUnits({
-        quantity: totalMainQuantity,
-        isLicense: reservationState.isLicense,
-        serviceCategory: mainLine.category,
-        items: lineCreates.map((line) => ({
-          quantity: line.quantity,
-          isExtra: false,
-          service: { category: line.category },
-        })),
-      });
       const commercialSnapshot = preserveCommercialSnapshot
         ? {
             appliedCommissionPct: current.appliedCommissionPct,
@@ -1322,31 +1419,64 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         select: { id: true },
       });
 
-      if (!preserveCommercialSnapshot) {
-        await tx.reservationItem.deleteMany({
-          where: { reservationId: id, isExtra: false },
-        });
-
-        await tx.reservationItem.createMany({
-          data: lineCreates.map((line) => ({
+      const itemReplacement = !preserveCommercialSnapshot
+        ? await replaceReservationMainItemsTx(tx, {
             reservationId: id,
-            serviceId: line.serviceId,
-            optionId: line.optionId,
-            servicePriceId: line.servicePriceId,
-            quantity: line.quantity,
-            pax: line.pax,
-            unitPriceCents: line.unitPriceCents,
-            totalPriceCents: line.totalPriceCents,
-            isExtra: false,
-          })),
-        });
-      }
+            existingItems: current.items ?? [],
+            nextItems: lineCreates.map((line) => ({
+              serviceId: line.serviceId,
+              optionId: line.optionId,
+              servicePriceId: line.servicePriceId,
+              quantity: line.quantity,
+              pax: line.pax,
+              unitPriceCents: line.unitPriceCents,
+              totalPriceCents: line.totalPriceCents,
+            })),
+          })
+        : {
+            nextReservationItemIds: (current.items ?? [])
+              .filter((item) => !item.isExtra)
+              .map((item) => item.id),
+            changedReservationItemIds: new Set<string>(),
+            removedReservationItemIds: [],
+          };
 
+      const nextContractItems = lineCreates.map((line, index) => ({
+        id: itemReplacement.nextReservationItemIds[index] ?? null,
+        serviceId: line.serviceId,
+        optionId: line.optionId,
+        quantity: line.quantity,
+        pax: line.pax,
+        totalPriceCents: line.totalPriceCents,
+        isExtra: false,
+        service: { name: line.serviceName, category: line.category },
+        option: { durationMinutes: line.durationMinutes },
+      }));
+      const contractRequirements = buildReservationContractRequirements({
+        quantity: totalMainQuantity,
+        isLicense: reservationState.isLicense,
+        serviceCategory: mainLine.category,
+        serviceId: mainLine.serviceId,
+        optionId: mainLine.optionId,
+        serviceName: mainLine.serviceName,
+        durationMinutes: mainLine.durationMinutes,
+        pax: Number(b.pax ?? current.pax ?? mainLine.pax),
+        totalPriceCents: preserveCommercialSnapshot ? current.totalPriceCents : commercial.finalTotalCents,
+        items: nextContractItems,
+      });
       await syncReservationContractsTx(tx, {
         reservationId: id,
-        requiredUnits: nextRequiredContractUnits,
+        requiredUnits: contractRequirements.length,
+        targets: reservationContractRequirementsToSyncTargets(contractRequirements, {
+          changedReservationItemIds: itemReplacement.changedReservationItemIds,
+          materialChange: reservationWideMaterialContractChange,
+        }),
         confirmSignedReduction: Boolean(b.confirmSignedContractReduction),
+        blockSignedOnMaterialChange: true,
       });
+      if (!preserveCommercialSnapshot) {
+        await deleteRemovedReservationMainItemsTx(tx, itemReplacement.removedReservationItemIds);
+      }
       await syncReservationPlatformUnitsTx(tx, {
         id,
         quantity: totalMainQuantity,

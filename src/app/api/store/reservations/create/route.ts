@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { createReservationWithItems } from "@/lib/reservations/createReservationWithItems";
+import { createReservationWithItems, expandPackForReservationCreate } from "@/lib/reservations/createReservationWithItems";
 import { validateReusableAssetsAvailability } from "@/lib/store-rental-assets";
 import { JetskiLicenseMode, PricingTier } from "@prisma/client";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
@@ -150,14 +150,15 @@ export async function POST(req: Request) {
       promoCode: i.promoCode ?? null,
     }));
 
-    const pricing =
-  items.length === 1
-    ? { mode: "QUICK_SINGLE_ITEM" as const }
-    : b.totalBeforeDiscountsCents != null
-      ? { mode: "PACK_FIXED_TOTAL" as const, totalBeforeDiscountsCents: b.totalBeforeDiscountsCents }
-      : { mode: "CART_MULTI_ITEM" as const };
+    const pricing = b.packId
+      ? { mode: "PACK_FIXED_TOTAL" as const, totalBeforeDiscountsCents: null }
+      : items.length === 1
+        ? { mode: "QUICK_SINGLE_ITEM" as const }
+        : b.totalBeforeDiscountsCents != null
+          ? { mode: "PACK_FIXED_TOTAL" as const, totalBeforeDiscountsCents: b.totalBeforeDiscountsCents }
+          : { mode: "CART_MULTI_ITEM" as const };
 
-    if (pricing.mode === "PACK_FIXED_TOTAL" && pricing.totalBeforeDiscountsCents <= 0) {
+    if (!b.packId && pricing.mode === "PACK_FIXED_TOTAL" && Number(pricing.totalBeforeDiscountsCents ?? 0) <= 0) {
       return new NextResponse("totalBeforeDiscountsCents requerido para multi-item", { status: 400 });
     }
 
@@ -165,7 +166,48 @@ export async function POST(req: Request) {
 
       // ===== VALIDACIÓN INVENTARIO REAL (ANTES DE CREAR) =====
 
-      const serviceIds = Array.from(new Set(items.map((i) => i.serviceIdOrCode)));
+      const packQty = Math.max(1, Number(items[0]?.quantity ?? 1));
+      let validationItems: Array<{
+        serviceIdOrCode: string;
+        optionIdOrCode: string;
+        quantity: number;
+        pax: number;
+        promoCode?: string | null;
+      }> = items;
+
+      if (b.packId) {
+        const pack = await tx.pack.findUnique({
+          where: { id: b.packId },
+          select: {
+            id: true,
+            code: true,
+            isActive: true,
+            serviceId: true,
+            packOptionId: true,
+            pricePerPersonCents: true,
+            minPax: true,
+            maxPax: true,
+            items: {
+              orderBy: { id: "asc" },
+              select: {
+                serviceId: true,
+                optionId: true,
+                quantity: true,
+                service: { select: { id: true, name: true, isActive: true } },
+                option: { select: { id: true, serviceId: true, isActive: true, durationMinutes: true } },
+              },
+            },
+          },
+        });
+
+        validationItems = expandPackForReservationCreate({
+          pack,
+          packQty,
+          pax: b.pax,
+        }).items;
+      }
+
+      const serviceIds = Array.from(new Set(validationItems.map((i) => i.serviceIdOrCode)));
 
       await assertServiceChannelCompatibilityTx(tx, {
         origin: "STORE",
@@ -185,7 +227,7 @@ export async function POST(req: Request) {
 
       const serviceMap = new Map(services.map((s) => [s.id, s]));
 
-      const itemsToValidate = items.map((it) => ({
+      const itemsToValidate = validationItems.map((it) => ({
         quantity: Number(it.quantity ?? 0),
         service: serviceMap.get(it.serviceIdOrCode) ?? null,
       }));
@@ -226,6 +268,7 @@ export async function POST(req: Request) {
           promoterDiscountShareBps: b.promoterDiscountShareBps ?? 0,
           items,
           packId: b.packId ?? null,
+          packQty: b.packId ? packQty : null,
           pricing,
         },
       });
@@ -242,6 +285,14 @@ export async function POST(req: Request) {
     }
     if (msg.includes("Slot completo") || msg.includes("Sin disponibilidad")) {
       return new NextResponse(msg, { status: 409 });
+    }
+    if (
+      msg.startsWith("Pack ") ||
+      msg.includes(" del pack") ||
+      msg.includes("Pack componente") ||
+      msg.includes("totalBeforeDiscountsCents requerido para pack")
+    ) {
+      return new NextResponse(msg, { status: 400 });
     }
     console.error("create endpoint error:", e);
     return new NextResponse(msg, { status: 500 });

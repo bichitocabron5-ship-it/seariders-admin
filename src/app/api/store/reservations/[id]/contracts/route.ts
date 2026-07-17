@@ -5,9 +5,15 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { OperationalOverrideAction, OperationalOverrideTarget } from "@prisma/client";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
-import { countReadyVisibleContracts, pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
+import {
+  countReadyVisibleContractsByTargets,
+  pickVisibleContractsByTargets,
+} from "@/lib/contracts/active-contracts";
 import { resolveReadyContractCountWithManualAttachments } from "@/lib/manual-contract-attachments";
+import {
+  buildReservationContractRequirements,
+  reservationContractRequirementsToSyncTargets,
+} from "@/lib/reservation-contract-requirements";
 
 export const runtime = "nodejs";
 
@@ -31,7 +37,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       id: true,
       isLicense: true,
       quantity: true,
-      service: { select: { category: true } },
+      serviceId: true,
+      optionId: true,
+      pax: true,
+      totalPriceCents: true,
+      service: { select: { name: true, category: true } },
+      option: { select: { durationMinutes: true } },
 
       customerName: true,
       customerPhone: true,
@@ -47,10 +58,17 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       licenseNumber: true,
 
       items: {
+        orderBy: { createdAt: "asc" },
         select: {
+          id: true,
+          serviceId: true,
+          optionId: true,
           quantity: true,
+          pax: true,
+          totalPriceCents: true,
           isExtra: true, 
-          service: { select: { category: true } },
+          service: { select: { name: true, category: true } },
+          option: { select: { durationMinutes: true } },
         },
       },
 
@@ -58,6 +76,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         orderBy: { unitIndex: "asc" },
         select: {
           id: true,
+          reservationItemId: true,
           unitIndex: true,
           logicalUnitIndex: true,
           status: true,
@@ -147,19 +166,23 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   if (!res) return new NextResponse("Reserva no existe", { status: 404 });
 
-  const requiredUnits = computeRequiredContractUnits({
+  const contractRequirements = buildReservationContractRequirements({
     quantity: res.quantity ?? 0,
     isLicense: Boolean(res.isLicense),
     serviceCategory: res.service?.category ?? null,
-    items: (res.items ?? []).map((it) => ({
-      quantity: it.quantity ?? 0,
-      isExtra: Boolean(it.isExtra),
-      service: it.service ? { category: it.service.category ?? null } : null,
-    })),
+    serviceId: res.serviceId,
+    optionId: res.optionId,
+    serviceName: res.service?.name ?? null,
+    durationMinutes: res.option?.durationMinutes ?? null,
+    pax: res.pax,
+    totalPriceCents: res.totalPriceCents,
+    items: res.items ?? [],
   });
+  const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+  const requiredUnits = contractRequirements.length;
 
   // Solo contamos contratos de 1..requiredUnits (ignora legacy unitIndex 0 y sobrantes).
-  const contracts = pickVisibleContractsByLogicalUnit(res.contracts ?? [], requiredUnits);
+  const contracts = pickVisibleContractsByTargets(res.contracts ?? [], syncTargets);
   const manualAttachmentCount =
     requiredUnits > 0
       ? await prisma.operationalOverrideLog.count({
@@ -173,7 +196,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       : 0;
   const readyCount = resolveReadyContractCountWithManualAttachments({
     requiredUnits,
-    readyContractsCount: countReadyVisibleContracts(res.contracts ?? [], requiredUnits),
+    readyContractsCount: countReadyVisibleContractsByTargets(res.contracts ?? [], syncTargets),
     manualAttachmentCount,
   });
 

@@ -38,3 +38,26 @@ test("Banana Boat sin licencia no requiere contratos", () => {
     0
   );
 });
+
+test("Banana no hereda licencia global de otra linea del carrito", () => {
+  assert.equal(
+    computeRequiredContractUnits({
+      quantity: 2,
+      isLicense: true,
+      serviceCategory: "JETSKI",
+      items: [
+        {
+          quantity: 1,
+          isExtra: false,
+          service: { category: "NAUTICA" },
+        },
+        {
+          quantity: 1,
+          isExtra: false,
+          service: { category: "JETSKI" },
+        },
+      ],
+    }),
+    1
+  );
+});

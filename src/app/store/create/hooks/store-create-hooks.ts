@@ -1,7 +1,7 @@
 // src/app/store/create/hooks/store-create-hooks.ts
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReservationWorkflowResult } from "@/lib/reservation-workflow";
 import type {
   AvailabilityData,
@@ -49,6 +49,7 @@ export function useContractsState(args: {
   } | null>(null);
 
   const [contractDrafts, setContractDrafts] = useState<ContractDraftState>({});
+  const contractsPollIntervalRef = useRef<number | null>(null);
 
   const loadContractsBlock = useCallback(async (reservationId: string): Promise<ReservationContractsResponse | null> => {
     try {
@@ -201,11 +202,39 @@ export function useContractsState(args: {
     });
     if (!hasContractsAwaitingSignature) return;
 
-    const timer = window.setInterval(() => {
-      void loadContractsBlock(prefillReservationId);
-    }, 3000);
+    const stopPolling = () => {
+      if (contractsPollIntervalRef.current == null) return;
+      window.clearInterval(contractsPollIntervalRef.current);
+      contractsPollIntervalRef.current = null;
+    };
 
-    return () => window.clearInterval(timer);
+    const runIfVisible = () => {
+      if (document.visibilityState === "hidden") return;
+      void loadContractsBlock(prefillReservationId);
+    };
+
+    const startPolling = () => {
+      if (contractsPollIntervalRef.current != null || document.visibilityState === "hidden") return;
+      contractsPollIntervalRef.current = window.setInterval(runIfVisible, 3000);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        stopPolling();
+        return;
+      }
+
+      runIfVisible();
+      startPolling();
+    };
+
+    startPolling();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [enabled, prefillReservationId, isHistorical, contracts, loadContractsBlock]);
 
   useEffect(() => {

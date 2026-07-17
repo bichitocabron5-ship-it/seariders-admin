@@ -1772,6 +1772,7 @@ const { discountPreview, discountLoading } = useDiscountPreview({
         dateStr,
         todayYmd: todayMadridYMD(),
         isPackMode,
+        packId: isPackMode ? packPreview?.id ?? null : null,
         cartItems,
         timeStr,
         customerPhone,

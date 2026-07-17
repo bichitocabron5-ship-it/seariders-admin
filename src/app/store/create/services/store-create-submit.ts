@@ -249,6 +249,7 @@ export function buildItemsToSend(args: {
 }
 
 export function buildCreateBody(args: {
+  packId?: string | null;
   customerName: string;
   customerPhone: string;
   customerEmail: string;
@@ -279,7 +280,7 @@ export function buildCreateBody(args: {
   const sanitizedPromoterDiscountShareBps = clampBps(args.promoterDiscountShareBps);
   const sanitizedManualDiscountCents = toSafeNonNegativeInt(args.manualDiscountCents);
 
-  return {
+  const body: Record<string, unknown> = {
     customerName: args.customerName.trim(),
     customerPhone: args.customerPhone.trim() || null,
     customerEmail: args.customerEmail.trim() || null,
@@ -313,4 +314,8 @@ export function buildCreateBody(args: {
       promoCode: item.promoCode ?? null,
     })),
   };
+
+  putIfNonEmpty(body, "packId", args.packId);
+
+  return body;
 }

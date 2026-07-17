@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import { opsStyles } from "@/components/ops-ui";
 import { getCountryLabel } from "@/lib/countries";
@@ -244,6 +244,7 @@ export function ContractCard({
   const [licenseNumber, setLicenseNumber] = React.useState<string>(c.licenseNumber ?? "");
   const [preparedJetskiId, setPreparedJetskiId] = useState(c.preparedJetskiId ?? "");
   const [preparedAssetId, setPreparedAssetId] = useState(c.preparedAssetId ?? "");
+  const signaturePollIntervalRef = useRef<number | null>(null);
   const [preparedOptions, setPreparedOptions] = useState<{
     jetskis: Array<{ id: string; number: number | null; model: string | null; plate: string | null }>;
     assets: Array<{ id: string; name: string | null; type: string | null; plate: string | null }>;
@@ -370,20 +371,37 @@ export function ContractCard({
     if (!awaitingExternalSignature) return;
     if (c.status === "SIGNED" || c.status === "VOID") return;
 
-    const intervalId = window.setInterval(() => {
-      void onSaved();
-    }, 2500);
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void onSaved();
-      }
+    const stopPolling = () => {
+      if (signaturePollIntervalRef.current == null) return;
+      window.clearInterval(signaturePollIntervalRef.current);
+      signaturePollIntervalRef.current = null;
     };
 
+    const runIfVisible = () => {
+      if (document.visibilityState === "hidden") return;
+      void onSaved();
+    };
+
+    const startPolling = () => {
+      if (signaturePollIntervalRef.current != null || document.visibilityState === "hidden") return;
+      signaturePollIntervalRef.current = window.setInterval(runIfVisible, 2500);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        stopPolling();
+        return;
+      }
+
+      runIfVisible();
+      startPolling();
+    };
+
+    startPolling();
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.clearInterval(intervalId);
+      stopPolling();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [awaitingExternalSignature, c.status, onSaved]);

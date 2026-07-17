@@ -37,6 +37,7 @@ const queuedAlertMinutesRaw = Number(process.env.NEXT_PUBLIC_PLATFORM_QUEUE_ALER
 const QUEUED_ALERT_MINUTES = Number.isFinite(queuedAlertMinutesRaw) && queuedAlertMinutesRaw > 0 ? queuedAlertMinutesRaw : 15;
 const ASSIGNED_QUEUE_WARN_MINUTES = QUEUED_ALERT_MINUTES / 2;
 const ASSIGNED_QUEUE_CRITICAL_MINUTES = QUEUED_ALERT_MINUTES;
+const PLATFORM_BOARD_POLL_MS = 15_000;
 
 function fmtHm(d: Date) { return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
 function msToClock(ms: number) {
@@ -218,6 +219,7 @@ export default function PlatformBoard(props: Props) {
   const [incidentRetainDepositCents, setIncidentRetainDepositCents] = useState("");
   const [incidentCreateMaintenanceEvent, setIncidentCreateMaintenanceEvent] = useState(true);
   const [platformExtras, setPlatformExtras] = useState<PlatformExtraOption[]>([]);
+  const pollIntervalRef = useRef<number | null>(null);
   const now = Date.now();
 
   async function submitIncidentFinish() {
@@ -339,11 +341,45 @@ export default function PlatformBoard(props: Props) {
   }, [loadPlatformExtras]);
 
   useEffect(() => {
-    void loadAll({ showLoading: true });
-    const poll = setInterval(() => {
-      void loadAll();
-    }, 2500);
-    return () => clearInterval(poll);
+    let disposed = false;
+
+    const stopPolling = () => {
+      if (pollIntervalRef.current == null) return;
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    };
+
+    const runIfVisible = (opts?: { showLoading?: boolean }) => {
+      if (disposed || document.visibilityState === "hidden") return;
+      void loadAll(opts);
+    };
+
+    const startPolling = () => {
+      if (pollIntervalRef.current != null || document.visibilityState === "hidden") return;
+      pollIntervalRef.current = window.setInterval(() => {
+        runIfVisible();
+      }, PLATFORM_BOARD_POLL_MS);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        stopPolling();
+        return;
+      }
+
+      runIfVisible();
+      startPolling();
+    };
+
+    runIfVisible({ showLoading: true });
+    startPolling();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      disposed = true;
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [loadAll]);
   const openRuns = useMemo(() => runs.filter((r) => r.status === "READY" || r.status === "IN_SEA"), [runs]);
   const readyRuns = useMemo(() => runs.filter((r) => r.status === "READY"), [runs]);

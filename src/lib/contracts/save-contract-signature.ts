@@ -4,8 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { s3 } from "@/lib/s3";
 import { regenerateSignedContractPdf } from "@/lib/contracts/render-contract-pdf";
 import type { PublicLanguage } from "@/lib/public-links/i18n";
-import { pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
+import { pickVisibleContractsByTargets } from "@/lib/contracts/active-contracts";
+import {
+  buildReservationContractRequirements,
+  reservationContractRequirementsToSyncTargets,
+} from "@/lib/reservation-contract-requirements";
 import { verifyContractSignatureToken } from "@/lib/contracts/signature-link";
 import { verifyReservationCheckinToken } from "@/lib/reservations/public-checkin-link";
 
@@ -43,6 +46,7 @@ type ContractSignatureAccess =
 export type ContractSignatureValidationContract = {
   id: string;
   reservationId: string;
+  reservationItemId?: string | null;
   unitIndex: number;
   logicalUnitIndex: number | null;
   status: ContractStatus | string;
@@ -52,15 +56,23 @@ export type ContractSignatureValidationContract = {
     id: string;
     status: ReservationStatus | string;
     quantity: number | null;
+    serviceId?: string | null;
+    optionId?: string | null;
+    pax?: number | null;
     isLicense: boolean;
     service: { category: string | null } | null;
     items: Array<{
+      id?: string | null;
+      serviceId?: string | null;
+      optionId?: string | null;
       quantity: number | null;
+      pax?: number | null;
       isExtra: boolean;
       service: { category: string | null } | null;
     }>;
     contracts: Array<{
       id: string;
+      reservationItemId?: string | null;
       unitIndex: number | null;
       logicalUnitIndex: number | null;
       status: ContractStatus | string | null;
@@ -183,15 +195,19 @@ function assertContractCanBeSigned(contract: ContractSignatureValidationContract
     );
   }
 
-  const requiredUnits = computeRequiredContractUnits({
+  const contractRequirements = buildReservationContractRequirements({
     quantity: contract.reservation.quantity,
     isLicense: Boolean(contract.reservation.isLicense),
     serviceCategory: contract.reservation.service?.category ?? null,
+    serviceId: contract.reservation.serviceId,
+    optionId: contract.reservation.optionId,
+    pax: contract.reservation.pax,
     items: contract.reservation.items ?? [],
   });
-  const visibleContracts = pickVisibleContractsByLogicalUnit(
+  const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+  const visibleContracts = pickVisibleContractsByTargets(
     contract.reservation.contracts ?? [],
-    requiredUnits
+    syncTargets
   );
 
   if (!visibleContracts.some((visibleContract) => visibleContract.id === contract.id)) {
@@ -209,6 +225,7 @@ async function loadContractForSignature(contractId: string) {
     select: {
       id: true,
       reservationId: true,
+      reservationItemId: true,
       unitIndex: true,
       logicalUnitIndex: true,
       status: true,
@@ -219,11 +236,19 @@ async function loadContractForSignature(contractId: string) {
           id: true,
           status: true,
           quantity: true,
+          serviceId: true,
+          optionId: true,
+          pax: true,
           isLicense: true,
           service: { select: { category: true } },
           items: {
+            orderBy: { createdAt: "asc" },
             select: {
+              id: true,
+              serviceId: true,
+              optionId: true,
               quantity: true,
+              pax: true,
               isExtra: true,
               service: { select: { category: true } },
             },
@@ -231,6 +256,7 @@ async function loadContractForSignature(contractId: string) {
           contracts: {
             select: {
               id: true,
+              reservationItemId: true,
               unitIndex: true,
               logicalUnitIndex: true,
               status: true,
