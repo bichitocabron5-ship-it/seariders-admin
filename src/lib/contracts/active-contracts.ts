@@ -138,8 +138,17 @@ export function pickVisibleContractsByTargets<T extends ContractLike>(
               contractReservationItemId(contract) === targetItemId
           )
         : [];
+    const legacySlotCandidates =
+      targetItemId && exactCandidates.length === 0 && itemCandidates.length === 0
+        ? activeContracts.filter(
+            (contract) =>
+              !usedIds.has(contract) &&
+              contractReservationItemId(contract) === null &&
+              contractLogicalUnitIndex(contract) === targetSlot
+          )
+        : [];
 
-    const candidates = sortVisibleCandidates([...exactCandidates, ...itemCandidates]);
+    const candidates = sortVisibleCandidates([...exactCandidates, ...itemCandidates, ...legacySlotCandidates]);
     const selected = candidates[0];
     if (!selected) continue;
 

@@ -110,3 +110,41 @@ test("ready por targets exige todas las lineas requeridas", () => {
     1
   );
 });
+
+test("visibilidad por targets conserva contrato legacy sin reservationItemId por slot", () => {
+  const visible = pickVisibleContractsByTargets(
+    [
+      contract("READY", 1, {
+        id: "legacy-contract",
+        reservationItemId: null,
+      }),
+    ],
+    [{ logicalUnitIndex: 1, reservationItemId: "jetski-20" }]
+  );
+
+  assert.deepEqual(
+    visible.map((item) => item.id),
+    ["legacy-contract"]
+  );
+});
+
+test("visibilidad por targets prefiere contrato vinculado sobre legacy del mismo slot", () => {
+  const visible = pickVisibleContractsByTargets(
+    [
+      contract("SIGNED", 1, {
+        id: "legacy-contract",
+        reservationItemId: null,
+      }),
+      contract("READY", 1, {
+        id: "linked-contract",
+        reservationItemId: "jetski-20",
+      }),
+    ],
+    [{ logicalUnitIndex: 1, reservationItemId: "jetski-20" }]
+  );
+
+  assert.deepEqual(
+    visible.map((item) => item.id),
+    ["linked-contract"]
+  );
+});
