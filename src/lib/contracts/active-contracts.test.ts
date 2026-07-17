@@ -75,6 +75,21 @@ test("requiredUnits 0 no expone contratos activos aunque existan filas antiguas"
   assert.equal(countLockedVisibleContracts(contracts, 0), 0);
 });
 
+test("visibilidad legacy por requiredUnits sigue basada en logicalUnitIndex", () => {
+  const contracts = [
+    contract("READY", 1, {
+      id: "legacy-contract",
+      reservationItemId: null,
+    }),
+  ];
+
+  assert.deepEqual(
+    pickVisibleContractsByLogicalUnit(contracts, 1).map((item) => item.id),
+    ["legacy-contract"]
+  );
+  assert.equal(countReadyVisibleContracts(contracts, 1), 1);
+});
+
 test("visibilidad por targets no cuenta contrato de otra linea", () => {
   const visible = pickVisibleContractsByTargets(
     [
@@ -126,6 +141,26 @@ test("visibilidad por targets conserva contrato legacy sin reservationItemId por
     visible.map((item) => item.id),
     ["legacy-contract"]
   );
+});
+
+test("visibilidad por targets no adopta contrato legacy por slot en reserva multiitem", () => {
+  const contracts = [
+    contract("READY", 1, {
+      id: "legacy-contract",
+      reservationItemId: null,
+    }),
+  ];
+  const targets = [
+    { logicalUnitIndex: 1, reservationItemId: "jetski-20" },
+    { logicalUnitIndex: 2, reservationItemId: "jetski-40" },
+  ];
+  const visible = pickVisibleContractsByTargets(contracts, targets);
+
+  assert.deepEqual(
+    visible.map((item) => item.id),
+    []
+  );
+  assert.equal(countReadyVisibleContractsByTargets(contracts, targets), 0);
 });
 
 test("visibilidad por targets prefiere contrato vinculado sobre legacy del mismo slot", () => {
