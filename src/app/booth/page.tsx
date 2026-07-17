@@ -504,21 +504,11 @@ const commissionCents = useMemo(
 );
 const netAfterCommissionCents = useMemo(() => Math.max(0, finalTotalCents - commissionCents), [finalTotalCents, commissionCents]);
 
-const load = useCallback(async () => {
-  setError(null);
-  const [catalogRes, summaryRes, reservationsRes, tripsRes, opsRes] =
-    await Promise.allSettled([
-      fetch("/api/pos/catalog?origin=BOOTH", { cache: "no-store" }),
-      fetch("/api/store/cash-closures/summary?origin=BOOTH", { cache: "no-store" }),
-      fetch("/api/booth/reservations/today", { cache: "no-store" }),
-      fetch("/api/booth/taxiboat-trips/today", { cache: "no-store" }),
-      fetch("/api/platform/taxiboat-operations", { cache: "no-store" }),
-    ]);
-
-  const errors: string[] = [];
-
-  if (catalogRes.status === "fulfilled" && catalogRes.value.ok) {
-    const data = await catalogRes.value.json();
+const loadCatalog = useCallback(async () => {
+  try {
+    const res = await fetch("/api/pos/catalog?origin=BOOTH", { cache: "no-store" });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
 
     setServices(data.services ?? []);
     setServicesExtra(data.servicesExtra ?? []);
@@ -542,9 +532,22 @@ const load = useCallback(async () => {
     );
     setOptionId((prev) => prev || firstOpt?.id || "");
     setExtraServiceId((prev) => prev || data.servicesExtra?.[0]?.id || "");
-  } else if (catalogRes.status === "rejected") {
-    errors.push("No se pudo cargar el catálogo de Booth.");
+  } catch {
+    setError("No se pudo cargar el catálogo de Booth.");
   }
+}, []);
+
+const load = useCallback(async () => {
+  setError(null);
+  const [summaryRes, reservationsRes, tripsRes, opsRes] =
+    await Promise.allSettled([
+      fetch("/api/store/cash-closures/summary?origin=BOOTH", { cache: "no-store" }),
+      fetch("/api/booth/reservations/today", { cache: "no-store" }),
+      fetch("/api/booth/taxiboat-trips/today", { cache: "no-store" }),
+      fetch("/api/platform/taxiboat-operations", { cache: "no-store" }),
+    ]);
+
+  const errors: string[] = [];
 
   if (summaryRes.status === "fulfilled") {
     if (summaryRes.value.ok) {
@@ -593,6 +596,10 @@ const load = useCallback(async () => {
     setError(errors[0]);
   }
 }, []);
+
+useEffect(() => {
+  void loadCatalog();
+}, [loadCatalog]);
 
 const activeTrip = trips.find((t) => t.id === activeTripId);
 const openTripOptions = useMemo(() => trips.filter((t) => t.status === "OPEN"), [trips]);

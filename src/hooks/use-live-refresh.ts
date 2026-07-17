@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from "react";
 
+const MIN_REFRESH_GAP_MS = 10_000;
+
 type UseLiveRefreshOptions = {
   enabled?: boolean;
   intervalMs?: number;
@@ -24,6 +26,7 @@ export function useLiveRefresh(
 
   const taskRef = useRef(task);
   const inFlightRef = useRef(false);
+  const lastRefreshFinishedAtRef = useRef(0);
 
   useEffect(() => {
     taskRef.current = task;
@@ -39,11 +42,15 @@ export function useLiveRefresh(
       if (typeof document !== "undefined" && document.visibilityState === "hidden") {
         return;
       }
+      if (Date.now() - lastRefreshFinishedAtRef.current < MIN_REFRESH_GAP_MS) {
+        return;
+      }
 
       inFlightRef.current = true;
       try {
         await taskRef.current();
       } finally {
+        lastRefreshFinishedAtRef.current = Date.now();
         inFlightRef.current = false;
       }
     };
