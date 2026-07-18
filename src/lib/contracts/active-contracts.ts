@@ -118,6 +118,12 @@ export function pickVisibleContractsByTargets<T extends ContractLike>(
   targets: readonly ContractVisibilityTarget[]
 ) {
   const activeContracts = contracts.filter((contract) => !isContractSuperseded(contract));
+  const targetItemIds = new Set(
+    targets
+      .map((target) => targetReservationItemId(target))
+      .filter((itemId): itemId is string => Boolean(itemId))
+  );
+  const allowLegacySlotCandidates = targetItemIds.size <= 1;
   const usedIds = new Set<T>();
   const visible: T[] = [];
 
@@ -138,8 +144,20 @@ export function pickVisibleContractsByTargets<T extends ContractLike>(
               contractReservationItemId(contract) === targetItemId
           )
         : [];
+    const legacySlotCandidates =
+      targetItemId &&
+      allowLegacySlotCandidates &&
+      exactCandidates.length === 0 &&
+      itemCandidates.length === 0
+        ? activeContracts.filter(
+            (contract) =>
+              !usedIds.has(contract) &&
+              contractReservationItemId(contract) === null &&
+              contractLogicalUnitIndex(contract) === targetSlot
+          )
+        : [];
 
-    const candidates = sortVisibleCandidates([...exactCandidates, ...itemCandidates]);
+    const candidates = sortVisibleCandidates([...exactCandidates, ...itemCandidates, ...legacySlotCandidates]);
     const selected = candidates[0];
     if (!selected) continue;
 
