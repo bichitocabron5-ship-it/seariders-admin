@@ -6,13 +6,14 @@ import type { JetskiAvail, QueueItem, RunOpen } from "../types/types";
 import {
   applyOptionalPlatformMutationDelta,
   applyPlatformMutationDelta,
+  filterQueueAssignedInRuns,
   queueScopeForKind,
   shouldAcceptLoadAllResponse,
 } from "./platform-board-state";
 
 const scope = queueScopeForKind("JETSKI");
 
-function queueItem(id = "unit-1"): QueueItem {
+function queueItem(id = "unit-1", overrides: Partial<QueueItem> = {}): QueueItem {
   return {
     reservationId: "reservation-1",
     reservationUnitId: id,
@@ -24,6 +25,34 @@ function queueItem(id = "unit-1"): QueueItem {
     pax: 1,
     quantity: 1,
     isLicense: false,
+    ...overrides,
+  };
+}
+
+function readyUnit(
+  id = "unit-1",
+  overrides: Partial<NonNullable<PlatformMutationDelta["reservationUnits"]>[number]> = {}
+): NonNullable<PlatformMutationDelta["reservationUnits"]>[number] {
+  const reservationId = overrides.reservationId ?? "reservation-1";
+
+  return {
+    id,
+    reservationId,
+    status: "READY_FOR_PLATFORM",
+    readyForPlatformAt: "2026-07-19T08:00:00.000Z",
+    jetskiId: null,
+    serviceCategory: "JETSKI",
+    serviceName: "Jetski",
+    durationMinutesSnapshot: 30,
+    quantitySnapshot: 1,
+    paxSnapshot: 1,
+    reservation: {
+      id: reservationId,
+      status: "READY_FOR_PLATFORM",
+      customerName: "Customer",
+      isLicense: false,
+    },
+    ...overrides,
   };
 }
 
@@ -103,34 +132,16 @@ function boardState(overrides: Partial<PlatformBoardStateSnapshot> = {}): Platfo
   };
 }
 
-test("assign applies the confirmed unit and assignment delta without a global loadAll snapshot", () => {
-  const assigned = assignment();
+test("assign moves the confirmed unit from queue to assigned without re-adding its queue item", () => {
+  const assigned = assignment({ reservationUnitId: "unit-1" });
   const delta: PlatformMutationDelta = {
     mutation: "assign",
     runId: "run-1",
     run: run({ assignments: [assigned] }),
     assignments: [assigned],
     removedQueueUnitIds: ["unit-1"],
-    reservationUnits: [
-      {
-        id: "unit-1",
-        reservationId: "reservation-1",
-        status: "READY_FOR_PLATFORM",
-        readyForPlatformAt: "2026-07-19T08:00:00.000Z",
-        jetskiId: "jetski-1",
-        serviceCategory: "JETSKI",
-        serviceName: "Jetski",
-        durationMinutesSnapshot: 30,
-        quantitySnapshot: 1,
-        paxSnapshot: 1,
-        reservation: {
-          id: "reservation-1",
-          status: "READY_FOR_PLATFORM",
-          customerName: "Customer",
-          isLicense: false,
-        },
-      },
-    ],
+    reservationUnits: [readyUnit("unit-1", { jetskiId: "jetski-1" })],
+    queueItems: [queueItem("unit-1")],
   };
 
   const after = applyPlatformMutationDelta(boardState(), delta, scope);
@@ -139,6 +150,36 @@ test("assign applies the confirmed unit and assignment delta without a global lo
   assert.equal(after.runs[0].assignments.length, 1);
   assert.equal(after.runs[0].assignments[0].id, "assignment-1");
   assert.equal(after.runs[0].assignments[0].jetskiId, "jetski-1");
+});
+
+test("assigning one of two units in the same reservation leaves only the other unit queued", () => {
+  const assigned = assignment({ reservationUnitId: "unit-1" });
+  const before = boardState({
+    queue: [
+      queueItem("unit-1", { reservationId: "reservation-1" }),
+      queueItem("unit-2", { reservationId: "reservation-1" }),
+    ],
+  });
+
+  const after = applyPlatformMutationDelta(
+    before,
+    {
+      mutation: "assign",
+      runId: "run-1",
+      run: run({ assignments: [assigned] }),
+      assignments: [assigned],
+      removedQueueUnitIds: ["unit-1"],
+      reservationUnits: [
+        readyUnit("unit-1", { reservationId: "reservation-1", jetskiId: "jetski-1" }),
+      ],
+      queueItems: [queueItem("unit-1", { reservationId: "reservation-1" })],
+    },
+    scope
+  );
+
+  assert.deepEqual(after.queue.map((item) => item.reservationUnitId), ["unit-2"]);
+  assert.equal(after.queue[0].reservationId, "reservation-1");
+  assert.equal(after.runs[0].assignments[0].reservationUnitId, "unit-1");
 });
 
 test("depart moves a queued assignment to active locally", () => {
@@ -168,12 +209,13 @@ test("depart moves a queued assignment to active locally", () => {
   assert.equal(after.runs[0].status, "IN_SEA");
   assert.equal(after.runs[0].assignments[0].status, "ACTIVE");
   assert.equal(after.runs[0].assignments[0].expectedEndAt, "2026-07-19T08:35:00.000Z");
+  assert.equal(after.queue.length, 0);
 });
 
-test("finish removes the finished assignment, releases the resource, and updates the unit/resource delta", () => {
+test("finish removes the finished assignment and leaves no duplicate queue entry behind", () => {
   const before = boardState({
     runs: [run({ status: "IN_SEA", assignments: [assignment({ status: "ACTIVE" })] })],
-    queue: [],
+    queue: [queueItem("unit-1"), queueItem("unit-2", { reservationId: "reservation-2" })],
   });
 
   const after = applyPlatformMutationDelta(
@@ -192,6 +234,7 @@ test("finish removes the finished assignment, releases the resource, and updates
   assert.equal(after.runs[0].status, "READY");
   assert.equal(after.runs[0].assignments.length, 0);
   assert.equal(after.jetskis[0].currentHours, 10.5);
+  assert.deepEqual(after.queue.map((item) => item.reservationUnitId), ["unit-2"]);
 });
 
 test("extend updates expected end and duration locally", () => {
@@ -219,10 +262,10 @@ test("extend updates expected end and duration locally", () => {
   assert.equal(after.runs[0].assignments[0].expectedEndAt, "2026-07-19T08:50:00.000Z");
 });
 
-test("unassign removes the assignment and returns the unit to the queue", () => {
+test("unassign removes the assignment and returns the unit to the queue once", () => {
   const before = boardState({
     runs: [run({ assignments: [assignment()] })],
-    queue: [],
+    queue: [queueItem("unit-1")],
   });
 
   const after = applyPlatformMutationDelta(
@@ -232,25 +275,8 @@ test("unassign removes the assignment and returns the unit to the queue", () => 
       runId: "run-1",
       run: run({ assignments: [] }),
       removedAssignmentIds: ["assignment-1"],
-      reservationUnits: [
-        {
-          id: "unit-1",
-          reservationId: "reservation-1",
-          status: "READY_FOR_PLATFORM",
-          readyForPlatformAt: "2026-07-19T08:10:00.000Z",
-          serviceCategory: "JETSKI",
-          serviceName: "Jetski",
-          durationMinutesSnapshot: 30,
-          quantitySnapshot: 1,
-          paxSnapshot: 1,
-          reservation: {
-            id: "reservation-1",
-            status: "READY_FOR_PLATFORM",
-            customerName: "Customer",
-            isLicense: false,
-          },
-        },
-      ],
+      reservationUnits: [readyUnit("unit-1", { readyForPlatformAt: "2026-07-19T08:10:00.000Z" })],
+      queueItems: [queueItem("unit-1", { queueEnteredAt: "2026-07-19T08:10:00.000Z" })],
     },
     scope
   );
@@ -258,6 +284,7 @@ test("unassign removes the assignment and returns the unit to the queue", () => 
   assert.equal(after.runs[0].assignments.length, 0);
   assert.equal(after.queue.length, 1);
   assert.equal(after.queue[0].reservationUnitId, "unit-1");
+  assert.equal(after.queue[0].queueEnteredAt, "2026-07-19T08:10:00.000Z");
 });
 
 test("an older polling response cannot overwrite a newer mutation", () => {
@@ -292,3 +319,11 @@ test("a later polling response is accepted so another operator can appear", () =
   assert.equal(pollingSnapshot.queue[0].reservationUnitId, "unit-2");
 });
 
+test("accepted polling snapshots do not reintroduce units that are still assigned", () => {
+  const snapshotRuns = [run({ assignments: [assignment({ reservationUnitId: "unit-1" })] })];
+  const snapshotQueue = [queueItem("unit-1"), queueItem("unit-2")];
+
+  const filteredQueue = filterQueueAssignedInRuns(snapshotQueue, snapshotRuns);
+
+  assert.deepEqual(filteredQueue.map((item) => item.reservationUnitId), ["unit-2"]);
+});

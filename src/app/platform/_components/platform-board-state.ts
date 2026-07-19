@@ -60,6 +60,30 @@ function queueMatchesScope(item: QueueItem, scope: PlatformBoardScope) {
   return category !== "JETSKI";
 }
 
+function getOpenAssignedReservationUnitIds(runs: readonly RunOpen[]) {
+  const unitIds = new Set<string>();
+
+  for (const run of runs) {
+    for (const assignment of run.assignments ?? []) {
+      if (
+        assignment.reservationUnitId &&
+        (assignment.status === "QUEUED" || assignment.status === "ACTIVE")
+      ) {
+        unitIds.add(assignment.reservationUnitId);
+      }
+    }
+  }
+
+  return unitIds;
+}
+
+export function filterQueueAssignedInRuns(queue: QueueItem[], runs: readonly RunOpen[]) {
+  const assignedUnitIds = getOpenAssignedReservationUnitIds(runs);
+  if (assignedUnitIds.size === 0) return queue;
+
+  return queue.filter((item) => !assignedUnitIds.has(item.reservationUnitId));
+}
+
 export function queueItemFromReservationUnit(
   unit: NonNullable<PlatformMutationDelta["reservationUnit"]>
 ): QueueItem | null {
@@ -139,12 +163,24 @@ export function applyQueueDelta(
     if (assignment.reservationUnitId) removedQueueUnitIds.add(assignment.reservationUnitId);
   }
 
+  for (const run of [...(delta.runs ?? []), ...(delta.run ? [delta.run] : [])]) {
+    for (const assignment of run.assignments ?? []) {
+      if (
+        assignment.reservationUnitId &&
+        (assignment.status === "QUEUED" || assignment.status === "ACTIVE")
+      ) {
+        removedQueueUnitIds.add(assignment.reservationUnitId);
+      }
+    }
+  }
+
   for (const unit of [...(delta.reservationUnits ?? []), ...(delta.reservationUnit ? [delta.reservationUnit] : [])]) {
     if (unit.status !== "READY_FOR_PLATFORM") removedQueueUnitIds.add(unit.id);
   }
 
   let nextQueue = queue.filter((item) => !removedQueueUnitIds.has(item.reservationUnitId));
-  const explicitQueueItems = [...(delta.queueItems ?? []), ...(delta.queueItem ? [delta.queueItem] : [])];
+  const explicitQueueItems = [...(delta.queueItems ?? []), ...(delta.queueItem ? [delta.queueItem] : [])]
+    .filter((item) => !removedQueueUnitIds.has(item.reservationUnitId));
   const derivedQueueItems = [...(delta.reservationUnits ?? []), ...(delta.reservationUnit ? [delta.reservationUnit] : [])]
     .filter((unit) => !removedQueueUnitIds.has(unit.id))
     .map(queueItemFromReservationUnit)

@@ -20,6 +20,7 @@ import { canShareMonitorAssetWithReservation } from "@/lib/platform-shared-resou
 import { opsStyles } from "@/components/ops-ui";
 import {
   applyAssetsDelta,
+  filterQueueAssignedInRuns,
   applyJetskisDelta,
   applyQueueDelta,
   applyRunsDelta,
@@ -482,9 +483,11 @@ export default function PlatformBoard(props: Props) {
         return;
       }
 
+      const nextRuns = (r.runs ?? []) as RunOpen[];
+
       setOperability(o as OperabilitySummary);
-      setQueue(q.queue ?? []);
-      setRuns(r.runs ?? []);
+      setQueue(filterQueueAssignedInRuns(q.queue ?? [], nextRuns));
+      setRuns(nextRuns);
       setMonitors(r.monitors ?? []);
       if (kind === "JETSKI") {
         setJetskis(x.jetskis ?? []);
