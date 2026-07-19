@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { platformAssignmentBlockingReason } from "@/lib/operability";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import { deriveReservationStatusFromUnits } from "@/lib/reservation-status";
+import { buildPlatformMutationDeltaTx } from "@/lib/platform-board-delta-server";
 import {
   MonitorRunKind,
   MonitorRunStatus,
@@ -30,7 +31,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
       });
       if (!run) throw new Error("Run no existe");
       if (run.status === MonitorRunStatus.CLOSED) throw new Error("La salida está cerrada");
-      if (run.status === MonitorRunStatus.IN_SEA) return { ok: true, already: true };
+      if (run.status === MonitorRunStatus.IN_SEA) {
+        const delta = await buildPlatformMutationDeltaTx(tx, {
+          mutation: "depart",
+          runId,
+        });
+        return { ok: true, already: true, delta };
+      }
 
       if (run.kind === MonitorRunKind.NAUTICA && !run.monitorAssetId) {
         throw new Error("Salida Náutica sin recurso del monitor (monitorAssetId).");
@@ -140,6 +147,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
       });
 
       const touchedReservationIds = new Set<string>();
+      const touchedReservationUnitIds: string[] = [];
 
       for (const assignment of queued) {
         if (!assignment.reservationUnitId) {
@@ -165,6 +173,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
         });
 
         touchedReservationIds.add(assignment.reservationId);
+        touchedReservationUnitIds.push(assignment.reservationUnitId);
       }
 
       for (const reservationId of touchedReservationIds) {
@@ -185,7 +194,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
         });
       }
 
-      return { ok: true, activated: queued.length };
+      const delta = await buildPlatformMutationDeltaTx(tx, {
+        mutation: "depart",
+        runId,
+        assignmentIds: queued.map((assignment) => assignment.id),
+        reservationUnitIds: touchedReservationUnitIds,
+        reservationIds: Array.from(touchedReservationIds),
+        removedQueueUnitIds: touchedReservationUnitIds,
+      });
+
+      return { ok: true, activated: queued.length, delta };
     });
 
     return NextResponse.json(out);

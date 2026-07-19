@@ -9,6 +9,7 @@ import { deriveReservationStatusFromUnits } from "@/lib/reservation-status";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import { getOperationalDurationMinutes } from "@/lib/reservation-operations";
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
+import { buildPlatformMutationDeltaTx } from "@/lib/platform-board-delta-server";
 import {
   MonitorRunKind,
   MonitorRunMode,
@@ -382,7 +383,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           tx
         );
 
-        return { ok: true, assignment: a };
+        const delta = await buildPlatformMutationDeltaTx(tx, {
+          mutation: "assign",
+          runId,
+          assignmentIds: [a.id],
+          reservationUnitIds: [unit.id],
+          reservationIds: [unit.reservationId],
+          removedQueueUnitIds: [unit.id],
+        });
+
+        return { ok: true, assignment: a, delta };
       }
 
       // NAUTICA
@@ -555,7 +565,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
           tx
         );
 
-        return { ok: true, assignment: a };
+        const delta = await buildPlatformMutationDeltaTx(tx, {
+          mutation: "assign",
+          runId,
+          assignmentIds: [a.id],
+          reservationUnitIds: [unit.id],
+          reservationIds: [unit.reservationId],
+          removedQueueUnitIds: [unit.id],
+        });
+
+        return { ok: true, assignment: a, delta };
       }
 
       throw new Error(`Run.kind no soportado: ${run.kind}`);

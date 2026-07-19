@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
       status: true,
       operabilityStatus: true,
       note: true,
+      currentHours: true,
       maintenanceEvents: {
         where: {
           status: {

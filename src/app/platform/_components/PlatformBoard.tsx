@@ -13,10 +13,19 @@ import type {
   QueueItem,
   RunOpen,
 } from "../types/types";
+import type { PlatformMutationDelta } from "../types/platform-delta";
 import { operabilityBadgeStyle, operabilityLabel } from "@/lib/operability-ui";
 import { isAssetCompatibleWithServiceCategory } from "@/lib/platform-resource-compat";
 import { canShareMonitorAssetWithReservation } from "@/lib/platform-shared-resource";
 import { opsStyles } from "@/components/ops-ui";
+import {
+  applyAssetsDelta,
+  applyJetskisDelta,
+  applyQueueDelta,
+  applyRunsDelta,
+  queueScopeForKind,
+  shouldAcceptLoadAllResponse,
+} from "./platform-board-state";
 import PlatformAssignModal from "./PlatformAssignModal";
 import PlatformAssignmentActionsModal from "./PlatformAssignmentActionsModal";
 import PlatformIncidentModal from "./PlatformIncidentModal";
@@ -38,6 +47,41 @@ const QUEUED_ALERT_MINUTES = Number.isFinite(queuedAlertMinutesRaw) && queuedAle
 const ASSIGNED_QUEUE_WARN_MINUTES = QUEUED_ALERT_MINUTES / 2;
 const ASSIGNED_QUEUE_CRITICAL_MINUTES = QUEUED_ALERT_MINUTES;
 const PLATFORM_BOARD_POLL_MS = 15_000;
+
+type MutationToken = {
+  key: string;
+  requestId: number;
+  operation: "createRun" | "assign" | "depart" | "finish" | "extend" | "unassign" | "close";
+  startedAt: number;
+};
+
+type PlatformMutationResponse = {
+  ok?: boolean;
+  delta?: PlatformMutationDelta | null;
+};
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+async function readResponseError(res: Response, fallback: string) {
+  const text = await res.text().catch(() => "");
+  if (!text) return fallback;
+
+  try {
+    const json = JSON.parse(text) as { error?: unknown };
+    return typeof json.error === "string" ? json.error : text;
+  } catch {
+    return text;
+  }
+}
+
+function recordClickToPaint(operation: "assign" | "depart" | "finish", startedAt: number) {
+  window.requestAnimationFrame(() => {
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    console.info(`[platform-board] ${operation} click-to-paint ${elapsedMs}ms`);
+  });
+}
 
 function fmtHm(d: Date) { return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
 function msToClock(ms: number) {
@@ -220,10 +264,82 @@ export default function PlatformBoard(props: Props) {
   const [incidentCreateMaintenanceEvent, setIncidentCreateMaintenanceEvent] = useState(true);
   const [platformExtras, setPlatformExtras] = useState<PlatformExtraOption[]>([]);
   const pollIntervalRef = useRef<number | null>(null);
+  const loadAllAbortRef = useRef<AbortController | null>(null);
+  const loadAllRequestIdRef = useRef(0);
+  const mutationRequestIdRef = useRef(0);
+  const appliedMutationRequestIdRef = useRef(0);
+  const inFlightMutationsRef = useRef<Map<string, number>>(new Map());
+  const reconcileTimeoutRef = useRef<number | null>(null);
+  const categoriesKey = useMemo(() => categories.join(","), [categories]);
+  const boardScope = useMemo(
+    () => queueScopeForKind(kind, categoriesKey ? categoriesKey.split(",").filter(Boolean) : []),
+    [categoriesKey, kind]
+  );
   const now = Date.now();
+
+  const beginMutation = useCallback(
+    (key: string, operation: MutationToken["operation"]): MutationToken | null => {
+      if (inFlightMutationsRef.current.has(key)) return null;
+
+      loadAllAbortRef.current?.abort();
+      const requestId = mutationRequestIdRef.current + 1;
+      mutationRequestIdRef.current = requestId;
+      inFlightMutationsRef.current.set(key, requestId);
+
+      return {
+        key,
+        requestId,
+        operation,
+        startedAt: performance.now(),
+      };
+    },
+    []
+  );
+
+  const isMutationCurrent = useCallback((token: MutationToken) => {
+    return inFlightMutationsRef.current.get(token.key) === token.requestId;
+  }, []);
+
+  const finishMutation = useCallback((token: MutationToken) => {
+    if (inFlightMutationsRef.current.get(token.key) === token.requestId) {
+      inFlightMutationsRef.current.delete(token.key);
+    }
+  }, []);
+
+  const applyConfirmedDelta = useCallback(
+    (delta: PlatformMutationDelta | null | undefined, token: MutationToken) => {
+      if (!delta || !isMutationCurrent(token)) return false;
+
+      appliedMutationRequestIdRef.current = Math.max(
+        appliedMutationRequestIdRef.current,
+        token.requestId
+      );
+      setRuns((prev) => applyRunsDelta(prev, delta));
+      setQueue((prev) => applyQueueDelta(prev, delta, boardScope));
+      setJetskis((prev) => applyJetskisDelta(prev, delta));
+      setAssets((prev) => applyAssetsDelta(prev, delta));
+      if (delta.operability) setOperability(delta.operability);
+
+      if (
+        token.operation === "assign" ||
+        token.operation === "depart" ||
+        token.operation === "finish"
+      ) {
+        recordClickToPaint(token.operation, token.startedAt);
+      }
+
+      return true;
+    },
+    [boardScope, isMutationCurrent]
+  );
 
   async function submitIncidentFinish() {
     if (!actionAssignment) return;
+    const token = beginMutation(`assignment:${actionAssignment.id}`, "finish");
+    if (!token) {
+      setIncidentError("Operación en curso para esta asignación.");
+      return;
+    }
 
     try {
       setIncidentBusy(true);
@@ -253,20 +369,31 @@ export default function PlatformBoard(props: Props) {
         body: JSON.stringify(body),
       });
 
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await readResponseError(res, "Error registrando incidencia"));
+      const data = (await res.json()) as PlatformMutationResponse;
+      if (!data.delta) throw new Error("Respuesta sin delta de finalización");
 
-      setIncidentOpen(false);
-      setActionOpen(false);
-      setActionAssignment(null);
-      await loadAll();
+      if (applyConfirmedDelta(data.delta, token)) {
+        setIncidentOpen(false);
+        setActionOpen(false);
+        setActionAssignment(null);
+      }
     } catch (e: unknown) {
       setIncidentError(e instanceof Error ? e.message : "Error registrando incidencia");
+      scheduleMutationErrorReconcile();
     } finally {
+      finishMutation(token);
       setIncidentBusy(false);
     }
   }
 
   async function createRun() {
+    const token = beginMutation(`create-run:${kind}`, "createRun");
+    if (!token) {
+      setCreateRunError("Operación en curso para abrir salida.");
+      return;
+    }
+
     try {
       setCreateRunBusy(true); setCreateRunError(null);
       const selectedFromRef = createRunResourceSelectRef.current?.value ?? NO_RESOURCE_SELECTED;
@@ -278,36 +405,117 @@ export default function PlatformBoard(props: Props) {
       }
       const res = await fetch("/api/platform/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ monitorId: createRunMode === "MONITOR" ? createRunMonitorId : null, kind, mode: createRunMode, monitorJetskiId: kind === "JETSKI" && selectedRunResourceId !== NO_RESOURCE_SELECTED ? selectedRunResourceId : null, monitorAssetId: kind === "NAUTICA" && selectedRunResourceId !== NO_RESOURCE_SELECTED ? selectedRunResourceId : null, note: createRunNote?.trim() ? createRunNote.trim() : null }) });
       if (!res.ok) { const txt = await res.text().catch(() => ""); throw new Error(txt || "No se pudo abrir la salida."); }
-      await loadAll(); setCreateRunNote(""); setCreateRunMode("MONITOR"); setCreateRunMonitorId(""); setCreateRunResourceId(NO_RESOURCE_SELECTED); if (createRunResourceSelectRef.current) createRunResourceSelectRef.current.value = NO_RESOURCE_SELECTED;
-    } catch (e: unknown) { setCreateRunError(e instanceof Error ? e.message : "Error"); } finally { setCreateRunBusy(false); }
+      const data = (await res.json()) as { run?: RunOpen & { assignments?: RunOpen["assignments"] } };
+      if (!data.run) throw new Error("Respuesta sin salida creada");
+      if (isMutationCurrent(token)) {
+        appliedMutationRequestIdRef.current = Math.max(
+          appliedMutationRequestIdRef.current,
+          token.requestId
+        );
+        const createdRun = { ...data.run, assignments: data.run.assignments ?? [] };
+        setRuns((prev) => [createdRun, ...prev.filter((run) => run.id !== createdRun.id)]);
+        setCreateRunNote("");
+        setCreateRunMode("MONITOR");
+        setCreateRunMonitorId("");
+        setCreateRunResourceId(NO_RESOURCE_SELECTED);
+        if (createRunResourceSelectRef.current) createRunResourceSelectRef.current.value = NO_RESOURCE_SELECTED;
+      }
+    } catch (e: unknown) {
+      setCreateRunError(e instanceof Error ? e.message : "Error");
+      scheduleMutationErrorReconcile();
+    } finally {
+      finishMutation(token);
+      setCreateRunBusy(false);
+    }
   }
 
   useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { setCreateRunMode("MONITOR"); setCreateRunMonitorId(""); setCreateRunResourceId(NO_RESOURCE_SELECTED); if (createRunResourceSelectRef.current) createRunResourceSelectRef.current.value = NO_RESOURCE_SELECTED; }, [kind]);
 
   const loadAll = useCallback(async (opts?: { showLoading?: boolean }) => {
+    const requestId = loadAllRequestIdRef.current + 1;
+    loadAllRequestIdRef.current = requestId;
+    const mutationRequestIdAtStart = mutationRequestIdRef.current;
+    const appliedMutationRequestIdAtStart = appliedMutationRequestIdRef.current;
+    const controller = new AbortController();
+
+    loadAllAbortRef.current?.abort();
+    loadAllAbortRef.current = controller;
+
     try {
       if (opts?.showLoading) setLoading(true);
       const queueParams = new URLSearchParams({ kind });
-      if (categories.length > 0) {
-        queueParams.set("categories", categories.join(","));
+      if (categoriesKey) {
+        queueParams.set("categories", categoriesKey);
       }
       const assetsUrl =
         kind === "NAUTICA"
           ? `/api/platform/assets/available?includeBlocked=true`
           : `/api/platform/jetskis/available?includeBlocked=true`;
       const [qRes, rRes, xRes, oRes] = await Promise.all([
-        fetch(`/api/platform/queue?${queueParams.toString()}`, { cache: "no-store" }),
-        fetch(`/api/platform/runs?kind=${kind}`, { cache: "no-store" }),
-        fetch(assetsUrl, { cache: "no-store" }),
-        fetch(`/api/platform/assets/operability`, { cache: "no-store" }),
-      ]);      
-      if (!qRes.ok) throw new Error(await qRes.text()); if (!rRes.ok) throw new Error(await rRes.text()); if (!xRes.ok) throw new Error(await xRes.text()); if (!oRes.ok) throw new Error(await oRes.text());
-      const q = await qRes.json(); const r = await rRes.json(); const x = await xRes.json(); const o = await oRes.json();
-      setOperability(o as OperabilitySummary); setQueue(q.queue ?? []); setRuns(r.runs ?? []); setMonitors(r.monitors ?? []);
-      if (kind === "JETSKI") { setJetskis(x.jetskis ?? []); setAssets([]); } else { setAssets(x.assets ?? []); setJetskis([]); }
-    } catch (e: unknown) { setDepartError(e instanceof Error ? e.message : "Error cargando plataforma"); } finally { if (opts?.showLoading) setLoading(false); }
-  }, [kind, categories]);
+        fetch(`/api/platform/queue?${queueParams.toString()}`, { cache: "no-store", signal: controller.signal }),
+        fetch(`/api/platform/runs?kind=${kind}`, { cache: "no-store", signal: controller.signal }),
+        fetch(assetsUrl, { cache: "no-store", signal: controller.signal }),
+        fetch(`/api/platform/assets/operability`, { cache: "no-store", signal: controller.signal }),
+      ]);
+
+      if (!qRes.ok) throw new Error(await qRes.text());
+      if (!rRes.ok) throw new Error(await rRes.text());
+      if (!xRes.ok) throw new Error(await xRes.text());
+      if (!oRes.ok) throw new Error(await oRes.text());
+
+      const q = await qRes.json();
+      const r = await rRes.json();
+      const x = await xRes.json();
+      const o = await oRes.json();
+
+      if (
+        !shouldAcceptLoadAllResponse(
+          { requestId, mutationRequestIdAtStart, appliedMutationRequestIdAtStart },
+          {
+            latestLoadAllRequestId: loadAllRequestIdRef.current,
+            latestMutationRequestId: mutationRequestIdRef.current,
+            latestAppliedMutationRequestId: appliedMutationRequestIdRef.current,
+          }
+        )
+      ) {
+        return;
+      }
+
+      setOperability(o as OperabilitySummary);
+      setQueue(q.queue ?? []);
+      setRuns(r.runs ?? []);
+      setMonitors(r.monitors ?? []);
+      if (kind === "JETSKI") {
+        setJetskis(x.jetskis ?? []);
+        setAssets([]);
+      } else {
+        setAssets(x.assets ?? []);
+        setJetskis([]);
+      }
+    } catch (e: unknown) {
+      if (isAbortError(e)) return;
+      setDepartError(e instanceof Error ? e.message : "Error cargando plataforma");
+    } finally {
+      if (loadAllAbortRef.current === controller) {
+        loadAllAbortRef.current = null;
+      }
+      if (opts?.showLoading && requestId === loadAllRequestIdRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [categoriesKey, kind]);
+
+  const scheduleMutationErrorReconcile = useCallback(() => {
+    if (reconcileTimeoutRef.current != null) {
+      window.clearTimeout(reconcileTimeoutRef.current);
+    }
+
+    reconcileTimeoutRef.current = window.setTimeout(() => {
+      reconcileTimeoutRef.current = null;
+      void loadAll();
+    }, 500);
+  }, [loadAll]);
 
   const loadPlatformExtras = useCallback(async () => {
     try {
@@ -321,17 +529,50 @@ export default function PlatformBoard(props: Props) {
   }, [kind]);
 
   async function departRun(runId: string) {
-    try { setDepartBusyRunId(runId); setDepartError(null); const res = await fetch(`/api/platform/runs/${runId}/depart`, { method: "POST", headers: { "Content-Type": "application/json" } }); if (!res.ok) throw new Error(await res.text()); await loadAll(); } catch (e: unknown) { setDepartError(e instanceof Error ? e.message : "Error iniciando salida"); } finally { setDepartBusyRunId(null); }
+    const token = beginMutation(`run:${runId}`, "depart");
+    if (!token) {
+      setDepartError("Operación en curso para esta salida.");
+      return;
+    }
+
+    try {
+      setDepartBusyRunId(runId);
+      setDepartError(null);
+      const res = await fetch(`/api/platform/runs/${runId}/depart`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) throw new Error(await readResponseError(res, "Error iniciando salida"));
+      const data = (await res.json()) as PlatformMutationResponse;
+      if (!data.delta) throw new Error("Respuesta sin delta de salida");
+      applyConfirmedDelta(data.delta, token);
+    } catch (e: unknown) {
+      setDepartError(e instanceof Error ? e.message : "Error iniciando salida");
+      scheduleMutationErrorReconcile();
+    } finally {
+      finishMutation(token);
+      setDepartBusyRunId(null);
+    }
   }
   async function closeRun(runId: string) {
+    const token = beginMutation(`run:${runId}`, "close");
+    if (!token) {
+      setDepartError("Operación en curso para esta salida.");
+      return;
+    }
+
     try {
       setCloseBusyRunId(runId); setDepartError(null);
       const res = await fetch(`/api/platform/runs/${runId}/close`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endedAt: new Date().toISOString() }) });
-      if (!res.ok) throw new Error(await res.text());
-      await loadAll();
+      if (!res.ok) throw new Error(await readResponseError(res, "Error cerrando salida"));
+      const data = (await res.json()) as PlatformMutationResponse;
+      if (!data.delta) throw new Error("Respuesta sin delta de cierre");
+      applyConfirmedDelta(data.delta, token);
     } catch (e: unknown) {
-      setDepartError(e instanceof Error ? e.message : "Error desasignando salida");
+      setDepartError(e instanceof Error ? e.message : "Error cerrando salida");
+      scheduleMutationErrorReconcile();
     } finally {
+      finishMutation(token);
       setCloseBusyRunId(null);
     }
   }
@@ -377,6 +618,11 @@ export default function PlatformBoard(props: Props) {
 
     return () => {
       disposed = true;
+      loadAllAbortRef.current?.abort();
+      if (reconcileTimeoutRef.current != null) {
+        window.clearTimeout(reconcileTimeoutRef.current);
+        reconcileTimeoutRef.current = null;
+      }
       stopPolling();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
@@ -613,8 +859,35 @@ export default function PlatformBoard(props: Props) {
   }
   async function doAssign() {
     if (!assignTarget) return; setAssignError(null); if (!assignRunId) return setAssignError("Selecciona un monitor o salida."); if (!assignResourceId) return setAssignError(kind === "JETSKI" ? "Selecciona una moto." : "Selecciona un recurso.");
+    const token = beginMutation(`unit:${assignTarget.reservationUnitId}`, "assign");
+    if (!token) {
+      setAssignError("Operación en curso para esta unidad.");
+      return;
+    }
     setAssignBusy(true);
-    try { const body = kind === "JETSKI" ? { reservationUnitId: assignTarget.reservationUnitId ?? "", jetskiId: assignResourceId } : { reservationUnitId: assignTarget.reservationUnitId ?? "", assetId: assignResourceId }; const res = await fetch(`/api/platform/runs/${assignRunId}/assign`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) throw new Error(await res.text()); setAssignOpen(false); setAssignTarget(null); await loadAll(); } catch (e: unknown) { setAssignError(e instanceof Error ? e.message : "Error asignando"); } finally { setAssignBusy(false); }
+    try {
+      const body = kind === "JETSKI"
+        ? { reservationUnitId: assignTarget.reservationUnitId ?? "", jetskiId: assignResourceId }
+        : { reservationUnitId: assignTarget.reservationUnitId ?? "", assetId: assignResourceId };
+      const res = await fetch(`/api/platform/runs/${assignRunId}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await readResponseError(res, "Error asignando"));
+      const data = (await res.json()) as PlatformMutationResponse;
+      if (!data.delta) throw new Error("Respuesta sin delta de asignación");
+      if (applyConfirmedDelta(data.delta, token)) {
+        setAssignOpen(false);
+        setAssignTarget(null);
+      }
+    } catch (e: unknown) {
+      setAssignError(e instanceof Error ? e.message : "Error asignando");
+      scheduleMutationErrorReconcile();
+    } finally {
+      finishMutation(token);
+      setAssignBusy(false);
+    }
   }
   function openAssignmentActions(a: RunOpen["assignments"][0]) { setActionAssignment(a); setActionOpen(true); setActionError(null); }
   function openIncidentFlow() {
@@ -631,9 +904,75 @@ export default function PlatformBoard(props: Props) {
     setIncidentError(null);
     setIncidentOpen(true);
   }
-  async function finishAssignment(hasIncident: boolean) { if (!actionAssignment) return; setActionBusy(true); setActionError(null); try { const res = await fetch(`/api/platform/assignments/${actionAssignment.id}/finish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hasIncident, type: hasIncident ? "OTHER" : undefined, level: hasIncident ? "LOW" : undefined }) }); if (!res.ok) throw new Error(await res.text()); setActionOpen(false); setActionAssignment(null); await loadAll(); } catch (e: unknown) { setActionError(e instanceof Error ? e.message : "Error finalizando"); } finally { setActionBusy(false); } }
-  async function extendAssignment(extraMinutes: number, serviceCode: string) { if (!actionAssignment) return; setActionBusy(true); setActionError(null); try { const res = await fetch(`/api/platform/assignments/${actionAssignment.id}/extend`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ extraMinutes, serviceCode }) }); if (!res.ok) throw new Error(await res.text()); setActionOpen(false); setActionAssignment(null); await loadAll(); } catch (e: unknown) { setActionError(e instanceof Error ? e.message : "Error extendiendo tiempo"); } finally { setActionBusy(false); } }
+  async function finishAssignment(hasIncident: boolean) {
+    if (!actionAssignment) return;
+    const token = beginMutation(`assignment:${actionAssignment.id}`, "finish");
+    if (!token) {
+      setActionError("Operación en curso para esta asignación.");
+      return;
+    }
+
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/platform/assignments/${actionAssignment.id}/finish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hasIncident, type: hasIncident ? "OTHER" : undefined, level: hasIncident ? "LOW" : undefined }),
+      });
+      if (!res.ok) throw new Error(await readResponseError(res, "Error finalizando"));
+      const data = (await res.json()) as PlatformMutationResponse;
+      if (!data.delta) throw new Error("Respuesta sin delta de finalización");
+      if (applyConfirmedDelta(data.delta, token)) {
+        setActionOpen(false);
+        setActionAssignment(null);
+      }
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : "Error finalizando");
+      scheduleMutationErrorReconcile();
+    } finally {
+      finishMutation(token);
+      setActionBusy(false);
+    }
+  }
+  async function extendAssignment(extraMinutes: number, serviceCode: string) {
+    if (!actionAssignment) return;
+    const token = beginMutation(`assignment:${actionAssignment.id}`, "extend");
+    if (!token) {
+      setActionError("Operación en curso para esta asignación.");
+      return;
+    }
+
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/platform/assignments/${actionAssignment.id}/extend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extraMinutes, serviceCode }),
+      });
+      if (!res.ok) throw new Error(await readResponseError(res, "Error extendiendo tiempo"));
+      const data = (await res.json()) as PlatformMutationResponse;
+      if (!data.delta) throw new Error("Respuesta sin delta de extensión");
+      if (applyConfirmedDelta(data.delta, token)) {
+        setActionOpen(false);
+        setActionAssignment(null);
+      }
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : "Error extendiendo tiempo");
+      scheduleMutationErrorReconcile();
+    } finally {
+      finishMutation(token);
+      setActionBusy(false);
+    }
+  }
   async function unassignAssignment(assignmentId: string) {
+    const token = beginMutation(`assignment:${assignmentId}`, "unassign");
+    if (!token) {
+      setDepartError("Operación en curso para esta asignación.");
+      return;
+    }
+
     try {
       setUnassignBusyAssignmentId(assignmentId);
       setDepartError(null);
@@ -641,11 +980,15 @@ export default function PlatformBoard(props: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
-      if (!res.ok) throw new Error(await res.text());
-      await loadAll();
+      if (!res.ok) throw new Error(await readResponseError(res, "Error desasignando cliente"));
+      const data = (await res.json()) as PlatformMutationResponse;
+      if (!data.delta) throw new Error("Respuesta sin delta de desasignación");
+      applyConfirmedDelta(data.delta, token);
     } catch (e: unknown) {
       setDepartError(e instanceof Error ? e.message : "Error desasignando cliente");
+      scheduleMutationErrorReconcile();
     } finally {
+      finishMutation(token);
       setUnassignBusyAssignmentId(null);
     }
   }

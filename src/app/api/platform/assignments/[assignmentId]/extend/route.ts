@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
 import { prisma } from "@/lib/prisma";
+import { buildPlatformMutationDeltaTx } from "@/lib/platform-board-delta-server";
 import { getPlatformExtraByServiceCodeTx } from "@/lib/platform-extras";
 import { applyPlatformExtraEventsTx } from "@/lib/reservation-platform-extras";
 
@@ -119,11 +120,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ assignmentId: 
 
       await applyPlatformExtraEventsTx(tx, assignment.reservationId, [event.id]);
 
+      const delta = await buildPlatformMutationDeltaTx(tx, {
+        mutation: "extend",
+        runId: assignment.runId,
+        assignmentIds: [assignment.id],
+        reservationUnitIds: assignment.reservationUnitId ? [assignment.reservationUnitId] : [],
+        reservationIds: [assignment.reservationId],
+      });
+
       return {
         ok: true,
         assignmentId: updated.id,
         expectedEndAt: updated.expectedEndAt,
         durationMinutesSnapshot: updated.durationMinutesSnapshot,
+        delta,
       };
     });
 

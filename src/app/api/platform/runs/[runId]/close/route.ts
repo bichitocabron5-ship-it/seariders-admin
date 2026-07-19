@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { MonitorRunStatus, RunAssignmentStatus } from "@prisma/client";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
+import { buildPlatformMutationDeltaTx } from "@/lib/platform-board-delta-server";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
       if (!run) throw new Error("Run no existe");
 
       if (run.status === MonitorRunStatus.CLOSED) {
-        return { ok: true, runId: run.id, alreadyClosed: true };
+        const delta = await buildPlatformMutationDeltaTx(tx, {
+          mutation: "close",
+          runId: run.id,
+          removedRunIds: [run.id],
+        });
+        return { ok: true, runId: run.id, alreadyClosed: true, delta };
       }
 
       if (![MonitorRunStatus.READY, MonitorRunStatus.IN_SEA].includes(run.status)) {
@@ -66,7 +72,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ runId: string 
         select: { id: true, status: true, closedAt: true, endedAt: true, note: true },
       });
 
-      return { ok: true, run: updated };
+      const delta = await buildPlatformMutationDeltaTx(tx, {
+        mutation: "close",
+        runId,
+        removedRunIds: [runId],
+      });
+
+      return { ok: true, run: updated, delta };
     });
 
     if (out instanceof NextResponse) return out;
