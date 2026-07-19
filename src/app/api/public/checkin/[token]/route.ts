@@ -361,10 +361,38 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
           customerName: true,
           customerCountry: true,
           isLicense: true,
+          quantity: true,
+          serviceId: true,
+          optionId: true,
+          pax: true,
+          totalPriceCents: true,
+          service: { select: { name: true, category: true } },
+          option: { select: { durationMinutes: true } },
+          items: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              reservationId: true,
+              serviceId: true,
+              optionId: true,
+              quantity: true,
+              pax: true,
+              totalPriceCents: true,
+              isExtra: true,
+              service: { select: { name: true, category: true } },
+              option: { select: { durationMinutes: true } },
+            },
+          },
           contracts: {
             select: {
               id: true,
+              reservationId: true,
+              reservationItemId: true,
+              unitIndex: true,
+              logicalUnitIndex: true,
               status: true,
+              supersededAt: true,
+              createdAt: true,
               minorAuthorizationFileKey: true,
             },
           },
@@ -396,11 +424,30 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ token: string
         },
       });
 
+      const contractRequirements = buildReservationContractRequirements({
+        quantity: reservation.quantity ?? 0,
+        isLicense: Boolean(reservation.isLicense),
+        serviceCategory: reservation.service?.category ?? null,
+        serviceId: reservation.serviceId,
+        optionId: reservation.optionId,
+        serviceName: reservation.service?.name ?? null,
+        durationMinutes: reservation.option?.durationMinutes ?? null,
+        pax: reservation.pax,
+        totalPriceCents: reservation.totalPriceCents,
+        items: reservation.items ?? [],
+      });
+      const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+      const visibleContractIds = new Set(
+        pickVisibleContractsByTargets(reservation.contracts ?? [], syncTargets).map((contract) => contract.id)
+      );
       const contractMap = new Map(reservation.contracts.map((contract) => [contract.id, contract]));
 
       for (const contractPatch of parsed.data.contracts) {
         const current = contractMap.get(contractPatch.id);
         if (!current) throw new Error(checkinRouteText(language, "contractNotInReservation"));
+        if (!visibleContractIds.has(current.id)) {
+          throw new Error(checkinRouteText(language, "contractNotInReservation"));
+        }
         if (String(current.status) === "SIGNED") continue;
 
         const nextDriverBirthDate =

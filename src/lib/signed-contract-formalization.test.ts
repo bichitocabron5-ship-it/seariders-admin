@@ -440,3 +440,45 @@ test("composicion moderna conserva el optionId del item", () => {
 
   assert.equal(sameContractComposition(existingComposition, nextComposition), true);
 });
+
+test("pack Jetski + Banana firmado sin cambios no bloquea aunque el formulario venga reordenado", () => {
+  const existingComposition = buildComparableContractComposition([
+    {
+      serviceId: "service-jetski",
+      optionId: "option-jetski",
+      quantity: 1,
+      pax: 2,
+    },
+    {
+      serviceId: "service-banana",
+      optionId: "option-banana",
+      quantity: 1,
+      pax: 2,
+    },
+  ]);
+  const nextComposition = buildComparableContractComposition([
+    {
+      serviceId: "service-banana",
+      optionId: "option-banana",
+      quantity: 1,
+      pax: 2,
+    },
+    {
+      serviceId: "service-jetski",
+      optionId: "option-jetski",
+      quantity: 1,
+      pax: 2,
+    },
+  ]);
+  const compositionChanged = !sameContractComposition(existingComposition, nextComposition);
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: false,
+    compositionChanged,
+    protectedNonScheduleFieldsChanged: false,
+  });
+
+  assert.equal(compositionChanged, false);
+  assert.equal(decision.signedContractBlockingChange, false);
+  assert.equal(decision.syncMaterialChange, false);
+});

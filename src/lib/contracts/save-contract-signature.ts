@@ -9,6 +9,7 @@ import {
   buildReservationContractRequirements,
   reservationContractRequirementsToSyncTargets,
 } from "@/lib/reservation-contract-requirements";
+import { evaluatePublicContractAccess } from "@/lib/contracts/public-contract-access";
 import { verifyContractSignatureToken } from "@/lib/contracts/signature-link";
 import { verifyReservationCheckinToken } from "@/lib/reservations/public-checkin-link";
 
@@ -47,6 +48,10 @@ export type ContractSignatureValidationContract = {
   id: string;
   reservationId: string;
   reservationItemId?: string | null;
+  reservationItem?: {
+    id?: string | null;
+    reservationId?: string | null;
+  } | null;
   unitIndex: number;
   logicalUnitIndex: number | null;
   status: ContractStatus | string;
@@ -63,6 +68,7 @@ export type ContractSignatureValidationContract = {
     service: { category: string | null } | null;
     items: Array<{
       id?: string | null;
+      reservationId?: string | null;
       serviceId?: string | null;
       optionId?: string | null;
       quantity: number | null;
@@ -72,6 +78,7 @@ export type ContractSignatureValidationContract = {
     }>;
     contracts: Array<{
       id: string;
+      reservationId?: string | null;
       reservationItemId?: string | null;
       unitIndex: number | null;
       logicalUnitIndex: number | null;
@@ -210,7 +217,12 @@ function assertContractCanBeSigned(contract: ContractSignatureValidationContract
     syncTargets
   );
 
-  if (!visibleContracts.some((visibleContract) => visibleContract.id === contract.id)) {
+  const access = evaluatePublicContractAccess({
+    reservation: contract.reservation,
+    contract,
+  });
+
+  if (!access.ok || !visibleContracts.some((visibleContract) => visibleContract.id === contract.id)) {
     throw new ContractSignatureError(
       "El contrato no esta vigente para esta reserva",
       "CONTRACT_NOT_VISIBLE",
@@ -226,6 +238,12 @@ async function loadContractForSignature(contractId: string) {
       id: true,
       reservationId: true,
       reservationItemId: true,
+      reservationItem: {
+        select: {
+          id: true,
+          reservationId: true,
+        },
+      },
       unitIndex: true,
       logicalUnitIndex: true,
       status: true,
@@ -245,6 +263,7 @@ async function loadContractForSignature(contractId: string) {
             orderBy: { createdAt: "asc" },
             select: {
               id: true,
+              reservationId: true,
               serviceId: true,
               optionId: true,
               quantity: true,
@@ -256,6 +275,7 @@ async function loadContractForSignature(contractId: string) {
           contracts: {
             select: {
               id: true,
+              reservationId: true,
               reservationItemId: true,
               unitIndex: true,
               logicalUnitIndex: true,

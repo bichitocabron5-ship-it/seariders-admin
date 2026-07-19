@@ -4,6 +4,7 @@ import { regenerateSignedContractPdf } from "@/lib/contracts/render-contract-pdf
 import { getSignedContractPdfUrl } from "@/lib/s3";
 import { verifyReservationCheckinToken } from "@/lib/reservations/public-checkin-link";
 import { normalizePublicLanguage } from "@/lib/public-links/i18n";
+import { evaluatePublicContractAccess } from "@/lib/contracts/public-contract-access";
 
 export const runtime = "nodejs";
 
@@ -16,9 +17,66 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string; 
   try {
     const existing = await prisma.reservationContract.findUnique({
       where: { id: contractId },
-      select: { id: true, reservationId: true },
+      select: {
+        id: true,
+        reservationId: true,
+        reservationItemId: true,
+        unitIndex: true,
+        logicalUnitIndex: true,
+        status: true,
+        supersededAt: true,
+        createdAt: true,
+        reservationItem: { select: { id: true, reservationId: true } },
+        reservation: {
+          select: {
+            id: true,
+            quantity: true,
+            isLicense: true,
+            serviceId: true,
+            optionId: true,
+            pax: true,
+            totalPriceCents: true,
+            service: { select: { name: true, category: true } },
+            option: { select: { durationMinutes: true } },
+            items: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                id: true,
+                reservationId: true,
+                serviceId: true,
+                optionId: true,
+                quantity: true,
+                pax: true,
+                totalPriceCents: true,
+                isExtra: true,
+                service: { select: { name: true, category: true } },
+                option: { select: { durationMinutes: true } },
+              },
+            },
+            contracts: {
+              select: {
+                id: true,
+                reservationId: true,
+                reservationItemId: true,
+                unitIndex: true,
+                logicalUnitIndex: true,
+                status: true,
+                supersededAt: true,
+                createdAt: true,
+              },
+            },
+          },
+        },
+      },
     });
     if (!existing || existing.reservationId !== payload.reservationId) {
+      return new NextResponse(language === "en" ? "Contract not found" : "Contrato no encontrado", { status: 404 });
+    }
+    const access = evaluatePublicContractAccess({
+      reservation: existing.reservation,
+      contract: existing,
+    });
+    if (!access.ok) {
       return new NextResponse(language === "en" ? "Contract not found" : "Contrato no encontrado", { status: 404 });
     }
 

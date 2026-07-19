@@ -36,6 +36,9 @@ type ContractOptions = {
   logicalUnitIndex?: number | null;
   reservationStatus?: string;
   quantity?: number | null;
+  reservationItemId?: string | null;
+  reservationItemReservationId?: string | null;
+  reservationItems?: ContractSignatureValidationContract["reservation"]["items"];
   reservationContracts?: ContractSignatureValidationContract["reservation"]["contracts"];
 };
 
@@ -46,9 +49,12 @@ function makeContract(options: ContractOptions = {}): ContractSignatureValidatio
   const supersededAt = options.supersededAt ?? null;
   const unitIndex = options.unitIndex ?? 1;
   const logicalUnitIndex = options.logicalUnitIndex === undefined ? 1 : options.logicalUnitIndex;
+  const reservationItemId = options.reservationItemId ?? null;
   const createdAt = new Date("2026-06-30T09:00:00.000Z");
   const contractRow = {
     id,
+    reservationId,
+    reservationItemId,
     unitIndex,
     logicalUnitIndex,
     status,
@@ -59,6 +65,13 @@ function makeContract(options: ContractOptions = {}): ContractSignatureValidatio
   return {
     id,
     reservationId,
+    reservationItemId,
+    reservationItem: reservationItemId
+      ? {
+          id: reservationItemId,
+          reservationId: options.reservationItemReservationId ?? reservationId,
+        }
+      : null,
     unitIndex,
     logicalUnitIndex,
     status,
@@ -70,7 +83,22 @@ function makeContract(options: ContractOptions = {}): ContractSignatureValidatio
       quantity: options.quantity ?? 1,
       isLicense: false,
       service: { category: "JETSKI" },
-      items: [],
+      items: options.reservationItems ?? (
+        reservationItemId
+          ? [
+              {
+                id: reservationItemId,
+                reservationId,
+                serviceId: "service_jetski",
+                optionId: "option_20",
+                quantity: options.quantity ?? 1,
+                pax: 2,
+                isExtra: false,
+                service: { category: "JETSKI" },
+              },
+            ]
+          : []
+      ),
       contracts: options.reservationContracts ?? [contractRow],
     },
   };
@@ -367,4 +395,56 @@ test("saveContractSignature firma contrato READY activo con token valido", async
   assert.equal(mocks.putSignatureImage.mock.callCount(), 1);
   assert.equal(mocks.updateContractSignature.mock.callCount(), 1);
   assert.equal(mocks.regenerateSignedContractPdf.mock.callCount(), 1);
+});
+
+test("saveContractSignature firma contrato READY vinculado a ReservationItem con token de firma valido", async (t) => {
+  const mocks = makeDeps(t, makeContract({ reservationItemId: "item_jetski" }));
+  const token = createContractSignatureToken({ contractId: "contract_1" });
+
+  const result = await saveContractSignature(
+    {
+      signerName: "Laura Perez",
+      imageDataUrl: PNG_DATA_URL,
+      access: { type: "contract-signature-token", token },
+    },
+    mocks.deps
+  );
+
+  assert.equal(result.id, "contract_1");
+  assert.equal(mocks.updateContractSignature.mock.callCount(), 1);
+});
+
+test("saveContractSignature firma contrato vinculado a ReservationItem con token de pre-checkin valido", async (t) => {
+  const mocks = makeDeps(t, makeContract({ reservationItemId: "item_jetski" }));
+  const token = createReservationCheckinToken({ reservationId: "reservation_1" });
+
+  const result = await saveContractSignature(
+    {
+      contractId: "contract_1",
+      signerName: "Laura Perez",
+      imageDataUrl: PNG_DATA_URL,
+      access: { type: "reservation-checkin-token", token },
+    },
+    mocks.deps
+  );
+
+  assert.equal(result.id, "contract_1");
+  assert.equal(mocks.updateContractSignature.mock.callCount(), 1);
+});
+
+test("saveContractSignature rechaza contract.reservationItemId de otra reserva", async (t) => {
+  const mocks = makeDeps(
+    t,
+    makeContract({
+      reservationItemId: "item_jetski",
+      reservationItemReservationId: "reservation_2",
+    })
+  );
+
+  await assertRejectsWithCode(
+    () => saveContractSignature(baseArgs({ type: "internal" }), mocks.deps),
+    "CONTRACT_NOT_VISIBLE"
+  );
+
+  assertNoSignatureSideEffects(mocks);
 });

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildReservationContractRequirements } from "./reservation-contract-requirements";
+import {
+  buildReservationContractRequirements,
+  findContractRequirementForContract,
+} from "./reservation-contract-requirements";
 
 function item(args: {
   id: string;
@@ -146,4 +149,38 @@ test("dos lineas Jetski con opciones distintas producen targets separados", () =
       ["jetski-40", "option-40", 40, 2],
     ]
   );
+});
+
+test("contrato legacy sin reservationItemId adopta requirement unico por slot sin usar Reservation.service", () => {
+  const requirements = buildReservationContractRequirements({
+    quantity: 2,
+    isLicense: false,
+    serviceCategory: "PACK",
+    items: [
+      item({
+        id: "banana",
+        category: "NAUTICA",
+        name: "Banana",
+        optionId: "banana-15",
+        durationMinutes: 15,
+      }),
+      item({
+        id: "jetski",
+        category: "JETSKI",
+        name: "Jetski",
+        optionId: "jetski-20",
+        durationMinutes: 20,
+      }),
+    ],
+  });
+
+  const requirement = findContractRequirementForContract(requirements, {
+    reservationItemId: null,
+    logicalUnitIndex: 1,
+    unitIndex: 1,
+  });
+
+  assert.equal(requirement?.reservationItemId, "jetski");
+  assert.equal(requirement?.templateCode, "JETSKI_NO_LICENSE");
+  assert.equal(requirement?.serviceName, "Jetski");
 });
