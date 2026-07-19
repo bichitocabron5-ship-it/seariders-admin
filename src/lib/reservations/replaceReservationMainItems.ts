@@ -35,8 +35,10 @@ function sameContractMaterialShape(
   return (
     existing.serviceId === next.serviceId &&
     (existing.optionId ?? null) === (next.optionId ?? null) &&
+    (existing.servicePriceId ?? null) === (next.servicePriceId ?? null) &&
     Number(existing.quantity ?? 0) === Number(next.quantity ?? 0) &&
     Number(existing.pax ?? 0) === Number(next.pax ?? 0) &&
+    Number(existing.unitPriceCents ?? 0) === Number(next.unitPriceCents ?? 0) &&
     Number(existing.totalPriceCents ?? 0) === Number(next.totalPriceCents ?? 0)
   );
 }

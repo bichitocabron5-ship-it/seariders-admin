@@ -42,6 +42,7 @@ import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operati
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 import {
   commercialPricingStateChanged,
+  hasExplicitPromoCodeChange,
   isReservationCoveredByPrepaidVoucher,
   netPaidServiceCents,
   resolvePrepaidVoucherCommercialChange,
@@ -49,7 +50,7 @@ import {
 } from "@/lib/reservation-commercial-snapshot";
 import {
   SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE,
-  hasSignedContractBlockingChange,
+  resolveSignedContractMaterialChangePolicy,
 } from "@/lib/signed-contract-formalization";
 
 export const runtime = "nodejs";
@@ -168,6 +169,10 @@ function sameInstant(a: Date | null | undefined, b: Date | null | undefined) {
   const at = a?.getTime() ?? null;
   const bt = b?.getTime() ?? null;
   return at === bt;
+}
+
+function sameCents(a: number | null | undefined, b: number | null | undefined) {
+  return Number(a ?? 0) === Number(b ?? 0);
 }
 
 function fallbackOptionalString(...values: Array<string | null | undefined>) {
@@ -816,6 +821,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const effectiveRequestedChannelId = commercialChange.effectiveRequestedChannelId;
       const channelChanged = commercialChange.channelChanged;
       const licensePricingChanged = commercialChange.commercialPricingChanged;
+      const promoCodeChanged =
+        current.source === "BOOTH"
+          ? false
+          : hasExplicitPromoCodeChange({
+              currentPromoCode: current.promoCode,
+              requestedPromoCodes: candidateItems.map((item) => item.promoCode),
+            });
       const requestedCommercialState = {
         jetskiLicenseMode: isPrepaidVoucherReservation
           ? current.jetskiLicenseMode
@@ -853,26 +865,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const protectedNonScheduleFieldsChanged =
         channelChanged ||
         licensePricingChanged ||
+        promoCodeChanged ||
         companionsChanged ||
         customerLegalFieldsChanged ||
         licenseFieldsChanged;
       const scheduleChanged =
         !sameInstant(current.activityDate, activityDate) ||
         !sameInstant(current.scheduledTime, scheduledTime);
-      const reservationWideMaterialContractChange =
-        scheduleChanged || protectedNonScheduleFieldsChanged;
+      const signedContractMaterialPolicy = resolveSignedContractMaterialChangePolicy({
+        hasSignedContracts: signedContractsCount > 0,
+        scheduleChanged,
+        compositionChanged: contractCompositionChanged,
+        protectedNonScheduleFieldsChanged,
+      });
 
-      if (
-        hasSignedContractBlockingChange({
-          hasSignedContracts: signedContractsCount > 0,
-          compositionChanged: contractCompositionChanged,
-          protectedNonScheduleFieldsChanged,
-        })
-      ) {
+      if (signedContractMaterialPolicy.signedContractBlockingChange) {
         throw new Error(SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE);
       }
 
-      if (preserveCommercialSnapshot && (commercialShapeChanged || channelChanged || licensePricingChanged)) {
+      if (preserveCommercialSnapshot && (commercialShapeChanged || channelChanged || licensePricingChanged || promoCodeChanged)) {
         throw new Error(
           "La reserva tiene snapshot comercial o pagos asociados. Formalizar conserva precio, promoción y comisión; usa una acción explícita de recálculo para cambiar actividad, cantidad, canal o tarifa."
         );
@@ -1167,6 +1178,29 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         });
       }
 
+      const commercialContractContentChanged =
+        !preserveCommercialSnapshot &&
+        (!sameCents(current.basePriceCents, serviceSubtotal) ||
+          !sameCents(current.commissionBaseCents, commercial.commissionBaseCents) ||
+          !sameCents(current.totalPriceCents, commercial.finalTotalCents) ||
+          !sameCents(current.autoDiscountCents, commercial.autoDiscountCents) ||
+          !sameCents(current.manualDiscountCents, commercial.manualDiscountCents) ||
+          !sameCents(current.customerDiscountCents, customerDiscountSnapshot.customerDiscountCents) ||
+          !sameCents(current.promoterDiscountCents, commercial.promoterDiscountCents) ||
+          !sameCents(current.companyDiscountCents, commercial.companyDiscountCents) ||
+          normalizeComparableOptionalString(current.promoCode) !==
+            normalizeComparableOptionalString(commercial.promoCode));
+      const commercialSignedContractMaterialPolicy = resolveSignedContractMaterialChangePolicy({
+        hasSignedContracts: signedContractsCount > 0,
+        scheduleChanged,
+        compositionChanged: contractCompositionChanged,
+        protectedNonScheduleFieldsChanged,
+        commercialContentChanged: commercialContractContentChanged,
+      });
+      if (commercialSignedContractMaterialPolicy.signedContractBlockingChange) {
+        throw new Error(SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE);
+      }
+
       const mainLine = lineCreates[0];
       if (!mainLine) throw new Error("Servicio y duracion requeridos.");
 
@@ -1440,6 +1474,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             changedReservationItemIds: new Set<string>(),
             removedReservationItemIds: [],
           };
+      const itemMaterialChanged = itemReplacement.changedReservationItemIds.size > 0;
+      const finalSignedContractMaterialPolicy = resolveSignedContractMaterialChangePolicy({
+        hasSignedContracts: signedContractsCount > 0,
+        scheduleChanged,
+        compositionChanged: contractCompositionChanged,
+        protectedNonScheduleFieldsChanged,
+        itemMaterialChanged,
+        commercialContentChanged: commercialContractContentChanged,
+      });
+      if (finalSignedContractMaterialPolicy.signedContractBlockingChange) {
+        throw new Error(SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE);
+      }
 
       const nextContractItems = lineCreates.map((line, index) => ({
         id: itemReplacement.nextReservationItemIds[index] ?? null,
@@ -1469,10 +1515,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         requiredUnits: contractRequirements.length,
         targets: reservationContractRequirementsToSyncTargets(contractRequirements, {
           changedReservationItemIds: itemReplacement.changedReservationItemIds,
-          materialChange: reservationWideMaterialContractChange,
+          materialChange: finalSignedContractMaterialPolicy.syncMaterialChange,
         }),
         confirmSignedReduction: Boolean(b.confirmSignedContractReduction),
-        blockSignedOnMaterialChange: true,
+        blockSignedOnMaterialChange:
+          finalSignedContractMaterialPolicy.blockSignedOnSyncMaterialChange,
       });
       if (!preserveCommercialSnapshot) {
         await deleteRemovedReservationMainItemsTx(tx, itemReplacement.removedReservationItemIds);

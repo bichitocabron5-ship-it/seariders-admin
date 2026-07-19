@@ -88,6 +88,36 @@ export function hasSignedContractBlockingChange(args: {
   );
 }
 
+export function resolveSignedContractMaterialChangePolicy(args: {
+  hasSignedContracts: boolean;
+  scheduleChanged: boolean;
+  compositionChanged: boolean;
+  protectedNonScheduleFieldsChanged: boolean;
+  itemMaterialChanged?: boolean;
+  commercialContentChanged?: boolean;
+}) {
+  const itemMaterialChanged = Boolean(args.itemMaterialChanged);
+  const commercialContentChanged = Boolean(args.commercialContentChanged);
+  const protectedContractContentChanged =
+    args.compositionChanged ||
+    args.protectedNonScheduleFieldsChanged ||
+    itemMaterialChanged ||
+    commercialContentChanged;
+  const signedContractBlockingChange = Boolean(
+    args.hasSignedContracts && protectedContractContentChanged
+  );
+
+  return {
+    signedContractBlockingChange,
+    protectedContractContentChanged,
+    syncMaterialChange:
+      args.scheduleChanged ||
+      args.protectedNonScheduleFieldsChanged ||
+      commercialContentChanged,
+    blockSignedOnSyncMaterialChange: protectedContractContentChanged,
+  };
+}
+
 export function shouldSyncReservationBeforeFormalize(args: {
   hasSignedContracts: boolean;
   hasPendingReservationChanges: boolean;

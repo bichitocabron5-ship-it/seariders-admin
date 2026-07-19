@@ -5,6 +5,7 @@ import {
   buildComparableContractComposition,
   buildExistingReservationContractComposition,
   hasSignedContractBlockingChange,
+  resolveSignedContractMaterialChangePolicy,
   sameContractComposition,
   shouldSyncReservationBeforeFormalize,
 } from "./signed-contract-formalization";
@@ -86,6 +87,114 @@ test("contrato SIGNED con solo fecha/hora permite continuar", () => {
     }),
     false
   );
+});
+
+test("BOOTH SIGNED sin cambios reales no bloquea ni marca sync material", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: false,
+    compositionChanged: false,
+    protectedNonScheduleFieldsChanged: false,
+  });
+
+  assert.deepEqual(decision, {
+    signedContractBlockingChange: false,
+    protectedContractContentChanged: false,
+    syncMaterialChange: false,
+    blockSignedOnSyncMaterialChange: false,
+  });
+});
+
+test("BOOTH SIGNED con solo fecha/hora refresca no firmados sin bloquear firmados", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: true,
+    compositionChanged: false,
+    protectedNonScheduleFieldsChanged: false,
+  });
+
+  assert.deepEqual(decision, {
+    signedContractBlockingChange: false,
+    protectedContractContentChanged: false,
+    syncMaterialChange: true,
+    blockSignedOnSyncMaterialChange: false,
+  });
+});
+
+test("BOOTH SIGNED con cambio de cantidad bloquea como cambio contractual real", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: false,
+    compositionChanged: true,
+    protectedNonScheduleFieldsChanged: false,
+  });
+
+  assert.equal(decision.signedContractBlockingChange, true);
+  assert.equal(decision.blockSignedOnSyncMaterialChange, true);
+});
+
+test("SIGNED con cambio de precio de item bloquea", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: false,
+    compositionChanged: false,
+    protectedNonScheduleFieldsChanged: false,
+    itemMaterialChanged: true,
+  });
+
+  assert.equal(decision.signedContractBlockingChange, true);
+  assert.equal(decision.blockSignedOnSyncMaterialChange, true);
+});
+
+test("SIGNED con cambio de descuento bloquea", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: false,
+    compositionChanged: false,
+    protectedNonScheduleFieldsChanged: false,
+    commercialContentChanged: true,
+  });
+
+  assert.equal(decision.signedContractBlockingChange, true);
+  assert.equal(decision.syncMaterialChange, true);
+  assert.equal(decision.blockSignedOnSyncMaterialChange, true);
+});
+
+test("SIGNED con cambio de promocion bloquea", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: false,
+    compositionChanged: false,
+    protectedNonScheduleFieldsChanged: true,
+  });
+
+  assert.equal(decision.signedContractBlockingChange, true);
+  assert.equal(decision.blockSignedOnSyncMaterialChange, true);
+});
+
+test("SIGNED con cambio de tarifa bloquea", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: false,
+    compositionChanged: false,
+    protectedNonScheduleFieldsChanged: false,
+    itemMaterialChanged: true,
+  });
+
+  assert.equal(decision.signedContractBlockingChange, true);
+  assert.equal(decision.blockSignedOnSyncMaterialChange, true);
+});
+
+test("BOOTH sin firmar no bloquea aunque haya cambio de composicion", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: false,
+    scheduleChanged: false,
+    compositionChanged: true,
+    protectedNonScheduleFieldsChanged: false,
+  });
+
+  assert.equal(decision.signedContractBlockingChange, false);
+  assert.equal(decision.protectedContractContentChanged, true);
 });
 
 test("reserva legacy SIGNED sin optionId en items permite solo cambio de fecha/hora", () => {
