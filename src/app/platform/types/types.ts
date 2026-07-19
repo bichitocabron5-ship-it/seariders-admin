@@ -40,6 +40,7 @@ export type JetskiAvail = {
   number: number | null;
   model: string | null;
   year?: number | null;
+  currentHours?: number | null;
   status: "OPERATIONAL" | string;
   operabilityStatus: OperabilityStatus;
   blockReason?: string | null;
@@ -62,6 +63,7 @@ export type AssetAvail = {
   plate: string | null;
   code: string | null;
   note?: string | null;
+  currentHours?: number | null;
 };
 
 export type MonitorLite = {
@@ -104,6 +106,7 @@ export type RunOpen = {
 
   assignments: Array<{
     id: string;
+    runId?: string | null;
     status: RunAssignmentStatus;
 
     reservationId: string;
@@ -113,7 +116,7 @@ export type RunOpen = {
     jetski?: { id?: string; number?: number | null } | null;
 
     assetId?: string | null;
-    asset?: { name?: string | null; type?: string | null } | null;
+    asset?: { id?: string | null; name?: string | null; type?: string | null; model?: string | null } | null;
 
     createdAt?: string | null;
     startedAt?: string | null;

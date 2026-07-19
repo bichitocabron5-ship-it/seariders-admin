@@ -67,6 +67,7 @@ export async function GET(req: Request) {
         orderBy: [{ status: "asc" }, { createdAt: "asc" }, { startedAt: "asc" }],
         select: {
           id: true,
+          runId: true,
           reservationId: true,
           reservationUnitId: true,
           reservationUnit: {
@@ -314,6 +315,7 @@ export async function POST(req: Request) {
         monitorAssetId: true,
         status: true,
         startedAt: true,
+        note: true,
         monitor: { select: { id: true, name: true } },
         monitorJetski: { select: { id: true, number: true, model: true } },
         monitorAsset: { select: { id: true, name: true, type: true } },

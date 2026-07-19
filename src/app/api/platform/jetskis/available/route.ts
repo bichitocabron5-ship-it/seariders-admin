@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
       number: true,
       model: true,
       year: true,
+      currentHours: true,
       status: true,
       operabilityStatus: true,
       maintenanceEvents: {

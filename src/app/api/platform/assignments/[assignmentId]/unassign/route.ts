@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { deriveReservationStatusFromUnits } from "@/lib/reservation-status";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
+import { buildPlatformMutationDeltaTx } from "@/lib/platform-board-delta-server";
 import {
   MonitorRunStatus,
   ReservationStatus,
@@ -50,7 +51,14 @@ export async function POST(_: Request, ctx: { params: Promise<{ assignmentId: st
       }
 
       if (assignment.status === RunAssignmentStatus.FINISHED) {
-        return { ok: true, assignmentId: assignment.id, alreadyUnassigned: true };
+        const delta = await buildPlatformMutationDeltaTx(tx, {
+          mutation: "unassign",
+          runId: assignment.runId,
+          removedAssignmentIds: [assignment.id],
+          reservationUnitIds: assignment.reservationUnitId ? [assignment.reservationUnitId] : [],
+          reservationIds: [assignment.reservationId],
+        });
+        return { ok: true, assignmentId: assignment.id, alreadyUnassigned: true, delta };
       }
 
       await tx.monitorRunAssignment.delete({ where: { id: assignment.id } });
@@ -101,7 +109,15 @@ export async function POST(_: Request, ctx: { params: Promise<{ assignmentId: st
         select: { id: true },
       });
 
-      return { ok: true, assignmentId: assignment.id, runId: assignment.runId };
+      const delta = await buildPlatformMutationDeltaTx(tx, {
+        mutation: "unassign",
+        runId: assignment.runId,
+        removedAssignmentIds: [assignment.id],
+        reservationUnitIds: assignment.reservationUnitId ? [assignment.reservationUnitId] : [],
+        reservationIds: [assignment.reservationId],
+      });
+
+      return { ok: true, assignmentId: assignment.id, runId: assignment.runId, delta };
     });
 
     return NextResponse.json(out);

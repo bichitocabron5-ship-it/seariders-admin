@@ -19,6 +19,7 @@ import {
 
 import { createMaintenanceEventLog } from "@/lib/mechanics-event-log";
 import { diffHours } from "@/lib/mechanics";
+import { buildPlatformMutationDeltaTx } from "@/lib/platform-board-delta-server";
 
 export const runtime = "nodejs";
 
@@ -149,7 +150,16 @@ export async function POST(
       if (!a) throw new Error("Assignment no existe");
 
       if (a.status === RunAssignmentStatus.FINISHED) {
-        return { ok: true, assignmentId: a.id, alreadyFinished: true };
+        const delta = await buildPlatformMutationDeltaTx(tx, {
+          mutation: "finish",
+          runId: a.runId,
+          removedAssignmentIds: [a.id],
+          reservationUnitIds: a.reservationUnitId ? [a.reservationUnitId] : [],
+          reservationIds: [a.reservationId],
+          jetskiIds: a.jetskiId ? [a.jetskiId] : [],
+          assetIds: a.assetId ? [a.assetId] : [],
+        });
+        return { ok: true, assignmentId: a.id, alreadyFinished: true, delta };
       }
 
       if (a.status !== RunAssignmentStatus.ACTIVE) {
@@ -399,6 +409,17 @@ export async function POST(
       });
     }
 
+      const delta = await buildPlatformMutationDeltaTx(tx, {
+        mutation: "finish",
+        runId: a.runId,
+        removedAssignmentIds: [updatedAssignment.id],
+        reservationUnitIds: a.reservationUnitId ? [a.reservationUnitId] : [],
+        reservationIds: [a.reservationId],
+        jetskiIds: a.jetskiId ? [a.jetskiId] : [],
+        assetIds: a.assetId ? [a.assetId] : [],
+        includeOperability: b.hasIncident,
+      });
+
       return {
         ok: true,
         assignmentId: updatedAssignment.id,
@@ -407,6 +428,8 @@ export async function POST(
         maintenanceEventId,
         reservationId: a.reservationId,
         jetskiId: a.jetskiId,
+        assetId: a.assetId,
+        delta,
       };
     });
 
