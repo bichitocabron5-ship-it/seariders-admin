@@ -42,6 +42,7 @@ import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operati
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 import {
   commercialPricingStateChanged,
+  hasExplicitPromoCodeChange,
   isReservationCoveredByPrepaidVoucher,
   netPaidServiceCents,
   resolvePrepaidVoucherCommercialChange,
@@ -168,6 +169,10 @@ function sameInstant(a: Date | null | undefined, b: Date | null | undefined) {
   const at = a?.getTime() ?? null;
   const bt = b?.getTime() ?? null;
   return at === bt;
+}
+
+function sameCents(a: number | null | undefined, b: number | null | undefined) {
+  return Number(a ?? 0) === Number(b ?? 0);
 }
 
 function fallbackOptionalString(...values: Array<string | null | undefined>) {
@@ -816,6 +821,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const effectiveRequestedChannelId = commercialChange.effectiveRequestedChannelId;
       const channelChanged = commercialChange.channelChanged;
       const licensePricingChanged = commercialChange.commercialPricingChanged;
+      const promoCodeChanged =
+        current.source === "BOOTH"
+          ? false
+          : hasExplicitPromoCodeChange({
+              currentPromoCode: current.promoCode,
+              requestedPromoCodes: candidateItems.map((item) => item.promoCode),
+            });
       const requestedCommercialState = {
         jetskiLicenseMode: isPrepaidVoucherReservation
           ? current.jetskiLicenseMode
@@ -853,6 +865,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const protectedNonScheduleFieldsChanged =
         channelChanged ||
         licensePricingChanged ||
+        promoCodeChanged ||
         companionsChanged ||
         customerLegalFieldsChanged ||
         licenseFieldsChanged;
@@ -870,7 +883,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         throw new Error(SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE);
       }
 
-      if (preserveCommercialSnapshot && (commercialShapeChanged || channelChanged || licensePricingChanged)) {
+      if (preserveCommercialSnapshot && (commercialShapeChanged || channelChanged || licensePricingChanged || promoCodeChanged)) {
         throw new Error(
           "La reserva tiene snapshot comercial o pagos asociados. Formalizar conserva precio, promoción y comisión; usa una acción explícita de recálculo para cambiar actividad, cantidad, canal o tarifa."
         );
@@ -1165,6 +1178,29 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         });
       }
 
+      const commercialContractContentChanged =
+        !preserveCommercialSnapshot &&
+        (!sameCents(current.basePriceCents, serviceSubtotal) ||
+          !sameCents(current.commissionBaseCents, commercial.commissionBaseCents) ||
+          !sameCents(current.totalPriceCents, commercial.finalTotalCents) ||
+          !sameCents(current.autoDiscountCents, commercial.autoDiscountCents) ||
+          !sameCents(current.manualDiscountCents, commercial.manualDiscountCents) ||
+          !sameCents(current.customerDiscountCents, customerDiscountSnapshot.customerDiscountCents) ||
+          !sameCents(current.promoterDiscountCents, commercial.promoterDiscountCents) ||
+          !sameCents(current.companyDiscountCents, commercial.companyDiscountCents) ||
+          normalizeComparableOptionalString(current.promoCode) !==
+            normalizeComparableOptionalString(commercial.promoCode));
+      const commercialSignedContractMaterialPolicy = resolveSignedContractMaterialChangePolicy({
+        hasSignedContracts: signedContractsCount > 0,
+        scheduleChanged,
+        compositionChanged: contractCompositionChanged,
+        protectedNonScheduleFieldsChanged,
+        commercialContentChanged: commercialContractContentChanged,
+      });
+      if (commercialSignedContractMaterialPolicy.signedContractBlockingChange) {
+        throw new Error(SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE);
+      }
+
       const mainLine = lineCreates[0];
       if (!mainLine) throw new Error("Servicio y duracion requeridos.");
 
@@ -1438,6 +1474,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             changedReservationItemIds: new Set<string>(),
             removedReservationItemIds: [],
           };
+      const itemMaterialChanged = itemReplacement.changedReservationItemIds.size > 0;
+      const finalSignedContractMaterialPolicy = resolveSignedContractMaterialChangePolicy({
+        hasSignedContracts: signedContractsCount > 0,
+        scheduleChanged,
+        compositionChanged: contractCompositionChanged,
+        protectedNonScheduleFieldsChanged,
+        itemMaterialChanged,
+        commercialContentChanged: commercialContractContentChanged,
+      });
+      if (finalSignedContractMaterialPolicy.signedContractBlockingChange) {
+        throw new Error(SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE);
+      }
 
       const nextContractItems = lineCreates.map((line, index) => ({
         id: itemReplacement.nextReservationItemIds[index] ?? null,
@@ -1467,11 +1515,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         requiredUnits: contractRequirements.length,
         targets: reservationContractRequirementsToSyncTargets(contractRequirements, {
           changedReservationItemIds: itemReplacement.changedReservationItemIds,
-          materialChange: signedContractMaterialPolicy.syncMaterialChange,
+          materialChange: finalSignedContractMaterialPolicy.syncMaterialChange,
         }),
         confirmSignedReduction: Boolean(b.confirmSignedContractReduction),
         blockSignedOnMaterialChange:
-          signedContractMaterialPolicy.blockSignedOnSyncMaterialChange,
+          finalSignedContractMaterialPolicy.blockSignedOnSyncMaterialChange,
       });
       if (!preserveCommercialSnapshot) {
         await deleteRemovedReservationMainItemsTx(tx, itemReplacement.removedReservationItemIds);

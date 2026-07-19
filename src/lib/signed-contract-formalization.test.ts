@@ -133,6 +133,58 @@ test("BOOTH SIGNED con cambio de cantidad bloquea como cambio contractual real",
   assert.equal(decision.blockSignedOnSyncMaterialChange, true);
 });
 
+test("SIGNED con cambio de precio de item bloquea", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: false,
+    compositionChanged: false,
+    protectedNonScheduleFieldsChanged: false,
+    itemMaterialChanged: true,
+  });
+
+  assert.equal(decision.signedContractBlockingChange, true);
+  assert.equal(decision.blockSignedOnSyncMaterialChange, true);
+});
+
+test("SIGNED con cambio de descuento bloquea", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: false,
+    compositionChanged: false,
+    protectedNonScheduleFieldsChanged: false,
+    commercialContentChanged: true,
+  });
+
+  assert.equal(decision.signedContractBlockingChange, true);
+  assert.equal(decision.syncMaterialChange, true);
+  assert.equal(decision.blockSignedOnSyncMaterialChange, true);
+});
+
+test("SIGNED con cambio de promocion bloquea", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: false,
+    compositionChanged: false,
+    protectedNonScheduleFieldsChanged: true,
+  });
+
+  assert.equal(decision.signedContractBlockingChange, true);
+  assert.equal(decision.blockSignedOnSyncMaterialChange, true);
+});
+
+test("SIGNED con cambio de tarifa bloquea", () => {
+  const decision = resolveSignedContractMaterialChangePolicy({
+    hasSignedContracts: true,
+    scheduleChanged: false,
+    compositionChanged: false,
+    protectedNonScheduleFieldsChanged: false,
+    itemMaterialChanged: true,
+  });
+
+  assert.equal(decision.signedContractBlockingChange, true);
+  assert.equal(decision.blockSignedOnSyncMaterialChange, true);
+});
+
 test("BOOTH sin firmar no bloquea aunque haya cambio de composicion", () => {
   const decision = resolveSignedContractMaterialChangePolicy({
     hasSignedContracts: false,

@@ -93,20 +93,27 @@ export function resolveSignedContractMaterialChangePolicy(args: {
   scheduleChanged: boolean;
   compositionChanged: boolean;
   protectedNonScheduleFieldsChanged: boolean;
+  itemMaterialChanged?: boolean;
+  commercialContentChanged?: boolean;
 }) {
-  const signedContractBlockingChange = hasSignedContractBlockingChange({
-    hasSignedContracts: args.hasSignedContracts,
-    compositionChanged: args.compositionChanged,
-    protectedNonScheduleFieldsChanged: args.protectedNonScheduleFieldsChanged,
-  });
+  const itemMaterialChanged = Boolean(args.itemMaterialChanged);
+  const commercialContentChanged = Boolean(args.commercialContentChanged);
   const protectedContractContentChanged =
-    args.compositionChanged || args.protectedNonScheduleFieldsChanged;
+    args.compositionChanged ||
+    args.protectedNonScheduleFieldsChanged ||
+    itemMaterialChanged ||
+    commercialContentChanged;
+  const signedContractBlockingChange = Boolean(
+    args.hasSignedContracts && protectedContractContentChanged
+  );
 
   return {
     signedContractBlockingChange,
     protectedContractContentChanged,
     syncMaterialChange:
-      args.scheduleChanged || args.protectedNonScheduleFieldsChanged,
+      args.scheduleChanged ||
+      args.protectedNonScheduleFieldsChanged ||
+      commercialContentChanged,
     blockSignedOnSyncMaterialChange: protectedContractContentChanged,
   };
 }
