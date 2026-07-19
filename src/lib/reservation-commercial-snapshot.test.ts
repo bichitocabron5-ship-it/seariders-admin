@@ -191,6 +191,19 @@ test("formalize preserves a full paid promo snapshot so pending stays zero", () 
   assert.equal(status.state, "PAID");
 });
 
+test("formalize BOOTH conserva snapshot comercial completo sin pagos ni recalculo", () => {
+  assert.equal(
+    shouldPreserveFormalizeCommercialSnapshot({
+      snapshot: {
+        ...completeSnapshot,
+        promoCode: null,
+      },
+      payments: [],
+    }),
+    true
+  );
+});
+
 test("paid gift voucher formalization keeps service pending at zero even with stale live price", () => {
   const snapshot = {
     ...completeSnapshot,

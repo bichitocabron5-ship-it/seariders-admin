@@ -256,6 +256,65 @@ test("sync resetea READY con cambio material sin bloquear", async () => {
   assert.equal(ready?.renderedPdfUrl, null);
 });
 
+test("sync por targets permite fecha/hora material con SIGNED si no es contenido protegido", async () => {
+  const { tx, rows } = makeTx([
+    row("signed-1", "SIGNED", 1, {
+      renderedHtml: "<html>signed</html>",
+      renderedPdfKey: "signed.pdf",
+    }),
+  ]);
+
+  const result = await syncReservationContractsTx(tx, {
+    reservationId: "reservation-1",
+    requiredUnits: 1,
+    targets: [
+      {
+        reservationItemId: null,
+        logicalUnitIndex: 1,
+        ...licensedJetskiTarget,
+        expectedAssetType: null,
+        materialChange: true,
+      },
+    ],
+    blockSignedOnMaterialChange: false,
+  });
+
+  assert.equal(result.keptContracts, 1);
+  assert.equal(result.resetContracts, 0);
+  const signed = rows.find((item) => item.id === "signed-1");
+  assert.equal(signed?.status, "SIGNED");
+  assert.equal(signed?.renderedHtml, "<html>signed</html>");
+  assert.equal(signed?.renderedPdfKey, "signed.pdf");
+});
+
+test("sync por targets bloquea SIGNED si el cambio material afecta contenido protegido", async () => {
+  const { tx } = makeTx([row("signed-1", "SIGNED", 1)]);
+
+  await assert.rejects(
+    () =>
+      syncReservationContractsTx(tx, {
+        reservationId: "reservation-1",
+        requiredUnits: 1,
+        targets: [
+          {
+            reservationItemId: null,
+            logicalUnitIndex: 1,
+            ...licensedJetskiTarget,
+            expectedAssetType: null,
+            materialChange: true,
+          },
+        ],
+        blockSignedOnMaterialChange: true,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ReservationContractSyncBlockedError);
+      assert.equal(error.status, 409);
+      assert.equal(error.code, "SIGNED_CONTRACT_MATERIAL_CHANGE");
+      return true;
+    }
+  );
+});
+
 test("sync JETSKI_LICENSED a BOAT_LICENSED invalida incompatible y crea reemplazo", async () => {
   const { tx, rows } = makeTx([
     row("jetski-1", "READY", 1, {

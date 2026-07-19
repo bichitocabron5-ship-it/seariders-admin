@@ -49,7 +49,7 @@ import {
 } from "@/lib/reservation-commercial-snapshot";
 import {
   SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE,
-  hasSignedContractBlockingChange,
+  resolveSignedContractMaterialChangePolicy,
 } from "@/lib/signed-contract-formalization";
 
 export const runtime = "nodejs";
@@ -859,16 +859,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const scheduleChanged =
         !sameInstant(current.activityDate, activityDate) ||
         !sameInstant(current.scheduledTime, scheduledTime);
-      const reservationWideMaterialContractChange =
-        scheduleChanged || protectedNonScheduleFieldsChanged;
+      const signedContractMaterialPolicy = resolveSignedContractMaterialChangePolicy({
+        hasSignedContracts: signedContractsCount > 0,
+        scheduleChanged,
+        compositionChanged: contractCompositionChanged,
+        protectedNonScheduleFieldsChanged,
+      });
 
-      if (
-        hasSignedContractBlockingChange({
-          hasSignedContracts: signedContractsCount > 0,
-          compositionChanged: contractCompositionChanged,
-          protectedNonScheduleFieldsChanged,
-        })
-      ) {
+      if (signedContractMaterialPolicy.signedContractBlockingChange) {
         throw new Error(SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE);
       }
 
@@ -1469,10 +1467,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         requiredUnits: contractRequirements.length,
         targets: reservationContractRequirementsToSyncTargets(contractRequirements, {
           changedReservationItemIds: itemReplacement.changedReservationItemIds,
-          materialChange: reservationWideMaterialContractChange,
+          materialChange: signedContractMaterialPolicy.syncMaterialChange,
         }),
         confirmSignedReduction: Boolean(b.confirmSignedContractReduction),
-        blockSignedOnMaterialChange: true,
+        blockSignedOnMaterialChange:
+          signedContractMaterialPolicy.blockSignedOnSyncMaterialChange,
       });
       if (!preserveCommercialSnapshot) {
         await deleteRemovedReservationMainItemsTx(tx, itemReplacement.removedReservationItemIds);
