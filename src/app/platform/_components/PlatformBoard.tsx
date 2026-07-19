@@ -25,6 +25,8 @@ import {
   applyQueueDelta,
   applyRunsDelta,
   queueScopeForKind,
+  recordAppliedPlatformMutationDelta,
+  shouldApplyPlatformMutationDelta,
   shouldAcceptLoadAllResponse,
 } from "./platform-board-state";
 import PlatformAssignModal from "./PlatformAssignModal";
@@ -269,6 +271,8 @@ export default function PlatformBoard(props: Props) {
   const loadAllRequestIdRef = useRef(0);
   const mutationRequestIdRef = useRef(0);
   const appliedMutationRequestIdRef = useRef(0);
+  const appliedMutationRevisionRef = useRef(0);
+  const appliedMutationEntityVersionsRef = useRef<Map<string, number>>(new Map());
   const inFlightMutationsRef = useRef<Map<string, number>>(new Map());
   const reconcileTimeoutRef = useRef<number | null>(null);
   const categoriesKey = useMemo(() => categories.join(","), [categories]);
@@ -310,9 +314,23 @@ export default function PlatformBoard(props: Props) {
   const applyConfirmedDelta = useCallback(
     (delta: PlatformMutationDelta | null | undefined, token: MutationToken) => {
       if (!delta || !isMutationCurrent(token)) return false;
+      if (
+        !shouldApplyPlatformMutationDelta(delta, token.requestId, {
+          latestAppliedRequestId: appliedMutationRequestIdRef.current,
+          entityVersions: appliedMutationEntityVersionsRef.current,
+        })
+      ) {
+        return true;
+      }
 
       appliedMutationRequestIdRef.current = Math.max(
         appliedMutationRequestIdRef.current,
+        token.requestId
+      );
+      appliedMutationRevisionRef.current += 1;
+      recordAppliedPlatformMutationDelta(
+        appliedMutationEntityVersionsRef.current,
+        delta,
         token.requestId
       );
       setRuns((prev) => applyRunsDelta(prev, delta));
@@ -413,7 +431,15 @@ export default function PlatformBoard(props: Props) {
           appliedMutationRequestIdRef.current,
           token.requestId
         );
+        appliedMutationRevisionRef.current += 1;
         const createdRun = { ...data.run, assignments: data.run.assignments ?? [] };
+        appliedMutationEntityVersionsRef.current.set(`run:${createdRun.id}`, token.requestId);
+        if (createdRun.monitorJetskiId) {
+          appliedMutationEntityVersionsRef.current.set(`jetski:${createdRun.monitorJetskiId}`, token.requestId);
+        }
+        if (createdRun.monitorAssetId) {
+          appliedMutationEntityVersionsRef.current.set(`asset:${createdRun.monitorAssetId}`, token.requestId);
+        }
         setRuns((prev) => [createdRun, ...prev.filter((run) => run.id !== createdRun.id)]);
         setCreateRunNote("");
         setCreateRunMode("MONITOR");
@@ -438,6 +464,7 @@ export default function PlatformBoard(props: Props) {
     loadAllRequestIdRef.current = requestId;
     const mutationRequestIdAtStart = mutationRequestIdRef.current;
     const appliedMutationRequestIdAtStart = appliedMutationRequestIdRef.current;
+    const appliedMutationRevisionAtStart = appliedMutationRevisionRef.current;
     const controller = new AbortController();
 
     loadAllAbortRef.current?.abort();
@@ -472,11 +499,17 @@ export default function PlatformBoard(props: Props) {
 
       if (
         !shouldAcceptLoadAllResponse(
-          { requestId, mutationRequestIdAtStart, appliedMutationRequestIdAtStart },
+          {
+            requestId,
+            mutationRequestIdAtStart,
+            appliedMutationRequestIdAtStart,
+            appliedMutationRevisionAtStart,
+          },
           {
             latestLoadAllRequestId: loadAllRequestIdRef.current,
             latestMutationRequestId: mutationRequestIdRef.current,
             latestAppliedMutationRequestId: appliedMutationRequestIdRef.current,
+            latestAppliedMutationRevision: appliedMutationRevisionRef.current,
           }
         )
       ) {

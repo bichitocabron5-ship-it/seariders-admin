@@ -16,12 +16,19 @@ export type LoadAllRequestFence = {
   requestId: number;
   mutationRequestIdAtStart: number;
   appliedMutationRequestIdAtStart: number;
+  appliedMutationRevisionAtStart?: number;
 };
 
 export type LoadAllCurrentFence = {
   latestLoadAllRequestId: number;
   latestMutationRequestId: number;
   latestAppliedMutationRequestId: number;
+  latestAppliedMutationRevision?: number;
+};
+
+export type PlatformMutationVersionState = {
+  latestAppliedRequestId: number;
+  entityVersions: ReadonlyMap<string, number>;
 };
 
 function assignmentSortKey(assignment: BoardAssignment) {
@@ -46,6 +53,115 @@ function upsertById<T extends { id: string }>(items: T[], nextItems: readonly T[
   }
 
   return items.map((item) => byId.get(item.id) ?? item).concat(nextItems.filter((item) => !items.some((current) => current.id === item.id)));
+}
+
+function addEntityKey(keys: Set<string>, prefix: string, id: string | null | undefined) {
+  if (id) keys.add(`${prefix}:${id}`);
+}
+
+function addAssignmentEntityKeys(
+  keys: Set<string>,
+  assignment: BoardAssignment,
+  fallbackRunId?: string | null
+) {
+  addEntityKey(keys, "assignment", assignment.id);
+  addEntityKey(keys, "run", assignment.runId ?? fallbackRunId);
+  addEntityKey(keys, "reservation", assignment.reservationId);
+  addEntityKey(keys, "unit", assignment.reservationUnitId);
+  addEntityKey(keys, "queue-unit", assignment.reservationUnitId);
+  addEntityKey(keys, "jetski", assignment.jetskiId);
+  addEntityKey(keys, "asset", assignment.assetId);
+}
+
+function addRunEntityKeys(keys: Set<string>, run: RunOpen) {
+  addEntityKey(keys, "run", run.id);
+  addEntityKey(keys, "jetski", run.monitorJetskiId);
+  addEntityKey(keys, "asset", run.monitorAssetId);
+
+  for (const assignment of run.assignments ?? []) {
+    addAssignmentEntityKeys(keys, assignment, run.id);
+  }
+}
+
+export function getPlatformMutationDeltaEntityKeys(delta: PlatformMutationDelta) {
+  const keys = new Set<string>();
+
+  addEntityKey(keys, "run", delta.runId);
+
+  for (const run of [...(delta.runs ?? []), ...(delta.run ? [delta.run] : [])]) {
+    addRunEntityKeys(keys, run);
+  }
+
+  for (const runId of delta.removedRunIds ?? []) {
+    addEntityKey(keys, "run", runId);
+  }
+
+  for (const assignment of [...(delta.assignments ?? []), ...(delta.assignment ? [delta.assignment] : [])]) {
+    addAssignmentEntityKeys(keys, assignment, delta.runId);
+  }
+
+  for (const assignmentId of delta.removedAssignmentIds ?? []) {
+    addEntityKey(keys, "assignment", assignmentId);
+  }
+
+  for (const unit of [...(delta.reservationUnits ?? []), ...(delta.reservationUnit ? [delta.reservationUnit] : [])]) {
+    addEntityKey(keys, "unit", unit.id);
+    addEntityKey(keys, "queue-unit", unit.id);
+    addEntityKey(keys, "reservation", unit.reservationId);
+  }
+
+  for (const item of [...(delta.queueItems ?? []), ...(delta.queueItem ? [delta.queueItem] : [])]) {
+    addEntityKey(keys, "unit", item.reservationUnitId);
+    addEntityKey(keys, "queue-unit", item.reservationUnitId);
+    addEntityKey(keys, "reservation", item.reservationId);
+  }
+
+  for (const unitId of delta.removedQueueUnitIds ?? []) {
+    addEntityKey(keys, "unit", unitId);
+    addEntityKey(keys, "queue-unit", unitId);
+  }
+
+  for (const reservation of [...(delta.reservations ?? []), ...(delta.reservation ? [delta.reservation] : [])]) {
+    addEntityKey(keys, "reservation", reservation.id);
+  }
+
+  for (const jetski of [...(delta.jetskis ?? []), ...(delta.jetski ? [delta.jetski] : [])]) {
+    addEntityKey(keys, "jetski", jetski.id);
+  }
+
+  for (const asset of [...(delta.assets ?? []), ...(delta.asset ? [delta.asset] : [])]) {
+    addEntityKey(keys, "asset", asset.id);
+  }
+
+  if (delta.operability) keys.add("global:operability");
+
+  return keys;
+}
+
+export function shouldApplyPlatformMutationDelta(
+  delta: PlatformMutationDelta,
+  requestId: number,
+  state: PlatformMutationVersionState
+) {
+  if (requestId >= state.latestAppliedRequestId) return true;
+
+  for (const key of getPlatformMutationDeltaEntityKeys(delta)) {
+    if ((state.entityVersions.get(key) ?? 0) > requestId) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function recordAppliedPlatformMutationDelta(
+  entityVersions: Map<string, number>,
+  delta: PlatformMutationDelta,
+  requestId: number
+) {
+  for (const key of getPlatformMutationDeltaEntityKeys(delta)) {
+    entityVersions.set(key, Math.max(entityVersions.get(key) ?? 0, requestId));
+  }
 }
 
 function queueMatchesScope(item: QueueItem, scope: PlatformBoardScope) {
@@ -229,6 +345,14 @@ export function shouldAcceptLoadAllResponse(
   request: LoadAllRequestFence,
   current: LoadAllCurrentFence
 ) {
+  if (
+    request.appliedMutationRevisionAtStart !== undefined &&
+    current.latestAppliedMutationRevision !== undefined &&
+    request.appliedMutationRevisionAtStart !== current.latestAppliedMutationRevision
+  ) {
+    return false;
+  }
+
   return (
     request.requestId === current.latestLoadAllRequestId &&
     request.mutationRequestIdAtStart === current.latestMutationRequestId &&

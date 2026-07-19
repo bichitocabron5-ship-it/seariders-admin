@@ -8,6 +8,8 @@ import {
   applyPlatformMutationDelta,
   filterQueueAssignedInRuns,
   queueScopeForKind,
+  recordAppliedPlatformMutationDelta,
+  shouldApplyPlatformMutationDelta,
   shouldAcceptLoadAllResponse,
 } from "./platform-board-state";
 
@@ -130,6 +132,26 @@ function boardState(overrides: Partial<PlatformBoardStateSnapshot> = {}): Platfo
     operability: null,
     ...overrides,
   };
+}
+
+function applyVersionedDelta(
+  state: PlatformBoardStateSnapshot,
+  delta: PlatformMutationDelta,
+  requestId: number,
+  clock: { latestAppliedRequestId: number; entityVersions: Map<string, number> }
+) {
+  if (
+    !shouldApplyPlatformMutationDelta(delta, requestId, {
+      latestAppliedRequestId: clock.latestAppliedRequestId,
+      entityVersions: clock.entityVersions,
+    })
+  ) {
+    return { applied: false, state };
+  }
+
+  clock.latestAppliedRequestId = Math.max(clock.latestAppliedRequestId, requestId);
+  recordAppliedPlatformMutationDelta(clock.entityVersions, delta, requestId);
+  return { applied: true, state: applyPlatformMutationDelta(state, delta, scope) };
 }
 
 test("assign moves the confirmed unit from queue to assigned without re-adding its queue item", () => {
@@ -326,4 +348,249 @@ test("accepted polling snapshots do not reintroduce units that are still assigne
   const filteredQueue = filterQueueAssignedInRuns(snapshotQueue, snapshotRuns);
 
   assert.deepEqual(filteredQueue.map((item) => item.reservationUnitId), ["unit-2"]);
+});
+
+test("an older mutation response for the same run is ignored after a newer response applied", () => {
+  const clock = { latestAppliedRequestId: 0, entityVersions: new Map<string, number>() };
+  let state = boardState({ runs: [run()], queue: [] });
+  const assignmentTwo = assignment({
+    id: "assignment-2",
+    reservationId: "reservation-2",
+    reservationUnitId: "unit-2",
+    jetskiId: "jetski-2",
+    jetski: { id: "jetski-2", number: 8 },
+  });
+
+  let result = applyVersionedDelta(
+    state,
+    {
+      mutation: "assign",
+      runId: "run-1",
+      run: run({ assignments: [assignmentTwo] }),
+      assignments: [assignmentTwo],
+      removedQueueUnitIds: ["unit-2"],
+    },
+    2,
+    clock
+  );
+  assert.equal(result.applied, true);
+  state = result.state;
+
+  result = applyVersionedDelta(
+    state,
+    {
+      mutation: "assign",
+      runId: "run-1",
+      run: run({ assignments: [assignment()] }),
+      assignments: [assignment()],
+      removedQueueUnitIds: ["unit-1"],
+      queueItems: [queueItem("unit-1")],
+    },
+    1,
+    clock
+  );
+
+  assert.equal(result.applied, false);
+  assert.deepEqual(state.runs[0].assignments.map((entry) => entry.id), ["assignment-2"]);
+  assert.equal(clock.latestAppliedRequestId, 2);
+});
+
+test("older mutation responses for different runs still apply when they do not overlap", () => {
+  const clock = { latestAppliedRequestId: 0, entityVersions: new Map<string, number>() };
+  let state = boardState({
+    runs: [run({ id: "run-1" }), run({ id: "run-2" })],
+    queue: [],
+  });
+  const runTwoAssignment = assignment({
+    id: "assignment-2",
+    runId: "run-2",
+    reservationId: "reservation-2",
+    reservationUnitId: "unit-2",
+    jetskiId: "jetski-2",
+    jetski: { id: "jetski-2", number: 8 },
+  });
+
+  let result = applyVersionedDelta(
+    state,
+    {
+      mutation: "assign",
+      runId: "run-2",
+      run: run({ id: "run-2", assignments: [runTwoAssignment] }),
+      assignments: [runTwoAssignment],
+      removedQueueUnitIds: ["unit-2"],
+    },
+    2,
+    clock
+  );
+  assert.equal(result.applied, true);
+  state = result.state;
+
+  result = applyVersionedDelta(
+    state,
+    {
+      mutation: "assign",
+      runId: "run-1",
+      run: run({ id: "run-1", assignments: [assignment()] }),
+      assignments: [assignment()],
+      removedQueueUnitIds: ["unit-1"],
+    },
+    1,
+    clock
+  );
+
+  assert.equal(result.applied, true);
+  assert.deepEqual(state.runs.find((entry) => entry.id === "run-1")?.assignments.map((entry) => entry.id), []);
+  state = result.state;
+  assert.deepEqual(state.runs.find((entry) => entry.id === "run-1")?.assignments.map((entry) => entry.id), ["assignment-1"]);
+  assert.deepEqual(state.runs.find((entry) => entry.id === "run-2")?.assignments.map((entry) => entry.id), ["assignment-2"]);
+  assert.equal(clock.latestAppliedRequestId, 2);
+});
+
+test("concurrent assign and unassign keep the latest requestId result for the same unit", () => {
+  const clock = { latestAppliedRequestId: 0, entityVersions: new Map<string, number>() };
+  let state = boardState({
+    runs: [run({ assignments: [assignment()] })],
+    queue: [],
+  });
+
+  let result = applyVersionedDelta(
+    state,
+    {
+      mutation: "unassign",
+      runId: "run-1",
+      run: run({ assignments: [] }),
+      removedAssignmentIds: ["assignment-1"],
+      reservationUnits: [readyUnit("unit-1", { readyForPlatformAt: "2026-07-19T08:10:00.000Z" })],
+      queueItems: [queueItem("unit-1", { queueEnteredAt: "2026-07-19T08:10:00.000Z" })],
+    },
+    2,
+    clock
+  );
+  assert.equal(result.applied, true);
+  state = result.state;
+
+  result = applyVersionedDelta(
+    state,
+    {
+      mutation: "assign",
+      runId: "run-1",
+      run: run({ assignments: [assignment()] }),
+      assignments: [assignment()],
+      removedQueueUnitIds: ["unit-1"],
+      queueItems: [queueItem("unit-1")],
+    },
+    1,
+    clock
+  );
+
+  assert.equal(result.applied, false);
+  assert.equal(state.runs[0].assignments.length, 0);
+  assert.deepEqual(state.queue.map((item) => item.reservationUnitId), ["unit-1"]);
+});
+
+test("finish rejects polling that started before the mutation was applied", () => {
+  assert.equal(
+    shouldAcceptLoadAllResponse(
+      {
+        requestId: 6,
+        mutationRequestIdAtStart: 2,
+        appliedMutationRequestIdAtStart: 1,
+        appliedMutationRevisionAtStart: 1,
+      },
+      {
+        latestLoadAllRequestId: 6,
+        latestMutationRequestId: 2,
+        latestAppliedMutationRequestId: 2,
+        latestAppliedMutationRevision: 2,
+      }
+    ),
+    false
+  );
+});
+
+test("failed mutations do not advance the applied mutation clock", () => {
+  const clock = { latestAppliedRequestId: 0, entityVersions: new Map<string, number>() };
+
+  assert.equal(clock.latestAppliedRequestId, 0);
+  assert.equal(clock.entityVersions.size, 0);
+
+  const result = applyVersionedDelta(
+    boardState(),
+    {
+      mutation: "assign",
+      runId: "run-1",
+      run: run({ assignments: [assignment()] }),
+      assignments: [assignment()],
+      removedQueueUnitIds: ["unit-1"],
+    },
+    2,
+    clock
+  );
+
+  assert.equal(result.applied, true);
+  assert.equal(clock.latestAppliedRequestId, 2);
+});
+
+test("a valid later mutation still applies after an older overlapping response was ignored", () => {
+  const clock = { latestAppliedRequestId: 0, entityVersions: new Map<string, number>() };
+  let state = boardState({ runs: [run()], queue: [] });
+  const assignmentTwo = assignment({
+    id: "assignment-2",
+    reservationId: "reservation-2",
+    reservationUnitId: "unit-2",
+    jetskiId: "jetski-2",
+    jetski: { id: "jetski-2", number: 8 },
+  });
+  const assignmentThree = assignment({
+    id: "assignment-3",
+    reservationId: "reservation-3",
+    reservationUnitId: "unit-3",
+    jetskiId: "jetski-3",
+    jetski: { id: "jetski-3", number: 9 },
+  });
+
+  let result = applyVersionedDelta(
+    state,
+    {
+      mutation: "assign",
+      runId: "run-1",
+      run: run({ assignments: [assignmentTwo] }),
+      assignments: [assignmentTwo],
+      removedQueueUnitIds: ["unit-2"],
+    },
+    2,
+    clock
+  );
+  state = result.state;
+
+  result = applyVersionedDelta(
+    state,
+    {
+      mutation: "assign",
+      runId: "run-1",
+      run: run({ assignments: [assignment()] }),
+      assignments: [assignment()],
+      removedQueueUnitIds: ["unit-1"],
+    },
+    1,
+    clock
+  );
+  assert.equal(result.applied, false);
+
+  result = applyVersionedDelta(
+    state,
+    {
+      mutation: "assign",
+      runId: "run-1",
+      run: run({ assignments: [assignmentTwo, assignmentThree] }),
+      assignments: [assignmentThree],
+      removedQueueUnitIds: ["unit-3"],
+    },
+    3,
+    clock
+  );
+
+  assert.equal(result.applied, true);
+  assert.deepEqual(result.state.runs[0].assignments.map((entry) => entry.id), ["assignment-2", "assignment-3"]);
+  assert.equal(clock.latestAppliedRequestId, 3);
 });
