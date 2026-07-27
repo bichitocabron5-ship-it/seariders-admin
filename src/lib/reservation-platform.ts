@@ -44,6 +44,7 @@ async function loadReservationOperationalUnitsTx(
           id: true,
           quantity: true,
           pax: true,
+          isPackParent: true,
           isExtra: true,
           service: {
             select: {
@@ -76,13 +77,13 @@ async function syncReservationPlatformUnitsInternalTx(
   readyAt?: Date
 ) {
   const reservation = await loadReservationOperationalUnitsTx(tx, reservationId);
-  if (reservation.isPackParent && !reservation.parentReservationId) return;
 
   const requiredUnits = buildOperationalUnitSnapshots({
     items: reservation.items ?? [],
     fallback: {
       quantity: reservation.quantity,
       pax: reservation.pax,
+      isPackParent: reservation.isPackParent,
       service: reservation.service,
       option: reservation.option,
     },
@@ -94,6 +95,7 @@ async function syncReservationPlatformUnitsInternalTx(
       id: true,
       unitIndex: true,
       status: true,
+      reservationItemId: true,
     },
     orderBy: { unitIndex: "asc" },
   });
