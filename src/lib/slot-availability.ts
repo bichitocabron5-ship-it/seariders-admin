@@ -1,15 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import {
-  getOperationalCapacityUnits,
-  getOperationalDurationMinutes,
-} from "@/lib/reservation-operations";
-import { buildCapacityBlockingReservationWhere } from "@/lib/reservation-capacity";
-import { getSlotConfigOrThrow, getSlotLimitOrThrow } from "@/lib/slot-config";
-import { BUSINESS_TZ, utcDateFromYmdInTz } from "@/lib/tz-business";
+import { buildConfigurationRequiredError } from "@/lib/slot-config";
+import { assertSlotCapacityForItemsOrThrow } from "@/lib/slot-capacity";
+import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
 
-function hmToMinutes(hm: string) {
-  const [h, m] = hm.split(":").map(Number);
-  return h * 60 + m;
+function isConfigurationRequiredError(message: string) {
+  return message.startsWith("CONFIGURATION_REQUIRED:");
 }
 
 export async function checkSlotCapacity(params: {
@@ -19,91 +14,32 @@ export async function checkSlotCapacity(params: {
   quantity: number;
   durationMinutes: number;
 }) {
-  const { date, time, category, quantity, durationMinutes } = params;
+  const scheduledStartUtc = utcDateTimeFromYmdHmInTz(BUSINESS_TZ, params.date, params.time);
+  if (!scheduledStartUtc) return false;
 
-  const policy = await getSlotConfigOrThrow(prisma);
-  const interval = policy.intervalMinutes;
-  const openTime = policy.openTime;
-  const closeTime = policy.closeTime;
-
-  const limitRow = await getSlotLimitOrThrow(prisma, category);
-
-  const maxUnits = limitRow.maxUnits;
-  const startMin = hmToMinutes(openTime);
-  const closeMin = hmToMinutes(closeTime);
-  const timeMin = hmToMinutes(time);
-
-  const operationalDurationMinutes = getOperationalDurationMinutes({
-    category,
-    durationMinutes,
-    quantity,
-  });
-  const slotsNeeded = Math.ceil(operationalDurationMinutes / interval);
-  const startSlotIndex = Math.floor((timeMin - startMin) / interval);
-
-  if (timeMin + slotsNeeded * interval > closeMin) {
-    return false;
-  }
-
-  const dayStartUtc = utcDateFromYmdInTz(BUSINESS_TZ, date);
+  const dayStartUtc = utcDateFromYmdInTz(BUSINESS_TZ, params.date);
   const nextDay = new Date(dayStartUtc.getTime() + 24 * 60 * 60 * 1000);
 
-  const reservations = await prisma.reservation.findMany({
-    where: {
-      ...buildCapacityBlockingReservationWhere({ requireScheduledTime: true }),
-      activityDate: { gte: dayStartUtc, lt: nextDay },
-    },
-    select: {
-      scheduledTime: true,
-      quantity: true,
-      service: { select: { category: true } },
-      option: { select: { durationMinutes: true } },
-    },
-  });
-
-  const usedPerSlot: Record<number, number> = {};
-
-  for (const reservation of reservations) {
-    if (!reservation.scheduledTime) continue;
-    if (reservation.service?.category !== category) continue;
-
-    const hhmm = new Intl.DateTimeFormat("en-GB", {
-      timeZone: BUSINESS_TZ,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(reservation.scheduledTime);
-
-    const reservationStartMin = hmToMinutes(hhmm);
-    const reservationSlots = Math.ceil(
-      getOperationalDurationMinutes({
-        category,
-        durationMinutes: reservation.option?.durationMinutes ?? interval,
-        quantity: reservation.quantity ?? 1,
-      }) / interval
-    );
-    const reservationStartIdx = Math.floor((reservationStartMin - startMin) / interval);
-    const reservationUnits = getOperationalCapacityUnits({
-      category,
-      quantity: reservation.quantity ?? 1,
+  try {
+    await assertSlotCapacityForItemsOrThrow({
+      tx: prisma,
+      dateStartUtc: dayStartUtc,
+      dateEndExclusiveUtc: nextDay,
+      scheduledStartUtc,
+      items: [
+        {
+          category: params.category,
+          durationMinutes: params.durationMinutes,
+          quantity: params.quantity,
+        },
+      ],
     });
-
-    for (let i = 0; i < reservationSlots; i++) {
-      const idx = reservationStartIdx + i;
-      usedPerSlot[idx] = (usedPerSlot[idx] ?? 0) + reservationUnits;
+    return true;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "";
+    if (isConfigurationRequiredError(message)) {
+      throw buildConfigurationRequiredError(message.replace(/^CONFIGURATION_REQUIRED:\s*/, ""));
     }
+    return false;
   }
-
-  const requestedUnits = getOperationalCapacityUnits({ category, quantity });
-
-  for (let i = 0; i < slotsNeeded; i++) {
-    const idx = startSlotIndex + i;
-    const used = usedPerSlot[idx] ?? 0;
-
-    if (used + requestedUnits > maxUnits) {
-      return false;
-    }
-  }
-
-  return true;
 }

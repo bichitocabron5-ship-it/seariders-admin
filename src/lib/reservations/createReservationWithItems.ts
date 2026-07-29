@@ -1,7 +1,7 @@
 // src/lib/reservations/createReservationWithItems.ts
 import { JetskiLicenseMode, PricingTier, type Prisma } from "@prisma/client";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz, shouldAutoFormalize, todayYmdInTz } from "@/lib/tz-business";
-import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
+import { assertSlotCapacityForItemsOrThrow } from "@/lib/slot-capacity";
 import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
@@ -303,17 +303,17 @@ export async function createReservationWithItems(params: {
   });
 
   // ✅ Validación slots por item (capacidad real)
-  for (const it of resolvedItems) {
-    await assertSlotCapacityOrThrow({
-      tx,
-      dateStartUtc: activityDate,
-      dateEndExclusiveUtc: dayEndExclusiveUtc,
-      scheduledStartUtc: scheduledTime,
-      category: it.category,
-      durationMinutes: it.durationMinutes,
-      units: it.quantity,
-    });
-  }
+  await assertSlotCapacityForItemsOrThrow({
+    tx,
+    dateStartUtc: activityDate,
+    dateEndExclusiveUtc: dayEndExclusiveUtc,
+    scheduledStartUtc: scheduledTime,
+    items: resolvedItems.map((item) => ({
+      category: item.category,
+      durationMinutes: item.durationMinutes,
+      quantity: item.quantity,
+    })),
+  });
 
   // Pricing
   const pricingWhen = scheduledTime ?? activityDate;

@@ -39,7 +39,7 @@ import {
 } from "@/lib/reservations/replaceReservationMainItems";
 import { buildReservationContractProgressForTargets } from "@/lib/contracts/reservation-contract-progress";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
-import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
+import { assertSlotCapacityForItemsOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
@@ -1072,18 +1072,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       if (scheduledTime) {
         const dayEndExclusiveUtc = new Date(activityDate.getTime() + 24 * 60 * 60 * 1000);
-        for (const line of lineCreates) {
-          await assertSlotCapacityOrThrow({
-            tx,
-            dateStartUtc: activityDate,
-            dateEndExclusiveUtc: dayEndExclusiveUtc,
-            scheduledStartUtc: scheduledTime,
+        await assertSlotCapacityForItemsOrThrow({
+          tx,
+          dateStartUtc: activityDate,
+          dateEndExclusiveUtc: dayEndExclusiveUtc,
+          scheduledStartUtc: scheduledTime,
+          items: lineCreates.map((line) => ({
             category: line.category,
             durationMinutes: line.durationMinutes,
-            units: line.quantity,
-            excludeReservationId: current.id,
-          });
-        }
+            quantity: line.quantity,
+          })),
+          excludeReservationId: current.id,
+        });
       }
 
       const serviceSubtotal = lineCreates.reduce((sum, line) => sum + line.totalPriceCents, 0);

@@ -29,7 +29,7 @@ import {
   syncReservationContractsTx,
 } from "@/lib/reservation-contract-sync";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
-import { assertSlotCapacityOrThrow } from "@/lib/slot-capacity";
+import { assertSlotCapacityForItemsOrThrow } from "@/lib/slot-capacity";
 import { assertServiceChannelCompatibilityTx } from "@/lib/service-channel-availability";
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
@@ -131,6 +131,37 @@ function sameDateOrFallback(
     normalizedNext === dateKey(current) ||
     (normalizedFallback !== null && normalizedNext === normalizedFallback)
   );
+}
+
+function buildCapacityValidationItemsFromReservation(reservation: {
+  quantity?: number | null;
+  service?: { category?: string | null } | null;
+  option?: { durationMinutes?: number | null } | null;
+  items?: Array<{
+    quantity?: number | null;
+    isExtra?: boolean | null;
+    isPackParent?: boolean | null;
+    service?: { category?: string | null } | null;
+    option?: { durationMinutes?: number | null } | null;
+  }> | null;
+}) {
+  const itemRequests = (reservation.items ?? [])
+    .filter((item) => !item.isExtra && !item.isPackParent)
+    .map((item) => ({
+      category: item.service?.category ?? null,
+      durationMinutes: item.option?.durationMinutes ?? null,
+      quantity: item.quantity ?? 0,
+    }));
+
+  if (itemRequests.length > 0) return itemRequests;
+
+  return [
+    {
+      category: reservation.service?.category ?? null,
+      durationMinutes: reservation.option?.durationMinutes ?? null,
+      quantity: reservation.quantity ?? 0,
+    },
+  ];
 }
 
 function toYmdInTz(d: Date, tz: string) {
@@ -415,6 +446,7 @@ async function rescheduleReservationOnly(args: {
             pax: true,
             totalPriceCents: true,
             isExtra: true,
+            isPackParent: true,
             service: { select: { name: true, category: true } },
             option: { select: { durationMinutes: true } },
           },
@@ -468,18 +500,14 @@ async function rescheduleReservationOnly(args: {
 
     if (scheduledTime) {
       const dayEndExclusiveUtc = new Date(activityDate.getTime() + 24 * 60 * 60 * 1000);
-      for (const item of (current.items ?? []).filter((row) => !row.isExtra)) {
-        await assertSlotCapacityOrThrow({
-          tx,
-          dateStartUtc: activityDate,
-          dateEndExclusiveUtc: dayEndExclusiveUtc,
-          scheduledStartUtc: scheduledTime,
-          category: String(item.service?.category ?? "UNKNOWN").toUpperCase(),
-          durationMinutes: Number(item.option?.durationMinutes ?? 30),
-          units: Number(item.quantity ?? 0),
-          excludeReservationId: reservationId,
-        });
-      }
+      await assertSlotCapacityForItemsOrThrow({
+        tx,
+        dateStartUtc: activityDate,
+        dateEndExclusiveUtc: dayEndExclusiveUtc,
+        scheduledStartUtc: scheduledTime,
+        items: buildCapacityValidationItemsFromReservation(current),
+        excludeReservationId: reservationId,
+      });
     }
 
     if (scheduleChanged) {
@@ -648,6 +676,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           unitPriceCents: true,
           totalPriceCents: true,
           isExtra: true,
+          isPackParent: true,
           service: { select: { name: true, category: true } },
           option: { select: { durationMinutes: true } },
         },
@@ -1122,18 +1151,18 @@ if (hasProItems && priceSensitiveChanged) {
 
     if (scheduledTime) {
       const dayEndExclusiveUtc = new Date(activityDate.getTime() + 24 * 60 * 60 * 1000);
-      for (const line of lineCreates) {
-        await assertSlotCapacityOrThrow({
-          tx,
-          dateStartUtc: activityDate,
-          dateEndExclusiveUtc: dayEndExclusiveUtc,
-          scheduledStartUtc: scheduledTime,
+      await assertSlotCapacityForItemsOrThrow({
+        tx,
+        dateStartUtc: activityDate,
+        dateEndExclusiveUtc: dayEndExclusiveUtc,
+        scheduledStartUtc: scheduledTime,
+        items: lineCreates.map((line) => ({
           category: line.category,
           durationMinutes: line.durationMinutes,
-          units: line.quantity,
-          excludeReservationId: id,
-        });
-      }
+          quantity: line.quantity,
+        })),
+        excludeReservationId: id,
+      });
     }
 
     const itemReplacement = await replaceReservationMainItemsTx(tx, {
@@ -1469,20 +1498,16 @@ if (hasProItems && priceSensitiveChanged) {
     try {
       contracts = await prisma.$transaction(async (tx) => {
         if (scheduledTime) {
-        const dayEndExclusiveUtc = new Date(activityDate.getTime() + 24 * 60 * 60 * 1000);
-        for (const item of (existing.items ?? []).filter((row) => !row.isExtra)) {
-          await assertSlotCapacityOrThrow({
+          const dayEndExclusiveUtc = new Date(activityDate.getTime() + 24 * 60 * 60 * 1000);
+          await assertSlotCapacityForItemsOrThrow({
             tx,
             dateStartUtc: activityDate,
             dateEndExclusiveUtc: dayEndExclusiveUtc,
             scheduledStartUtc: scheduledTime,
-            category: String(item.service?.category ?? "UNKNOWN").toUpperCase(),
-            durationMinutes: Number(item.option?.durationMinutes ?? 30),
-            units: Number(item.quantity ?? 0),
+            items: buildCapacityValidationItemsFromReservation(existing),
             excludeReservationId: id,
           });
         }
-      }
 
         await tx.reservation.update({
           where: { id },

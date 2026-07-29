@@ -12,6 +12,7 @@ import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { resolveReadyContractCountWithManualAttachments } from "@/lib/manual-contract-attachments";
 import { buildStoreCalendarWhere } from "@/lib/store-reservation-visibility";
 import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
+import { resolveStoreCalendarReservationSummary } from "@/lib/store-calendar";
 
 export const runtime = "nodejs";
 
@@ -81,10 +82,13 @@ export async function GET(req: Request) {
       option: { select: { durationMinutes: true, paxMax: true } },
       items: {
         select: {
+          id: true,
           quantity: true,
           isExtra: true,
+          isPackParent: true,
           totalPriceCents: true,
-          service: { select: { category: true } },
+          service: { select: { name: true, category: true } },
+          option: { select: { durationMinutes: true, paxMax: true } },
         },
       },
       contracts: {
@@ -158,7 +162,7 @@ export async function GET(req: Request) {
     pendingCents: number;
     paidCents: number;
     service: { name: string; category: string | null } | null;
-    option: { durationMinutes: number; paxMax: number } | null;
+    option: { durationMinutes: number | null; paxMax: number | null } | null;
     contractsRequiredUnits: number;
     contractsReadyCount: number;
   };
@@ -204,6 +208,7 @@ export async function GET(req: Request) {
       readyContractsCount: countReadyVisibleContracts(r.contracts ?? [], contractsRequiredUnits),
       manualAttachmentCount: manualAttachmentCountByReservation.get(r.id) ?? 0,
     });
+    const calendarSummary = resolveStoreCalendarReservationSummary(r);
 
     days[k] ??= { count: 0, rows: [] };
     days[k].rows.push({
@@ -219,8 +224,8 @@ export async function GET(req: Request) {
       totalCents,
       pendingCents,
       paidCents,
-      service: r.service,
-      option: r.option,
+      service: calendarSummary.service,
+      option: calendarSummary.option,
       contractsRequiredUnits,
       contractsReadyCount,
     });
