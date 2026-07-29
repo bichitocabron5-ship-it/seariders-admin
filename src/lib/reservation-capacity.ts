@@ -124,25 +124,24 @@ export function buildReservationCapacityUsages(
   const reservationId = reservation.id ?? null;
   const scheduledTime = normalizeScheduledTime(reservation.scheduledTime);
   const items = reservation.items ?? [];
+  const capacityBearingItems = items
+    .filter((item) => !item.isExtra && !item.isPackParent)
+    .map((item) => ({
+      item,
+      category: getReservationItemCapacityCategory(item),
+    }))
+    .filter(({ category }) => isCapacityCategory(category));
 
-  if (items.length > 0) {
-    return items
-      .filter((item) => !item.isExtra && !item.isPackParent)
-      .map((item): ReservationCapacityUsage | null => {
-        const category = getReservationItemCapacityCategory(item);
-        if (!isCapacityCategory(category)) return null;
-
-        return {
-          reservationId,
-          reservationItemId: item.id ?? null,
-          scheduledTime,
-          category,
-          durationMinutes: getReservationItemCapacityDurationMinutes(item, defaultDurationMinutes),
-          quantity: positiveInt(item.quantity ?? null, 1),
-          source: "ITEM",
-        };
-      })
-      .filter((usage): usage is ReservationCapacityUsage => usage !== null);
+  if (capacityBearingItems.length > 0) {
+    return capacityBearingItems.map(({ item, category }): ReservationCapacityUsage => ({
+      reservationId,
+      reservationItemId: item.id ?? null,
+      scheduledTime,
+      category,
+      durationMinutes: getReservationItemCapacityDurationMinutes(item, defaultDurationMinutes),
+      quantity: positiveInt(item.quantity ?? null, 1),
+      source: "ITEM",
+    }));
   }
 
   const category = normalizeCapacityCategory(
