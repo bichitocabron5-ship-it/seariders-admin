@@ -3,7 +3,11 @@ import {
   getOperationalCapacityUnits,
   getOperationalDurationMinutes,
 } from "@/lib/reservation-operations";
-import { buildCapacityBlockingReservationWhere } from "@/lib/reservation-capacity";
+import {
+  buildCapacityBlockingReservationWhere,
+  buildReservationsCapacityUsages,
+  normalizeCapacityCategory,
+} from "@/lib/reservation-capacity";
 import { getSlotConfigOrThrow, getSlotLimitOrThrow } from "@/lib/slot-config";
 
 type SlotPolicy = {
@@ -60,19 +64,20 @@ export async function assertCapacityOrThrow(args: {
   tx?: typeof prisma;
 }) {
   const tx = args.tx ?? prisma;
+  const category = normalizeCapacityCategory(args.category);
 
   const policy = await getSlotPolicy(tx);
   const intervalMin = policy.intervalMinutes;
 
   const operationalDurationMin = getOperationalDurationMinutes({
-    category: args.category,
+    category,
     durationMinutes: args.durationMin,
     quantity: args.quantity,
   });
   const slots = computeSlotsNeeded(operationalDurationMin, intervalMin);
   const end = computeEndFromSlots(args.scheduledStart, slots, intervalMin);
 
-  const cap = await getCategoryCapacity(args.category, tx);
+  const cap = await getCategoryCapacity(category, tx);
   const windowStart = new Date(args.scheduledStart.getTime() - 24 * 60 * 60_000);
   const windowEnd = new Date(end.getTime() + 24 * 60 * 60_000);
 
@@ -80,13 +85,23 @@ export async function assertCapacityOrThrow(args: {
     where: {
       ...buildCapacityBlockingReservationWhere({ requireScheduledTime: true }),
       scheduledTime: { not: null, gte: windowStart, lte: windowEnd },
-      service: { category: args.category },
     },
     select: {
       id: true,
       quantity: true,
       scheduledTime: true,
+      service: { select: { category: true } },
       option: { select: { durationMinutes: true } },
+      items: {
+        select: {
+          id: true,
+          quantity: true,
+          isExtra: true,
+          isPackParent: true,
+          service: { select: { category: true } },
+          option: { select: { durationMinutes: true } },
+        },
+      },
     },
   });
 
@@ -94,16 +109,22 @@ export async function assertCapacityOrThrow(args: {
 
   const reqStartIdx = toSlotIndex(args.scheduledStart);
   const reqEndIdx = toSlotIndex(end);
-  const usage = new Map<number, number>();
+  const slotUsage = new Map<number, number>();
 
-  for (const reservation of existing) {
-    const scheduledTime = reservation.scheduledTime ? new Date(reservation.scheduledTime) : null;
+  const existingUsages = buildReservationsCapacityUsages(existing, {
+    defaultDurationMinutes: intervalMin,
+  });
+
+  for (const existingUsage of existingUsages) {
+    if (existingUsage.category !== category) continue;
+
+    const scheduledTime = existingUsage.scheduledTime ? new Date(existingUsage.scheduledTime) : null;
     if (!scheduledTime) continue;
 
     const duration = getOperationalDurationMinutes({
-      category: args.category,
-      durationMinutes: Number(reservation.option?.durationMinutes ?? 0) || intervalMin,
-      quantity: reservation.quantity ?? 1,
+      category,
+      durationMinutes: existingUsage.durationMinutes,
+      quantity: existingUsage.quantity,
     });
     const reservationSlots = computeSlotsNeeded(duration, intervalMin);
     const reservationEnd = computeEndFromSlots(scheduledTime, reservationSlots, intervalMin);
@@ -114,22 +135,22 @@ export async function assertCapacityOrThrow(args: {
     if (!(startIdx < reqEndIdx && endIdx > reqStartIdx)) continue;
 
     const units = getOperationalCapacityUnits({
-      category: args.category,
-      quantity: reservation.quantity ?? 1,
+      category,
+      quantity: existingUsage.quantity,
     });
 
     for (let i = Math.max(startIdx, reqStartIdx); i < Math.min(endIdx, reqEndIdx); i++) {
-      usage.set(i, (usage.get(i) ?? 0) + units);
+      slotUsage.set(i, (slotUsage.get(i) ?? 0) + units);
     }
   }
 
   const requestedUnits = getOperationalCapacityUnits({
-    category: args.category,
+    category,
     quantity: args.quantity,
   });
 
   for (let i = reqStartIdx; i < reqEndIdx; i++) {
-    const total = (usage.get(i) ?? 0) + requestedUnits;
+    const total = (slotUsage.get(i) ?? 0) + requestedUnits;
     if (total > cap) {
       throw new Error(`Sin disponibilidad: capacidad ${cap} excedida en ese horario (${args.category}).`);
     }
