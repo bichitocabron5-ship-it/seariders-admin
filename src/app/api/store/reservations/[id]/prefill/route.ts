@@ -122,6 +122,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       passConsumeId: true,
       items: {
         select: {
+          id: true,
           serviceId: true,
           optionId: true,
           quantity: true,
