@@ -3,6 +3,7 @@ import { getOperationalPlatformUnits } from "@/lib/reservation-operations";
 type ContractItem = {
   quantity: number | null;
   isExtra: boolean;
+  isPackParent?: boolean | null;
   service: { category: string | null } | null;
 };
 
@@ -21,6 +22,14 @@ export function needsContractForReservationItemCategory(
   return cat === "JETSKI" || (cat === "BOAT" && isLicense);
 }
 
+function isPackParentLikeItem(item: ContractItem) {
+  return (
+    !item.isExtra &&
+    (Boolean(item.isPackParent) ||
+      String(item.service?.category ?? "").trim().toUpperCase() === "PACK")
+  );
+}
+
 export function computeRequiredContractUnits(input: {
   quantity: number | null;
   isLicense: boolean;
@@ -28,7 +37,7 @@ export function computeRequiredContractUnits(input: {
   items: ContractItem[];
 }) {
   if (input.items && input.items.length > 0) {
-    const mainItems = input.items.filter((it) => !it.isExtra);
+    const mainItems = input.items.filter((it) => !it.isExtra && !it.isPackParent);
     let sum = 0;
     for (const it of mainItems) {
       const qty = Number(it.quantity ?? 0);
@@ -36,6 +45,7 @@ export function computeRequiredContractUnits(input: {
       if (needsContractForReservationItemCategory(cat, input.isLicense)) sum += qty;
     }
     if (sum > 0) return sum;
+    if (input.items.some(isPackParentLikeItem)) return 0;
   }
 
   const qty = Math.max(0, Number(input.quantity ?? 0));
@@ -55,7 +65,7 @@ export function computeRequiredPlatformUnits(input: {
   items: ContractItem[];
 }) {
   if (input.items && input.items.length > 0) {
-    const mainItems = input.items.filter((it) => !it.isExtra);
+    const mainItems = input.items.filter((it) => !it.isExtra && !it.isPackParent);
     let sum = 0;
     for (const it of mainItems) {
       const qty = Number(it.quantity ?? 0);
@@ -65,6 +75,7 @@ export function computeRequiredPlatformUnits(input: {
       }
     }
     if (sum > 0) return sum;
+    if (input.items.some(isPackParentLikeItem)) return 0;
   }
 
   const qty = Math.max(0, Number(input.quantity ?? 0));

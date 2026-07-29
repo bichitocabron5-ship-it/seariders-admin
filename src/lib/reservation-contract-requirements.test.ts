@@ -184,3 +184,73 @@ test("contrato legacy sin reservationItemId adopta requirement unico por slot si
   assert.equal(requirement?.templateCode, "JETSKI_NO_LICENSE");
   assert.equal(requirement?.serviceName, "Jetski");
 });
+
+test("padre de pack no crea requirement ni impone duracion contractual", () => {
+  const requirements = buildReservationContractRequirements({
+    quantity: 3,
+    isLicense: false,
+    serviceCategory: "PACK",
+    serviceId: "service-pack",
+    optionId: "option-pack",
+    durationMinutes: 90,
+    items: [
+      {
+        id: "item-pack-parent",
+        serviceId: "service-pack",
+        optionId: "option-pack",
+        quantity: 1,
+        pax: 2,
+        totalPriceCents: 10000,
+        isExtra: false,
+        isPackParent: true,
+        service: { name: "Pack", category: "PACK" },
+        option: { durationMinutes: 90 },
+      },
+      item({
+        id: "item-jetski",
+        category: "JETSKI",
+        name: "Jetski",
+        optionId: "option-jetski-20",
+        durationMinutes: 20,
+      }),
+      item({
+        id: "item-banana",
+        category: "TOWABLE",
+        name: "Banana",
+        optionId: "option-banana-15",
+        durationMinutes: 15,
+      }),
+    ],
+  });
+
+  assert.equal(requirements.length, 1);
+  assert.equal(requirements[0]?.reservationItemId, "item-jetski");
+  assert.equal(requirements[0]?.durationMinutes, 20);
+});
+
+test("solo padre de pack no cae al fallback contractual global", () => {
+  const requirements = buildReservationContractRequirements({
+    quantity: 1,
+    isLicense: true,
+    serviceCategory: "PACK",
+    serviceId: "service-pack",
+    optionId: "option-pack",
+    durationMinutes: 90,
+    items: [
+      {
+        id: "item-pack-parent",
+        serviceId: "service-pack",
+        optionId: "option-pack",
+        quantity: 1,
+        pax: 2,
+        totalPriceCents: 10000,
+        isExtra: false,
+        isPackParent: true,
+        service: { name: "Pack", category: "PACK" },
+        option: { durationMinutes: 90 },
+      },
+    ],
+  });
+
+  assert.equal(requirements.length, 0);
+});

@@ -128,6 +128,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: true,
           pax: true,
           isExtra: true,
+          isPackParent: true,
           servicePriceId: true,
           unitPriceCents: true,
           totalPriceCents: true,

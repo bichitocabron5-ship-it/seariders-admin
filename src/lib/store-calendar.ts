@@ -49,6 +49,10 @@ export function resolveStoreCalendarReservationSummary(
   const usages = buildReservationCapacityUsages(reservation);
 
   if (items.length === 0 || usages.length === 0) {
+    const hasOnlyNonRealPackItems =
+      items.length > 0 &&
+      String(reservation.service?.category ?? "").trim().toUpperCase() === "PACK";
+
     return {
       service: reservation.service
         ? {
@@ -58,8 +62,8 @@ export function resolveStoreCalendarReservationSummary(
         : null,
       option: reservation.option
         ? {
-            durationMinutes: reservation.option.durationMinutes ?? null,
-            paxMax: reservation.option.paxMax ?? null,
+            durationMinutes: hasOnlyNonRealPackItems ? null : reservation.option.durationMinutes ?? null,
+            paxMax: hasOnlyNonRealPackItems ? null : reservation.option.paxMax ?? null,
           }
         : null,
     };
@@ -71,11 +75,20 @@ export function resolveStoreCalendarReservationSummary(
   const capacityItems = items.filter((item) => {
     if (item.isExtra || item.isPackParent) return false;
     const category = String(item.service?.category ?? "").trim().toUpperCase();
+    if (category === "PACK") return false;
     return usages.some((usage) => usage.category === category) && (
       capacityItemIds.size === 0 || !item.id || capacityItemIds.has(item.id)
     );
   });
-  const sourceItems = capacityItems.length > 0 ? capacityItems : items.filter((item) => !item.isExtra && !item.isPackParent);
+  const sourceItems =
+    capacityItems.length > 0
+      ? capacityItems
+      : items.filter(
+          (item) =>
+            !item.isExtra &&
+            !item.isPackParent &&
+            String(item.service?.category ?? "").trim().toUpperCase() !== "PACK"
+        );
 
   const categories = uniqueValues(sourceItems.map((item) => item.service?.category ?? null));
   const names = uniqueValues(sourceItems.map((item) => item.service?.name ?? item.service?.category ?? null));
@@ -88,8 +101,8 @@ export function resolveStoreCalendarReservationSummary(
       category: categories.length === 1 ? categories[0] : categories.join(" + ") || reservation.service?.category || null,
     },
     option: {
-      durationMinutes: durations.length === 1 ? durations[0] : null,
-      paxMax: paxMaxValues.length === 1 ? paxMaxValues[0] : null,
+      durationMinutes: sourceItems.length === 1 && durations.length === 1 ? durations[0] : null,
+      paxMax: sourceItems.length === 1 && paxMaxValues.length === 1 ? paxMaxValues[0] : null,
     },
   };
 }

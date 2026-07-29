@@ -7,8 +7,10 @@ type ReservationPrefillItemSnapshot = {
   quantity?: number | null;
   pax?: number | null;
   isExtra?: boolean | null;
+  isPackParent?: boolean | null;
   unitPriceCents?: number | null;
   totalPriceCents?: number | null;
+  service?: { category?: string | null } | null;
 };
 
 export function buildReservationPrefillCartItems(args: {
@@ -19,7 +21,12 @@ export function buildReservationPrefillCartItems(args: {
   const promoCode = normalizePromoCode(args.promoCode);
 
   return (args.items ?? [])
-    .filter((item) => !item.isExtra)
+    .filter(
+      (item) =>
+        !item.isExtra &&
+        !item.isPackParent &&
+        String(item.service?.category ?? "").trim().toUpperCase() !== "PACK"
+    )
     .map((item) => ({
       serviceId: item.serviceId,
       optionId: item.optionId ?? args.fallbackOptionId ?? "",

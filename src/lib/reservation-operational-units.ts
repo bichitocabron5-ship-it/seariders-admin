@@ -7,6 +7,7 @@ type ReservationUnitItemInput = {
   pax: number | null;
   isExtra: boolean;
   isPackParent?: boolean | null;
+  durationMinutes?: number | null;
   service: {
     id?: string | null;
     name?: string | null;
@@ -55,7 +56,7 @@ export function buildOperationalUnitSnapshots(args: {
   fallback: ReservationUnitFallbackInput;
 }) {
   const mainItems = args.items.filter((item) => !item.isExtra && !item.isPackParent);
-  const shouldUseFallback = mainItems.length === 0 && args.items.length === 0 && !args.fallback.isPackParent;
+  const shouldUseFallback = mainItems.length === 0 && !args.fallback.isPackParent;
   const sourceItems =
     mainItems.length > 0
       ? mainItems
@@ -88,7 +89,7 @@ export function buildOperationalUnitSnapshots(args: {
 
     const itemQuantity = Math.max(1, Number(item.quantity ?? 0) || 1);
     const itemPax = Math.max(1, Number(item.pax ?? 0) || 1);
-    const durationMinutes = Number(item.option?.durationMinutes ?? 0) || null;
+    const durationMinutes = Number(item.durationMinutes ?? item.option?.durationMinutes ?? 0) || null;
     const platformUnits = getOperationalPlatformUnits({
       category,
       quantity: itemQuantity,

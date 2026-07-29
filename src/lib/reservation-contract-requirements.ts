@@ -12,6 +12,7 @@ export type ReservationContractRequirementItem = {
   pax?: number | null;
   totalPriceCents?: number | null;
   isExtra?: boolean | null;
+  isPackParent?: boolean | null;
   service?: {
     name?: string | null;
     category?: string | null;
@@ -115,7 +116,15 @@ export function buildReservationContractRequirements(input: {
   totalPriceCents?: number | null;
   items?: ReservationContractRequirementItem[] | null;
 }) {
-  const mainItems = (input.items ?? []).filter((item) => !item.isExtra);
+  const items = input.items ?? [];
+  const hasPackParentItem = items.some(
+    (item) =>
+      !item.isExtra &&
+      (item.isPackParent || normalizeCode(item.service?.category) === "PACK")
+  );
+  const mainItems = items.filter(
+    (item) => !item.isExtra && !item.isPackParent && normalizeCode(item.service?.category) !== "PACK"
+  );
   const requirements: ReservationContractRequirement[] = [];
   let logicalUnitIndex = 1;
 
@@ -141,6 +150,8 @@ export function buildReservationContractRequirements(input: {
 
     return requirements;
   }
+
+  if (hasPackParentItem) return requirements;
 
   const quantity = normalizeQuantity(input.quantity);
   if (!needsContractForCategory(input.serviceCategory, input.isLicense)) return requirements;
