@@ -150,6 +150,7 @@ export type UIMode = "CREATE" | "FORMALIZE" | "EDIT";
 
 export type ContractDto = {
   id: string;
+  reservationItemId?: string | null;
   unitIndex: number;
   logicalUnitIndex?: number | null;
   status: "DRAFT" | "READY" | "SIGNED" | "VOID";

@@ -46,7 +46,7 @@ export function computeRequiredContractUnits(input: {
 export function needsPlatformUnitForCategory(categoryRaw: string | null | undefined) {
   const cat = String(categoryRaw ?? "").toUpperCase();
   if (!cat) return false;
-  return cat !== "EXTRA" && cat !== "BAR";
+  return cat !== "EXTRA" && cat !== "BAR" && cat !== "PACK" && cat !== "CATERING";
 }
 
 export function computeRequiredPlatformUnits(input: {

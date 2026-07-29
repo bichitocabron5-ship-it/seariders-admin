@@ -111,6 +111,21 @@ async function repairMissingReadyPlatformUnits(params: {
   kind: "JETSKI" | "NAUTICA" | null;
   categories: string[] | null;
 }) {
+  const serviceCategoryWhere = params.categories
+    ? { category: { in: params.categories } }
+    : params.kind === "JETSKI"
+      ? { category: "JETSKI" }
+      : params.kind === "NAUTICA"
+        ? { category: { not: "JETSKI" } }
+        : null;
+  const unitCategoryWhere = params.categories
+    ? { serviceCategory: { in: params.categories } }
+    : params.kind === "JETSKI"
+      ? { serviceCategory: "JETSKI" }
+      : params.kind === "NAUTICA"
+        ? { serviceCategory: { not: "JETSKI" } }
+        : null;
+
   const reservations = await prisma.reservation.findMany({
     where: {
       status: ReservationStatus.READY_FOR_PLATFORM,
@@ -118,13 +133,27 @@ async function repairMissingReadyPlatformUnits(params: {
         { scheduledTime: { gte: params.start, lt: params.endExclusive } },
         { scheduledTime: null, activityDate: { gte: params.start, lt: params.endExclusive } },
       ],
-      service: params.categories
-        ? { category: { in: params.categories } }
-        : params.kind === "JETSKI"
-          ? { category: "JETSKI" }
-          : params.kind === "NAUTICA"
-            ? { category: { not: "JETSKI" } }
-            : undefined,
+      ...(serviceCategoryWhere && unitCategoryWhere
+        ? {
+            AND: [
+              {
+                OR: [
+                  { service: serviceCategoryWhere },
+                  {
+                    items: {
+                      some: {
+                        isExtra: false,
+                        isPackParent: false,
+                        service: serviceCategoryWhere,
+                      },
+                    },
+                  },
+                  { units: { some: unitCategoryWhere } },
+                ],
+              },
+            ],
+          }
+        : {}),
     },
     select: {
       id: true,
@@ -137,6 +166,7 @@ async function repairMissingReadyPlatformUnits(params: {
         select: {
           quantity: true,
           isExtra: true,
+          isPackParent: true,
           service: { select: { category: true } },
         },
       },
@@ -147,7 +177,6 @@ async function repairMissingReadyPlatformUnits(params: {
   });
 
   for (const reservation of reservations) {
-    if (reservation.isPackParent && !reservation.parentReservationId) continue;
     await prisma.$transaction(async (tx) => {
       await syncReservationPlatformUnitsTx(tx, { id: reservation.id }, reservation.readyForPlatformAt ?? undefined);
     });

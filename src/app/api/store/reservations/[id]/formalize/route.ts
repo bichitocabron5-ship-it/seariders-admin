@@ -25,7 +25,10 @@ import {
   resolveManualDiscountCentsForQuantityChange,
   sumMainReservationQuantity,
 } from "@/lib/manual-discount-proration";
-import { syncReservationContractsTx } from "@/lib/reservation-contract-sync";
+import {
+  ReservationContractSyncBlockedError,
+  syncReservationContractsTx,
+} from "@/lib/reservation-contract-sync";
 import {
   buildReservationContractRequirements,
   reservationContractRequirementsToSyncTargets,
@@ -240,6 +243,13 @@ function deriveCommercialReservationState(args: {
 }
 
 function toRouteErrorResponse(error: unknown) {
+  if (error instanceof ReservationContractSyncBlockedError) {
+    return NextResponse.json(
+      { error: error.code, message: error.message, blockers: error.blockers },
+      { status: error.status }
+    );
+  }
+
   const message = error instanceof Error ? error.message : "Error";
   if (message.startsWith("CONFIGURATION_REQUIRED:")) {
     return NextResponse.json(

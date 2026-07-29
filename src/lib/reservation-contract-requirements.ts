@@ -226,6 +226,13 @@ export function findContractRequirementForContract<T extends { reservationItemId
       (requirement) =>
         requirement.reservationItemId === null &&
         requirement.logicalUnitIndex === contractSlot
-    ) ?? null
+    ) ??
+    (new Set(
+      requirements
+        .map((requirement) => requirement.reservationItemId)
+        .filter((itemId): itemId is string => Boolean(itemId))
+    ).size <= 1
+      ? requirements.find((requirement) => requirement.logicalUnitIndex === contractSlot) ?? null
+      : null)
   );
 }

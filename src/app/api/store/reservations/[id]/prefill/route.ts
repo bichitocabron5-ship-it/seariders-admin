@@ -7,10 +7,13 @@ import { OperationalOverrideAction, OperationalOverrideTarget } from "@prisma/cl
 import { sessionOptions, AppSession } from "@/lib/session";
 import { getReservationWorkflowState } from "@/lib/reservation-workflow";
 import { getReservationPaymentStatus } from "@/lib/reservation-payment-status";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { buildReservationPrefillCartItems } from "@/lib/reservation-prefill";
-import { countReadyVisibleContracts, pickVisibleContractsByLogicalUnit } from "@/lib/contracts/active-contracts";
+import { countReadyVisibleContractsByTargets, pickVisibleContractsByTargets } from "@/lib/contracts/active-contracts";
 import { resolveReadyContractCountWithManualAttachments } from "@/lib/manual-contract-attachments";
+import {
+  buildReservationContractRequirements,
+  reservationContractRequirementsToSyncTargets,
+} from "@/lib/reservation-contract-requirements";
 
 export const runtime = "nodejs";
 
@@ -93,6 +96,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         orderBy: { unitIndex: "asc" },
         take: 20,
         select: {
+          id: true,
+          reservationItemId: true,
           unitIndex: true,
           logicalUnitIndex: true,
           status: true,
@@ -126,6 +131,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           unitPriceCents: true,
           totalPriceCents: true,
           service: { select: { category: true } },
+          option: { select: { durationMinutes: true } },
         },
       },
       payments: {
@@ -170,13 +176,21 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   if (!r) return NextResponse.json({ error: "No existe" }, { status: 404 });
 
-  const requiredUnits = computeRequiredContractUnits({
+  const contractRequirements = buildReservationContractRequirements({
     quantity: r.quantity ?? 0,
     isLicense: Boolean(r.isLicense),
     serviceCategory: r.service?.category ?? null,
+    serviceId: r.serviceId,
+    optionId: r.optionId,
+    serviceName: r.service?.name ?? null,
+    durationMinutes: r.option?.durationMinutes ?? null,
+    pax: r.pax,
+    totalPriceCents: r.totalPriceCents,
     items: r.items ?? [],
   });
-  const visibleContracts = pickVisibleContractsByLogicalUnit(r.contracts ?? [], requiredUnits);
+  const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
+  const requiredUnits = contractRequirements.length;
+  const visibleContracts = pickVisibleContractsByTargets(r.contracts ?? [], syncTargets);
   const completeLicenseContract =
     visibleContracts.find(
       (contract) =>
@@ -241,10 +255,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       : 0;
   const readyCount = resolveReadyContractCountWithManualAttachments({
     requiredUnits,
-    readyContractsCount: countReadyVisibleContracts(r.contracts ?? [], requiredUnits),
+    readyContractsCount: countReadyVisibleContractsByTargets(r.contracts ?? [], syncTargets),
     manualAttachmentCount,
   });
-  const signedCount = (r.contracts ?? []).filter((contract) => contract.status === "SIGNED").length;
+  const signedCount = visibleContracts.filter((contract) => contract.status === "SIGNED").length;
   const workflow = getReservationWorkflowState({
     reservationId: r.id,
     status: r.status,

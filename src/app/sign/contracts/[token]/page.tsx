@@ -7,6 +7,7 @@ import {
   loadLogoSrc,
 } from "@/lib/contracts/render-contract";
 import { resolveContractRenderLanguage } from "@/lib/contracts/language";
+import { evaluatePublicContractAccess } from "@/lib/contracts/public-contract-access";
 import { resolveContractRenderContext } from "@/lib/contracts/render-context";
 import { buildPublicPageMetadata } from "@/lib/metadata";
 import { normalizePublicLanguage } from "@/lib/public-links/i18n";
@@ -44,10 +45,14 @@ export default async function SignContractPage({
     where: { id: payload.contractId },
     select: {
       id: true,
+      reservationId: true,
+      reservationItemId: true,
       templateCode: true,
       unitIndex: true,
       logicalUnitIndex: true,
       status: true,
+      supersededAt: true,
+      createdAt: true,
       driverName: true,
       driverDocType: true,
       driverDocNumber: true,
@@ -102,11 +107,39 @@ export default async function SignContractPage({
           service: { select: { name: true, category: true } },
           activityDate: true,
           scheduledTime: true,
+          items: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              reservationId: true,
+              serviceId: true,
+              optionId: true,
+              quantity: true,
+              pax: true,
+              totalPriceCents: true,
+              isExtra: true,
+              service: { select: { name: true, category: true } },
+              option: { select: { durationMinutes: true } },
+            },
+          },
+          contracts: {
+            select: {
+              id: true,
+              reservationId: true,
+              reservationItemId: true,
+              unitIndex: true,
+              logicalUnitIndex: true,
+              status: true,
+              supersededAt: true,
+              createdAt: true,
+            },
+          },
         },
       },
       reservationItem: {
         select: {
           id: true,
+          reservationId: true,
           serviceId: true,
           optionId: true,
           quantity: true,
@@ -120,6 +153,11 @@ export default async function SignContractPage({
   });
 
   if (!contract) notFound();
+  const access = evaluatePublicContractAccess({
+    reservation: contract.reservation,
+    contract,
+  });
+  if (!access.ok) notFound();
 
   const language = resolveContractRenderLanguage({
     requestedLanguage,

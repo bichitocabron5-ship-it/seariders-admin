@@ -1,10 +1,12 @@
 import { getOperationalDurationMinutes, getOperationalPlatformUnits, usesQuantityAsOperationalMultiplier } from "@/lib/reservation-operations";
+import { needsPlatformUnitForCategory } from "@/lib/reservation-rules";
 
 type ReservationUnitItemInput = {
   id?: string | null;
   quantity: number | null;
   pax: number | null;
   isExtra: boolean;
+  isPackParent?: boolean | null;
   service: {
     id?: string | null;
     name?: string | null;
@@ -19,6 +21,7 @@ type ReservationUnitItemInput = {
 type ReservationUnitFallbackInput = {
   quantity: number | null;
   pax: number | null;
+  isPackParent?: boolean | null;
   service: {
     id?: string | null;
     name?: string | null;
@@ -32,6 +35,7 @@ type ReservationUnitFallbackInput = {
 
 export type OperationalUnitSnapshot = {
   unitIndex: number;
+  itemUnitIndex: number;
   reservationItemId: string | null;
   serviceId: string | null;
   optionId: string | null;
@@ -50,18 +54,23 @@ export function buildOperationalUnitSnapshots(args: {
   items: ReservationUnitItemInput[];
   fallback: ReservationUnitFallbackInput;
 }) {
-  const mainItems = args.items.filter((item) => !item.isExtra);
+  const mainItems = args.items.filter((item) => !item.isExtra && !item.isPackParent);
+  const shouldUseFallback = mainItems.length === 0 && args.items.length === 0 && !args.fallback.isPackParent;
   const sourceItems =
     mainItems.length > 0
       ? mainItems
+      : shouldUseFallback
+        ? [
+            {
+              quantity: args.fallback.quantity,
+              pax: args.fallback.pax,
+              isExtra: false,
+              isPackParent: false,
+              service: args.fallback.service,
+              option: args.fallback.option,
+            },
+          ]
       : [
-          {
-            quantity: args.fallback.quantity,
-            pax: args.fallback.pax,
-            isExtra: false,
-            service: args.fallback.service,
-            option: args.fallback.option,
-          },
         ];
 
   const units: OperationalUnitSnapshot[] = [];
@@ -69,7 +78,11 @@ export function buildOperationalUnitSnapshots(args: {
 
   for (const item of sourceItems) {
     const category = normalizeCategory(item.service?.category);
-    if (!category || getOperationalPlatformUnits({ category, quantity: item.quantity ?? 0 }) <= 0) {
+    if (
+      !category ||
+      !needsPlatformUnitForCategory(category) ||
+      getOperationalPlatformUnits({ category, quantity: item.quantity ?? 0 }) <= 0
+    ) {
       continue;
     }
 
@@ -94,6 +107,7 @@ export function buildOperationalUnitSnapshots(args: {
     if (usesQuantityAsOperationalMultiplier(category)) {
       units.push({
         unitIndex: unitIndex++,
+        itemUnitIndex: 1,
         ...baseSnapshot,
         quantitySnapshot: itemQuantity,
         durationMinutesSnapshot: getOperationalDurationMinutes({
@@ -108,6 +122,7 @@ export function buildOperationalUnitSnapshots(args: {
     for (let index = 0; index < platformUnits; index++) {
       units.push({
         unitIndex: unitIndex++,
+        itemUnitIndex: index + 1,
         ...baseSnapshot,
         quantitySnapshot: 1,
       });

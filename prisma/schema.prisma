@@ -493,6 +493,7 @@ model ReservationItem {
   splitReservation Reservation? @relation("ReservationItemSplit", fields: [splitReservationId], references: [id])
   reservation      Reservation  @relation("ReservationItems", fields: [reservationId], references: [id], onDelete: Cascade)
   contracts        ReservationContract[]
+  units            ReservationUnit[]
 
   service Service        @relation(fields: [serviceId], references: [id])
   option  ServiceOption? @relation(fields: [optionId], references: [id])
@@ -511,6 +512,7 @@ model ReservationUnit {
   unitIndex               Int // 1..N
   status                  ReservationUnitStatus @default(READY_FOR_PLATFORM)
   reservationItemId       String?
+  reservationItem         ReservationItem?      @relation(fields: [reservationItemId], references: [id], onDelete: SetNull)
   serviceId               String?
   optionId                String?
   serviceCategory         String?
@@ -545,6 +547,8 @@ model ReservationUnit {
 
   @@unique([reservationId, unitIndex])
   @@index([reservationId])
+  @@index([reservationItemId])
+  @@index([reservationId, reservationItemId, unitIndex])
   @@index([jetskiId])
   @@index([status])
 }

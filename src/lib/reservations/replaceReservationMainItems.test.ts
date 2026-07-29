@@ -91,3 +91,57 @@ test("replaceReservationMainItemsTx marca cambio material si cambia servicePrice
 
   assert.deepEqual([...result.changedReservationItemIds], ["item-1"]);
 });
+
+test("replaceReservationMainItemsTx conserva ids cuando el formulario reordena pack Banana y Jetski", async () => {
+  const rows = [
+    baseItem({
+      id: "item-jetski",
+      serviceId: "service-jetski",
+      optionId: "option-jetski",
+      servicePriceId: "price-jetski",
+      unitPriceCents: 10_000,
+      totalPriceCents: 10_000,
+    }),
+    baseItem({
+      id: "item-banana",
+      serviceId: "service-banana",
+      optionId: "option-banana",
+      servicePriceId: "price-banana",
+      unitPriceCents: 8_000,
+      totalPriceCents: 8_000,
+    }),
+  ];
+
+  const result = await replaceReservationMainItemsTx(makeTx(rows), {
+    reservationId: "reservation-1",
+    existingItems: rows,
+    nextItems: [
+      {
+        serviceId: "service-banana",
+        optionId: "option-banana",
+        servicePriceId: "price-banana",
+        quantity: 1,
+        pax: 2,
+        unitPriceCents: 8_000,
+        totalPriceCents: 8_000,
+      },
+      {
+        serviceId: "service-jetski",
+        optionId: "option-jetski",
+        servicePriceId: "price-jetski",
+        quantity: 1,
+        pax: 2,
+        unitPriceCents: 10_000,
+        totalPriceCents: 10_000,
+      },
+    ],
+  });
+
+  assert.deepEqual(result.nextReservationItemIds, ["item-banana", "item-jetski"]);
+  assert.deepEqual([...result.changedReservationItemIds], []);
+  assert.deepEqual(result.removedReservationItemIds, []);
+  assert.deepEqual(
+    rows.map((item) => item.id),
+    ["item-jetski", "item-banana"]
+  );
+});
