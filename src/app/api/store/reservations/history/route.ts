@@ -17,6 +17,7 @@ import { resolveCommissionForReporting } from "@/lib/commission-reporting";
 import { getBusinessDayRange } from "@/lib/business-day";
 import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { resolveReservationOperationalStatus } from "@/lib/reservation-operational-status";
+import { resolveReservationActivitySummary } from "@/lib/reservation-activity-summary";
 
 export const runtime = "nodejs";
 
@@ -157,6 +158,7 @@ export async function GET(req: Request) {
       financialAdjustedAt: true,
       source: true,
       formalizedAt: true,
+      isPackParent: true,
       parentReservationId: true,
       contracts: {
         select: {
@@ -198,6 +200,7 @@ export async function GET(req: Request) {
         select: {
           quantity: true,
           isExtra: true,
+          isPackParent: true,
           totalPriceCents: true,
           service: { select: { name: true, category: true } },
           option: { select: { durationMinutes: true } },
@@ -308,17 +311,28 @@ export async function GET(req: Request) {
   const rows = rowsDb.map((reservation) => {
     const contractsSummary = summarizeReservationContracts(reservation.contracts ?? []);
     const attachment = attachmentMap.get(reservation.id);
-    const mainItem = reservation.items.find((item) => !item.isExtra) ?? null;
+    const mainItem =
+      reservation.items.find((item) => !item.isExtra && !item.isPackParent) ?? null;
     const shouldUseParentService =
       String(mainItem?.service?.category ?? reservation.service?.category ?? "").toUpperCase() === "EXTRA" &&
       Boolean(reservation.parentReservationId) &&
       Boolean(reservation.parentReservation?.service);
-    const displayService = shouldUseParentService
-      ? reservation.parentReservation?.service ?? reservation.service
-      : mainItem?.service ?? reservation.service;
+    const activitySummary = resolveReservationActivitySummary({
+      service: shouldUseParentService
+        ? reservation.parentReservation?.service ?? reservation.service
+        : reservation.service,
+      option: shouldUseParentService
+        ? reservation.parentReservation?.option ?? reservation.option
+        : reservation.option,
+      items: shouldUseParentService ? [] : reservation.items,
+    });
+    const displayServiceName = activitySummary.serviceName;
+    const displayServiceCategory = activitySummary.serviceCategory;
     const displayDurationMinutes = shouldUseParentService
-      ? reservation.parentReservation?.option?.durationMinutes ?? reservation.option?.durationMinutes ?? null
-      : mainItem?.option?.durationMinutes ?? reservation.option?.durationMinutes ?? null;
+      ? activitySummary.durationMinutes
+      : Boolean(reservation.isPackParent)
+        ? null
+        : activitySummary.durationMinutes;
     const extrasSummary = reservation.items
       .filter((item) => item.isExtra)
       .map((item) => ({
@@ -441,8 +455,8 @@ export async function GET(req: Request) {
       source: reservation.source,
       formalizedAt: reservation.formalizedAt,
       channelName: reservation.channel?.name ?? null,
-      serviceName: displayService?.name ?? null,
-      serviceCategory: displayService?.category ?? null,
+      serviceName: displayServiceName,
+      serviceCategory: displayServiceCategory,
       durationMinutes: displayDurationMinutes,
       extrasSummary,
       paidCents,
@@ -468,8 +482,8 @@ export async function GET(req: Request) {
         holderCountry: reservation.customerCountry,
         source: reservation.source,
         channelName: reservation.channel?.name ?? null,
-        serviceName: displayService?.name ?? null,
-        serviceCategory: displayService?.category ?? null,
+        serviceName: displayServiceName,
+        serviceCategory: displayServiceCategory,
         durationMinutes: displayDurationMinutes,
         quantity: reservation.quantity,
         pax: reservation.pax,

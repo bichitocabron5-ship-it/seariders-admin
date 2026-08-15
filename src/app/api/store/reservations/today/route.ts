@@ -13,6 +13,7 @@ import { buildReservationJetskiAssignments } from "@/lib/jetski-assignment-histo
 import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { resolveReservationOperationalStatus } from "@/lib/reservation-operational-status";
 import { getBusinessDayRange } from "@/lib/business-day";
+import { resolveReservationActivitySummary } from "@/lib/reservation-activity-summary";
 
 export const runtime = "nodejs";
 
@@ -89,6 +90,7 @@ export async function GET() {
           unitPriceCents: true,
           totalPriceCents: true,
           isExtra: true,
+          isPackParent: true,
           service: { select: { name: true, category: true } },
           option: { select: { durationMinutes: true } },
         },
@@ -170,7 +172,7 @@ export async function GET() {
     const depositCents = paymentStatus.depositDueCents;
 
     // items principal + extras
-    const mainItem = r.items.find((it) => !it.isExtra) ?? null;
+    const mainItem = r.items.find((it) => !it.isExtra && !it.isPackParent) ?? null;
     const extras = r.items.filter((it) => it.isExtra);
     const isGift = Boolean(r.giftVoucherId);
     const isPass = Boolean(r.passVoucherId || r.passConsumeId);
@@ -221,6 +223,7 @@ export async function GET() {
       items: (r.items ?? []).map((it) => ({
         quantity: it.quantity ?? 0,
         isExtra: Boolean(it.isExtra),
+        isPackParent: Boolean(it.isPackParent),
         service: it.service ? { category: it.service.category ?? null } : null,
       })),
     });
@@ -244,17 +247,9 @@ export async function GET() {
       storeFlowStage,
     });
 
-    // nombres para UI (main item o fallback legacy)
-    const legacyServiceName = r.service?.name ?? null;
-    const legacyDurationMinutes = r.option?.durationMinutes ?? null;
-
-    const serviceName = isPack
-      ? legacyServiceName
-      : (mainItem?.service?.name ?? legacyServiceName);
-
-    const durationMinutes = isPack
-      ? null
-      : (mainItem?.option?.durationMinutes ?? legacyDurationMinutes);
+    const activitySummary = resolveReservationActivitySummary(r);
+    const serviceName = isPack ? r.service?.name ?? null : activitySummary.serviceName;
+    const durationMinutes = isPack ? null : activitySummary.durationMinutes;
 
     const pvpTotalCents = isPack
       ? grossCents

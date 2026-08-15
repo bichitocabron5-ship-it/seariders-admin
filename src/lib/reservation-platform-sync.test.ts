@@ -563,3 +563,87 @@ test("extras no generan unidades operativas", () => {
 
   assert.equal(units.length, 0);
 });
+
+test("reserva legacy con solo extras usa fallback seguro de la reserva", () => {
+  const units = buildOperationalUnitSnapshots({
+    items: [
+      {
+        id: "item-extra",
+        quantity: 1,
+        pax: 1,
+        isExtra: true,
+        service: { id: "svc-extra", name: "Foto", category: "EXTRA" },
+        option: { id: "opt-extra", durationMinutes: 5 },
+      },
+    ],
+    fallback: {
+      quantity: 1,
+      pax: 2,
+      service: { id: "svc-jetski", name: "Jetski", category: "JETSKI" },
+      option: { id: "opt-jetski-60", durationMinutes: 60 },
+    },
+  });
+
+  assert.equal(units.length, 1);
+  assert.equal(units[0]?.reservationItemId, null);
+  assert.equal(units[0]?.durationMinutesSnapshot, 60);
+});
+
+test("editar una linea conserva la duracion de las otras unidades por reservationItemId", () => {
+  const requiredUnits = buildOperationalUnitSnapshots({
+    items: [
+      {
+        id: "item-jetski",
+        quantity: 1,
+        pax: 2,
+        isExtra: false,
+        service: { id: "svc-jetski", name: "Jetski", category: "JETSKI" },
+        option: { id: "opt-jetski-60", durationMinutes: 60 },
+      },
+      {
+        id: "item-banana",
+        quantity: 1,
+        pax: 2,
+        isExtra: false,
+        service: { id: "svc-banana", name: "Banana", category: "NAUTICA" },
+        option: { id: "opt-banana-15", durationMinutes: 15 },
+      },
+    ],
+    fallback: {
+      quantity: 2,
+      pax: 2,
+      service: null,
+      option: null,
+    },
+  });
+
+  const plan = computeReservationUnitSyncPlan({
+    requiredUnits,
+    existingUnits: [
+      {
+        id: "unit-jetski",
+        unitIndex: 1,
+        reservationItemId: "item-jetski",
+        status: ReservationUnitStatus.READY_FOR_PLATFORM,
+      },
+      {
+        id: "unit-banana",
+        unitIndex: 2,
+        reservationItemId: "item-banana",
+        status: ReservationUnitStatus.READY_FOR_PLATFORM,
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    plan.updates.map((update) => [
+      update.id,
+      update.data.reservationItemId,
+      update.data.durationMinutesSnapshot,
+    ]),
+    [
+      ["unit-jetski", "item-jetski", 60],
+      ["unit-banana", "item-banana", 15],
+    ]
+  );
+});

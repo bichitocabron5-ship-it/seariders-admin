@@ -56,7 +56,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           status: true,
           totalPriceCents: true,
           depositCents: true,
-          service: { select: { category: true } },
+          serviceId: true,
+          optionId: true,
+          service: { select: { name: true, category: true } },
+          option: { select: { durationMinutes: true } },
           items: {
             orderBy: { createdAt: "asc" },
             select: {
@@ -66,12 +69,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
               quantity: true,
               pax: true,
               isExtra: true,
+              isPackParent: true,
+              totalPriceCents: true,
               splitReservationId: true,
-              service: { select: { category: true } },
+              service: { select: { name: true, category: true } },
+              option: { select: { durationMinutes: true } },
             },
           },
           contracts: {
-            select: { unitIndex: true, status: true },
+            select: {
+              id: true,
+              reservationItemId: true,
+              unitIndex: true,
+              logicalUnitIndex: true,
+              status: true,
+              supersededAt: true,
+              createdAt: true,
+            },
           },
           payments: {
             select: { amountCents: true, isDeposit: true, direction: true },
@@ -86,16 +100,32 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         totalPriceCents: parent.totalPriceCents,
         depositCents: parent.depositCents,
         quantity: parent.quantity,
+        serviceId: parent.serviceId,
+        optionId: parent.optionId,
+        pax: parent.pax,
         isLicense: Boolean(parent.isLicense),
         service: parent.service,
+        option: parent.option,
         items: (parent.items ?? []).map((it) => ({
+          id: it.id,
+          serviceId: it.serviceId,
+          optionId: it.optionId,
           quantity: it.quantity ?? 0,
+          pax: it.pax,
           isExtra: Boolean(it.isExtra),
-          service: it.service ? { category: it.service.category ?? null } : null,
+          isPackParent: Boolean(it.isPackParent),
+          totalPriceCents: it.totalPriceCents,
+          service: it.service ? { name: it.service.name ?? null, category: it.service.category ?? null } : null,
+          option: it.option ? { durationMinutes: it.option.durationMinutes ?? null } : null,
         })),
         contracts: (parent.contracts ?? []).map((contract) => ({
+          id: contract.id,
+          reservationItemId: contract.reservationItemId,
           unitIndex: Number(contract.unitIndex ?? 0),
+          logicalUnitIndex: contract.logicalUnitIndex ?? null,
           status: contract.status,
+          supersededAt: contract.supersededAt ?? null,
+          createdAt: contract.createdAt ?? null,
         })),
         payments: (parent.payments ?? []).map((payment) => ({
           amountCents: Number(payment.amountCents ?? 0),
@@ -206,6 +236,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           },
           select: { id: true },
         });
+        // Crear item principal en hija (snapshot 0)
+        await tx.reservationItem.create({
+          data: {
+            reservationId: child.id,
+            serviceId: it.serviceId,
+            optionId: it.optionId,
+            servicePriceId: null,
+            quantity: Number(it.quantity ?? 1),
+            pax: Number(it.pax ?? parent.pax ?? 1),
+            unitPriceCents: 0,
+            totalPriceCents: 0,
+            isExtra: false,
+          },
+        });
+
         await ensureReservationPlatformUnitsTx(tx, {
           id: child.id,
           quantity: Number(it.quantity ?? 1),
@@ -225,21 +270,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         });
 
         createdChildrenIds.push(child.id);
-
-        // Crear item principal en hija (snapshot 0)
-        await tx.reservationItem.create({
-          data: {
-            reservationId: child.id,
-            serviceId: it.serviceId,
-            optionId: it.optionId,
-            servicePriceId: null,
-            quantity: Number(it.quantity ?? 1),
-            pax: Number(it.pax ?? parent.pax ?? 1),
-            unitPriceCents: 0,
-            totalPriceCents: 0,
-            isExtra: false,
-          },
-        });
 
         // Marcar item del padre como “splitteado”
         await tx.reservationItem.update({

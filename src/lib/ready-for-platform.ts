@@ -29,6 +29,7 @@ type ReadyReservation = {
     quantity: number | null;
     pax?: number | null;
     isExtra: boolean;
+    isPackParent?: boolean | null;
     totalPriceCents?: number | null;
     service: { name?: string | null; category: string | null } | null;
     option?: { durationMinutes?: number | null } | null;

@@ -200,6 +200,7 @@ export async function GET(req: Request) {
       items: (r.items ?? []).map((item) => ({
         quantity: item.quantity ?? 0,
         isExtra: Boolean(item.isExtra),
+        isPackParent: Boolean(item.isPackParent),
         service: item.service ? { category: item.service.category ?? null } : null,
       })),
     });

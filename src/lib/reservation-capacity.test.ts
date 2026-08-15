@@ -150,6 +150,66 @@ test("carrito multiactividad mantiene todas sus lineas operativas", () => {
   ]);
 });
 
+test("pack Jetski 20 + Banana 15 conserva duraciones independientes", () => {
+  const usages = buildReservationCapacityUsages(
+    reservation({
+      service: { category: "PACK" },
+      option: { durationMinutes: 90 },
+      items: [
+        item({ id: "item-pack-parent", category: "PACK", durationMinutes: 90, isPackParent: true, name: "Pack" }),
+        item({ id: "item-jetski", category: "JETSKI", durationMinutes: 20, name: "Jetski" }),
+        item({ id: "item-banana", category: "TOWABLE", durationMinutes: 15, name: "Banana" }),
+      ],
+    })
+  );
+
+  assert.deepEqual(
+    usages.map((usage) => [usage.reservationItemId, usage.category, usage.durationMinutes]),
+    [
+      ["item-jetski", "JETSKI", 20],
+      ["item-banana", "TOWABLE", 15],
+    ]
+  );
+});
+
+test("carrito en orden inverso no altera duraciones por linea", () => {
+  const usages = buildReservationCapacityUsages(
+    reservation({
+      items: [
+        item({ id: "item-banana", category: "TOWABLE", durationMinutes: 15, name: "Banana" }),
+        item({ id: "item-jetski", category: "JETSKI", durationMinutes: 20, name: "Jetski" }),
+      ],
+    })
+  );
+
+  assert.deepEqual(
+    usages.map((usage) => [usage.reservationItemId, usage.category, usage.durationMinutes]),
+    [
+      ["item-banana", "TOWABLE", 15],
+      ["item-jetski", "JETSKI", 20],
+    ]
+  );
+});
+
+test("dos Jetski con opciones de 20 y 60 minutos conservan tiempos independientes", () => {
+  const usages = buildReservationCapacityUsages(
+    reservation({
+      items: [
+        item({ id: "item-jetski-20", category: "JETSKI", durationMinutes: 20, quantity: 1 }),
+        item({ id: "item-jetski-60", category: "JETSKI", durationMinutes: 60, quantity: 1 }),
+      ],
+    })
+  );
+
+  assert.deepEqual(
+    usages.map((usage) => [usage.reservationItemId, usage.durationMinutes]),
+    [
+      ["item-jetski-20", 20],
+      ["item-jetski-60", 60],
+    ]
+  );
+});
+
 test("dos Jetski consumen dos unidades de capacidad", () => {
   const usages = buildReservationCapacityUsages(
     reservation({
@@ -330,6 +390,37 @@ test("calendario resume pack por lineas reales y no por el padre", () => {
 
   assert.equal(summary.service?.name, "Jetski + Banana");
   assert.equal(summary.service?.category, "JETSKI + TOWABLE");
+  assert.equal(summary.option?.durationMinutes, null);
+});
+
+test("calendario no resume varias lineas como una duracion unica aunque coincidan", () => {
+  const summary = resolveStoreCalendarReservationSummary(
+    reservation({
+      service: { name: "Reserva multi", category: "JETSKI" },
+      option: { durationMinutes: 90, paxMax: 2 },
+      items: [
+        item({ id: "item-jetski-a", category: "JETSKI", durationMinutes: 20, name: "Jetski A" }),
+        item({ id: "item-jetski-b", category: "JETSKI", durationMinutes: 20, name: "Jetski B" }),
+      ],
+    })
+  );
+
+  assert.equal(summary.service?.name, "Jetski A + Jetski B");
+  assert.equal(summary.option?.durationMinutes, null);
+});
+
+test("calendario no usa duracion global del pack padre sin componentes reales", () => {
+  const summary = resolveStoreCalendarReservationSummary(
+    reservation({
+      service: { name: "Pack padre", category: "PACK" },
+      option: { durationMinutes: 90, paxMax: 2 },
+      items: [
+        item({ id: "item-pack-parent", category: "PACK", durationMinutes: 90, isPackParent: true, name: "Pack padre" }),
+      ],
+    })
+  );
+
+  assert.equal(summary.service?.name, "Pack padre");
   assert.equal(summary.option?.durationMinutes, null);
 });
 

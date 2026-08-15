@@ -62,3 +62,39 @@ test("prefill usa optionId fallback en items legacy sin optionId", () => {
   assert.equal(items[0]?.optionId, "option-legacy");
   assert.equal(items[0]?.promoCode, null);
 });
+
+test("prefill excluye el padre de pack y conserva los componentes reales", () => {
+  const items = buildReservationPrefillCartItems({
+    promoCode: null,
+    fallbackOptionId: "option-pack",
+    items: [
+      {
+        serviceId: "service-pack",
+        optionId: "option-pack",
+        quantity: 1,
+        pax: 2,
+        isExtra: false,
+        isPackParent: true,
+      },
+      {
+        serviceId: "service-jetski",
+        optionId: "option-jetski-20",
+        quantity: 1,
+        pax: 2,
+        isExtra: false,
+      },
+      {
+        serviceId: "service-banana",
+        optionId: "option-banana-15",
+        quantity: 1,
+        pax: 2,
+        isExtra: false,
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    items.map((item) => item.optionId),
+    ["option-jetski-20", "option-banana-15"]
+  );
+});
