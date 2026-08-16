@@ -766,18 +766,31 @@ const tz = BUSINESS_TZ;
 const activityDate = utcDateFromYmdInTz(tz, b.activityDate);
 const scheduledTime = utcDateTimeFromYmdHmInTz(tz, b.activityDate, b.time ?? null);
 const pricingWhen = scheduledTime ?? activityDate;
-const requestedServiceId = hasProItems
-  ? (b.items?.[0]?.serviceId ?? existing.serviceId)
-  : (b.serviceId ?? existing.serviceId);
+const requestedServiceIds = hasProItems
+  ? Array.from(new Set((b.items ?? []).map((item) => item.serviceId).filter(Boolean)))
+  : [b.serviceId ?? existing.serviceId].filter((serviceId): serviceId is string => Boolean(serviceId));
+const requestedServiceCategoryRows =
+  requestedServiceIds.length > 0
+    ? await prisma.service.findMany({
+        where: { id: { in: requestedServiceIds } },
+        select: { id: true, category: true },
+      })
+    : [];
+const requestedServiceCategoryById = new Map(
+  requestedServiceCategoryRows.map((service) => [service.id, service.category ?? null])
+);
+const requestedServiceCategories = requestedServiceIds
+  .map((serviceId) =>
+    serviceId === existing.serviceId
+      ? existing.service?.category ?? requestedServiceCategoryById.get(serviceId) ?? null
+      : requestedServiceCategoryById.get(serviceId) ?? null
+  )
+  .map((category) => String(category ?? "").trim().toUpperCase())
+  .filter(Boolean);
 const requestedServiceCategory =
-  requestedServiceId === existing.serviceId
-    ? existing.service?.category ?? null
-    : (
-        await prisma.service.findUnique({
-          where: { id: requestedServiceId },
-          select: { category: true },
-        })
-      )?.category ?? null;
+  requestedServiceCategories.includes("JETSKI")
+    ? "JETSKI"
+    : requestedServiceCategories[0] ?? existing.service?.category ?? null;
 const isPrepaidVoucherReservation = isReservationCoveredByPrepaidVoucher(existing);
 const existingMainQuantity = sumMainReservationQuantity(existing.items ?? [], existing.quantity);
 const rawRequestedReservationState = deriveCommercialReservationState({

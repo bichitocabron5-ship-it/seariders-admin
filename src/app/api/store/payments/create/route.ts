@@ -7,15 +7,14 @@ import { assertCashOpenForUser } from "@/lib/cashClosureLock";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 import { getReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
-import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { ensureReservationPlatformUnitsTx } from "@/lib/reservation-platform";
 import { originFromRoleName } from "@/lib/cashClosures";
 import { getRequestOperationalContext, writeOperationalLog } from "@/lib/operational-log";
 import { syncChannelCommissionLineFromPaymentTx } from "@/lib/channel-commission-lines";
+import { buildReservationContractProgressFromReservation } from "@/lib/contracts/reservation-contract-progress";
 
 export const runtime = "nodejs";
 
@@ -120,13 +119,15 @@ export async function POST(req: Request) {
               pax: true,
               totalPriceCents: true,
               isExtra: true,
+              isPackParent: true,
               splitReservationId: true,
               service: { select: { category: true } },
+              option: { select: { durationMinutes: true } },
             },
           },
 
           contracts: {
-            select: { unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
+            select: { reservationItemId: true, unitIndex: true, logicalUnitIndex: true, status: true, supersededAt: true, createdAt: true },
           },
 
           payments: {
@@ -160,18 +161,9 @@ export async function POST(req: Request) {
 
       // Bloqueo de caja: no permitir cobro si faltan contratos operativos.
       if (direction === "IN" && reservation.formalizedAt) {
-        const requiredUnits = computeRequiredContractUnits({
-          quantity: reservation.quantity,
-          isLicense: Boolean(reservation.isLicense),
-          serviceCategory: reservation.service?.category ?? null,
-          items: (reservation.items ?? []).map((it) => ({
-            quantity: it.quantity ?? 0,
-            isExtra: Boolean(it.isExtra),
-            service: it.service ? { category: it.service.category ?? null } : null,
-          })),
-        });
-
-        const readyCount = countReadyVisibleContracts(reservation.contracts ?? [], requiredUnits);
+        const contractProgress = buildReservationContractProgressFromReservation(reservation);
+        const requiredUnits = contractProgress.requiredUnits;
+        const readyCount = contractProgress.readyCount;
 
         if (requiredUnits > 0 && readyCount < requiredUnits) {
           throw Object.assign(
@@ -274,14 +266,24 @@ export async function POST(req: Request) {
         isLicense: Boolean(reservation.isLicense),
         service: reservation.service,
         items: (reservation.items ?? []).map((it) => ({
+          id: it.id,
+          serviceId: it.serviceId,
+          optionId: it.optionId,
           quantity: it.quantity ?? 0,
+          pax: it.pax,
           isExtra: Boolean(it.isExtra),
+          isPackParent: Boolean(it.isPackParent),
           totalPriceCents: it.totalPriceCents ?? 0,
           service: it.service ? { category: it.service.category ?? null } : null,
+          option: it.option ? { durationMinutes: it.option.durationMinutes ?? null } : null,
         })),
         contracts: (reservation.contracts ?? []).map((contract) => ({
           unitIndex: Number(contract.unitIndex ?? 0),
+          logicalUnitIndex: contract.logicalUnitIndex ?? null,
+          reservationItemId: contract.reservationItemId ?? null,
           status: contract.status,
+          supersededAt: contract.supersededAt ?? null,
+          createdAt: contract.createdAt ?? null,
         })),
         payments: [
           ...(reservation.payments ?? []).map((payment) => ({

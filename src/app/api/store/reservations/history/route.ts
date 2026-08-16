@@ -17,7 +17,10 @@ import { resolveCommissionForReporting } from "@/lib/commission-reporting";
 import { getBusinessDayRange } from "@/lib/business-day";
 import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { resolveReservationOperationalStatus } from "@/lib/reservation-operational-status";
-import { resolveReservationActivitySummary } from "@/lib/reservation-activity-summary";
+import {
+  resolveReservationActivitySummary,
+  sumReservationActivityQuantity,
+} from "@/lib/reservation-activity-summary";
 
 export const runtime = "nodejs";
 
@@ -333,6 +336,16 @@ export async function GET(req: Request) {
       : Boolean(reservation.isPackParent)
         ? null
         : activitySummary.durationMinutes;
+    const displayQuantity = sumReservationActivityQuantity({
+      quantity: reservation.quantity,
+      service: shouldUseParentService
+        ? reservation.parentReservation?.service ?? reservation.service
+        : reservation.service,
+      option: shouldUseParentService
+        ? reservation.parentReservation?.option ?? reservation.option
+        : reservation.option,
+      items: shouldUseParentService ? [] : reservation.items,
+    });
     const extrasSummary = reservation.items
       .filter((item) => item.isExtra)
       .map((item) => ({
@@ -347,7 +360,7 @@ export async function GET(req: Request) {
       passConsumeId: reservation.passConsumeId,
       totalPriceCents: reservation.totalPriceCents,
       depositCents: reservation.depositCents,
-      quantity: reservation.quantity,
+      quantity: displayQuantity,
       isLicense: Boolean(reservation.isLicense),
       serviceCategory: reservation.service?.category ?? null,
       items: reservation.items ?? [],
@@ -485,7 +498,7 @@ export async function GET(req: Request) {
         serviceName: displayServiceName,
         serviceCategory: displayServiceCategory,
         durationMinutes: displayDurationMinutes,
-        quantity: reservation.quantity,
+        quantity: displayQuantity,
         pax: reservation.pax,
         isLicense: reservation.isLicense,
         totalPriceCents: chargeableTotalPriceCents,

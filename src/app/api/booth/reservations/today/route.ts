@@ -6,6 +6,10 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 import { ReservationStatus } from "@prisma/client";
+import {
+  resolveReservationActivitySummary,
+  sumReservationActivityQuantity,
+} from "@/lib/reservation-activity-summary";
 
 export const runtime = "nodejs";
 
@@ -55,17 +59,18 @@ export async function GET() {
 
       // ✅ items (principal)
       items: {
-        where: { isExtra: false },
         orderBy: { createdAt: "asc" },
         select: {
+          id: true,
           totalPriceCents: true,
           unitPriceCents: true,
           quantity: true,
           pax: true,
-          service: { select: { name: true } },
+          isExtra: true,
+          isPackParent: true,
+          service: { select: { name: true, category: true } },
           option: { select: { durationMinutes: true } },
         },
-        take: 1,
       },
 
       payments: {
@@ -93,8 +98,13 @@ export async function GET() {
     const pendingCents = Math.max(0, Number(r.totalPriceCents ?? 0) - paidCents);
 
     // ✅ PVP “robusto”: si hay item principal, úsalo; si no, usa basePriceCents legacy
-    const mainItem = r.items?.[0] ?? null;
-    const serviceTotalCents = mainItem ? Number(mainItem.totalPriceCents ?? 0) : Number(r.basePriceCents ?? 0);
+    const activitySummary = resolveReservationActivitySummary(r);
+    const serviceTotalCents =
+      r.items?.length > 0
+        ? r.items
+            .filter((item) => !item.isExtra && !item.isPackParent)
+            .reduce((sum, item) => sum + Number(item.totalPriceCents ?? 0), 0)
+        : Number(r.basePriceCents ?? 0);
 
     return {
       id: r.id,
@@ -111,16 +121,20 @@ export async function GET() {
       customerName: r.customerName,
       customerCountry: r.customerCountry,
       pax: r.pax,
-      quantity: r.quantity,
+      quantity: sumReservationActivityQuantity(r),
 
-      serviceName: mainItem?.service?.name ?? r.service?.name ?? null,
-      durationMinutes: mainItem?.option?.durationMinutes ?? r.option?.durationMinutes ?? null,
-      serviceCategory: r.service?.category ?? null,
+      serviceName: activitySummary.serviceName,
+      durationMinutes: activitySummary.durationMinutes,
+      serviceCategory: activitySummary.serviceCategory,
       // ✅ claves para que la UI pueda resolver siempre
       serviceId: r.serviceId,
       optionId: r.optionId,
-      service: r.service,   // { id, name, code }
-      option: r.option,     // { id, durationMinutes }
+      service: r.service
+        ? { ...r.service, name: activitySummary.serviceName ?? r.service.name }
+        : activitySummary.serviceName
+          ? { id: "", code: null, name: activitySummary.serviceName, category: activitySummary.serviceCategory }
+          : null,
+      option: r.option ? { ...r.option, durationMinutes: activitySummary.durationMinutes } : null,
 
       // ✅ para UI: PVP, descuento, final
       serviceTotalCents, // PVP base del principal (comisionable)
@@ -135,6 +149,7 @@ export async function GET() {
       paidCents,
       pendingCents,
       payments: r.payments ?? [],
+      items: r.items ?? [],
     };
   });
 

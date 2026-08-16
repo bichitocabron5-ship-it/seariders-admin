@@ -4,16 +4,18 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, AppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
 import { resolveDepositStatus } from "@/lib/reservation-deposits";
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
-import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { buildStoreTodayWhere } from "@/lib/store-reservation-visibility";
 import { buildReservationJetskiAssignments } from "@/lib/jetski-assignment-history";
 import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { resolveReservationOperationalStatus } from "@/lib/reservation-operational-status";
 import { getBusinessDayRange } from "@/lib/business-day";
-import { resolveReservationActivitySummary } from "@/lib/reservation-activity-summary";
+import {
+  resolveReservationActivitySummary,
+  sumReservationActivityQuantity,
+} from "@/lib/reservation-activity-summary";
+import { buildReservationContractProgressFromReservation } from "@/lib/contracts/reservation-contract-progress";
 
 export const runtime = "nodejs";
 
@@ -114,7 +116,7 @@ export async function GET() {
       },
 
       contracts: {
-        select: { status: true, unitIndex: true, logicalUnitIndex: true, supersededAt: true, createdAt: true },
+        select: { status: true, reservationItemId: true, unitIndex: true, logicalUnitIndex: true, supersededAt: true, createdAt: true },
       },
 
       depositHeld: true,
@@ -172,7 +174,6 @@ export async function GET() {
     const depositCents = paymentStatus.depositDueCents;
 
     // items principal + extras
-    const mainItem = r.items.find((it) => !it.isExtra && !it.isPackParent) ?? null;
     const extras = r.items.filter((it) => it.isExtra);
     const isGift = Boolean(r.giftVoucherId);
     const isPass = Boolean(r.passVoucherId || r.passConsumeId);
@@ -216,19 +217,9 @@ export async function GET() {
     const pendingDepositCents = paymentStatus.displayPendingDepositCents;
     const pendingCents = pendingServiceCents + pendingDepositCents;
 
-    const requiredUnits = computeRequiredContractUnits({
-      quantity: r.quantity,
-      isLicense: Boolean(r.isLicense),
-      serviceCategory: r.service?.category ?? null,
-      items: (r.items ?? []).map((it) => ({
-        quantity: it.quantity ?? 0,
-        isExtra: Boolean(it.isExtra),
-        isPackParent: Boolean(it.isPackParent),
-        service: it.service ? { category: it.service.category ?? null } : null,
-      })),
-    });
-
-    const readyCount = countReadyVisibleContracts(r.contracts ?? [], requiredUnits);
+    const contractProgress = buildReservationContractProgressFromReservation(r);
+    const requiredUnits = contractProgress.requiredUnits;
+    const readyCount = contractProgress.readyCount;
 
     const contractsBadge =
       requiredUnits > 0 ? { requiredUnits, readyCount } : null;
@@ -287,7 +278,7 @@ export async function GET() {
       customerName: r.customerName,
       customerCountry: r.customerCountry,
 
-      quantity: mainItem?.quantity ?? r.quantity,
+      quantity: sumReservationActivityQuantity(r),
       pax: r.pax,
       isLicense: r.isLicense,
 

@@ -9,6 +9,10 @@ import { resolveCommissionForReporting } from "@/lib/commission-reporting";
 import { getBusinessDayRange } from "@/lib/business-day";
 import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { resolveReservationOperationalStatus } from "@/lib/reservation-operational-status";
+import {
+  resolveReservationActivitySummary,
+  sumReservationActivityQuantity,
+} from "@/lib/reservation-activity-summary";
 
 export const runtime = "nodejs";
 
@@ -125,6 +129,17 @@ export async function GET(req: Request) {
             },
             service: { select: { name: true, category: true } },
             option: { select: { durationMinutes: true } },
+            items: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                quantity: true,
+                isExtra: true,
+                isPackParent: true,
+                totalPriceCents: true,
+                service: { select: { name: true, category: true } },
+                option: { select: { durationMinutes: true } },
+              },
+            },
             payments: {
               select: {
                 amountCents: true,
@@ -242,13 +257,16 @@ export async function GET(req: Request) {
       quantity: reservation.quantity,
     });
     const boothPayments = reservation.payments.filter((payment) => payment.origin === "BOOTH");
+    const activitySummary = resolveReservationActivitySummary(reservation);
+    const displayQuantity = sumReservationActivityQuantity(reservation);
     const paymentStatus = resolveReservationPaymentStatus({
       reservationStatus: reservation.status,
       totalPriceCents: reservation.totalPriceCents,
       depositCents: 0,
-      quantity: reservation.quantity,
+      quantity: displayQuantity,
       isLicense: false,
       serviceCategory: reservation.service?.category ?? null,
+      items: reservation.items ?? [],
       payments: boothPayments,
     });
     const lastBoothPaymentAt = boothPayments[boothPayments.length - 1]?.createdAt ?? null;
@@ -272,12 +290,12 @@ export async function GET(req: Request) {
       createdAt: reservation.createdAt,
       customerName: reservation.customerName,
       customerCountry: reservation.customerCountry,
-      quantity: reservation.quantity,
+      quantity: displayQuantity,
       pax: reservation.pax,
       totalPriceCents: Number(reservation.totalPriceCents ?? 0),
-      serviceName: reservation.service?.name ?? null,
-      serviceCategory: reservation.service?.category ?? null,
-      durationMinutes: reservation.option?.durationMinutes ?? null,
+      serviceName: activitySummary.serviceName,
+      serviceCategory: activitySummary.serviceCategory,
+      durationMinutes: activitySummary.durationMinutes,
       paymentStatus: paymentStatus.state,
       paymentStatusLabel: paymentStatus.label,
       servicePaidCents: paymentStatus.paidServiceCents,

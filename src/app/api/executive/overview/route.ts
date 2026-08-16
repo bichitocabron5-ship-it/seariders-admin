@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { AppSession, sessionOptions } from "@/lib/session";
 import { computeReservationDepositCents } from "@/lib/reservation-deposits";
 import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
+import { buildReservationActivityMetricRows } from "@/lib/reservation-reporting";
 
 export const runtime = "nodejs";
 
@@ -334,7 +335,9 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
       source: reservation.source ?? "—",
       marketing: reservation.marketing ?? "Sin dato",
       channelName: reservation.channel?.name ?? "—",
-      serviceName: reservation.service?.name ?? "—",
+      service: reservation.service,
+      quantity: reservation.quantity ?? null,
+      items: reservation.items,
       soldTotalCents,
       collectedCents,
       pendingCents: pendingServiceCents,
@@ -356,18 +359,6 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
     {
       channel: string;
       reservations: number;
-      salesCents: number;
-      collectedCents: number;
-      pendingCents: number;
-    }
-  >();
-
-  const servicesMap = new Map<
-    string,
-    {
-      service: string;
-      reservations: number;
-      quantity: number;
       salesCents: number;
       collectedCents: number;
       pendingCents: number;
@@ -402,24 +393,6 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
     channel.collectedCents += row.collectedCents;
     channel.pendingCents += row.pendingCents;
 
-    const svKey = row.serviceName || "—";
-    if (!servicesMap.has(svKey)) {
-      servicesMap.set(svKey, {
-        service: svKey,
-        reservations: 0,
-        quantity: 0,
-        salesCents: 0,
-        collectedCents: 0,
-        pendingCents: 0,
-      });
-    }
-    const service = servicesMap.get(svKey)!;
-    service.reservations += 1;
-    service.quantity += 1;
-    service.salesCents += row.soldTotalCents;
-    service.collectedCents += row.collectedCents;
-    service.pendingCents += row.pendingCents;
-
     const mkKey = row.marketing || "Sin dato";
     if (!marketingMap.has(mkKey)) {
       marketingMap.set(mkKey, {
@@ -447,15 +420,16 @@ function buildReservationMetrics(rows: ReservationMetricInput[]) {
     }))
     .sort((a, b) => b.salesCents - a.salesCents);
 
-  const services = Array.from(servicesMap.values())
-    .map((entry) => ({
-      ...entry,
-      averageTicketCents:
-        entry.reservations > 0
-          ? Math.round(entry.salesCents / entry.reservations)
-          : 0,
+  const services = buildReservationActivityMetricRows(
+    mapped.map((row) => ({
+      service: row.service,
+      quantity: row.quantity,
+      items: row.items,
+      soldTotalCents: row.soldTotalCents,
+      collectedCents: row.collectedCents,
+      pendingCents: row.pendingCents,
     }))
-    .sort((a, b) => b.salesCents - a.salesCents);
+  );
 
   const marketing = Array.from(marketingMap.values())
     .map((entry) => ({

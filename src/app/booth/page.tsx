@@ -77,7 +77,7 @@ type ReservationLike = {
   taxiboatTripId?: string | null;
   taxiboatDepartedAt?: string | null;
   taxiboatAssignedAt?: string | null;
-  service?: { name?: string | null; code?: string | null } | null;
+  service?: { name?: string | null; code?: string | null; category?: string | null } | null;
   option?: { durationMinutes?: number | null } | null;
 };
 
@@ -222,7 +222,9 @@ function toCentsFromEuroInput(v: string) {
   return Math.round(n * 100);
 }
 
-function isJetskiService(svc?: { code?: string | null; name?: string | null } | null) {
+function isJetskiService(svc?: { code?: string | null; name?: string | null; category?: string | null } | null) {
+  const category = String(svc?.category ?? "").trim().toUpperCase();
+  if (category) return category === "JETSKI";
   const key = normalize(svc?.code ?? svc?.name ?? "");
   return key.includes("jetski") || key.includes("jet") || key.includes("moto");
 }
