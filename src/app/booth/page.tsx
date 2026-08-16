@@ -69,6 +69,7 @@ type ReservationLike = {
   boothCode?: string | null;
   boothNote?: string | null;
   quantity?: number | null;
+  jetskiQuantity?: number | null;
   pax?: number | null;
   totalPriceCents?: number | null;
   paidCents?: number | null;
@@ -230,12 +231,16 @@ function isJetskiService(svc?: { code?: string | null; name?: string | null; cat
 }
 
 function formatReservationLine(r: ReservationLike, opts?: { showCountry?: boolean }) {
-  const jetski = isJetskiService(r.service);
+  const legacyJetskiQuantity = isJetskiService(r.service) ? Math.max(0, Number(r.quantity ?? 0)) : 0;
+  const motos =
+    r.jetskiQuantity == null
+      ? legacyJetskiQuantity
+      : Math.max(0, Number(r.jetskiQuantity ?? 0));
 
   const parts = [
     r.service?.name ?? "Servicio",
     r.option?.durationMinutes ? `${r.option.durationMinutes} min` : null,
-    jetski ? `${r.quantity} ${r.quantity === 1 ? "moto" : "motos"}` : null,
+    motos > 0 ? `${motos} ${motos === 1 ? "moto" : "motos"}` : null,
     r.pax ? `${r.pax} pax` : null,
     opts?.showCountry && r.customerCountry ? r.customerCountry : null,
   ].filter(Boolean);

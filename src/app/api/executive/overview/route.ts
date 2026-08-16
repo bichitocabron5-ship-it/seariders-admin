@@ -23,7 +23,7 @@ type ReservationMetricInput = {
   marketing?: string | null;
   scheduledTime: Date | null;
   activityDate: Date | null;
-  service: { name: string | null; category?: string | null } | null;
+  service: { id?: string | null; name: string | null; category?: string | null } | null;
   channel: { name: string | null } | null;
   totalPriceCents: number | null;
   autoDiscountCents: number | null;
@@ -40,7 +40,7 @@ type ReservationMetricInput = {
     isExtra: boolean;
     quantity?: number | null;
     totalPriceCents: number | null;
-    service: { name: string | null; category?: string | null } | null;
+    service: { id?: string | null; name: string | null; category?: string | null } | null;
   }>;
   depositHeld?: boolean;
   createdAt?: Date;
@@ -103,13 +103,13 @@ const reservationExecutiveSelect =
       },
     },
     channel: { select: { name: true } },
-    service: { select: { name: true, category: true } },
+    service: { select: { id: true, name: true, category: true } },
     items: {
       select: {
         isExtra: true,
         quantity: true,
         totalPriceCents: true,
-        service: { select: { name: true, category: true } },
+        service: { select: { id: true, name: true, category: true } },
       },
     },
   });

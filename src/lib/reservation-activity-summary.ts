@@ -67,6 +67,12 @@ export function sumReservationActivityQuantityForCategory(
     : 0;
 }
 
+export function sumReservationJetskiQuantity(
+  reservation: ReservationActivitySummaryInput & { quantity?: number | null }
+) {
+  return sumReservationActivityQuantityForCategory(reservation, "JETSKI");
+}
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return Array.from(
     new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean))

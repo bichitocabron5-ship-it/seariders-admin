@@ -8,7 +8,7 @@ import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
 import {
   resolveReservationActivitySummary,
   sumReservationActivityQuantity,
-  sumReservationActivityQuantityForCategory,
+  sumReservationJetskiQuantity,
 } from "@/lib/reservation-activity-summary";
 
 export const runtime = "nodejs";
@@ -69,10 +69,12 @@ export async function GET() {
     const reservations = (t.reservations ?? []).map((reservation) => {
       const activitySummary = resolveReservationActivitySummary(reservation);
       const quantity = sumReservationActivityQuantity(reservation);
+      const jetskiQuantity = sumReservationJetskiQuantity(reservation);
 
       return {
         ...reservation,
         quantity,
+        jetskiQuantity,
         service: reservation.service
           ? { ...reservation.service, name: activitySummary.serviceName ?? reservation.service.name }
           : activitySummary.serviceName
@@ -85,7 +87,7 @@ export async function GET() {
     });
     const paxTotal = reservations.reduce((acc, r) => acc + (r.pax ?? 0), 0);
     const motosTotal = reservations.reduce(
-      (acc, r) => acc + sumReservationActivityQuantityForCategory(r, "JETSKI"),
+      (acc, r) => acc + r.jetskiQuantity,
       0
     );
     return { ...t, reservations, paxTotal, motosTotal };
