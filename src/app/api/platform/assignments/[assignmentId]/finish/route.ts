@@ -20,6 +20,7 @@ import {
 import { createMaintenanceEventLog } from "@/lib/mechanics-event-log";
 import { diffHours } from "@/lib/mechanics";
 import { buildPlatformMutationDeltaTx } from "@/lib/platform-board-delta-server";
+import { resolvePlatformIncidentEntity } from "@/lib/platform-incident-context";
 
 export const runtime = "nodejs";
 
@@ -230,6 +231,10 @@ export async function POST(
       let maintenanceEventId: string | null = null;
 
     if (b.hasIncident) {
+      const incidentEntity = resolvePlatformIncidentEntity({
+        jetskiId: a.jetskiId,
+        assetId: a.assetId,
+      });
       const affectsOperability =
         b.affectsOperability !== undefined ? b.affectsOperability : true;
 
@@ -242,11 +247,11 @@ export async function POST(
           runId: a.runId,
           reservationId: a.reservationId,
           assignmentId: a.id,
-          jetskiId: a.jetskiId ?? null,
-          assetId: a.assetId ?? null,
+          jetskiId: incidentEntity.jetskiId,
+          assetId: incidentEntity.assetId,
           reservationUnitId: a.reservationUnitId ?? null,
 
-          entityType: a.jetskiId ? "JETSKI" : "ASSET",
+          entityType: incidentEntity.entityType,
 
           type: b.type!,
           level: b.level!,
@@ -309,9 +314,9 @@ export async function POST(
       if (b.createMaintenanceEvent) {
         const ev = await tx.maintenanceEvent.create({
           data: {
-            entityType: a.jetskiId ? "JETSKI" : "ASSET",
-            jetskiId: a.jetskiId ?? null,
-            assetId: a.assetId ?? null,
+            entityType: incidentEntity.entityType,
+            jetskiId: incidentEntity.jetskiId,
+            assetId: incidentEntity.assetId,
 
             type: "INCIDENT_REVIEW",
             status: "OPEN",

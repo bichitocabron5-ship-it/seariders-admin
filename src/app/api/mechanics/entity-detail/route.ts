@@ -7,6 +7,7 @@ import { applyLiveHours, calcService, diffHours, isServiceEventType } from "@/li
 import { requireMechanicsOrAdmin } from "@/lib/mechanics-auth";
 import { getActiveTaxiboatHoursMap } from "@/lib/taxiboat-mechanics";
 import { BUSINESS_TZ, tzDayRangeUtc } from "@/lib/tz-business";
+import { resolveReservationUnitActivity } from "@/lib/reservation-unit-activity";
 
 export const runtime = "nodejs";
 
@@ -53,6 +54,57 @@ function withPartUsageSummary<
       partUsageSummary,
     };
   });
+}
+
+function withResolvedAssignmentActivity<
+  T extends {
+    reservationUnit: {
+      unitIndex: number | null;
+      reservationItemId?: string | null;
+      serviceId?: string | null;
+      optionId?: string | null;
+      serviceName?: string | null;
+      serviceCategory?: string | null;
+      durationMinutesSnapshot?: number | null;
+      quantitySnapshot?: number | null;
+      paxSnapshot?: number | null;
+    } | null;
+    reservation: {
+      quantity?: number | null;
+      pax?: number | null;
+      service?: {
+        id?: string | null;
+        name?: string | null;
+        category?: string | null;
+      } | null;
+      option?: {
+        id?: string | null;
+        durationMinutes?: number | null;
+      } | null;
+    };
+  }
+>(assignment: T) {
+  const activity = resolveReservationUnitActivity({
+    unit: assignment.reservationUnit,
+    legacyReservation: assignment.reservation,
+  });
+
+  return {
+    ...assignment,
+    activity,
+    reservation: {
+      ...assignment.reservation,
+      service: {
+        id: activity.serviceId,
+        name: activity.serviceName,
+        category: activity.serviceCategory,
+      },
+      option: {
+        id: activity.optionId,
+        durationMinutes: activity.durationMinutes,
+      },
+    },
+  };
 }
 
 async function getJetskiDetail(entityId: string, take: number) {
@@ -201,6 +253,14 @@ async function getJetskiDetail(entityId: string, take: number) {
       reservationUnit: {
         select: {
           unitIndex: true,
+          reservationItemId: true,
+          serviceId: true,
+          optionId: true,
+          serviceName: true,
+          serviceCategory: true,
+          durationMinutesSnapshot: true,
+          quantitySnapshot: true,
+          paxSnapshot: true,
         },
       },
       reservation: {
@@ -211,7 +271,10 @@ async function getJetskiDetail(entityId: string, take: number) {
           customerCountry: true,
           activityDate: true,
           scheduledTime: true,
-          service: { select: { name: true, category: true } },
+          quantity: true,
+          pax: true,
+          service: { select: { id: true, name: true, category: true } },
+          option: { select: { id: true, durationMinutes: true } },
         },
       },
     },
@@ -237,8 +300,8 @@ async function getJetskiDetail(entityId: string, take: number) {
     lastServiceHoursEffective,
     lastEvent: lastEvt,
     events,
-    assignmentsToday,
-    recentAssignments: assignmentUsage,
+    assignmentsToday: assignmentsToday.map(withResolvedAssignmentActivity),
+    recentAssignments: assignmentUsage.map(withResolvedAssignmentActivity),
   };
 }
 
@@ -417,6 +480,14 @@ async function getAssetDetail(entityId: string, take: number) {
       reservationUnit: {
         select: {
           unitIndex: true,
+          reservationItemId: true,
+          serviceId: true,
+          optionId: true,
+          serviceName: true,
+          serviceCategory: true,
+          durationMinutesSnapshot: true,
+          quantitySnapshot: true,
+          paxSnapshot: true,
         },
       },
       reservation: {
@@ -427,7 +498,10 @@ async function getAssetDetail(entityId: string, take: number) {
           customerCountry: true,
           activityDate: true,
           scheduledTime: true,
-          service: { select: { name: true, category: true } },
+          quantity: true,
+          pax: true,
+          service: { select: { id: true, name: true, category: true } },
+          option: { select: { id: true, durationMinutes: true } },
         },
       },
     },
@@ -446,7 +520,7 @@ async function getAssetDetail(entityId: string, take: number) {
     lastEvent: lastEvt,
     events,
     assignmentsToday: [],
-    recentAssignments: assignmentUsage,
+    recentAssignments: assignmentUsage.map(withResolvedAssignmentActivity),
   };
 }
 

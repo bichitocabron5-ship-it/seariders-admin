@@ -138,7 +138,6 @@ async function repairMissingReadyPlatformUnits(params: {
             AND: [
               {
                 OR: [
-                  { service: serviceCategoryWhere },
                   {
                     items: {
                       some: {
@@ -149,6 +148,13 @@ async function repairMissingReadyPlatformUnits(params: {
                     },
                   },
                   { units: { some: unitCategoryWhere } },
+                  {
+                    AND: [
+                      { items: { none: {} } },
+                      { units: { none: {} } },
+                      { service: serviceCategoryWhere },
+                    ],
+                  },
                 ],
               },
             ],
@@ -178,7 +184,15 @@ async function repairMissingReadyPlatformUnits(params: {
 
   for (const reservation of reservations) {
     await prisma.$transaction(async (tx) => {
-      await syncReservationPlatformUnitsTx(tx, { id: reservation.id }, reservation.readyForPlatformAt ?? undefined);
+      await syncReservationPlatformUnitsTx(
+        tx,
+        { id: reservation.id },
+        reservation.readyForPlatformAt ?? undefined,
+        {
+          kind: params.kind,
+          categories: params.categories,
+        }
+      );
     });
   }
 }
