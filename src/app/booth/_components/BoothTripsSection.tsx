@@ -16,6 +16,7 @@ type ReservationLike = {
   service?: { name?: string | null; code?: string | null; category?: string | null } | null;
   option?: { durationMinutes?: number | null } | null;
   quantity?: number | null;
+  jetskiQuantity?: number | null;
   pax?: number | null;
 };
 

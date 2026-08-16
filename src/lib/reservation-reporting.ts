@@ -5,11 +5,11 @@ type ReportingActivityItem = {
   totalPriceCents?: number | null;
   isExtra?: boolean | null;
   isPackParent?: boolean | null;
-  service?: { name?: string | null; category?: string | null } | null;
+  service?: { id?: string | null; name?: string | null; category?: string | null } | null;
 };
 
 type ReservationActivityMetricInput = {
-  service?: { name?: string | null; category?: string | null } | null;
+  service?: { id?: string | null; name?: string | null; category?: string | null } | null;
   quantity?: number | null;
   items?: ReportingActivityItem[] | null;
   soldTotalCents: number;
@@ -18,6 +18,7 @@ type ReservationActivityMetricInput = {
 };
 
 export type ReservationActivityMetricLine = {
+  serviceId: string | null;
   service: string;
   reservations: number;
   quantity: number;
@@ -38,11 +39,28 @@ function positiveQuantity(value: number | null | undefined, fallback: number) {
   return parsed;
 }
 
-function allocateByWeights(totalCents: number, weights: number[]) {
+function serviceName(
+  service: { id?: string | null; name?: string | null; category?: string | null } | null | undefined
+) {
+  return service?.name ?? service?.category ?? "-";
+}
+
+function serviceKey(
+  service: { id?: string | null; name?: string | null; category?: string | null } | null | undefined
+) {
+  const id = String(service?.id ?? "").trim();
+  if (id) return `id:${id}`;
+  return `fallback:${serviceName(service)}`;
+}
+
+export function allocateCentsByWeights(totalCents: number, weights: number[]) {
   const total = normalizedCents(totalCents);
   if (weights.length === 0) return [];
 
-  const normalizedWeights = weights.map((weight) => Math.max(0, Number(weight) || 0));
+  const normalizedWeights = weights.map((weight) => {
+    const parsed = Number(weight);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  });
   const weightSum = normalizedWeights.reduce((sum, weight) => sum + weight, 0);
   if (weightSum <= 0) {
     const base = Math.floor(total / weights.length);
@@ -50,13 +68,24 @@ function allocateByWeights(totalCents: number, weights: number[]) {
     return weights.map((_, index) => base + (index < remainder ? 1 : 0));
   }
 
-  let allocated = 0;
-  return normalizedWeights.map((weight, index) => {
-    if (index === normalizedWeights.length - 1) return total - allocated;
-    const share = Math.round((total * weight) / weightSum);
-    allocated += share;
-    return share;
+  const quotas = normalizedWeights.map((weight, index) => {
+    const exact = (total * weight) / weightSum;
+    const floor = Math.floor(exact);
+    return { index, floor, fraction: exact - floor };
   });
+  const allocations = quotas.map((quota) => quota.floor);
+  const floorTotal = allocations.reduce((sum, value) => sum + value, 0);
+  const remainder = Math.max(0, total - floorTotal);
+
+  quotas
+    .slice()
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index)
+    .slice(0, remainder)
+    .forEach((quota) => {
+      allocations[quota.index] += 1;
+    });
+
+  return allocations;
 }
 
 export function buildReservationActivityMetricLines(
@@ -67,6 +96,7 @@ export function buildReservationActivityMetricLines(
   if (activityItems.length === 0) {
     return [
       {
+        serviceId: reservation.service?.id ?? null,
         service: reservation.service?.name ?? "-",
         reservations: 1,
         quantity: positiveQuantity(reservation.quantity ?? null, 1),
@@ -81,18 +111,34 @@ export function buildReservationActivityMetricLines(
     const itemTotal = normalizedCents(item.totalPriceCents ?? null);
     return itemTotal > 0 ? itemTotal : positiveQuantity(item.quantity ?? null, 1);
   });
-  const salesAllocations = allocateByWeights(reservation.soldTotalCents, weights);
-  const collectedAllocations = allocateByWeights(reservation.collectedCents, weights);
-  const pendingAllocations = allocateByWeights(reservation.pendingCents, weights);
+  const salesAllocations = allocateCentsByWeights(reservation.soldTotalCents, weights);
+  const collectedAllocations = allocateCentsByWeights(reservation.collectedCents, weights);
+  const pendingAllocations = allocateCentsByWeights(reservation.pendingCents, weights);
 
-  return activityItems.map((item, index) => ({
-    service: item.service?.name ?? item.service?.category ?? "-",
-    reservations: 1,
-    quantity: positiveQuantity(item.quantity ?? null, 1),
-    salesCents: salesAllocations[index] ?? 0,
-    collectedCents: collectedAllocations[index] ?? 0,
-    pendingCents: pendingAllocations[index] ?? 0,
-  }));
+  const linesByService = new Map<string, ReservationActivityMetricLine>();
+
+  activityItems.forEach((item, index) => {
+    const key = serviceKey(item.service);
+    const current =
+      linesByService.get(key) ??
+      {
+        serviceId: item.service?.id ?? null,
+        service: serviceName(item.service),
+        reservations: 1,
+        quantity: 0,
+        salesCents: 0,
+        collectedCents: 0,
+        pendingCents: 0,
+      };
+
+    current.quantity += positiveQuantity(item.quantity ?? null, 1);
+    current.salesCents += salesAllocations[index] ?? 0;
+    current.collectedCents += collectedAllocations[index] ?? 0;
+    current.pendingCents += pendingAllocations[index] ?? 0;
+    linesByService.set(key, current);
+  });
+
+  return Array.from(linesByService.values());
 }
 
 export function buildReservationActivityMetricRows(
@@ -102,9 +148,11 @@ export function buildReservationActivityMetricRows(
 
   for (const reservation of reservations) {
     for (const line of buildReservationActivityMetricLines(reservation)) {
+      const key = line.serviceId ? `id:${line.serviceId}` : `fallback:${line.service}`;
       const current =
-        rowsByService.get(line.service) ??
+        rowsByService.get(key) ??
         {
+          serviceId: line.serviceId,
           service: line.service,
           reservations: 0,
           quantity: 0,
@@ -117,7 +165,7 @@ export function buildReservationActivityMetricRows(
       current.salesCents += line.salesCents;
       current.collectedCents += line.collectedCents;
       current.pendingCents += line.pendingCents;
-      rowsByService.set(line.service, current);
+      rowsByService.set(key, current);
     }
   }
 

@@ -16,6 +16,7 @@ type ReservationLike = {
   boothCode?: string | null;
   boothNote?: string | null;
   quantity?: number | null;
+  jetskiQuantity?: number | null;
   pax?: number | null;
   totalPriceCents?: number | null;
   paidCents?: number | null;

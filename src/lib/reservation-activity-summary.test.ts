@@ -5,6 +5,7 @@ import {
   resolveReservationActivitySummary,
   sumReservationActivityQuantity,
   sumReservationActivityQuantityForCategory,
+  sumReservationJetskiQuantity,
 } from "./reservation-activity-summary";
 
 test("resumen de una reserva moderna simple usa la duracion de su linea", () => {
@@ -129,6 +130,52 @@ test("carrito Banana + Jetski calcula las mismas cantidades por categoria", () =
   assert.equal(sumReservationActivityQuantity(reservation), 2);
   assert.equal(sumReservationActivityQuantityForCategory(reservation, "JETSKI"), 1);
   assert.equal(sumReservationActivityQuantityForCategory(reservation, "TOWABLE"), 1);
+});
+
+test("cantidad Jetski explicita solo suma items Jetski en reservas mixtas", () => {
+  assert.equal(
+    sumReservationJetskiQuantity({
+      quantity: 99,
+      service: { name: "Padre Jetski", category: "JETSKI" },
+      items: [
+        { quantity: 1, service: { name: "Jetski", category: "JETSKI" } },
+        { quantity: 1, service: { name: "Banana", category: "TOWABLE" } },
+      ],
+    }),
+    1
+  );
+
+  assert.equal(
+    sumReservationJetskiQuantity({
+      quantity: 99,
+      service: { name: "Padre Banana", category: "TOWABLE" },
+      items: [
+        { quantity: 2, service: { name: "Jetski", category: "JETSKI" } },
+        { quantity: 4, service: { name: "Banana", category: "TOWABLE" } },
+      ],
+    }),
+    2
+  );
+});
+
+test("cantidad Jetski explicita devuelve cero sin items Jetski y usa fallback legacy", () => {
+  assert.equal(
+    sumReservationJetskiQuantity({
+      quantity: 4,
+      service: { name: "Banana", category: "TOWABLE" },
+      items: [{ quantity: 4, service: { name: "Banana", category: "TOWABLE" } }],
+    }),
+    0
+  );
+
+  assert.equal(
+    sumReservationJetskiQuantity({
+      quantity: 2,
+      service: { name: "Jetski legacy", category: "JETSKI" },
+      items: [],
+    }),
+    2
+  );
 });
 
 test("dos Jetski con duraciones distintas no colapsan a una duracion padre", () => {

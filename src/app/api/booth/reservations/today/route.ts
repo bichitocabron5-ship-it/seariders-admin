@@ -9,6 +9,7 @@ import { ReservationStatus } from "@prisma/client";
 import {
   resolveReservationActivitySummary,
   sumReservationActivityQuantity,
+  sumReservationJetskiQuantity,
 } from "@/lib/reservation-activity-summary";
 
 export const runtime = "nodejs";
@@ -99,6 +100,7 @@ export async function GET() {
 
     // ✅ PVP “robusto”: si hay item principal, úsalo; si no, usa basePriceCents legacy
     const activitySummary = resolveReservationActivitySummary(r);
+    const jetskiQuantity = sumReservationJetskiQuantity(r);
     const serviceTotalCents =
       r.items?.length > 0
         ? r.items
@@ -122,6 +124,7 @@ export async function GET() {
       customerCountry: r.customerCountry,
       pax: r.pax,
       quantity: sumReservationActivityQuantity(r),
+      jetskiQuantity,
 
       serviceName: activitySummary.serviceName,
       durationMinutes: activitySummary.durationMinutes,
