@@ -757,6 +757,53 @@ test("repair scoped de Banana actualiza Banana sin tocar Jetski", () => {
   );
 });
 
+test("repair scoped normaliza unidad legacy null con snapshot del padre sin duplicar", () => {
+  const readyAt = new Date("2026-07-27T10:00:00.000Z");
+  const requiredUnits = buildOperationalUnitSnapshots({
+    items: [],
+    fallback: {
+      quantity: 1,
+      pax: 2,
+      service: { id: "svc-jetski", name: "Jetski", category: "JETSKI" },
+      option: { id: "opt-jetski-20", durationMinutes: 20 },
+    },
+  });
+
+  const plan = computeReservationUnitSyncPlan({
+    requiredUnits,
+    existingUnits: [
+      {
+        id: "unit-legacy",
+        unitIndex: 1,
+        reservationItemId: null,
+        serviceCategory: null,
+        status: ReservationUnitStatus.READY_FOR_PLATFORM,
+      },
+    ],
+    managedExistingUnitIds: new Set(["unit-legacy"]),
+    readyAt,
+  });
+
+  assert.equal(plan.creates.length, 0);
+  assert.deepEqual(plan.extraUnitIds, []);
+  assert.deepEqual(plan.updates, [
+    {
+      id: "unit-legacy",
+      data: {
+        reservationItemId: null,
+        serviceId: "svc-jetski",
+        optionId: "opt-jetski-20",
+        serviceCategory: "JETSKI",
+        serviceName: "Jetski",
+        durationMinutesSnapshot: 20,
+        quantitySnapshot: 1,
+        paxSnapshot: 2,
+        readyForPlatformAt: readyAt,
+      },
+    },
+  ]);
+});
+
 test("repair no regenera ni muta una unidad IN_SEA existente", () => {
   const requiredUnits = buildOperationalUnitSnapshots({
     items: [

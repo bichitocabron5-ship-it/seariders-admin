@@ -15,6 +15,7 @@ import {
   getOperationalDurationMinutes,
 } from "@/lib/reservation-operations";
 import { syncReservationPlatformUnitsTx } from "@/lib/reservation-platform";
+import { isReservationEligibleForPlatformQueueRepairScope } from "@/lib/platform-queue-repair-eligibility";
 
 export const runtime = "nodejs";
 
@@ -111,55 +112,13 @@ async function repairMissingReadyPlatformUnits(params: {
   kind: "JETSKI" | "NAUTICA" | null;
   categories: string[] | null;
 }) {
-  const serviceCategoryWhere = params.categories
-    ? { category: { in: params.categories } }
-    : params.kind === "JETSKI"
-      ? { category: "JETSKI" }
-      : params.kind === "NAUTICA"
-        ? { category: { not: "JETSKI" } }
-        : null;
-  const unitCategoryWhere = params.categories
-    ? { serviceCategory: { in: params.categories } }
-    : params.kind === "JETSKI"
-      ? { serviceCategory: "JETSKI" }
-      : params.kind === "NAUTICA"
-        ? { serviceCategory: { not: "JETSKI" } }
-        : null;
-
-  const reservations = await prisma.reservation.findMany({
+  const repairCandidates = await prisma.reservation.findMany({
     where: {
       status: ReservationStatus.READY_FOR_PLATFORM,
       OR: [
         { scheduledTime: { gte: params.start, lt: params.endExclusive } },
         { scheduledTime: null, activityDate: { gte: params.start, lt: params.endExclusive } },
       ],
-      ...(serviceCategoryWhere && unitCategoryWhere
-        ? {
-            AND: [
-              {
-                OR: [
-                  {
-                    items: {
-                      some: {
-                        isExtra: false,
-                        isPackParent: false,
-                        service: serviceCategoryWhere,
-                      },
-                    },
-                  },
-                  { units: { some: unitCategoryWhere } },
-                  {
-                    AND: [
-                      { items: { none: {} } },
-                      { units: { none: {} } },
-                      { service: serviceCategoryWhere },
-                    ],
-                  },
-                ],
-              },
-            ],
-          }
-        : {}),
     },
     select: {
       id: true,
@@ -177,10 +136,20 @@ async function repairMissingReadyPlatformUnits(params: {
         },
       },
       units: {
-        select: { unitIndex: true },
+        select: {
+          unitIndex: true,
+          status: true,
+          serviceCategory: true,
+        },
       },
     },
   });
+  const reservations = repairCandidates.filter((reservation) =>
+    isReservationEligibleForPlatformQueueRepairScope(reservation, {
+      kind: params.kind,
+      categories: params.categories,
+    })
+  );
 
   for (const reservation of reservations) {
     await prisma.$transaction(async (tx) => {
