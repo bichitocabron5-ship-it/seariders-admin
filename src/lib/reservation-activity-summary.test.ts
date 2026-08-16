@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveReservationActivitySummary } from "./reservation-activity-summary";
+import {
+  resolveReservationActivitySummary,
+  sumReservationActivityQuantity,
+  sumReservationActivityQuantityForCategory,
+} from "./reservation-activity-summary";
 
 test("resumen de una reserva moderna simple usa la duracion de su linea", () => {
   const summary = resolveReservationActivitySummary({
@@ -71,5 +75,81 @@ test("resumen con solo padre de pack no usa duracion global", () => {
   });
 
   assert.equal(summary.serviceName, "Pack padre");
+  assert.equal(summary.durationMinutes, null);
+});
+
+test("carrito Jetski + Banana no depende del servicio padre para cantidad o categoria", () => {
+  const reservation = {
+    quantity: 99,
+    service: { name: "Banana padre", category: "TOWABLE" },
+    option: { durationMinutes: 15 },
+    items: [
+      {
+        quantity: 1,
+        service: { name: "Jetski", category: "JETSKI" },
+        option: { durationMinutes: 20 },
+      },
+      {
+        quantity: 1,
+        service: { name: "Banana", category: "TOWABLE" },
+        option: { durationMinutes: 15 },
+      },
+    ],
+  };
+
+  const summary = resolveReservationActivitySummary(reservation);
+
+  assert.equal(summary.serviceName, "Jetski + Banana");
+  assert.equal(summary.serviceCategory, "JETSKI + TOWABLE");
+  assert.equal(summary.durationMinutes, null);
+  assert.equal(sumReservationActivityQuantity(reservation), 2);
+  assert.equal(sumReservationActivityQuantityForCategory(reservation, "JETSKI"), 1);
+  assert.equal(sumReservationActivityQuantityForCategory(reservation, "TOWABLE"), 1);
+});
+
+test("carrito Banana + Jetski calcula las mismas cantidades por categoria", () => {
+  const reservation = {
+    quantity: 99,
+    service: { name: "Jetski padre", category: "JETSKI" },
+    option: { durationMinutes: 20 },
+    items: [
+      {
+        quantity: 1,
+        service: { name: "Banana", category: "TOWABLE" },
+        option: { durationMinutes: 15 },
+      },
+      {
+        quantity: 1,
+        service: { name: "Jetski", category: "JETSKI" },
+        option: { durationMinutes: 20 },
+      },
+    ],
+  };
+
+  assert.equal(sumReservationActivityQuantity(reservation), 2);
+  assert.equal(sumReservationActivityQuantityForCategory(reservation, "JETSKI"), 1);
+  assert.equal(sumReservationActivityQuantityForCategory(reservation, "TOWABLE"), 1);
+});
+
+test("dos Jetski con duraciones distintas no colapsan a una duracion padre", () => {
+  const summary = resolveReservationActivitySummary({
+    service: { name: "Jetski padre", category: "JETSKI" },
+    option: { durationMinutes: 90 },
+    items: [
+      {
+        quantity: 1,
+        service: { name: "Jetski", category: "JETSKI" },
+        option: { durationMinutes: 20 },
+      },
+      {
+        quantity: 1,
+        service: { name: "Jetski", category: "JETSKI" },
+        option: { durationMinutes: 40 },
+      },
+    ],
+  });
+
+  assert.equal(summary.serviceName, "Jetski");
+  assert.equal(summary.serviceCategory, "JETSKI");
   assert.equal(summary.durationMinutes, null);
 });

@@ -7,12 +7,11 @@ import { OperationalOverrideAction, OperationalOverrideTarget } from "@prisma/cl
 import { sessionOptions, AppSession } from "@/lib/session";
 import { BUSINESS_TZ, tzLocalToUtcDate, todayYmdInTz } from "@/lib/tz-business";
 import { deriveStoreFlowStage } from "@/lib/store-flow-stage";
-import { computeRequiredContractUnits } from "@/lib/reservation-rules";
-import { countReadyVisibleContracts } from "@/lib/contracts/active-contracts";
 import { resolveReadyContractCountWithManualAttachments } from "@/lib/manual-contract-attachments";
 import { buildStoreCalendarWhere } from "@/lib/store-reservation-visibility";
 import { resolveReservationPaymentStatus } from "@/lib/reservation-payment-status";
 import { resolveStoreCalendarReservationSummary } from "@/lib/store-calendar";
+import { buildReservationContractProgressFromReservation } from "@/lib/contracts/reservation-contract-progress";
 
 export const runtime = "nodejs";
 
@@ -93,6 +92,7 @@ export async function GET(req: Request) {
       },
       contracts: {
         select: {
+          reservationItemId: true,
           unitIndex: true,
           logicalUnitIndex: true,
           status: true,
@@ -193,20 +193,11 @@ export async function GET(req: Request) {
     const pendingCents = paymentStatus.displayPendingCents;
     const paidCents = Math.max(0, paymentStatus.paidServiceCents + paymentStatus.paidDepositCents);
     const totalCents = paymentStatus.serviceDueCents;
-    const contractsRequiredUnits = computeRequiredContractUnits({
-      quantity: r.quantity ?? 0,
-      isLicense: Boolean(r.isLicense),
-      serviceCategory: r.service?.category ?? null,
-      items: (r.items ?? []).map((item) => ({
-        quantity: item.quantity ?? 0,
-        isExtra: Boolean(item.isExtra),
-        isPackParent: Boolean(item.isPackParent),
-        service: item.service ? { category: item.service.category ?? null } : null,
-      })),
-    });
+    const contractProgress = buildReservationContractProgressFromReservation(r);
+    const contractsRequiredUnits = contractProgress.requiredUnits;
     const contractsReadyCount = resolveReadyContractCountWithManualAttachments({
       requiredUnits: contractsRequiredUnits,
-      readyContractsCount: countReadyVisibleContracts(r.contracts ?? [], contractsRequiredUnits),
+      readyContractsCount: contractProgress.readyCount,
       manualAttachmentCount: manualAttachmentCountByReservation.get(r.id) ?? 0,
     });
     const calendarSummary = resolveStoreCalendarReservationSummary(r);
