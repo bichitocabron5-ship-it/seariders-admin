@@ -9,6 +9,11 @@ import { ReservationStatus } from "@prisma/client";
 import { syncStoreFulfillmentTasksForReservation } from "@/lib/fulfillment/sync-store-fulfillment";
 import { evaluateReadyForPlatform } from "@/lib/ready-for-platform";
 import { ensureReservationPlatformUnitsTx } from "@/lib/reservation-platform";
+import {
+  OPEN_PLATFORM_ASSIGNMENT_STATUSES,
+  OPEN_PLATFORM_RUN_STATUSES,
+  evaluateManualMarkInSea,
+} from "@/lib/reservation-operational-actions";
 
 export const runtime = "nodejs";
 
@@ -212,12 +217,34 @@ export async function POST(
       }
 
       if (action === "mark_in_sea") {
-        if (reservation.status === "IN_SEA") {
-          return reservation;
+        const [units, openAssignmentCount] = await Promise.all([
+          tx.reservationUnit.findMany({
+            where: { reservationId: id },
+            select: { status: true },
+          }),
+          tx.monitorRunAssignment.count({
+            where: {
+              reservationId: id,
+              status: { in: [...OPEN_PLATFORM_ASSIGNMENT_STATUSES] },
+              run: {
+                status: { in: [...OPEN_PLATFORM_RUN_STATUSES] },
+              },
+            },
+          }),
+        ]);
+
+        const decision = evaluateManualMarkInSea({
+          reservationStatus: reservation.status,
+          units,
+          openAssignmentCount,
+        });
+
+        if (!decision.ok) {
+          throw new Error(decision.error);
         }
 
-        if (reservation.status !== "READY_FOR_PLATFORM") {
-          throw new Error("Solo se puede pasar a IN_SEA desde READY_FOR_PLATFORM.");
+        if (decision.alreadyInSea) {
+          return reservation;
         }
 
         return await tx.reservation.update({
