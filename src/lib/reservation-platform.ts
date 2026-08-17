@@ -13,6 +13,36 @@ export type ReservationPlatformUnitsInput = {
   items?: Array<unknown>;
 };
 
+export type ReservationPlatformUnitSyncScope = {
+  kind?: "JETSKI" | "NAUTICA" | null;
+  categories?: string[] | null;
+};
+
+function normalizeCategory(category: string | null | undefined) {
+  return String(category ?? "").trim().toUpperCase();
+}
+
+function categoryMatchesSyncScope(
+  category: string | null | undefined,
+  scope?: ReservationPlatformUnitSyncScope
+) {
+  if (!scope) return true;
+
+  const normalized = normalizeCategory(category);
+  const categories = (scope.categories ?? [])
+    .map((entry) => normalizeCategory(entry))
+    .filter(Boolean);
+
+  if (categories.length > 0) {
+    return normalized ? categories.includes(normalized) : false;
+  }
+
+  if (scope.kind === "JETSKI") return normalized === "JETSKI";
+  if (scope.kind === "NAUTICA") return Boolean(normalized) && normalized !== "JETSKI";
+
+  return true;
+}
+
 async function loadReservationOperationalUnitsTx(
   tx: Prisma.TransactionClient,
   reservationId: string
@@ -74,11 +104,12 @@ async function loadReservationOperationalUnitsTx(
 async function syncReservationPlatformUnitsInternalTx(
   tx: Prisma.TransactionClient,
   reservationId: string,
-  readyAt?: Date
+  readyAt?: Date,
+  scope?: ReservationPlatformUnitSyncScope
 ) {
   const reservation = await loadReservationOperationalUnitsTx(tx, reservationId);
 
-  const requiredUnits = buildOperationalUnitSnapshots({
+  const allRequiredUnits = buildOperationalUnitSnapshots({
     items: reservation.items ?? [],
     fallback: {
       quantity: reservation.quantity,
@@ -88,6 +119,9 @@ async function syncReservationPlatformUnitsInternalTx(
       option: reservation.option,
     },
   });
+  const requiredUnits = scope
+    ? allRequiredUnits.filter((unit) => categoryMatchesSyncScope(unit.serviceCategory, scope))
+    : allRequiredUnits;
 
   const existingUnits = await tx.reservationUnit.findMany({
     where: { reservationId },
@@ -96,13 +130,29 @@ async function syncReservationPlatformUnitsInternalTx(
       unitIndex: true,
       status: true,
       reservationItemId: true,
+      serviceCategory: true,
     },
     orderBy: { unitIndex: "asc" },
   });
+  const managedExistingUnitIds = scope
+    ? new Set(
+        existingUnits
+          .filter((unit) => {
+            if (categoryMatchesSyncScope(unit.serviceCategory, scope)) return true;
+
+            // Legacy units may not have snapshots yet. Keep them eligible only
+            // while scoping so the repair can attach the missing snapshot instead
+            // of creating a duplicate row.
+            return !unit.reservationItemId && !normalizeCategory(unit.serviceCategory);
+          })
+          .map((unit) => unit.id)
+      )
+    : undefined;
   const syncPlan = computeReservationUnitSyncPlan({
     requiredUnits,
     existingUnits,
     readyAt,
+    managedExistingUnitIds,
   });
 
   if (syncPlan.extraUnitIds.length > 0) {
@@ -146,7 +196,8 @@ export async function ensureReservationPlatformUnitsTx(
 export async function syncReservationPlatformUnitsTx(
   tx: Prisma.TransactionClient,
   reservation: ReservationPlatformUnitsInput,
-  readyAt?: Date
+  readyAt?: Date,
+  scope?: ReservationPlatformUnitSyncScope
 ) {
-  await syncReservationPlatformUnitsInternalTx(tx, reservation.id, readyAt);
+  await syncReservationPlatformUnitsInternalTx(tx, reservation.id, readyAt, scope);
 }

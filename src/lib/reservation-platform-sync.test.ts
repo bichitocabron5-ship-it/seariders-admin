@@ -647,3 +647,239 @@ test("editar una linea conserva la duracion de las otras unidades por reservatio
     ]
   );
 });
+
+test("repair scoped de Banana crea solo Banana y no duplica Jetski existente", () => {
+  const allRequiredUnits = buildOperationalUnitSnapshots({
+    items: [
+      {
+        id: "item-jetski",
+        quantity: 1,
+        pax: 2,
+        isExtra: false,
+        service: { id: "svc-jetski", name: "Jetski", category: "JETSKI" },
+        option: { id: "opt-jetski-20", durationMinutes: 20 },
+      },
+      {
+        id: "item-banana",
+        quantity: 1,
+        pax: 2,
+        isExtra: false,
+        service: { id: "svc-banana", name: "Banana", category: "NAUTICA" },
+        option: { id: "opt-banana-15", durationMinutes: 15 },
+      },
+    ],
+    fallback: {
+      quantity: 2,
+      pax: 2,
+      service: null,
+      option: null,
+    },
+  });
+  const requiredUnits = allRequiredUnits.filter((unit) => unit.serviceCategory === "NAUTICA");
+
+  const plan = computeReservationUnitSyncPlan({
+    requiredUnits,
+    existingUnits: [
+      {
+        id: "unit-jetski",
+        unitIndex: 1,
+        reservationItemId: "item-jetski",
+        serviceCategory: "JETSKI",
+        status: ReservationUnitStatus.READY_FOR_PLATFORM,
+      },
+    ],
+    managedExistingUnitIds: new Set(),
+  });
+
+  assert.deepEqual(plan.updates, []);
+  assert.deepEqual(plan.extraUnitIds, []);
+  assert.equal(plan.creates.length, 1);
+  assert.equal(plan.creates[0]?.unitIndex, 2);
+  assert.equal(plan.creates[0]?.data.reservationItemId, "item-banana");
+  assert.equal(plan.creates[0]?.data.serviceCategory, "NAUTICA");
+});
+
+test("repair scoped de Banana actualiza Banana sin tocar Jetski", () => {
+  const allRequiredUnits = buildOperationalUnitSnapshots({
+    items: [
+      {
+        id: "item-jetski",
+        quantity: 1,
+        pax: 2,
+        isExtra: false,
+        service: { id: "svc-jetski", name: "Jetski", category: "JETSKI" },
+        option: { id: "opt-jetski-20", durationMinutes: 20 },
+      },
+      {
+        id: "item-banana",
+        quantity: 1,
+        pax: 4,
+        isExtra: false,
+        service: { id: "svc-banana", name: "Banana", category: "NAUTICA" },
+        option: { id: "opt-banana-15", durationMinutes: 15 },
+      },
+    ],
+    fallback: {
+      quantity: 2,
+      pax: 2,
+      service: null,
+      option: null,
+    },
+  });
+  const requiredUnits = allRequiredUnits.filter((unit) => unit.serviceCategory === "NAUTICA");
+
+  const plan = computeReservationUnitSyncPlan({
+    requiredUnits,
+    existingUnits: [
+      {
+        id: "unit-jetski",
+        unitIndex: 1,
+        reservationItemId: "item-jetski",
+        serviceCategory: "JETSKI",
+        status: ReservationUnitStatus.READY_FOR_PLATFORM,
+      },
+      {
+        id: "unit-banana",
+        unitIndex: 2,
+        reservationItemId: "item-banana",
+        serviceCategory: "NAUTICA",
+        status: ReservationUnitStatus.READY_FOR_PLATFORM,
+      },
+    ],
+    managedExistingUnitIds: new Set(["unit-banana"]),
+  });
+
+  assert.equal(plan.creates.length, 0);
+  assert.deepEqual(plan.extraUnitIds, []);
+  assert.deepEqual(
+    plan.updates.map((update) => [update.id, update.data.reservationItemId, update.data.paxSnapshot]),
+    [["unit-banana", "item-banana", 4]]
+  );
+});
+
+test("repair scoped normaliza unidad legacy null con snapshot del padre sin duplicar", () => {
+  const readyAt = new Date("2026-07-27T10:00:00.000Z");
+  const requiredUnits = buildOperationalUnitSnapshots({
+    items: [],
+    fallback: {
+      quantity: 1,
+      pax: 2,
+      service: { id: "svc-jetski", name: "Jetski", category: "JETSKI" },
+      option: { id: "opt-jetski-20", durationMinutes: 20 },
+    },
+  });
+
+  const plan = computeReservationUnitSyncPlan({
+    requiredUnits,
+    existingUnits: [
+      {
+        id: "unit-legacy",
+        unitIndex: 1,
+        reservationItemId: null,
+        serviceCategory: null,
+        status: ReservationUnitStatus.READY_FOR_PLATFORM,
+      },
+    ],
+    managedExistingUnitIds: new Set(["unit-legacy"]),
+    readyAt,
+  });
+
+  assert.equal(plan.creates.length, 0);
+  assert.deepEqual(plan.extraUnitIds, []);
+  assert.deepEqual(plan.updates, [
+    {
+      id: "unit-legacy",
+      data: {
+        reservationItemId: null,
+        serviceId: "svc-jetski",
+        optionId: "opt-jetski-20",
+        serviceCategory: "JETSKI",
+        serviceName: "Jetski",
+        durationMinutesSnapshot: 20,
+        quantitySnapshot: 1,
+        paxSnapshot: 2,
+        readyForPlatformAt: readyAt,
+      },
+    },
+  ]);
+});
+
+test("repair no regenera ni muta una unidad IN_SEA existente", () => {
+  const requiredUnits = buildOperationalUnitSnapshots({
+    items: [
+      {
+        id: "item-jetski",
+        quantity: 1,
+        pax: 2,
+        isExtra: false,
+        service: { id: "svc-jetski", name: "Jetski", category: "JETSKI" },
+        option: { id: "opt-jetski-20", durationMinutes: 20 },
+      },
+    ],
+    fallback: {
+      quantity: 1,
+      pax: 2,
+      service: null,
+      option: null,
+    },
+  });
+
+  const plan = computeReservationUnitSyncPlan({
+    requiredUnits,
+    existingUnits: [
+      {
+        id: "unit-jetski",
+        unitIndex: 1,
+        reservationItemId: "item-jetski",
+        serviceCategory: "JETSKI",
+        status: ReservationUnitStatus.IN_SEA,
+      },
+    ],
+    managedExistingUnitIds: new Set(["unit-jetski"]),
+    readyAt: new Date("2026-07-27T10:00:00.000Z"),
+  });
+
+  assert.deepEqual(plan.creates, []);
+  assert.deepEqual(plan.updates, []);
+  assert.deepEqual(plan.extraUnitIds, []);
+});
+
+test("repair no reactiva una unidad COMPLETED existente", () => {
+  const requiredUnits = buildOperationalUnitSnapshots({
+    items: [
+      {
+        id: "item-jetski",
+        quantity: 1,
+        pax: 2,
+        isExtra: false,
+        service: { id: "svc-jetski", name: "Jetski", category: "JETSKI" },
+        option: { id: "opt-jetski-20", durationMinutes: 20 },
+      },
+    ],
+    fallback: {
+      quantity: 1,
+      pax: 2,
+      service: null,
+      option: null,
+    },
+  });
+
+  const plan = computeReservationUnitSyncPlan({
+    requiredUnits,
+    existingUnits: [
+      {
+        id: "unit-jetski",
+        unitIndex: 1,
+        reservationItemId: "item-jetski",
+        serviceCategory: "JETSKI",
+        status: ReservationUnitStatus.COMPLETED,
+      },
+    ],
+    managedExistingUnitIds: new Set(["unit-jetski"]),
+    readyAt: new Date("2026-07-27T10:00:00.000Z"),
+  });
+
+  assert.deepEqual(plan.creates, []);
+  assert.deepEqual(plan.updates, []);
+  assert.deepEqual(plan.extraUnitIds, []);
+});

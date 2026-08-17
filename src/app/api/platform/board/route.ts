@@ -5,6 +5,7 @@ import { z } from "zod";
 import { BUSINESS_TZ, utcDateFromYmdInTz } from "@/lib/tz-business";
 import { MonitorRunStatus } from "@prisma/client";
 import { requirePlatformOrAdmin } from "@/app/api/platform/_auth";
+import { resolveReservationUnitActivity } from "@/lib/reservation-unit-activity";
 
 export const runtime = "nodejs";
 
@@ -52,6 +53,19 @@ export async function GET(req: Request) {
           endedAt: true,
           durationMinutesSnapshot: true,
           reservationId: true,
+          reservationUnitId: true,
+          reservationUnit: {
+            select: {
+              reservationItemId: true,
+              serviceId: true,
+              optionId: true,
+              serviceName: true,
+              serviceCategory: true,
+              durationMinutesSnapshot: true,
+              quantitySnapshot: true,
+              paxSnapshot: true,
+            },
+          },
           jetskiId: true,
           assetId: true,
           jetski: { select: { id: true, number: true, status: true } },
@@ -63,8 +77,10 @@ export async function GET(req: Request) {
               customerName: true,
               scheduledTime: true,
               // si quieres, añade service/option o items
-              service: { select: { name: true, category: true } },
-              option: { select: { durationMinutes: true } },
+              quantity: true,
+              pax: true,
+              service: { select: { id: true, name: true, category: true } },
+              option: { select: { id: true, durationMinutes: true } },
             },
           },
         },
@@ -72,5 +88,32 @@ export async function GET(req: Request) {
     },
   });
 
-  return NextResponse.json({ ok: true, activityDate, runs });
+  const normalizedRuns = runs.map((run) => ({
+    ...run,
+    assignments: run.assignments.map((assignment) => {
+      const activity = resolveReservationUnitActivity({
+        unit: assignment.reservationUnit,
+        legacyReservation: assignment.reservation,
+      });
+
+      return {
+        ...assignment,
+        activity,
+        reservation: {
+          ...assignment.reservation,
+          service: {
+            id: activity.serviceId,
+            name: activity.serviceName,
+            category: activity.serviceCategory,
+          },
+          option: {
+            id: activity.optionId,
+            durationMinutes: activity.durationMinutes,
+          },
+        },
+      };
+    }),
+  }));
+
+  return NextResponse.json({ ok: true, activityDate, runs: normalizedRuns });
 }

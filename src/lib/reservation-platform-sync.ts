@@ -7,6 +7,7 @@ export type ExistingReservationUnitSnapshot = {
   unitIndex: number | null;
   status: ReservationUnitStatus;
   reservationItemId?: string | null;
+  serviceCategory?: string | null;
 };
 
 const MUTABLE_UNIT_STATUSES = new Set<ReservationUnitStatus>([
@@ -85,6 +86,7 @@ export function computeReservationUnitSyncPlan(args: {
   requiredUnits: OperationalUnitSnapshot[];
   existingUnits: ExistingReservationUnitSnapshot[];
   readyAt?: Date;
+  managedExistingUnitIds?: Set<string>;
 }) {
   const creates: Array<{
     unitIndex: number;
@@ -102,7 +104,10 @@ export function computeReservationUnitSyncPlan(args: {
     };
   }> = [];
 
-  const { byItemSlot, byLegacyIndex } = buildExistingKeyIndex(args.existingUnits);
+  const managedExistingUnits = args.managedExistingUnitIds
+    ? args.existingUnits.filter((unit) => args.managedExistingUnitIds?.has(unit.id))
+    : args.existingUnits;
+  const { byItemSlot, byLegacyIndex } = buildExistingKeyIndex(managedExistingUnits);
   const matchedExistingIds = new Set<string>();
   const occupiedIndexes = new Set(
     args.existingUnits
@@ -162,7 +167,7 @@ export function computeReservationUnitSyncPlan(args: {
     });
   }
 
-  const extraUnitIds = args.existingUnits
+  const extraUnitIds = managedExistingUnits
     .filter((unit) => isMutableUnit(unit) && !matchedExistingIds.has(unit.id))
     .map((unit) => unit.id);
 
