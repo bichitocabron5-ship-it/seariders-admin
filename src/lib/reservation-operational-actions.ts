@@ -27,15 +27,11 @@ export function evaluateManualMarkInSea(args: {
   const reservationStatus = String(args.reservationStatus ?? "");
   const units = args.units ?? [];
 
+  if (reservationStatus === ReservationStatus.IN_SEA) {
+    return { ok: true, alreadyInSea: true, legacyFallback: false };
+  }
+
   if (units.length > 0) {
-    const allUnitsInSea = units.every(
-      (unit) => unit.status === ReservationUnitStatus.IN_SEA
-    );
-
-    if (reservationStatus === ReservationStatus.IN_SEA && allUnitsInSea) {
-      return { ok: true, alreadyInSea: true, legacyFallback: false };
-    }
-
     return {
       ok: false,
       error:
@@ -49,10 +45,6 @@ export function evaluateManualMarkInSea(args: {
       error:
         "No se puede pasar a IN_SEA manualmente una reserva con asignaciones activas o en cola. Usa la salida de Platform.",
     };
-  }
-
-  if (reservationStatus === ReservationStatus.IN_SEA) {
-    return { ok: true, alreadyInSea: true, legacyFallback: true };
   }
 
   if (reservationStatus !== ReservationStatus.READY_FOR_PLATFORM) {

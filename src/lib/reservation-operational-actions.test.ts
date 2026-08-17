@@ -41,18 +41,38 @@ test("mark_in_sea manual bloquea asignaciones abiertas aunque no haya unidades",
   }
 });
 
-test("mark_in_sea manual es idempotente solo si las unidades ya estan IN_SEA", () => {
-  const validAlreadyInSea = evaluateManualMarkInSea({
+test("mark_in_sea manual es idempotente con salida parcial ya agregada IN_SEA", () => {
+  const decision = evaluateManualMarkInSea({
     reservationStatus: ReservationStatus.IN_SEA,
-    units: [{ status: ReservationUnitStatus.IN_SEA }],
+    units: [
+      { status: ReservationUnitStatus.IN_SEA },
+      { status: ReservationUnitStatus.READY_FOR_PLATFORM },
+    ],
     openAssignmentCount: 1,
   });
-  const inconsistentAlreadyInSea = evaluateManualMarkInSea({
+
+  assert.deepEqual(decision, { ok: true, alreadyInSea: true, legacyFallback: false });
+});
+
+test("mark_in_sea manual es idempotente cuando todas las unidades ya estan IN_SEA", () => {
+  const decision = evaluateManualMarkInSea({
     reservationStatus: ReservationStatus.IN_SEA,
-    units: [{ status: ReservationUnitStatus.READY_FOR_PLATFORM }],
+    units: [
+      { status: ReservationUnitStatus.IN_SEA },
+      { status: ReservationUnitStatus.IN_SEA },
+    ],
     openAssignmentCount: 0,
   });
 
-  assert.deepEqual(validAlreadyInSea, { ok: true, alreadyInSea: true, legacyFallback: false });
-  assert.equal(inconsistentAlreadyInSea.ok, false);
+  assert.deepEqual(decision, { ok: true, alreadyInSea: true, legacyFallback: false });
+});
+
+test("mark_in_sea idempotente no solicita fallback legacy ni mutaciones operativas", () => {
+  const decision = evaluateManualMarkInSea({
+    reservationStatus: ReservationStatus.IN_SEA,
+    units: [],
+    openAssignmentCount: 0,
+  });
+
+  assert.deepEqual(decision, { ok: true, alreadyInSea: true, legacyFallback: false });
 });
