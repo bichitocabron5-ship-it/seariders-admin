@@ -55,6 +55,11 @@ import {
   SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE,
   resolveSignedContractMaterialChangePolicy,
 } from "@/lib/signed-contract-formalization";
+import {
+  deriveReservationItemSetCommercialCategory,
+  deriveReservationItemSetCommercialState,
+  selectReservationCompatMainLine,
+} from "@/lib/reservations/reservation-item-semantics";
 
 export const runtime = "nodejs";
 
@@ -759,6 +764,35 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         });
       }
 
+      const candidateServiceIds = Array.from(new Set(candidateItems.map((item) => item.serviceId)));
+      const requestedServiceCategoryRows =
+        candidateServiceIds.length > 0
+          ? await tx.service.findMany({
+              where: { id: { in: candidateServiceIds } },
+              select: { id: true, category: true },
+            })
+          : [];
+      const requestedServiceCategoryById = new Map(
+        requestedServiceCategoryRows.map((service) => [service.id, service.category ?? null])
+      );
+      const currentCommercialCategory = deriveReservationItemSetCommercialCategory(
+        (current.items ?? []).map((item) => ({
+          serviceId: item.serviceId,
+          optionId: item.optionId ?? current.optionId,
+          category: item.service?.category ?? null,
+          isExtra: item.isExtra,
+        })),
+        current.service?.category ?? null
+      );
+      const requestedCommercialCategory = deriveReservationItemSetCommercialCategory(
+        candidateItems.map((item) => ({
+          serviceId: item.serviceId,
+          optionId: item.optionId,
+          category: requestedServiceCategoryById.get(item.serviceId) ?? null,
+        })),
+        currentCommercialCategory
+      );
+
       const currentCommercialShapeSource = (current.items ?? [])
         .filter((item) => !item.isExtra)
         .map((item) => ({
@@ -810,13 +844,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         b.channelId !== undefined ? b.channelId ?? null : current.channelId ?? null;
       const rawLicensePricingChanged = commercialPricingStateChanged({
         current: {
-          serviceCategory: current.service?.category ?? null,
+          serviceCategory: currentCommercialCategory,
           isLicense: current.isLicense,
           jetskiLicenseMode: current.jetskiLicenseMode,
           pricingTier: current.pricingTier,
         },
         requested: {
-          serviceCategory: current.service?.category ?? null,
+          serviceCategory: requestedCommercialCategory,
           isLicense: b.isLicense ?? current.isLicense,
           jetskiLicenseMode: b.jetskiLicenseMode ?? current.jetskiLicenseMode,
           pricingTier: b.pricingTier ?? current.pricingTier,
@@ -908,11 +942,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         throw new Error("Acompanantes invalido.");
       }
 
-      const serviceIds = Array.from(new Set(candidateItems.map((item) => item.serviceId)));
       const optionIds = Array.from(new Set(candidateItems.map((item) => item.optionId)));
       const [services, options] = await Promise.all([
         tx.service.findMany({
-          where: { id: { in: serviceIds } },
+          where: { id: { in: candidateServiceIds } },
           select: { id: true, name: true, code: true, category: true },
         }),
         tx.serviceOption.findMany({
@@ -1211,11 +1244,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         throw new Error(SIGNED_CONTRACT_CHANGE_BLOCK_MESSAGE);
       }
 
-      const mainLine = lineCreates[0];
+      const mainLine = selectReservationCompatMainLine(lineCreates);
       if (!mainLine) throw new Error("Servicio y duracion requeridos.");
 
-      const reservationState = deriveCommercialReservationState({
-        serviceCategory: mainLine.category,
+      const reservationState = deriveReservationItemSetCommercialState({
+        lines: lineCreates,
         jetskiLicenseMode: requestedCommercialState.jetskiLicenseMode,
         isLicense: requestedCommercialState.isLicense,
         pricingTier: requestedCommercialState.pricingTier,

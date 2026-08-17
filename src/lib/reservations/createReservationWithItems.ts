@@ -3,7 +3,6 @@ import { JetskiLicenseMode, PricingTier, type Prisma } from "@prisma/client";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz, shouldAutoFormalize, todayYmdInTz } from "@/lib/tz-business";
 import { assertSlotCapacityForItemsOrThrow } from "@/lib/slot-capacity";
 import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
-import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import { findActiveServicePrice } from "@/lib/service-pricing";
 import {
   getAppliedCommercialSnapshotTx,
@@ -13,6 +12,10 @@ import {
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
 import { buildReservationContractRequirements } from "@/lib/reservation-contract-requirements";
+import {
+  deriveReservationItemSetCommercialState,
+  selectReservationCompatMainLine,
+} from "@/lib/reservations/reservation-item-semantics";
 
 type CreateItemInput = {
   serviceIdOrCode: string;
@@ -317,20 +320,13 @@ export async function createReservationWithItems(params: {
 
   // Pricing
   const pricingWhen = scheduledTime ?? activityDate;
-  const mainCategory = String(resolvedItems[0]?.category ?? "").toUpperCase();
-  const jetskiLicenseMode = resolveJetskiLicenseMode({
-    category: mainCategory,
+  const reservationState = deriveReservationItemSetCommercialState({
+    lines: resolvedItems,
     jetskiLicenseMode: input.jetskiLicenseMode,
     isLicense: input.isLicense,
+    pricingTier: input.pricingTier,
   });
-  const isLicense =
-    mainCategory === "JETSKI"
-      ? jetskiLicenseMode !== JetskiLicenseMode.NONE
-      : Boolean(input.isLicense);
-  const pricingTier =
-    mainCategory === "JETSKI"
-      ? resolvePricingTierForJetskiMode(jetskiLicenseMode)
-      : (input.pricingTier ?? PricingTier.STANDARD);
+  const { jetskiLicenseMode, isLicense, pricingTier } = reservationState;
 
   let basePriceCents = 0;
   let totalBeforeDiscounts = 0;
@@ -435,10 +431,11 @@ export async function createReservationWithItems(params: {
       }
     }
 
-      const reservationQuantity =
-        packMeta
-          ? packQty
-          : (resolvedItems[0]?.quantity ?? 1);
+      const totalActivityQuantity = resolvedItems.reduce(
+        (sum, item) => sum + Number(item.quantity ?? 0),
+        0
+      );
+      const reservationQuantity = packMeta ? packQty : Math.max(1, totalActivityQuantity);
       const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
         channel: ch,
         quantity: reservationQuantity,
@@ -471,9 +468,14 @@ export async function createReservationWithItems(params: {
       const depositCents = computeDepositFromResolvedItems({ isLicense, resolvedItems });
       
       // Service/option “main” obligatorios en Reservation (por compatibilidad)
+      const compatMain = selectReservationCompatMainLine(resolvedItems);
       const main = packMeta
         ? { serviceId: packMeta.serviceId, optionId: packMeta.packOptionId }
-        : resolvedItems[0];
+        : compatMain;
+
+      if (!main?.serviceId || !main.optionId) {
+        throw new Error("Servicio y duracion requeridos.");
+      }
 
       const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
         channelId: ch.id,
@@ -586,12 +588,13 @@ export async function createReservationWithItems(params: {
       });
     }
 
+    const contractCompatMain = selectReservationCompatMainLine(itemCreates);
     const contractRequirements = buildReservationContractRequirements({
       quantity: reservationQuantity,
       isLicense,
-      serviceCategory: resolvedItems[0]?.category ?? null,
-      serviceId: itemCreates[0]?.serviceId ?? null,
-      optionId: itemCreates[0]?.optionId ?? null,
+      serviceCategory: contractCompatMain?.category ?? null,
+      serviceId: contractCompatMain?.serviceId ?? null,
+      optionId: contractCompatMain?.optionId ?? null,
       pax: input.pax,
       totalPriceCents: commercial.finalTotalCents,
       items: createdContractItems,

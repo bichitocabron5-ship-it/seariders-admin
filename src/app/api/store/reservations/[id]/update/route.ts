@@ -57,6 +57,11 @@ import {
   deleteRemovedReservationMainItemsTx,
   replaceReservationMainItemsTx,
 } from "@/lib/reservations/replaceReservationMainItems";
+import {
+  deriveReservationItemSetCommercialCategory,
+  deriveReservationItemSetCommercialState,
+  selectReservationCompatMainLine,
+} from "@/lib/reservations/reservation-item-semantics";
 
 export const runtime = "nodejs";
 
@@ -791,6 +796,16 @@ const requestedServiceCategory =
   requestedServiceCategories.includes("JETSKI")
     ? "JETSKI"
     : requestedServiceCategories[0] ?? existing.service?.category ?? null;
+const existingCommercialCategory = deriveReservationItemSetCommercialCategory(
+  (existing.items ?? []).map((item) => ({
+    serviceId: item.serviceId,
+    optionId: item.optionId,
+    category: item.service?.category ?? null,
+    isExtra: item.isExtra,
+    isPackParent: item.isPackParent,
+  })),
+  existing.service?.category ?? null
+);
 const isPrepaidVoucherReservation = isReservationCoveredByPrepaidVoucher(existing);
 const existingMainQuantity = sumMainReservationQuantity(existing.items ?? [], existing.quantity);
 const rawRequestedReservationState = deriveCommercialReservationState({
@@ -813,7 +828,7 @@ const requestedReservationState = deriveCommercialReservationState({
 });
 const rawCommercialPricingChanged = commercialPricingStateChanged({
   current: {
-    serviceCategory: existing.service?.category ?? null,
+    serviceCategory: existingCommercialCategory,
     isLicense: existing.isLicense,
     jetskiLicenseMode: existing.jetskiLicenseMode,
     pricingTier: existing.pricingTier,
@@ -1202,10 +1217,18 @@ if (hasProItems && priceSensitiveChanged) {
       service: { category: line.category },
       option: { durationMinutes: line.durationMinutes },
     }));
+    const main = selectReservationCompatMainLine(lineCreates);
+    if (!main) throw new Error("Servicio y duracion requeridos.");
+    const reservationState = deriveReservationItemSetCommercialState({
+      lines: lineCreates,
+      jetskiLicenseMode: requestedReservationState.jetskiLicenseMode,
+      isLicense: requestedReservationState.isLicense,
+      pricingTier: requestedReservationState.pricingTier,
+    });
     const contractRequirements = buildReservationContractRequirements({
       quantity: lineCreates.reduce((sum, line) => sum + Number(line.quantity ?? 0), 0),
-      isLicense: requestedReservationState.isLicense,
-      serviceCategory: lineCreates[0]?.category ?? null,
+      isLicense: reservationState.isLicense,
+      serviceCategory: main.category,
       items: nextContractItems,
     });
     await syncReservationContractsTx(tx, {
@@ -1321,13 +1344,6 @@ if (hasProItems && priceSensitiveChanged) {
 
     // Fianza (jetski units)
     const jetskiUnits = lineCreates.filter(l => l.category === "JETSKI").reduce((s, l) => s + l.quantity, 0);
-    const main = lineCreates[0];
-    const reservationState = deriveCommercialReservationState({
-      serviceCategory: main.category,
-      jetskiLicenseMode: requestedReservationState.jetskiLicenseMode,
-      isLicense: requestedReservationState.isLicense,
-      pricingTier: requestedReservationState.pricingTier,
-    });
     const depositPerUnit = reservationState.isLicense ? 50000 : 10000;
     const depositCents = isPrepaidVoucherReservation
       ? Number(existing.depositCents ?? 0)
