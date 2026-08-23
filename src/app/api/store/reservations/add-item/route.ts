@@ -13,8 +13,8 @@ import {
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { PricingTier } from "@prisma/client";
-import { findActiveServicePrice } from "@/lib/service-pricing";
 import { syncChannelCommissionLineFromReservationTx } from "@/lib/channel-commission-lines";
+import { resolveEffectiveReservationItemPrice } from "@/lib/reservations/effective-reservation-item-price";
 
 export const runtime = "nodejs";
 
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
       }),
       prisma.reservation.findUnique({
         where: { id: reservationId },
-        select: { id: true },
+        select: { id: true, channelId: true },
       }),
     ]);
 
@@ -84,23 +84,26 @@ export async function POST(req: Request) {
       durationMin = opt.durationMinutes;
     }
 
-    const price = await findActiveServicePrice(prisma, {
+    const isCommercialLine = !isExtra && svc.category !== "EXTRA";
+    const itemPrice = await resolveEffectiveReservationItemPrice(prisma, {
       serviceId,
       optionId: optionId ?? "",
       durationMinutes: Number(durationMin ?? 0),
+      quantity,
       now,
       pricingTier: PricingTier.STANDARD,
+      channelId: isCommercialLine ? reservation.channelId : null,
     });
 
-    if (!price) {
+    if (!itemPrice) {
       const label = svc.category === "EXTRA" ? "extra" : "servicio/duración";
       return new NextResponse(`Este ${label} no tiene precio vigente (Admin > Precios).`, {
         status: 400,
       });
     }
 
-    const unitPriceCents = Number(price.basePriceCents);
-    const totalPriceCents = unitPriceCents * quantity;
+    const unitPriceCents = itemPrice.unitPriceCents;
+    const totalPriceCents = itemPrice.totalPriceCents;
 
     const result = await prisma.$transaction(async (tx) => {
       await tx.reservationItem.create({
@@ -108,7 +111,7 @@ export async function POST(req: Request) {
           reservationId,
           serviceId,
           optionId: svc.category === "EXTRA" ? null : optionId,
-          servicePriceId: price.id ?? null,
+          servicePriceId: itemPrice.servicePriceId,
           quantity,
           pax,
           unitPriceCents,

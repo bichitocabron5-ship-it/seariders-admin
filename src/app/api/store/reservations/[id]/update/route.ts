@@ -10,7 +10,6 @@ import { JetskiLicenseMode, PricingTier, ReservationStatus } from "@prisma/clien
 import type { Prisma } from "@prisma/client";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
-import { findActiveServicePrice } from "@/lib/service-pricing";
 import {
   getAppliedCommercialSnapshotTx,
   resolveCustomerDiscountSnapshot,
@@ -62,6 +61,7 @@ import {
   deriveReservationItemSetCommercialState,
   selectReservationCompatMainLine,
 } from "@/lib/reservations/reservation-item-semantics";
+import { resolveEffectiveReservationItemPrice } from "@/lib/reservations/effective-reservation-item-price";
 
 export const runtime = "nodejs";
 
@@ -324,7 +324,6 @@ const Body = z.object({
   licenseType: NullableStr,
   licenseNumber: NullableStr,
 
-  // NUEVO PRO
   items: z.array(ItemBody).optional(),
   companionsCount: z.number().int().min(0).max(20).optional(),
 
@@ -1149,19 +1148,18 @@ if (hasProItems && priceSensitiveChanged) {
         continue;
       }
 
-      const price = await findActiveServicePrice(tx, {
+      const qty = Math.max(1, Number(it.quantity || 1));
+      const itemPrice = await resolveEffectiveReservationItemPrice(tx, {
         serviceId: it.serviceId,
         optionId: it.optionId,
         durationMinutes: Number(opt.durationMinutes ?? 30),
+        quantity: qty,
         now: pricingWhen,
         pricingTier: String(svc.category ?? "").toUpperCase() === "JETSKI" ? reservationState.pricingTier : PricingTier.STANDARD,
+        channelId: requestedChannelId,
       });
 
-      if (!price) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
-
-      const unitPriceCents = Number(price.basePriceCents) || 0;
-      const qty = Math.max(1, Number(it.quantity || 1));
-      const lineTotal = unitPriceCents * qty;
+      if (!itemPrice) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
 
       lineCreates.push({
         serviceId: it.serviceId,
@@ -1170,9 +1168,9 @@ if (hasProItems && priceSensitiveChanged) {
         quantity: qty,
         pax: Math.max(1, Number(it.pax || b.pax)),
         promoCode: linePromoCode,
-        servicePriceId: price.id ?? null,
-        unitPriceCents,
-        totalPriceCents: lineTotal,
+        servicePriceId: itemPrice.servicePriceId,
+        unitPriceCents: itemPrice.unitPriceCents,
+        totalPriceCents: itemPrice.totalPriceCents,
         category: String(svc.category ?? "UNKNOWN").toUpperCase(),
       });
     }
@@ -1600,17 +1598,19 @@ if (hasProItems && priceSensitiveChanged) {
     isPrepaidVoucherReservation &&
     svc.id === existing.serviceId &&
     opt.id === existing.optionId;
-  const price = isVoucherIncludedBaseLine
+  const itemPrice = isVoucherIncludedBaseLine
     ? null
-    : await findActiveServicePrice(prisma, {
+    : await resolveEffectiveReservationItemPrice(prisma, {
         serviceId: svc.id,
         optionId: opt.id,
         durationMinutes: Number(opt.durationMinutes ?? 30),
+        quantity: requestedQuantity,
         now: pricingWhen,
         pricingTier: String(svc.category ?? "").toUpperCase() === "JETSKI" ? reservationState.pricingTier : PricingTier.STANDARD,
+        channelId: requestedChannelId,
       });
 
-  if (!isVoucherIncludedBaseLine && !price) {
+  if (!isVoucherIncludedBaseLine && !itemPrice) {
     return new NextResponse("No hay precio vigente para este servicio/duración.", { status: 400 });
   }
 
@@ -1625,8 +1625,8 @@ if (hasProItems && priceSensitiveChanged) {
     }
   }
 
-  const unitPriceCents = isVoucherIncludedBaseLine ? 0 : Number(price!.basePriceCents) || 0;
-  const principalCents = unitPriceCents * requestedQuantity;
+  const unitPriceCents = isVoucherIncludedBaseLine ? 0 : itemPrice!.unitPriceCents;
+  const principalCents = isVoucherIncludedBaseLine ? 0 : itemPrice!.totalPriceCents;
 
   const depositPerUnit = reservationState.isLicense ? 50000 : 10000;
   const depositCents = isPrepaidVoucherReservation
@@ -1692,7 +1692,7 @@ if (hasProItems && priceSensitiveChanged) {
         {
           serviceId: svc.id,
           optionId: opt.id,
-          servicePriceId: isVoucherIncludedBaseLine ? null : price!.id ?? null,
+          servicePriceId: isVoucherIncludedBaseLine ? null : itemPrice!.servicePriceId,
           quantity: requestedQuantity,
           pax: requestedPax,
           unitPriceCents,

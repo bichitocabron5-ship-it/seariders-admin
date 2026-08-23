@@ -3,7 +3,10 @@ import { JetskiLicenseMode, PricingTier, type Prisma } from "@prisma/client";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz, shouldAutoFormalize, todayYmdInTz } from "@/lib/tz-business";
 import { assertSlotCapacityForItemsOrThrow } from "@/lib/slot-capacity";
 import { computeDepositFromResolvedItems } from "@/lib/reservation-deposits";
-import { findActiveServicePrice } from "@/lib/service-pricing";
+import {
+  findActiveServicePrice,
+  resolveEffectiveServicePriceForChannel,
+} from "@/lib/service-pricing";
 import {
   getAppliedCommercialSnapshotTx,
   resolveCustomerDiscountSnapshot,
@@ -58,13 +61,13 @@ type CreateReservationInput = {
 
   // metadata opcional de pack
   packId?: string | null;
-  packQty?: number | null; // 👈 NUEVO (cantidad de packs)
+  packQty?: number | null;
 
   // modo de pricing
   pricing:
   | { mode: "QUICK_SINGLE_ITEM" }
   | { mode: "PACK_FIXED_TOTAL"; totalBeforeDiscountsCents?: number | null }
-  | { mode: "CART_MULTI_ITEM" }; // ✅ NUEVO
+  | { mode: "CART_MULTI_ITEM" };
 };
 
 type PackExpansionPack = {
@@ -250,7 +253,7 @@ export async function createReservationWithItems(params: {
     packMeta = expandedPack.packMeta;
     packFixedTotalCents = expandedPack.totalBeforeDiscountsCents;
 
-    // ✅ sustituimos input.items por los items reales del pack (server-truth)
+    // El servidor sustituye el input por la composicion real del pack.
     input.items = expandedPack.items;
   }
   
@@ -305,7 +308,7 @@ export async function createReservationWithItems(params: {
     };
   });
 
-  // ✅ Validación slots por item (capacidad real)
+  // Validacion de slots por item.
   await assertSlotCapacityForItemsOrThrow({
     tx,
     dateStartUtc: activityDate,
@@ -345,28 +348,29 @@ export async function createReservationWithItems(params: {
     totalPriceCents: number;
     category: string | null;
     durationMinutes: number | null;
-    isPackParent?: boolean; // 👈 NUEVO
+    isPackParent?: boolean;
   };
 
   const itemCreates: ItemCreate[] = [];
 
   if (input.pricing.mode === "QUICK_SINGLE_ITEM") {
-    // Igual que create-quick: precio por servicePrice vigente
+    // Igual que create-quick: precio efectivo por canal sobre ServicePrice vigente
     if (resolvedItems.length !== 1) throw new Error("QUICK_SINGLE_ITEM requiere 1 item");
 
     const it = resolvedItems[0];
 
-    const price = await findActiveServicePrice(tx, {
+    const price = await resolveEffectiveServicePriceForChannel(tx, {
       serviceId: it.serviceId,
       optionId: it.optionId,
       durationMinutes: it.durationMinutes,
       now: pricingWhen,
       pricingTier: it.category === "JETSKI" ? pricingTier : PricingTier.STANDARD,
+      channelId: ch.id,
     });
 
     if (!price) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
 
-    const unitPriceCents = Number(price.basePriceCents) || 0;
+    const unitPriceCents = Number(price.effectivePriceCents) || 0;
     const lineTotal = unitPriceCents * it.quantity;
 
     basePriceCents = lineTotal;
@@ -378,263 +382,296 @@ export async function createReservationWithItems(params: {
       quantity: it.quantity,
       pax: it.pax,
       promoCode: it.promoCode ?? null,
-      servicePriceId: price.id ?? null,
+      servicePriceId: price.servicePriceId,
       unitPriceCents,
       totalPriceCents: lineTotal,
       category: it.category ?? null,
       durationMinutes: it.durationMinutes ?? null,
     });
-    } else if (input.pricing.mode === "CART_MULTI_ITEM" || input.pricing.mode === "PACK_FIXED_TOTAL") {
-      // precio real por línea
-      totalBeforeDiscounts = 0;
-      basePriceCents = 0;
+  } else if (input.pricing.mode === "CART_MULTI_ITEM") {
+    // Precio efectivo por linea.
+    totalBeforeDiscounts = 0;
+    basePriceCents = 0;
 
-      for (const it of resolvedItems) {
-        const price = await findActiveServicePrice(tx, {
-          serviceId: it.serviceId,
-          optionId: it.optionId,
-          durationMinutes: it.durationMinutes,
-          now: pricingWhen,
-          pricingTier: it.category === "JETSKI" ? pricingTier : PricingTier.STANDARD,
-        });
-
-        if (!price) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
-
-        const unitPriceCents = Number(price.basePriceCents) || 0;
-        const lineTotal = unitPriceCents * it.quantity;
-
-        totalBeforeDiscounts += lineTotal;
-        basePriceCents += lineTotal;
-
-        itemCreates.push({
-          serviceId: it.serviceId,
-          optionId: it.optionId,
-          quantity: it.quantity,
-          pax: it.pax,
-          promoCode: it.promoCode ?? null,
-          servicePriceId: price.id ?? null,
-          unitPriceCents,
-          totalPriceCents: lineTotal,
-          category: it.category ?? null,
-          durationMinutes: it.durationMinutes ?? null,
-          // si quieres marcar el “main” para UI: isPackParent no aplica aquí
-        });
-      }
-
-      if (input.pricing.mode === "PACK_FIXED_TOTAL") {
-        totalBeforeDiscounts = Math.max(
-          0,
-          Number(packFixedTotalCents ?? input.pricing.totalBeforeDiscountsCents ?? 0)
-        );
-        if (totalBeforeDiscounts <= 0) throw new Error("totalBeforeDiscountsCents requerido para pack");
-        basePriceCents = totalBeforeDiscounts;
-      }
-    }
-
-      const totalActivityQuantity = resolvedItems.reduce(
-        (sum, item) => sum + Number(item.quantity ?? 0),
-        0
-      );
-      const reservationQuantity = packMeta ? packQty : Math.max(1, totalActivityQuantity);
-      const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
-        channel: ch,
-        quantity: reservationQuantity,
-        baseCents: totalBeforeDiscounts,
-      });
-
-      const commercial = await computeReservationCommercialBreakdown({
-        when: pricingWhen,
-        discountLines: itemCreates.map((item) => ({
-          serviceId: item.serviceId,
-          optionId: item.optionId,
-          category: resolvedItems.find(
-            (resolved) =>
-              resolved.serviceId === item.serviceId && resolved.optionId === item.optionId
-          )?.category ?? null,
-          quantity: item.quantity,
-          lineBaseCents: item.totalPriceCents,
-          promoCode: promotionsEnabled ? item.promoCode ?? null : null,
-        })),
-        customerCountry,
-        promotionsEnabled,
-        totalBeforeDiscountsCents: totalBeforeDiscounts,
-        customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
-        manualDiscountCents: input.manualDiscountCents ?? 0,
-        discountResponsibility: discountPolicy.discountResponsibility,
-        promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
-        allowAutoDiscount: input.pricing.mode !== "PACK_FIXED_TOTAL",
-      });
-
-      const depositCents = computeDepositFromResolvedItems({ isLicense, resolvedItems });
-      
-      // Service/option “main” obligatorios en Reservation (por compatibilidad)
-      const compatMain = selectReservationCompatMainLine(resolvedItems);
-      const main = packMeta
-        ? { serviceId: packMeta.serviceId, optionId: packMeta.packOptionId }
-        : compatMain;
-
-      if (!main?.serviceId || !main.optionId) {
-        throw new Error("Servicio y duracion requeridos.");
-      }
-
-      const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
+    for (const it of resolvedItems) {
+      const price = await resolveEffectiveServicePriceForChannel(tx, {
+        serviceId: it.serviceId,
+        optionId: it.optionId,
+        durationMinutes: it.durationMinutes,
+        now: pricingWhen,
+        pricingTier: it.category === "JETSKI" ? pricingTier : PricingTier.STANDARD,
         channelId: ch.id,
-        serviceId: main.serviceId,
-        commissionBaseCents: commercial.commissionBaseCents,
-        finalTotalCents: commercial.finalTotalCents,
-        customerDiscountBaseCents: totalBeforeDiscounts,
-        quantity: reservationQuantity,
       });
 
-      const reservation = await tx.reservation.create({
-        data: {
-          source: "STORE",
-          status: "WAITING",
-          activityDate,
-          scheduledTime,
-          storeQueueStartedAt: isTodayBusiness ? new Date() : null,
-          ...formalizeData,
+      if (!price) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
 
-          customerName: input.customerName,
-          customerPhone,
-          customerEmail,
-          channelId: ch.id,
-          pax: input.pax,
-          companionsCount: Number(input.companionsCount ?? 0),
-          quantity: reservationQuantity,
-          isLicense,
-          jetskiLicenseMode,
-          pricingTier,
-          isPackParent: Boolean(input.packId),
+      const unitPriceCents = Number(price.effectivePriceCents) || 0;
+      const lineTotal = unitPriceCents * it.quantity;
 
-          // Compat fields (main)
-          serviceId: main.serviceId,
-          optionId: main.optionId,
+      totalBeforeDiscounts += lineTotal;
+      basePriceCents += lineTotal;
 
-          // Totales
-          basePriceCents,
-          commissionBaseCents: commercial.commissionBaseCents,
-          appliedCommissionPct: commercialSnapshot.appliedCommissionPct,
-          appliedCommissionMode: commercialSnapshot.appliedCommissionMode,
-          appliedCommissionValue: commercialSnapshot.appliedCommissionValue,
-          appliedCommissionCents: commercialSnapshot.appliedCommissionCents,
-          customerDiscountMode: commercialSnapshot.customerDiscountMode,
-          customerDiscountValue: commercialSnapshot.customerDiscountValue,
-          customerDiscountCents: commercialSnapshot.customerDiscountCents,
-          autoDiscountCents: commercial.autoDiscountCents,
-          manualDiscountCents: commercial.manualDiscountCents,
-          discountResponsibility: commercial.discountResponsibility,
-          promoterDiscountShareBps: commercial.promoterDiscountShareBps,
-          promoterDiscountCents: commercial.promoterDiscountCents,
-          companyDiscountCents: commercial.companyDiscountCents,
-          manualDiscountReason: input.manualDiscountReason ?? null,
-          totalPriceCents: commercial.finalTotalCents,
-          depositCents,
-
-          // placeholders (como ya haces)
-          customerCountry,
-          customerAddress,
-          customerPostalCode,
-          customerBirthDate,
-          customerDocType,
-          customerDocNumber,
-          marketing,
-          licenseSchool: isLicense ? licenseSchool : null,
-          licenseType: isLicense ? licenseType : null,
-          licenseNumber: isLicense ? licenseNumber : null,
-
-          // metadata pack (opcional)
-          packId: input.packId ?? null,
-        },
-        select: { id: true },
-      });
-
-    const createdContractItems = [];
-
-    for (const it of itemCreates) {
-      const createdItem = await tx.reservationItem.create({
-        data: {
-          reservationId: reservation.id,
-          serviceId: it.serviceId,
-          optionId: it.optionId,
-          servicePriceId: it.servicePriceId,
-          quantity: it.quantity,
-          pax: it.pax,
-          unitPriceCents: it.unitPriceCents,
-          totalPriceCents: it.totalPriceCents,
-          isExtra: false, // ✅ actividades reales
-          isPackParent: Boolean(it.isPackParent), // 👈 NUEVO
-        },
-        select: { id: true },
-      });
-      createdContractItems.push({
-        id: createdItem.id,
+      itemCreates.push({
         serviceId: it.serviceId,
         optionId: it.optionId,
         quantity: it.quantity,
         pax: it.pax,
-        totalPriceCents: it.totalPriceCents,
-        isExtra: false,
-        service: { category: it.category },
-        option: { durationMinutes: it.durationMinutes },
+        promoCode: it.promoCode ?? null,
+        servicePriceId: price.servicePriceId,
+        unitPriceCents,
+        totalPriceCents: lineTotal,
+        category: it.category ?? null,
+        durationMinutes: it.durationMinutes ?? null,
       });
     }
 
-    if (commercial.promoCode !== null || itemCreates.every((it) => !it.promoCode)) {
-      await tx.reservation.update({
-        where: { id: reservation.id },
-        data: { promoCode: commercial.promoCode },
-        select: { id: true },
+  } else if (input.pricing.mode === "PACK_FIXED_TOTAL") {
+    // Los packs mantienen precios Admin por componente y total fijo de pack.
+    totalBeforeDiscounts = 0;
+    basePriceCents = 0;
+
+    for (const it of resolvedItems) {
+      const price = await findActiveServicePrice(tx, {
+        serviceId: it.serviceId,
+        optionId: it.optionId,
+        durationMinutes: it.durationMinutes,
+        now: pricingWhen,
+        pricingTier: it.category === "JETSKI" ? pricingTier : PricingTier.STANDARD,
+      });
+
+      if (!price) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
+
+      const unitPriceCents = Number(price.basePriceCents) || 0;
+      const lineTotal = unitPriceCents * it.quantity;
+
+      totalBeforeDiscounts += lineTotal;
+      basePriceCents += lineTotal;
+
+      itemCreates.push({
+        serviceId: it.serviceId,
+        optionId: it.optionId,
+        quantity: it.quantity,
+        pax: it.pax,
+        promoCode: it.promoCode ?? null,
+        servicePriceId: price.id ?? null,
+        unitPriceCents,
+        totalPriceCents: lineTotal,
+        category: it.category ?? null,
+        durationMinutes: it.durationMinutes ?? null,
       });
     }
 
-    const contractCompatMain = selectReservationCompatMainLine(itemCreates);
-    const contractRequirements = buildReservationContractRequirements({
+    totalBeforeDiscounts = Math.max(
+      0,
+      Number(packFixedTotalCents ?? input.pricing.totalBeforeDiscountsCents ?? 0)
+    );
+    if (totalBeforeDiscounts <= 0) throw new Error("totalBeforeDiscountsCents requerido para pack");
+    basePriceCents = totalBeforeDiscounts;
+  }
+
+  const totalActivityQuantity = resolvedItems.reduce(
+    (sum, item) => sum + Number(item.quantity ?? 0),
+    0
+  );
+  const reservationQuantity = packMeta ? packQty : Math.max(1, totalActivityQuantity);
+  const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
+    channel: ch,
+    quantity: reservationQuantity,
+    baseCents: totalBeforeDiscounts,
+  });
+
+  const commercial = await computeReservationCommercialBreakdown({
+    when: pricingWhen,
+    discountLines: itemCreates.map((item) => ({
+      serviceId: item.serviceId,
+      optionId: item.optionId,
+      category: resolvedItems.find(
+        (resolved) =>
+          resolved.serviceId === item.serviceId && resolved.optionId === item.optionId
+      )?.category ?? null,
+      quantity: item.quantity,
+      lineBaseCents: item.totalPriceCents,
+      promoCode: promotionsEnabled ? item.promoCode ?? null : null,
+    })),
+    customerCountry,
+    promotionsEnabled,
+    totalBeforeDiscountsCents: totalBeforeDiscounts,
+    customerDiscountCents: customerDiscountSnapshot.customerDiscountCents,
+    manualDiscountCents: input.manualDiscountCents ?? 0,
+    discountResponsibility: discountPolicy.discountResponsibility,
+    promoterDiscountShareBps: discountPolicy.promoterDiscountShareBps,
+    allowAutoDiscount: input.pricing.mode !== "PACK_FIXED_TOTAL",
+  });
+
+  const depositCents = computeDepositFromResolvedItems({ isLicense, resolvedItems });
+
+  // Service/option main obligatorios en Reservation por compatibilidad.
+  const compatMain = selectReservationCompatMainLine(resolvedItems);
+  const main = packMeta
+    ? { serviceId: packMeta.serviceId, optionId: packMeta.packOptionId }
+    : compatMain;
+
+  if (!main?.serviceId || !main.optionId) {
+    throw new Error("Servicio y duracion requeridos.");
+  }
+
+  const commercialSnapshot = await getAppliedCommercialSnapshotTx(tx, {
+    channelId: ch.id,
+    serviceId: main.serviceId,
+    commissionBaseCents: commercial.commissionBaseCents,
+    finalTotalCents: commercial.finalTotalCents,
+    customerDiscountBaseCents: totalBeforeDiscounts,
+    quantity: reservationQuantity,
+  });
+
+  const reservation = await tx.reservation.create({
+    data: {
+      source: "STORE",
+      status: "WAITING",
+      activityDate,
+      scheduledTime,
+      storeQueueStartedAt: isTodayBusiness ? new Date() : null,
+      ...formalizeData,
+
+      customerName: input.customerName,
+      customerPhone,
+      customerEmail,
+      channelId: ch.id,
+      pax: input.pax,
+      companionsCount: Number(input.companionsCount ?? 0),
       quantity: reservationQuantity,
       isLicense,
-      serviceCategory: contractCompatMain?.category ?? null,
-      serviceId: contractCompatMain?.serviceId ?? null,
-      optionId: contractCompatMain?.optionId ?? null,
-      pax: input.pax,
+      jetskiLicenseMode,
+      pricingTier,
+      isPackParent: Boolean(input.packId),
+
+      // Compat fields (main)
+      serviceId: main.serviceId,
+      optionId: main.optionId,
+
+      // Totales
+      basePriceCents,
+      commissionBaseCents: commercial.commissionBaseCents,
+      appliedCommissionPct: commercialSnapshot.appliedCommissionPct,
+      appliedCommissionMode: commercialSnapshot.appliedCommissionMode,
+      appliedCommissionValue: commercialSnapshot.appliedCommissionValue,
+      appliedCommissionCents: commercialSnapshot.appliedCommissionCents,
+      customerDiscountMode: commercialSnapshot.customerDiscountMode,
+      customerDiscountValue: commercialSnapshot.customerDiscountValue,
+      customerDiscountCents: commercialSnapshot.customerDiscountCents,
+      autoDiscountCents: commercial.autoDiscountCents,
+      manualDiscountCents: commercial.manualDiscountCents,
+      discountResponsibility: commercial.discountResponsibility,
+      promoterDiscountShareBps: commercial.promoterDiscountShareBps,
+      promoterDiscountCents: commercial.promoterDiscountCents,
+      companyDiscountCents: commercial.companyDiscountCents,
+      manualDiscountReason: input.manualDiscountReason ?? null,
       totalPriceCents: commercial.finalTotalCents,
-      items: createdContractItems,
+      depositCents,
+
+      customerCountry,
+      customerAddress,
+      customerPostalCode,
+      customerBirthDate,
+      customerDocType,
+      customerDocNumber,
+      marketing,
+      licenseSchool: isLicense ? licenseSchool : null,
+      licenseType: isLicense ? licenseType : null,
+      licenseNumber: isLicense ? licenseNumber : null,
+
+      // metadata pack (opcional)
+      packId: input.packId ?? null,
+    },
+    select: { id: true },
+  });
+
+  const createdContractItems = [];
+
+  for (const it of itemCreates) {
+    const createdItem = await tx.reservationItem.create({
+      data: {
+        reservationId: reservation.id,
+        serviceId: it.serviceId,
+        optionId: it.optionId,
+        servicePriceId: it.servicePriceId,
+        quantity: it.quantity,
+        pax: it.pax,
+        unitPriceCents: it.unitPriceCents,
+        totalPriceCents: it.totalPriceCents,
+        isExtra: false,
+        isPackParent: Boolean(it.isPackParent),
+      },
+      select: { id: true },
     });
-    const requiredContractUnits = contractRequirements.length;
-
-    if (shouldFormalize && requiredContractUnits > 0) {
-      await tx.reservationContract.createMany({
-        data: contractRequirements.map((requirement, idx) => {
-          const isPrimaryContract = idx === 0;
-          return {
-            reservationId: reservation.id,
-            reservationItemId: requirement.reservationItemId,
-            unitIndex: idx + 1,
-            logicalUnitIndex: requirement.logicalUnitIndex,
-            templateCode: requirement.templateCode,
-            driverName: isPrimaryContract ? input.customerName : null,
-            driverPhone: isPrimaryContract ? customerPhone : null,
-            driverEmail: isPrimaryContract ? customerEmail : null,
-            driverCountry: isPrimaryContract ? customerCountry : null,
-            driverAddress: isPrimaryContract ? customerAddress : null,
-            driverPostalCode: isPrimaryContract ? customerPostalCode : null,
-            driverDocType: isPrimaryContract ? customerDocType : null,
-            driverDocNumber: isPrimaryContract ? customerDocNumber : null,
-            driverBirthDate: isPrimaryContract ? customerBirthDate : null,
-            licenseSchool: isPrimaryContract && isLicense ? licenseSchool : null,
-            licenseType: isPrimaryContract && isLicense ? licenseType : null,
-            licenseNumber: isPrimaryContract && isLicense ? licenseNumber : null,
-          };
-        }),
-        skipDuplicates: true,
-      });
-    }
-
-    await syncChannelCommissionLineFromReservationTx(tx, reservation.id);
-
-    return {
-      id: reservation.id,
-      autoFormalized: shouldFormalize,
-      requiredContractUnits,
-      readyContractUnits: 0,
-    };
+    createdContractItems.push({
+      id: createdItem.id,
+      serviceId: it.serviceId,
+      optionId: it.optionId,
+      quantity: it.quantity,
+      pax: it.pax,
+      totalPriceCents: it.totalPriceCents,
+      isExtra: false,
+      service: { category: it.category },
+      option: { durationMinutes: it.durationMinutes },
+    });
   }
+
+  if (commercial.promoCode !== null || itemCreates.every((it) => !it.promoCode)) {
+    await tx.reservation.update({
+      where: { id: reservation.id },
+      data: { promoCode: commercial.promoCode },
+      select: { id: true },
+    });
+  }
+
+  const contractCompatMain = selectReservationCompatMainLine(itemCreates);
+  const contractRequirements = buildReservationContractRequirements({
+    quantity: reservationQuantity,
+    isLicense,
+    serviceCategory: contractCompatMain?.category ?? null,
+    serviceId: contractCompatMain?.serviceId ?? null,
+    optionId: contractCompatMain?.optionId ?? null,
+    pax: input.pax,
+    totalPriceCents: commercial.finalTotalCents,
+    items: createdContractItems,
+  });
+  const requiredContractUnits = contractRequirements.length;
+
+  if (shouldFormalize && requiredContractUnits > 0) {
+    await tx.reservationContract.createMany({
+      data: contractRequirements.map((requirement, idx) => {
+        const isPrimaryContract = idx === 0;
+        return {
+          reservationId: reservation.id,
+          reservationItemId: requirement.reservationItemId,
+          unitIndex: idx + 1,
+          logicalUnitIndex: requirement.logicalUnitIndex,
+          templateCode: requirement.templateCode,
+          driverName: isPrimaryContract ? input.customerName : null,
+          driverPhone: isPrimaryContract ? customerPhone : null,
+          driverEmail: isPrimaryContract ? customerEmail : null,
+          driverCountry: isPrimaryContract ? customerCountry : null,
+          driverAddress: isPrimaryContract ? customerAddress : null,
+          driverPostalCode: isPrimaryContract ? customerPostalCode : null,
+          driverDocType: isPrimaryContract ? customerDocType : null,
+          driverDocNumber: isPrimaryContract ? customerDocNumber : null,
+          driverBirthDate: isPrimaryContract ? customerBirthDate : null,
+          licenseSchool: isPrimaryContract && isLicense ? licenseSchool : null,
+          licenseType: isPrimaryContract && isLicense ? licenseType : null,
+          licenseNumber: isPrimaryContract && isLicense ? licenseNumber : null,
+        };
+      }),
+      skipDuplicates: true,
+    });
+  }
+
+  await syncChannelCommissionLineFromReservationTx(tx, reservation.id);
+
+  return {
+    id: reservation.id,
+    autoFormalized: shouldFormalize,
+    requiredContractUnits,
+    readyContractUnits: 0,
+  };
+}

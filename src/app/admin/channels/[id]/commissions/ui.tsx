@@ -231,8 +231,8 @@ export default function ChannelCommissionsClient({ channelId }: { channelId: str
             puedes definir un PVP comercial por duración/pax para cada opción.
           </p>
           <div style={helperStyle}>
-            El PVP por canal es informativo para seguimiento comercial y liquidaciones. No modifica el precio real que
-            se cobra en reserva.
+            Precio Admin es la tarifa base. Si defines un PVP por canal para una opción, ese importe se usa en las
+            reservas de este canal. Si queda por defecto, se usa Precio Admin.
           </div>
         </div>
 
