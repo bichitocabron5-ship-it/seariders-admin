@@ -99,6 +99,7 @@ Respuesta ejemplo:
       "category": "JETSKI",
       "isExternalActivity": false,
       "isLicense": false,
+      "startingPriceCents": 5900,
       "options": [
         {
           "optionCode": "JETSKI_TOUR_30_2",
@@ -106,7 +107,8 @@ Respuesta ejemplo:
           "contractedMinutes": 30,
           "paxMax": 2,
           "displayLabel": "30 min",
-          "secondaryLabel": "Hasta 2 pax"
+          "secondaryLabel": "Hasta 2 pax",
+          "publicPriceCents": 5900
         }
       ]
     }
@@ -128,6 +130,15 @@ Lógica reutilizada:
 - `annotateServiceOptions`
 - `service-channel-availability`
 - pricing vigente por `ServicePrice`
+
+Precio público orientativo:
+
+- `option.publicPriceCents` es el precio `STANDARD` vigente no promocional para esa opción.
+- La resolución usa `ServicePrice` activo y vigente, primero por `optionId` y después por `durationMin` legacy.
+- No aplica promociones, tarifa residente, descuentos de canal ni descuentos manuales.
+- `service.startingPriceCents` es el mínimo de `publicPriceCents` entre sus opciones públicas con precio.
+- Si una opción pública no tiene precio `STANDARD` vigente, `publicPriceCents` es `null` y no cuenta para `startingPriceCents`.
+- No se exponen IDs internos ni filas `ServicePrice`.
 
 ## 2. POST /api/public/v1/pricing/quote
 
@@ -278,4 +289,3 @@ Estados bloqueantes:
 - Diseñar idempotencia (`Idempotency-Key`).
 - Añadir cancelación técnica y estados pre-pago.
 - Integrar pago sin exponer credenciales ni lógica interna.
-

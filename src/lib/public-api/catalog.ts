@@ -1,6 +1,12 @@
 import { PricingTier } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import {
+  buildActiveCatalogPriceIndex,
+  resolveCatalogOptionPriceCents,
+  resolvePublicOptionPriceCents,
+  resolvePublicServicePriceCents,
+} from "@/lib/public-api/catalog-pricing";
 import { annotateServiceOptions } from "@/lib/service-option-labels";
 import {
   buildServiceAllowedChannelIndex,
@@ -195,13 +201,7 @@ export async function buildPosCatalog(origin: ServiceChannelOrigin) {
       .map((service) => service.id),
   }));
 
-  const standardPriceMap = new Map<string, number>();
-  const residentPriceMap = new Map<string, number>();
-  for (const pr of prices) {
-    const targetMap = pr.pricingTier === PricingTier.RESIDENT ? residentPriceMap : standardPriceMap;
-    const key = pr.optionId ? `${pr.serviceId}:${pr.optionId}` : `${pr.serviceId}:null`;
-    if (!targetMap.has(key)) targetMap.set(key, pr.basePriceCents);
-  }
+  const priceIndex = buildActiveCatalogPriceIndex(prices);
 
   const visibleMainIds = new Set(servicesMainWithAvailability.map((service) => service.id));
   const options = annotateServiceOptions(
@@ -209,9 +209,8 @@ export async function buildPosCatalog(origin: ServiceChannelOrigin) {
       .filter((option) => visibleMainIds.has(option.serviceId))
       .filter((option) => (origin === "BOOTH" ? option.visibleInBooth : option.visibleInStore))
   ).map((option) => {
-    const key = `${option.serviceId}:${option.id}`;
-    const standardPriceCents = standardPriceMap.get(key) ?? null;
-    const residentPriceCents = residentPriceMap.get(key) ?? null;
+    const standardPriceCents = resolvePublicOptionPriceCents(priceIndex, option);
+    const residentPriceCents = resolveCatalogOptionPriceCents(priceIndex, option, PricingTier.RESIDENT);
     const boothFallback = origin === "BOOTH" ? Number(option.basePriceCents ?? 0) || 0 : null;
     const base = standardPriceCents ?? boothFallback;
 
@@ -219,6 +218,7 @@ export async function buildPosCatalog(origin: ServiceChannelOrigin) {
       ...option,
       basePriceCents: base,
       standardPriceCents,
+      publicPriceCents: standardPriceCents,
       residentPriceCents,
       hasPrice: (base != null && base > 0) || (residentPriceCents != null && residentPriceCents > 0),
     };
@@ -226,7 +226,7 @@ export async function buildPosCatalog(origin: ServiceChannelOrigin) {
 
   const extraPriceByServiceId: Record<string, number | null> = {};
   for (const service of servicesExtraWithAvailability) {
-    extraPriceByServiceId[service.id] = standardPriceMap.get(`${service.id}:null`) ?? null;
+    extraPriceByServiceId[service.id] = resolvePublicServicePriceCents(priceIndex, service.id);
   }
 
   const categoriesMain = uniqSorted(
@@ -274,7 +274,11 @@ export async function buildPublicCatalogSnapshot() {
         paxMax: Number(option.paxMax ?? 0),
         displayLabel: option.displayLabel,
         secondaryLabel: option.secondaryLabel,
+        publicPriceCents: option.publicPriceCents,
       }));
+    const publicOptionPrices = options
+      .map((option) => option.publicPriceCents)
+      .filter((priceCents): priceCents is number => priceCents != null);
 
     return {
       serviceCode,
@@ -282,6 +286,7 @@ export async function buildPublicCatalogSnapshot() {
       category: service.category,
       isExternalActivity: Boolean(service.isExternalActivity),
       isLicense: Boolean(service.isLicense),
+      startingPriceCents: publicOptionPrices.length > 0 ? Math.min(...publicOptionPrices) : null,
       options,
     };
   });
