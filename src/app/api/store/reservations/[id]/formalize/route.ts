@@ -20,6 +20,7 @@ import {
   resolveDiscountPolicy,
 } from "@/lib/commission";
 import { computeReservationCommercialBreakdown } from "@/lib/reservation-commercial";
+import { readReservationContractProgressTx } from "@/lib/formalize-contract-progress";
 import {
   resolveManualDiscountCentsForQuantityChange,
   sumMainReservationQuantity,
@@ -65,6 +66,11 @@ import {
 } from "@/lib/reservations/effective-reservation-item-price";
 
 export const runtime = "nodejs";
+
+const FORMALIZE_TRANSACTION_OPTIONS = {
+  maxWait: 10_000,
+  timeout: 15_000,
+} as const;
 
 async function requireStore() {
   const cookieStore = await cookies();
@@ -402,106 +408,6 @@ function sameContractContentShape(
   right: ReturnType<typeof buildContractContentShape>
 ) {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-async function ensureContractsTx(tx: Prisma.TransactionClient, reservationId: string) {
-  const res = await tx.reservation.findUnique({
-    where: { id: reservationId },
-    select: {
-      id: true,
-      quantity: true,
-      isLicense: true,
-      serviceId: true,
-      optionId: true,
-      pax: true,
-      totalPriceCents: true,
-      service: { select: { name: true, category: true } },
-      option: { select: { durationMinutes: true } },
-      items: {
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true,
-          serviceId: true,
-          optionId: true,
-          quantity: true,
-          pax: true,
-          totalPriceCents: true,
-          isExtra: true,
-          service: { select: { name: true, category: true } },
-          option: { select: { durationMinutes: true } },
-        },
-      },
-      contracts: {
-        select: {
-          id: true,
-          reservationItemId: true,
-          unitIndex: true,
-          logicalUnitIndex: true,
-          status: true,
-          supersededAt: true,
-          createdAt: true,
-        },
-      },
-    },
-  });
-  if (!res) throw new Error("Reserva no existe");
-
-  const contractRequirements = buildReservationContractRequirements({
-    quantity: res.quantity ?? 0,
-    isLicense: Boolean(res.isLicense),
-    serviceCategory: res.service?.category ?? null,
-    serviceId: res.serviceId,
-    optionId: res.optionId,
-    serviceName: res.service?.name ?? null,
-    durationMinutes: res.option?.durationMinutes ?? null,
-    pax: res.pax,
-    totalPriceCents: res.totalPriceCents,
-    items: res.items ?? [],
-  });
-  const syncTargets = reservationContractRequirementsToSyncTargets(contractRequirements);
-  const requiredUnits = contractRequirements.length;
-
-  if (requiredUnits <= 0) return { requiredUnits: 0, readyCount: 0 };
-
-  const existingContracts = res.contracts ?? [];
-  const hasUnitOne = existingContracts.some((c) => Number(c.unitIndex) === 1);
-
-  if (!hasUnitOne) {
-    const legacyPrimary = existingContracts
-      .filter((c) => Number(c.unitIndex) <= 0)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0];
-
-    if (legacyPrimary) {
-      await tx.reservationContract.update({
-        where: { id: legacyPrimary.id },
-        data: { unitIndex: 1, logicalUnitIndex: 1 },
-      });
-    }
-  }
-
-  await syncReservationContractsTx(tx, {
-    reservationId,
-    requiredUnits,
-    targets: syncTargets,
-  });
-
-  const all = await tx.reservationContract.findMany({
-    where: { reservationId },
-    orderBy: { unitIndex: "asc" },
-    select: {
-      id: true,
-      reservationItemId: true,
-      unitIndex: true,
-      logicalUnitIndex: true,
-      status: true,
-      supersededAt: true,
-      createdAt: true,
-    },
-  });
-
-  const readyCount = buildReservationContractProgressForTargets(all, syncTargets).readyCount;
-
-  return { requiredUnits, readyCount };
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -946,16 +852,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
 
       const optionIds = Array.from(new Set(candidateItems.map((item) => item.optionId)));
-      const [services, options] = await Promise.all([
-        tx.service.findMany({
-          where: { id: { in: candidateServiceIds } },
-          select: { id: true, name: true, code: true, category: true },
-        }),
-        tx.serviceOption.findMany({
-          where: { id: { in: optionIds } },
-          select: { id: true, serviceId: true, durationMinutes: true },
-        }),
-      ]);
+      const services = await tx.service.findMany({
+        where: { id: { in: candidateServiceIds } },
+        select: { id: true, name: true, code: true, category: true },
+      });
+      const options = await tx.serviceOption.findMany({
+        where: { id: { in: optionIds } },
+        select: { id: true, serviceId: true, durationMinutes: true },
+      });
 
       const svcById = new Map(services.map((service) => [service.id, service]));
       const optById = new Map(options.map((option) => [option.id, option]));
@@ -1584,7 +1488,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           service: { category: line.category },
         })),
       });
-      const contracts = await ensureContractsTx(tx, id);
+      const contracts = await readReservationContractProgressTx(tx, id);
 
       if (contracts.requiredUnits > 0 && contracts.readyCount < contracts.requiredUnits) {
         throw new Error(
@@ -1625,7 +1529,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
 
       return { ok: true as const, id, ...contracts };
-    });
+    }, FORMALIZE_TRANSACTION_OPTIONS);
 
     if (!result.ok && result.isHistorical) {
       return NextResponse.json(result, { status: 409 });
