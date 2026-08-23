@@ -1,8 +1,12 @@
-import { PricingTier, type Prisma } from "@prisma/client";
+import { PricingTier, Prisma } from "@prisma/client";
 
 type ServicePriceReader = {
   servicePrice: Prisma.TransactionClient["servicePrice"];
   serviceOption: Prisma.TransactionClient["serviceOption"];
+};
+
+type EffectiveServicePriceReader = ServicePriceReader & {
+  channelOptionPrice: Prisma.TransactionClient["channelOptionPrice"];
 };
 
 type ActiveServicePriceResult = {
@@ -10,6 +14,22 @@ type ActiveServicePriceResult = {
   basePriceCents: number;
   pricingTier: PricingTier;
 };
+
+export type EffectiveChannelServicePriceResult = {
+  servicePriceId: string | null;
+  adminPriceCents: number;
+  effectivePriceCents: number;
+  channelPriceApplied: boolean;
+  pricingTier: PricingTier;
+};
+
+function isMissingChannelOptionPriceTable(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2021" &&
+    String(error.meta?.modelName ?? "") === "ChannelOptionPrice"
+  );
+}
 
 export async function findActiveServicePrice(
   tx: ServicePriceReader,
@@ -84,4 +104,54 @@ export async function findActiveServicePrice(
   }
 
   return null;
+}
+
+export async function resolveEffectiveServicePriceForChannel(
+  tx: EffectiveServicePriceReader,
+  params: {
+    serviceId: string;
+    optionId: string;
+    durationMinutes: number;
+    now: Date;
+    pricingTier?: PricingTier;
+    channelId?: string | null;
+  }
+): Promise<EffectiveChannelServicePriceResult | null> {
+  const adminPrice = await findActiveServicePrice(tx, params);
+
+  if (!adminPrice) return null;
+
+  const adminPriceCents = Number(adminPrice.basePriceCents ?? 0);
+  const baseResult: EffectiveChannelServicePriceResult = {
+    servicePriceId: adminPrice.id ?? null,
+    adminPriceCents,
+    effectivePriceCents: adminPriceCents,
+    channelPriceApplied: false,
+    pricingTier: adminPrice.pricingTier,
+  };
+
+  if (!params.channelId) return baseResult;
+
+  const channelOptionPrice = await tx.channelOptionPrice
+    .findUnique({
+      where: {
+        channelId_optionId: {
+          channelId: params.channelId,
+          optionId: params.optionId,
+        },
+      },
+      select: { priceCents: true, isActive: true },
+    })
+    .catch((error: unknown) => {
+      if (isMissingChannelOptionPriceTable(error)) return null;
+      throw error;
+    });
+
+  if (!channelOptionPrice?.isActive) return baseResult;
+
+  return {
+    ...baseResult,
+    effectivePriceCents: Number(channelOptionPrice.priceCents ?? 0),
+    channelPriceApplied: true,
+  };
 }

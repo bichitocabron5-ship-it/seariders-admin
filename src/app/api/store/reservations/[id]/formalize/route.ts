@@ -14,7 +14,6 @@ import {
 } from "@/lib/reservation-formalization";
 import { getBoothUnitDiscountCents, getScaledBoothDiscountCents } from "@/lib/booth-discount";
 import { resolveJetskiLicenseMode, resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
-import { findActiveServicePrice } from "@/lib/service-pricing";
 import {
   getAppliedCommercialSnapshotTx,
   resolveCustomerDiscountSnapshot,
@@ -60,6 +59,10 @@ import {
   deriveReservationItemSetCommercialState,
   selectReservationCompatMainLine,
 } from "@/lib/reservations/reservation-item-semantics";
+import {
+  buildPreservedReservationItemPriceSnapshot,
+  resolveEffectiveReservationItemPrice,
+} from "@/lib/reservations/effective-reservation-item-price";
 
 export const runtime = "nodejs";
 
@@ -1025,6 +1028,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
         if (preserveCommercialSnapshot) {
           const frozenItem = currentMainItemSnapshots.get(`${service.id}::${option.id}`) ?? null;
+          const preservedPrice = buildPreservedReservationItemPriceSnapshot(frozenItem);
           lineCreates.push({
             serviceId: service.id,
             optionId: option.id,
@@ -1032,9 +1036,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             quantity: qty,
             pax,
             promoCode: linePromoCode,
-            servicePriceId: frozenItem?.servicePriceId ?? null,
-            unitPriceCents: Number(frozenItem?.unitPriceCents ?? 0),
-            totalPriceCents: Number(frozenItem?.totalPriceCents ?? 0),
+            servicePriceId: preservedPrice.servicePriceId,
+            unitPriceCents: preservedPrice.unitPriceCents,
+            totalPriceCents: preservedPrice.totalPriceCents,
             category: String(service.category ?? "").toUpperCase(),
             serviceName: service.name ?? null,
             serviceCode: service.code ?? null,
@@ -1042,20 +1046,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           continue;
         }
 
-        const price = await findActiveServicePrice(tx, {
+        const itemPrice = await resolveEffectiveReservationItemPrice(tx, {
           serviceId: service.id,
           optionId: option.id,
           durationMinutes: Number(option.durationMinutes ?? 30),
+          quantity: qty,
           now: pricingWhen,
           pricingTier:
             String(service.category ?? "").toUpperCase() === "JETSKI"
               ? lineState.pricingTier
               : PricingTier.STANDARD,
+          channelId: effectiveRequestedChannelId,
         });
 
-        if (!price) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
+        if (!itemPrice) throw new Error("Este servicio/opción no tiene precio vigente (Admin > Precios).");
 
-        const unitPriceCents = Number(price.basePriceCents) || 0;
         lineCreates.push({
           serviceId: service.id,
           optionId: option.id,
@@ -1063,9 +1068,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           quantity: qty,
           pax,
           promoCode: linePromoCode,
-          servicePriceId: price.id ?? null,
-          unitPriceCents,
-          totalPriceCents: unitPriceCents * qty,
+          servicePriceId: itemPrice.servicePriceId,
+          unitPriceCents: itemPrice.unitPriceCents,
+          totalPriceCents: itemPrice.totalPriceCents,
           category: String(service.category ?? "").toUpperCase(),
           serviceName: service.name ?? null,
           serviceCode: service.code ?? null,

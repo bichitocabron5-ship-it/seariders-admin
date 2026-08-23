@@ -211,7 +211,7 @@ export default function ChannelCommissionRulesSection({
                             onChange={() => onSetOptionRule(option.id, { useDefault: true })}
                             disabled={!optionPricingAvailable}
                           />
-                          Usar Admin
+                          Por defecto: Precio Admin
                         </label>
 
                         <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 700 }}>

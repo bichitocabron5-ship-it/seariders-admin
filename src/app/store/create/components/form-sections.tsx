@@ -224,12 +224,17 @@ export function PricingSection({
     unitPriceCents: number;
     quantity: number;
     modeLabel: string;
+    adminUnitPriceCents?: number;
+    channelPriceApplied?: boolean;
   } | null;
   channelPricingSummary?: {
     channelName: string;
     basePriceCents: number;
     referencePriceCents: number;
+    adminPriceCents?: number;
+    effectivePriceCents?: number;
     optionLabel: string;
+    channelPriceApplied?: boolean;
   } | null;
   commercialSummary?: CommercialSummarySnapshot | null;
   availablePromos: Array<{ code: string | null; name: string; discountCents: number }>;
@@ -238,6 +243,13 @@ export function PricingSection({
   onApplyPromoChange: (value: boolean) => void;
   onPromoCodeChange: (value: string) => void;
 }) {
+  const channelAdminTotalCents = channelPricingSummary
+    ? channelPricingSummary.adminPriceCents ?? channelPricingSummary.basePriceCents
+    : 0;
+  const channelEffectiveTotalCents = channelPricingSummary
+    ? channelPricingSummary.effectivePriceCents ?? channelPricingSummary.referencePriceCents
+    : 0;
+
   return (
     <section style={{ ...cardStyle, display: "grid", gap: 14, background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
@@ -261,7 +273,7 @@ export function PricingSection({
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
         <div style={{ padding: 14, borderRadius: 14, border: "1px solid #e2e8f0", background: "#fff" }}>
-          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Total automático</div>
+          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>Total efectivo automático</div>
           <div style={{ fontSize: 24, fontWeight: 900 }}>{euros(shownFinalCents)}</div>
         </div>
         <div style={{ padding: 14, borderRadius: 14, border: "1px solid #e2e8f0", background: "#fff" }}>
@@ -274,7 +286,7 @@ export function PricingSection({
         <div style={{ padding: 12, borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", fontSize: 13, color: "#334155", display: "grid", gap: 4 }}>
           <div style={{ fontWeight: 900 }}>{pricingMeta.modeLabel}</div>
           <div>
-            Precio unitario <strong>{euros(pricingMeta.unitPriceCents)}</strong> × {pricingMeta.quantity} = <strong>{euros(pricingMeta.unitPriceCents * pricingMeta.quantity)}</strong>
+            Precio efectivo unitario <strong>{euros(pricingMeta.unitPriceCents)}</strong> × {pricingMeta.quantity} = <strong>{euros(pricingMeta.unitPriceCents * pricingMeta.quantity)}</strong>
           </div>
         </div>
       ) : null}
@@ -440,12 +452,12 @@ export function PricingSection({
 
       {channelPricingSummary ? (
         <div style={{ padding: 12, borderRadius: 14, background: "#fff7ed", border: "1px solid #fed7aa", fontSize: 13, color: "#7c2d12", display: "grid", gap: 6 }}>
-          <div style={{ fontWeight: 900 }}>Canal {channelPricingSummary.channelName}: PVP comercial configurado</div>
+          <div style={{ fontWeight: 900 }}>Canal {channelPricingSummary.channelName}: PVP canal aplicado</div>
           <div>
-            {channelPricingSummary.optionLabel}: Admin/precios <strong>{euros(channelPricingSummary.basePriceCents)}</strong> ·
-            PVP canal <strong>{euros(channelPricingSummary.referencePriceCents)}</strong>
+            {channelPricingSummary.optionLabel}: Precio Admin <strong>{euros(channelAdminTotalCents)}</strong> ·
+            PVP canal aplicado <strong>{euros(channelEffectiveTotalCents)}</strong>
           </div>
-          <div>Resumen solo informativo para comisiones. No modifica el cobro ni el precio final de la reserva.</div>
+          <div>Este PVP es el precio usado para calcular la reserva.</div>
         </div>
       ) : null}
     </section>

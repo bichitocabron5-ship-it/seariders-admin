@@ -297,13 +297,18 @@ export type DiscountPreview = {
     unitPriceCents: number;
     quantity: number;
     modeLabel: string;
+    adminUnitPriceCents?: number;
+    channelPriceApplied?: boolean;
   } | null;
   reason?: string | null;
   channelPricingSummary?: {
     channelName: string;
     basePriceCents: number;
     referencePriceCents: number;
+    adminPriceCents?: number;
+    effectivePriceCents?: number;
     optionLabel: string;
+    channelPriceApplied?: boolean;
   } | null;
   availablePromos?: DiscountPromoChoice[];
   appliedRule?: { id: string; name: string; code: string | null } | null;
