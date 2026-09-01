@@ -4,10 +4,12 @@ import type { CSSProperties } from "react";
 
 type Props = {
   newName: string;
+  newCode: string;
   newKind: "STANDARD" | "EXTERNAL_ACTIVITY";
   newIsActive: boolean;
   newVisibleInStore: boolean;
   newVisibleInBooth: boolean;
+  newVisibleInWeb: boolean;
   newAllowsPromotions: boolean;
   newCommissionEnabled: boolean;
   newCommissionPct: string;
@@ -19,10 +21,12 @@ type Props = {
   newPromoterDiscountSharePct: string;
   creating: boolean;
   setNewName: (value: string) => void;
+  setNewCode: (value: string) => void;
   setNewKind: (value: "STANDARD" | "EXTERNAL_ACTIVITY") => void;
   setNewIsActive: (value: boolean) => void;
   setNewVisibleInStore: (value: boolean) => void;
   setNewVisibleInBooth: (value: boolean) => void;
+  setNewVisibleInWeb: (value: boolean) => void;
   setNewAllowsPromotions: (value: boolean) => void;
   setNewCommissionEnabled: (value: boolean) => void;
   setNewCommissionPct: (value: string) => void;
@@ -42,10 +46,12 @@ type Props = {
 
 export default function CreateChannelSection({
   newName,
+  newCode,
   newKind,
   newIsActive,
   newVisibleInStore,
   newVisibleInBooth,
+  newVisibleInWeb,
   newAllowsPromotions,
   newCommissionEnabled,
   newCommissionPct,
@@ -57,10 +63,12 @@ export default function CreateChannelSection({
   newPromoterDiscountSharePct,
   creating,
   setNewName,
+  setNewCode,
   setNewKind,
   setNewIsActive,
   setNewVisibleInStore,
   setNewVisibleInBooth,
+  setNewVisibleInWeb,
   setNewAllowsPromotions,
   setNewCommissionEnabled,
   setNewCommissionPct,
@@ -94,6 +102,16 @@ export default function CreateChannelSection({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Ej. Booking, GetYourGuide, Brutal"
+              style={inputStyle}
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+            Codigo
+            <input
+              value={newCode}
+              onChange={(e) => setNewCode(e.target.value)}
+              placeholder="Ej. WEB"
               style={inputStyle}
             />
           </label>
@@ -205,6 +223,11 @@ export default function CreateChannelSection({
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
             <input type="checkbox" checked={newVisibleInBooth} onChange={(e) => setNewVisibleInBooth(e.target.checked)} />
             Visible en booth
+          </label>
+
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+            <input type="checkbox" checked={newVisibleInWeb} onChange={(e) => setNewVisibleInWeb(e.target.checked)} />
+            Disponible en WEB
           </label>
 
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>

@@ -14,12 +14,14 @@ type Props = {
   contracted: number;
   visibleInStore: boolean;
   visibleInBooth: boolean;
+  visibleInWeb: boolean;
   creating: boolean;
   onDurChange: (value: number) => void;
   onPaxChange: (value: number) => void;
   onContractedChange: (value: number) => void;
   onVisibleInStoreChange: (value: boolean) => void;
   onVisibleInBoothChange: (value: boolean) => void;
+  onVisibleInWebChange: (value: boolean) => void;
   onCreate: () => void | Promise<void>;
 };
 
@@ -35,12 +37,14 @@ export default function OptionsCreateSection({
   contracted,
   visibleInStore,
   visibleInBooth,
+  visibleInWeb,
   creating,
   onDurChange,
   onPaxChange,
   onContractedChange,
   onVisibleInStoreChange,
   onVisibleInBoothChange,
+  onVisibleInWebChange,
   onCreate,
 }: Props) {
   return (
@@ -108,6 +112,14 @@ export default function OptionsCreateSection({
                   onChange={(e) => onVisibleInBoothChange(e.target.checked)}
                 />
                 Visible en Booth
+              </label>
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={visibleInWeb}
+                  onChange={(e) => onVisibleInWebChange(e.target.checked)}
+                />
+                Visible en WEB
               </label>
             </span>
           </label>

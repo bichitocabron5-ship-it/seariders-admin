@@ -9,10 +9,12 @@ import CreateChannelSection from "./_components/CreateChannelSection";
 type Channel = {
   id: string;
   name: string;
+  code: string | null;
   kind: "STANDARD" | "EXTERNAL_ACTIVITY";
   isActive: boolean;
   visibleInStore: boolean;
   visibleInBooth: boolean;
+  visibleInWeb: boolean;
   allowsPromotions: boolean;
   commissionEnabled: boolean;
   commissionBps: number | null;
@@ -33,10 +35,12 @@ export default function AdminChannelsPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [newCode, setNewCode] = useState("");
   const [newKind, setNewKind] = useState<Channel["kind"]>("STANDARD");
   const [newIsActive, setNewIsActive] = useState(true);
   const [newVisibleInStore, setNewVisibleInStore] = useState(true);
   const [newVisibleInBooth, setNewVisibleInBooth] = useState(false);
+  const [newVisibleInWeb, setNewVisibleInWeb] = useState(false);
   const [newAllowsPromotions, setNewAllowsPromotions] = useState(false);
   const [newCommissionEnabled, setNewCommissionEnabled] = useState(false);
   const [newCommissionPct, setNewCommissionPct] = useState("0");
@@ -77,6 +81,7 @@ export default function AdminChannelsPage() {
       total: channels.length,
       active: channels.filter((ch) => ch.isActive).length,
       commissionActive: channels.filter((ch) => ch.commissionEnabled).length,
+      web: channels.filter((ch) => ch.visibleInWeb).length,
     };
   }, [channels]);
 
@@ -143,10 +148,12 @@ export default function AdminChannelsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: trimmedName,
+          code: newCode.trim() || null,
           kind: newKind,
           isActive: newIsActive,
           visibleInStore: newVisibleInStore,
           visibleInBooth: newVisibleInBooth,
+          visibleInWeb: newVisibleInWeb,
           allowsPromotions: newAllowsPromotions,
           commissionEnabled: newCommissionEnabled,
           commissionBps,
@@ -170,10 +177,12 @@ export default function AdminChannelsPage() {
       }
 
       setNewName("");
+      setNewCode("");
       setNewKind("STANDARD");
       setNewIsActive(true);
       setNewVisibleInStore(true);
       setNewVisibleInBooth(false);
+      setNewVisibleInWeb(false);
       setNewAllowsPromotions(false);
       setNewCommissionEnabled(false);
       setNewCommissionPct("0");
@@ -225,16 +234,22 @@ export default function AdminChannelsPage() {
           <div style={summaryLabel}>Comisión activa</div>
           <div style={summaryValue}>{stats.commissionActive}</div>
         </article>
+        <article style={summaryCard}>
+          <div style={summaryLabel}>WEB</div>
+          <div style={summaryValue}>{stats.web}</div>
+        </article>
       </section>
 
       {error ? <div style={errorStyle}>{error}</div> : null}
 
       <CreateChannelSection
         newName={newName}
+        newCode={newCode}
         newKind={newKind}
         newIsActive={newIsActive}
         newVisibleInStore={newVisibleInStore}
         newVisibleInBooth={newVisibleInBooth}
+        newVisibleInWeb={newVisibleInWeb}
         newAllowsPromotions={newAllowsPromotions}
         newCommissionEnabled={newCommissionEnabled}
         newCommissionPct={newCommissionPct}
@@ -246,10 +261,12 @@ export default function AdminChannelsPage() {
         newPromoterDiscountSharePct={newPromoterDiscountSharePct}
         creating={creating}
         setNewName={setNewName}
+        setNewCode={setNewCode}
         setNewKind={setNewKind}
         setNewIsActive={setNewIsActive}
         setNewVisibleInStore={setNewVisibleInStore}
         setNewVisibleInBooth={setNewVisibleInBooth}
+        setNewVisibleInWeb={setNewVisibleInWeb}
         setNewAllowsPromotions={setNewAllowsPromotions}
         setNewCommissionEnabled={setNewCommissionEnabled}
         setNewCommissionPct={setNewCommissionPct}

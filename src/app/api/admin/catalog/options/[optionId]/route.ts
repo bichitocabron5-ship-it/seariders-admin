@@ -15,6 +15,7 @@ const Body = z.object({
   isActive: z.boolean().optional(),
   visibleInStore: z.boolean().optional(),
   visibleInBooth: z.boolean().optional(),
+  visibleInWeb: z.boolean().optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ optionId: string }> }) {
@@ -65,6 +66,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ option
       isActive: true,
       visibleInStore: true,
       visibleInBooth: true,
+      visibleInWeb: true,
     },
   });
 

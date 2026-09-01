@@ -99,6 +99,7 @@ Respuesta ejemplo:
       "category": "JETSKI",
       "isExternalActivity": false,
       "isLicense": false,
+      "startingPriceCents": 5900,
       "options": [
         {
           "optionCode": "JETSKI_TOUR_30_2",
@@ -106,7 +107,8 @@ Respuesta ejemplo:
           "contractedMinutes": 30,
           "paxMax": 2,
           "displayLabel": "30 min",
-          "secondaryLabel": "Hasta 2 pax"
+          "secondaryLabel": "Hasta 2 pax",
+          "publicPriceCents": 5900
         }
       ]
     }
@@ -124,14 +126,28 @@ Respuesta ejemplo:
 
 Lógica reutilizada:
 
-- `buildPosCatalog("STORE")`
+- `buildPublicCatalogSnapshot()`
 - `annotateServiceOptions`
 - `service-channel-availability`
-- pricing vigente por `ServicePrice`
+- visibilidad explicita `Service.visibleInWeb` y `ServiceOption.visibleInWeb`
+- canal comercial WEB resuelto por `Channel.code = "WEB"`
+- pricing vigente por `ChannelOptionPrice` WEB o `ServicePrice`
+
+Precio público orientativo:
+
+- `option.publicPriceCents` es el precio publico WEB efectivo vigente para esa opcion.
+- Si existe `ChannelOptionPrice` activo para el canal `WEB` y la opcion, se usa ese importe.
+- Si no existe precio especifico de canal WEB, se usa `ServicePrice` `STANDARD` activo y vigente, primero por `optionId` y despues por `durationMin` legacy.
+- No aplica promociones, tarifa residente, descuentos de canal ni descuentos manuales.
+- `service.startingPriceCents` es el minimo de `publicPriceCents` entre sus opciones WEB publicas con precio.
+- Si una opcion WEB no tiene precio publico vigente, `publicPriceCents` es `null` y no cuenta para `startingPriceCents`.
+- No se exponen IDs internos ni filas `ServicePrice`.
 
 ## 2. POST /api/public/v1/pricing/quote
 
-Calcula precio vigente y promociones aplicables sin crear reserva.
+Calcula precio vigente y promociones aplicables sin crear reserva. Rechaza `serviceCode`/`optionCode` que no esten habilitados en WEB.
+
+El precio base del quote usa el PVP WEB efectivo: `ChannelOptionPrice` del canal `WEB` si existe, o `ServicePrice` `STANDARD` vigente si no existe. No usa tarifa residente.
 
 Body ejemplo:
 
@@ -208,7 +224,7 @@ Reglas de Fase 1:
 
 ## 3. GET /api/public/v1/availability
 
-Consulta disponibilidad real por servicio/opción y fecha.
+Consulta disponibilidad real por servicio/opcion y fecha. Rechaza combinaciones que no esten habilitadas en WEB.
 
 Ejemplo:
 
@@ -278,4 +294,3 @@ Estados bloqueantes:
 - Diseñar idempotencia (`Idempotency-Key`).
 - Añadir cancelación técnica y estados pre-pago.
 - Integrar pago sin exponer credenciales ni lógica interna.
-

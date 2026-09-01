@@ -2,27 +2,10 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
-export type PublicApiErrorCode =
-  | "INVALID_INPUT"
-  | "NO_PRICE"
-  | "NO_AVAILABILITY"
-  | "PROMO_INVALID"
-  | "UNAUTHORIZED"
-  | "RATE_LIMITED";
+import type { PublicApiErrorCode } from "@/lib/public-api/errors";
 
-export class PublicApiError extends Error {
-  code: PublicApiErrorCode;
-  status: number;
-  details?: unknown;
-
-  constructor(code: PublicApiErrorCode, status: number, message: string, details?: unknown) {
-    super(message);
-    this.name = "PublicApiError";
-    this.code = code;
-    this.status = status;
-    this.details = details;
-  }
-}
+export { PublicApiError } from "@/lib/public-api/errors";
+export type { PublicApiErrorCode } from "@/lib/public-api/errors";
 
 export function getRequestId(req: Request) {
   const candidate = String(req.headers.get("x-request-id") ?? "").trim();

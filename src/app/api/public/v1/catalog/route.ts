@@ -1,5 +1,6 @@
 import { buildPublicCatalogSnapshot } from "@/lib/public-api/catalog";
 import {
+  PublicApiError,
   getRequestId,
   publicApiErrorResponse,
   publicApiJson,
@@ -35,6 +36,16 @@ export async function GET(req: Request) {
       },
     });
   } catch (error: unknown) {
+    if (error instanceof PublicApiError) {
+      return publicApiErrorResponse({
+        requestId,
+        code: error.code,
+        status: error.status,
+        message: error.message,
+        details: error.details,
+      });
+    }
+
     return publicApiErrorResponse({
       requestId,
       code: "INVALID_INPUT",

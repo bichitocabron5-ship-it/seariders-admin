@@ -9,10 +9,12 @@ export const runtime = "nodejs";
 
 const CreateBody = z.object({
   name: z.string().trim().min(1).max(120),
+  code: z.string().trim().min(1).max(60).nullable().optional(),
   kind: z.enum(["STANDARD", "EXTERNAL_ACTIVITY"]).optional(),
   isActive: z.boolean().optional(),
   visibleInStore: z.boolean().optional(),
   visibleInBooth: z.boolean().optional(),
+  visibleInWeb: z.boolean().optional(),
   allowsPromotions: z.boolean().optional(),
   commissionEnabled: z.boolean().optional(),
   commissionBps: z.number().int().min(0).max(10000).optional(),
@@ -35,6 +37,16 @@ function normalizeCommissionInput(input: {
   return { commissionEnabled, commissionBps };
 }
 
+function normalizeChannelCode(value: string | null | undefined) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^\p{L}\p{N}_-]+/gu, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60);
+  return normalized || null;
+}
+
 async function requireAdmin() {
   const cookieStore = await cookies();
   const session = await getIronSession<AppSession>(cookieStore as unknown as never, sessionOptions);
@@ -55,10 +67,12 @@ export async function GET() {
     select: {
       id: true,
       name: true,
+      code: true,
       kind: true,
       isActive: true,
       visibleInStore: true,
       visibleInBooth: true,
+      visibleInWeb: true,
       allowsPromotions: true,
       commissionEnabled: true,
       commissionBps: true,
@@ -97,10 +111,12 @@ export async function POST(req: Request) {
     const channel = await prisma.channel.create({
       data: {
         name: parsed.data.name,
+        code: normalizeChannelCode(parsed.data.code),
         kind: parsed.data.kind ?? "STANDARD",
         isActive: parsed.data.isActive ?? true,
         visibleInStore: parsed.data.visibleInStore ?? true,
         visibleInBooth: parsed.data.visibleInBooth ?? false,
+        visibleInWeb: parsed.data.visibleInWeb ?? false,
         allowsPromotions: parsed.data.allowsPromotions ?? false,
         commissionEnabled: normalizedCommission.commissionEnabled,
         commissionBps: normalizedCommission.commissionBps,
@@ -130,10 +146,12 @@ export async function POST(req: Request) {
       select: {
         id: true,
         name: true,
+        code: true,
         kind: true,
         isActive: true,
         visibleInStore: true,
         visibleInBooth: true,
+        visibleInWeb: true,
         allowsPromotions: true,
         commissionEnabled: true,
         commissionBps: true,
@@ -151,7 +169,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ channel });
   } catch (error: unknown) {
     if (error instanceof Error && error.message.toLowerCase().includes("unique")) {
-      return new NextResponse("Ya existe un canal con ese nombre", { status: 409 });
+      return new NextResponse("Ya existe un canal con ese nombre o codigo", { status: 409 });
     }
     return new NextResponse("No se pudo crear el canal", { status: 500 });
   }

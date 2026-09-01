@@ -39,9 +39,17 @@ export async function findActiveServicePrice(
     durationMinutes: number;
     now: Date;
     pricingTier?: PricingTier;
+    allowLegacyOptionFallback?: boolean;
   }
 ): Promise<ActiveServicePriceResult | null> {
-  const { serviceId, optionId, durationMinutes, now, pricingTier = PricingTier.STANDARD } = params;
+  const {
+    serviceId,
+    optionId,
+    durationMinutes,
+    now,
+    pricingTier = PricingTier.STANDARD,
+    allowLegacyOptionFallback = true,
+  } = params;
 
   const priceByOption = await tx.servicePrice.findFirst({
     where: {
@@ -86,6 +94,8 @@ export async function findActiveServicePrice(
     };
   }
 
+  if (!allowLegacyOptionFallback) return null;
+
   const legacyOption = await tx.serviceOption.findFirst({
     where: {
       id: optionId,
@@ -115,22 +125,24 @@ export async function resolveEffectiveServicePriceForChannel(
     now: Date;
     pricingTier?: PricingTier;
     channelId?: string | null;
+    allowLegacyOptionFallback?: boolean;
+    allowChannelOnlyPrice?: boolean;
   }
 ): Promise<EffectiveChannelServicePriceResult | null> {
   const adminPrice = await findActiveServicePrice(tx, params);
 
-  if (!adminPrice) return null;
+  if (!adminPrice && !params.allowChannelOnlyPrice) return null;
 
-  const adminPriceCents = Number(adminPrice.basePriceCents ?? 0);
+  const adminPriceCents = Number(adminPrice?.basePriceCents ?? 0);
   const baseResult: EffectiveChannelServicePriceResult = {
-    servicePriceId: adminPrice.id ?? null,
+    servicePriceId: adminPrice?.id ?? null,
     adminPriceCents,
     effectivePriceCents: adminPriceCents,
     channelPriceApplied: false,
-    pricingTier: adminPrice.pricingTier,
+    pricingTier: adminPrice?.pricingTier ?? params.pricingTier ?? PricingTier.STANDARD,
   };
 
-  if (!params.channelId) return baseResult;
+  if (!params.channelId) return adminPrice ? baseResult : null;
 
   const channelOptionPrice = await tx.channelOptionPrice
     .findUnique({
@@ -147,11 +159,14 @@ export async function resolveEffectiveServicePriceForChannel(
       throw error;
     });
 
-  if (!channelOptionPrice?.isActive) return baseResult;
+  if (!channelOptionPrice?.isActive) return adminPrice ? baseResult : null;
+
+  const channelPriceCents = Number(channelOptionPrice.priceCents ?? 0);
 
   return {
     ...baseResult,
-    effectivePriceCents: Number(channelOptionPrice.priceCents ?? 0),
+    adminPriceCents: adminPrice ? baseResult.adminPriceCents : channelPriceCents,
+    effectivePriceCents: channelPriceCents,
     channelPriceApplied: true,
   };
 }

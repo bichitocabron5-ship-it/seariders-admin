@@ -6,10 +6,12 @@ import { useMemo, useState, type CSSProperties } from "react";
 type Channel = {
   id: string;
   name: string;
+  code: string | null;
   kind: "STANDARD" | "EXTERNAL_ACTIVITY";
   isActive: boolean;
   visibleInStore: boolean;
   visibleInBooth: boolean;
+  visibleInWeb: boolean;
   allowsPromotions: boolean;
   commissionEnabled: boolean;
   commissionBps: number | null;
@@ -137,6 +139,7 @@ export default function ChannelsConfigurationSection({
                   <div style={{ display: "grid", gap: 4 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <div style={{ fontWeight: 950, fontSize: 17, color: "#0f172a" }}>{channel.name}</div>
+                      <span style={{ ...statusPill, ...statusOff }}>Code {channel.code ?? "-"}</span>
                       <span style={{ ...statusPill, ...(channel.isActive ? statusOn : statusOff) }}>
                         {channel.isActive ? "Activo" : "Inactivo"}
                       </span>
@@ -154,6 +157,9 @@ export default function ChannelsConfigurationSection({
                       </span>
                       <span style={{ ...statusPill, ...(channel.visibleInBooth ? statusOn : statusOff) }}>
                         {channel.visibleInBooth ? "Booth ON" : "Booth OFF"}
+                      </span>
+                      <span style={{ ...statusPill, ...(channel.visibleInWeb ? statusOn : statusOff) }}>
+                        {channel.visibleInWeb ? "WEB ON" : "WEB OFF"}
                       </span>
                       <span style={{ ...statusPill, ...(channel.discountResponsibility === "COMPANY" ? statusOff : statusOn) }}>
                         {discountPolicyLabel}
@@ -173,6 +179,23 @@ export default function ChannelsConfigurationSection({
                 </div>
 
                 <div style={controlsGrid}>
+                  <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+                    Codigo
+                    <input
+                      type="text"
+                      value={getDraft(channel.id, "code", channel.code ?? "")}
+                      disabled={busy}
+                      onChange={(e) => {
+                        setDraft(channel.id, "code", e.target.value);
+                      }}
+                      onBlur={() => {
+                        const code = getDraft(channel.id, "code", channel.code ?? "").trim() || null;
+                        if (code !== channel.code) void patchChannel(channel.id, { code });
+                      }}
+                      style={inputStyle}
+                    />
+                  </label>
+
                   <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
                     Tipo de canal
                     <select
@@ -214,6 +237,18 @@ export default function ChannelsConfigurationSection({
                       }}
                     />
                     Visible en booth
+                  </label>
+
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
+                    <input
+                      type="checkbox"
+                      checked={channel.visibleInWeb}
+                      disabled={busy}
+                      onChange={(e) => {
+                        void patchChannel(channel.id, { visibleInWeb: e.target.checked });
+                      }}
+                    />
+                    Disponible en WEB
                   </label>
 
                   <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 800 }}>
