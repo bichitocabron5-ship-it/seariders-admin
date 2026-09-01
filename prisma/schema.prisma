@@ -154,6 +154,7 @@ model EditLock {
 model Channel {
   id                         String                  @id @default(cuid())
   name                       String                  @unique
+  code                       String?                 @unique
   kind                       ChannelKind             @default(STANDARD)
   commissionPct              Float                   @default(0)
   customerDiscountMode       CommercialValueMode     @default(PERCENT)
@@ -167,6 +168,7 @@ model Channel {
   isActive                   Boolean                 @default(true)
   visibleInStore             Boolean                 @default(true)
   visibleInBooth             Boolean                 @default(false)
+  visibleInWeb               Boolean                 @default(false)
   allowsPromotions           Boolean                 @default(false)
   commissionEnabled          Boolean                 @default(false)
   commissionBps              Int                     @default(0)
@@ -213,7 +215,9 @@ model Service {
   requiresMonitor    Boolean                 @default(false)
   isLicense          Boolean                 @default(false)
   isActive           Boolean                 @default(true)
+  visibleInStore     Boolean                 @default(true)
   visibleInBooth     Boolean                 @default(false)
+  visibleInWeb       Boolean                 @default(false)
   options            ServiceOption[]
   servicePrices      ServicePrice[]
   discountRules      DiscountRule[]
@@ -258,6 +262,7 @@ model ServiceOption {
   isActive          Boolean              @default(true)
   visibleInStore    Boolean              @default(true)
   visibleInBooth    Boolean              @default(true)
+  visibleInWeb      Boolean              @default(false)
   service           Service              @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   reservations      Reservation[]
   reservationItems  ReservationItem[]

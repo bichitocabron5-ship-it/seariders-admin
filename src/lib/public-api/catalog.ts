@@ -1,18 +1,28 @@
-import { PricingTier } from "@prisma/client";
+import { PricingTier, type Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import {
   buildActiveCatalogPriceIndex,
+  buildActiveChannelOptionPriceIndex,
   resolveCatalogOptionPriceCents,
   resolvePublicOptionPriceCents,
   resolvePublicServicePriceCents,
+  resolvePublicWebOptionPriceCents,
+  type ActiveCatalogPrice,
+  type ActiveChannelOptionPrice,
 } from "@/lib/public-api/catalog-pricing";
+import { PublicApiError } from "@/lib/public-api/errors";
 import { annotateServiceOptions } from "@/lib/service-option-labels";
 import {
   buildServiceAllowedChannelIndex,
+  isChannelAllowedForService,
   serviceHasAllowedChannelRules,
+  type ServiceAllowedChannelRuleLite,
   type ServiceChannelOrigin,
 } from "@/lib/service-channel-availability";
+
+export const WEB_CHANNEL_CODE = "WEB";
+export type PosCatalogOrigin = Exclude<ServiceChannelOrigin, "WEB">;
 
 type ServiceLite = {
   id: string;
@@ -22,9 +32,35 @@ type ServiceLite = {
   isExternalActivity: boolean;
   isLicense: boolean;
   isActive: boolean;
+  visibleInStore: boolean;
   visibleInBooth: boolean;
+  visibleInWeb: boolean;
   hasAllowedChannelRules?: boolean;
 };
+
+type OptionLite = {
+  id: string;
+  serviceId: string;
+  code: string | null;
+  durationMinutes: number | null;
+  paxMax: number | null;
+  contractedMinutes: number | null;
+  basePriceCents: number | null;
+  isActive: boolean;
+  visibleInStore: boolean;
+  visibleInBooth: boolean;
+  visibleInWeb: boolean;
+};
+
+type WebChannelLite = {
+  id: string;
+  code: string | null;
+  isActive: boolean;
+  visibleInWeb: boolean;
+  allowsPromotions?: boolean;
+};
+
+type PublicWebCatalogDb = Pick<Prisma.TransactionClient, "channel" | "serviceOption" | "serviceAllowedChannel">;
 
 function normalizeCodePart(value: string) {
   return value
@@ -33,14 +69,6 @@ function normalizeCodePart(value: string) {
     .replace(/[^\p{L}\p{N}]+/gu, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 60);
-}
-
-function normalize(s: string) {
-  return (s || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
 }
 
 function uniqSorted(arr: string[]) {
@@ -53,10 +81,28 @@ function isExtra(service: Pick<ServiceLite, "category">) {
   return String(service.category ?? "").toUpperCase() === "EXTRA";
 }
 
-function isAcompanante(service: Pick<ServiceLite, "code" | "name">) {
-  const c = normalize(String(service.code ?? ""));
-  const n = normalize(String(service.name ?? ""));
-  return c === "acompanante" || n.includes("acompan");
+export function isServiceVisibleForCatalogOrigin(
+  origin: ServiceChannelOrigin,
+  service: Pick<ServiceLite, "visibleInStore" | "visibleInBooth" | "visibleInWeb">
+) {
+  if (origin === "BOOTH") return service.visibleInBooth;
+  if (origin === "WEB") return service.visibleInWeb;
+  return service.visibleInStore;
+}
+
+export function isOptionVisibleForCatalogOrigin(
+  origin: ServiceChannelOrigin,
+  option: Pick<OptionLite, "visibleInStore" | "visibleInBooth" | "visibleInWeb">
+) {
+  if (origin === "BOOTH") return option.visibleInBooth;
+  if (origin === "WEB") return option.visibleInWeb;
+  return option.visibleInStore;
+}
+
+export function assertPublicWebChannelReady(channel: WebChannelLite | null | undefined): asserts channel is WebChannelLite {
+  if (!channel || channel.code !== WEB_CHANNEL_CODE || !channel.isActive || !channel.visibleInWeb) {
+    throw new PublicApiError("CONFIGURATION_REQUIRED", 500, "Canal WEB no configurado.");
+  }
 }
 
 export function getStableServiceCode(service: { code: string | null; name: string; category?: string | null }) {
@@ -73,7 +119,82 @@ export function getStableOptionCode(option: {
   return normalizeCodePart(`${option.serviceCode}_${option.durationMinutes ?? 0}_${option.paxMax ?? 0}`);
 }
 
-export async function buildPosCatalog(origin: ServiceChannelOrigin) {
+export async function getPublicWebChannelOrThrow(tx: PublicWebCatalogDb = prisma) {
+  const channel = await tx.channel.findUnique({
+    where: { code: WEB_CHANNEL_CODE },
+    select: {
+      id: true,
+      code: true,
+      isActive: true,
+      visibleInWeb: true,
+      allowsPromotions: true,
+    },
+  });
+
+  assertPublicWebChannelReady(channel);
+  return channel;
+}
+
+export async function findPublicWebCatalogOptionOrThrow(
+  tx: PublicWebCatalogDb,
+  params: { serviceCode: string; optionCode: string }
+) {
+  const webChannel = await getPublicWebChannelOrThrow(tx);
+  const option = await tx.serviceOption.findFirst({
+    where: {
+      code: params.optionCode,
+      isActive: true,
+      visibleInWeb: true,
+      service: {
+        code: params.serviceCode,
+        isActive: true,
+        visibleInWeb: true,
+      },
+    },
+    select: {
+      id: true,
+      code: true,
+      durationMinutes: true,
+      paxMax: true,
+      service: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          category: true,
+          isLicense: true,
+        },
+      },
+    },
+  });
+
+  if (!option?.service) {
+    throw new PublicApiError("INVALID_INPUT", 400, "serviceCode u optionCode no validos para WEB.");
+  }
+
+  const serviceAllowedChannelRules = await tx.serviceAllowedChannel.findMany({
+    where: { serviceId: option.service.id },
+    select: {
+      serviceId: true,
+      channelId: true,
+      active: true,
+    },
+  });
+  const allowedChannelIndex = buildServiceAllowedChannelIndex(serviceAllowedChannelRules);
+  const allowedForWebChannel = isChannelAllowedForService({
+    index: allowedChannelIndex,
+    serviceId: option.service.id,
+    channelId: webChannel.id,
+  });
+
+  if (!allowedForWebChannel) {
+    throw new PublicApiError("INVALID_INPUT", 400, "serviceCode u optionCode no validos para WEB.");
+  }
+
+  return { option, webChannel };
+}
+
+export async function buildPosCatalog(origin: PosCatalogOrigin) {
   const now = new Date();
 
   const [servicesAll, optionsRaw, prices, channelsAll, serviceAllowedChannelRules] = await Promise.all([
@@ -87,7 +208,9 @@ export async function buildPosCatalog(origin: ServiceChannelOrigin) {
         isExternalActivity: true,
         isLicense: true,
         isActive: true,
+        visibleInStore: true,
         visibleInBooth: true,
+        visibleInWeb: true,
       },
       orderBy: [{ category: "asc" }, { name: "asc" }],
     }),
@@ -105,6 +228,7 @@ export async function buildPosCatalog(origin: ServiceChannelOrigin) {
         isActive: true,
         visibleInStore: true,
         visibleInBooth: true,
+        visibleInWeb: true,
       },
       orderBy: [{ serviceId: "asc" }, { durationMinutes: "asc" }],
     }),
@@ -131,9 +255,11 @@ export async function buildPosCatalog(origin: ServiceChannelOrigin) {
       select: {
         id: true,
         name: true,
+        code: true,
         kind: true,
         visibleInStore: true,
         visibleInBooth: true,
+        visibleInWeb: true,
         allowsPromotions: true,
         commissionEnabled: true,
         commissionBps: true,
@@ -169,13 +295,7 @@ export async function buildPosCatalog(origin: ServiceChannelOrigin) {
   ]);
 
   const allowedChannelIndex = buildServiceAllowedChannelIndex(serviceAllowedChannelRules);
-
-  let servicesVisible = servicesAll.slice();
-  if (origin === "STORE") {
-    servicesVisible = servicesVisible.filter((service) => !isAcompanante(service));
-  } else {
-    servicesVisible = servicesVisible.filter((service) => service.visibleInBooth);
-  }
+  const servicesVisible = servicesAll.filter((service) => isServiceVisibleForCatalogOrigin(origin, service));
 
   const servicesMain = servicesVisible.filter((service) => !isExtra(service));
   const servicesExtra = servicesVisible.filter((service) => isExtra(service));
@@ -188,8 +308,8 @@ export async function buildPosCatalog(origin: ServiceChannelOrigin) {
     hasAllowedChannelRules: serviceHasAllowedChannelRules(allowedChannelIndex, service.id),
   }));
 
-  let channels = channelsAll.slice();
-  channels = origin === "BOOTH" ? channels.filter((c) => c.visibleInBooth) : channels.filter((c) => c.visibleInStore);
+  const channels =
+    origin === "BOOTH" ? channelsAll.filter((c) => c.visibleInBooth) : channelsAll.filter((c) => c.visibleInStore);
   const channelsWithAvailability = channels.map((channel) => ({
     ...channel,
     allowedServiceIds: servicesVisible
@@ -207,7 +327,7 @@ export async function buildPosCatalog(origin: ServiceChannelOrigin) {
   const options = annotateServiceOptions(
     optionsRaw
       .filter((option) => visibleMainIds.has(option.serviceId))
-      .filter((option) => (origin === "BOOTH" ? option.visibleInBooth : option.visibleInStore))
+      .filter((option) => isOptionVisibleForCatalogOrigin(origin, option))
   ).map((option) => {
     const standardPriceCents = resolvePublicOptionPriceCents(priceIndex, option);
     const residentPriceCents = resolveCatalogOptionPriceCents(priceIndex, option, PricingTier.RESIDENT);
@@ -248,35 +368,84 @@ export async function buildPosCatalog(origin: ServiceChannelOrigin) {
   };
 }
 
-export async function buildPublicCatalogSnapshot() {
-  const storeCatalog = await buildPosCatalog("STORE");
+export function buildPublicCatalogSnapshotFromRows(args: {
+  generatedAt?: string;
+  webChannel: WebChannelLite | null | undefined;
+  servicesAll: ServiceLite[];
+  optionsRaw: OptionLite[];
+  prices: ActiveCatalogPrice[];
+  webOptionPrices: ActiveChannelOptionPrice[];
+  serviceAllowedChannelRules: ServiceAllowedChannelRuleLite[];
+}) {
+  const webChannel = args.webChannel;
+  assertPublicWebChannelReady(webChannel);
 
-  const optionsByServiceId = new Map<string, Array<(typeof storeCatalog.options)[number]>>();
-  for (const option of storeCatalog.options) {
+  const allowedChannelIndex = buildServiceAllowedChannelIndex(args.serviceAllowedChannelRules);
+  const servicesVisible = args.servicesAll.filter(
+    (service) =>
+      isServiceVisibleForCatalogOrigin("WEB", service) &&
+      isChannelAllowedForService({
+        index: allowedChannelIndex,
+        serviceId: service.id,
+        channelId: webChannel.id,
+      })
+  );
+
+  const servicesMain = servicesVisible.filter((service) => !isExtra(service));
+  const servicesExtra = servicesVisible.filter((service) => isExtra(service));
+  const visibleMainIds = new Set(servicesMain.map((service) => service.id));
+  const priceIndex = buildActiveCatalogPriceIndex(args.prices);
+  const webOptionPriceByOptionId = buildActiveChannelOptionPriceIndex(args.webOptionPrices);
+
+  const optionsByServiceId = new Map<
+    string,
+    Array<
+      OptionLite & {
+        displayLabel: string;
+        secondaryLabel: string | null;
+        publicPriceCents: number | null;
+        hasPrice: boolean;
+      }
+    >
+  >();
+
+  const options = annotateServiceOptions(
+    args.optionsRaw
+      .filter((option) => visibleMainIds.has(option.serviceId))
+      .filter((option) => isOptionVisibleForCatalogOrigin("WEB", option))
+  ).map((option) => {
+    const publicPriceCents = resolvePublicWebOptionPriceCents(priceIndex, webOptionPriceByOptionId, option);
+    return {
+      ...option,
+      publicPriceCents,
+      hasPrice: publicPriceCents != null && publicPriceCents > 0,
+    };
+  });
+
+  for (const option of options) {
+    if (!option.hasPrice) continue;
     const current = optionsByServiceId.get(option.serviceId) ?? [];
     current.push(option);
     optionsByServiceId.set(option.serviceId, current);
   }
 
-  const services = storeCatalog.servicesMain.map((service) => {
+  const services = servicesMain.map((service) => {
     const serviceCode = getStableServiceCode(service);
-    const options = (optionsByServiceId.get(service.id) ?? [])
-      .filter((option) => option.hasPrice)
-      .map((option) => ({
-        optionCode: getStableOptionCode({
-          code: option.code ?? null,
-          durationMinutes: option.durationMinutes ?? null,
-          paxMax: option.paxMax ?? null,
-          serviceCode,
-        }),
-        durationMinutes: Number(option.durationMinutes ?? 0),
-        contractedMinutes: Number(option.contractedMinutes ?? option.durationMinutes ?? 0),
-        paxMax: Number(option.paxMax ?? 0),
-        displayLabel: option.displayLabel,
-        secondaryLabel: option.secondaryLabel,
-        publicPriceCents: option.publicPriceCents,
-      }));
-    const publicOptionPrices = options
+    const serviceOptions = (optionsByServiceId.get(service.id) ?? []).map((option) => ({
+      optionCode: getStableOptionCode({
+        code: option.code ?? null,
+        durationMinutes: option.durationMinutes ?? null,
+        paxMax: option.paxMax ?? null,
+        serviceCode,
+      }),
+      durationMinutes: Number(option.durationMinutes ?? 0),
+      contractedMinutes: Number(option.contractedMinutes ?? option.durationMinutes ?? 0),
+      paxMax: Number(option.paxMax ?? 0),
+      displayLabel: option.displayLabel,
+      secondaryLabel: option.secondaryLabel,
+      publicPriceCents: option.publicPriceCents,
+    }));
+    const publicOptionPrices = serviceOptions
       .map((option) => option.publicPriceCents)
       .filter((priceCents): priceCents is number => priceCents != null);
 
@@ -287,21 +456,113 @@ export async function buildPublicCatalogSnapshot() {
       isExternalActivity: Boolean(service.isExternalActivity),
       isLicense: Boolean(service.isLicense),
       startingPriceCents: publicOptionPrices.length > 0 ? Math.min(...publicOptionPrices) : null,
-      options,
+      options: serviceOptions,
     };
   });
 
-  const extras = storeCatalog.servicesExtra.map((service) => ({
+  const extras = servicesExtra.map((service) => ({
     serviceCode: getStableServiceCode(service),
     name: service.name,
     category: service.category,
-    hasStandalonePricing: Number(storeCatalog.extraPriceByServiceId[service.id] ?? 0) > 0,
+    hasStandalonePricing: Number(resolvePublicServicePriceCents(priceIndex, service.id) ?? 0) > 0,
   }));
 
   return {
-    generatedAt: new Date().toISOString(),
-    categories: storeCatalog.categories,
+    generatedAt: args.generatedAt ?? new Date().toISOString(),
+    categories: {
+      main: uniqSorted(servicesMain.map((service) => String(service.category ?? "")).filter(Boolean)),
+      extra: uniqSorted(servicesExtra.map((service) => String(service.category ?? "")).filter(Boolean)),
+    },
     services,
     extras,
   };
+}
+
+export async function buildPublicCatalogSnapshot() {
+  const now = new Date();
+  const webChannel = await getPublicWebChannelOrThrow(prisma);
+
+  const [servicesAll, optionsRaw, prices, webOptionPrices, serviceAllowedChannelRules] = await Promise.all([
+    prisma.service.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        category: true,
+        isExternalActivity: true,
+        isLicense: true,
+        isActive: true,
+        visibleInStore: true,
+        visibleInBooth: true,
+        visibleInWeb: true,
+      },
+      orderBy: [{ category: "asc" }, { name: "asc" }],
+    }),
+
+    prisma.serviceOption.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        serviceId: true,
+        code: true,
+        durationMinutes: true,
+        paxMax: true,
+        contractedMinutes: true,
+        basePriceCents: true,
+        isActive: true,
+        visibleInStore: true,
+        visibleInBooth: true,
+        visibleInWeb: true,
+      },
+      orderBy: [{ serviceId: "asc" }, { durationMinutes: "asc" }],
+    }),
+
+    prisma.servicePrice.findMany({
+      where: {
+        isActive: true,
+        validFrom: { lte: now },
+        OR: [{ validTo: null }, { validTo: { gt: now } }],
+      },
+      select: {
+        serviceId: true,
+        optionId: true,
+        durationMin: true,
+        pricingTier: true,
+        basePriceCents: true,
+        validFrom: true,
+      },
+      orderBy: { validFrom: "desc" },
+    }),
+
+    prisma.channelOptionPrice.findMany({
+      where: {
+        channelId: webChannel.id,
+        isActive: true,
+      },
+      select: {
+        optionId: true,
+        priceCents: true,
+        isActive: true,
+      },
+      orderBy: { updatedAt: "desc" },
+    }),
+
+    prisma.serviceAllowedChannel.findMany({
+      select: {
+        serviceId: true,
+        channelId: true,
+        active: true,
+      },
+    }),
+  ]);
+
+  return buildPublicCatalogSnapshotFromRows({
+    webChannel,
+    servicesAll,
+    optionsRaw,
+    prices,
+    webOptionPrices,
+    serviceAllowedChannelRules,
+  });
 }

@@ -14,6 +14,7 @@ type ChannelRow = {
   name: string;
   visibleInStore: boolean;
   visibleInBooth: boolean;
+  visibleInWeb: boolean;
 };
 
 type RuleRow = {
@@ -65,6 +66,7 @@ export default function AdminServiceAllowedChannelsClient({ serviceId }: { servi
     return {
       store: channels.filter((channel) => channel.visibleInStore).length,
       booth: channels.filter((channel) => channel.visibleInBooth).length,
+      web: channels.filter((channel) => channel.visibleInWeb).length,
     };
   }, [channels]);
 
@@ -127,7 +129,7 @@ export default function AdminServiceAllowedChannelsClient({ serviceId }: { servi
           <h1 style={titleStyle}>Canales permitidos</h1>
           <p style={subtitleStyle}>
             {service?.name ?? "Servicio"}{service?.category ? ` · ${service.category}` : ""}. Si no hay configuración,
-            el servicio queda abierto a todos los canales visibles en Store y Booth.
+            el servicio queda abierto a todos los canales visibles en Store, Booth y WEB.
           </p>
         </div>
 
@@ -153,6 +155,10 @@ export default function AdminServiceAllowedChannelsClient({ serviceId }: { servi
         <article style={summaryCard}>
           <div style={summaryLabel}>Canales visibles Booth</div>
           <div style={summaryValue}>{visibleSummary.booth}</div>
+        </article>
+        <article style={summaryCard}>
+          <div style={summaryLabel}>Canales visibles WEB</div>
+          <div style={summaryValue}>{visibleSummary.web}</div>
         </article>
         <article style={summaryCard}>
           <div style={summaryLabel}>Estado</div>
@@ -182,6 +188,7 @@ export default function AdminServiceAllowedChannelsClient({ serviceId }: { servi
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, color: "#475569" }}>
                   <span style={pillStyle(channel.visibleInStore)}>{channel.visibleInStore ? "Store" : "No Store"}</span>
                   <span style={pillStyle(channel.visibleInBooth)}>{channel.visibleInBooth ? "Booth" : "No Booth"}</span>
+                  <span style={pillStyle(channel.visibleInWeb)}>{channel.visibleInWeb ? "WEB" : "No WEB"}</span>
                 </div>
               </div>
               <input

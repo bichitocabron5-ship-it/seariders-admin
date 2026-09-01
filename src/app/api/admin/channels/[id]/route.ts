@@ -9,9 +9,11 @@ import { resolveChannelCommercialPatch } from "@/lib/channel-commercial";
 export const runtime = "nodejs";
 
 const Body = z.object({
+  code: z.string().trim().min(1).max(60).nullable().optional(),
   kind: z.enum(["STANDARD", "EXTERNAL_ACTIVITY"]).optional(),
   visibleInStore: z.boolean().optional(),
   visibleInBooth: z.boolean().optional(),
+  visibleInWeb: z.boolean().optional(),
   allowsPromotions: z.boolean().optional(),
   commissionEnabled: z.boolean().optional(),
   commissionBps: z.number().int().min(0).max(10000).optional(), // 0..100% en bps
@@ -33,6 +35,19 @@ function normalizeCommissionPatch(
   const commissionEnabled = patch.commissionEnabled ?? current.commissionEnabled;
   const commissionBps = commissionEnabled ? (patch.commissionBps ?? current.commissionBps) : 0;
   return { commissionEnabled, commissionBps };
+}
+
+function normalizeChannelCode(value: string | null | undefined) {
+  if (value === null) return null;
+  if (value === undefined) return undefined;
+
+  const normalized = String(value)
+    .trim()
+    .toUpperCase()
+    .replace(/[^\p{L}\p{N}_-]+/gu, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60);
+  return normalized || null;
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -69,59 +84,64 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const normalizedCommission = normalizeCommissionPatch(current, parsed.data);
   const normalizedCommercial = resolveChannelCommercialPatch(current, parsed.data);
 
-  const updated = await prisma.channel.update({
-    where: { id },
-    data: {
-      kind: parsed.data.kind,
-      visibleInStore: parsed.data.visibleInStore,
-      visibleInBooth: parsed.data.visibleInBooth,
-      allowsPromotions: parsed.data.allowsPromotions,
-      isActive: parsed.data.isActive,
-      commissionEnabled: normalizedCommission.commissionEnabled,
-      commissionBps: normalizedCommission.commissionBps,
-      customerDiscountMode: normalizedCommercial.customerDiscountMode,
-      customerDiscountValue: normalizedCommercial.customerDiscountValue,
-      customerDiscountCents: normalizedCommercial.customerDiscountCents,
-      promoterCommissionMode: normalizedCommercial.promoterCommissionMode,
-      promoterCommissionValue: normalizedCommercial.promoterCommissionValue,
-      promoterCommissionCents: normalizedCommercial.promoterCommissionCents,
-      discountResponsibility: parsed.data.discountResponsibility,
-      promoterDiscountShareBps:
-        parsed.data.discountResponsibility === undefined && parsed.data.promoterDiscountShareBps === undefined
-          ? undefined
-          : parsed.data.discountResponsibility === "PROMOTER"
-            ? 10_000
-            : parsed.data.discountResponsibility === "COMPANY"
-              ? 0
-              : Math.max(
-                  0,
-                  Math.min(
-                    10_000,
-                    Math.round(parsed.data.promoterDiscountShareBps ?? 0)
-                  )
-                ),
-    },
-    select: {
-      id: true,
-      name: true,
-      kind: true,
-      isActive: true,
-      visibleInStore: true,
-      visibleInBooth: true,
-      allowsPromotions: true,
-      commissionEnabled: true,
-      commissionBps: true,
-      customerDiscountMode: true,
-      customerDiscountValue: true,
-      customerDiscountCents: true,
-      promoterCommissionMode: true,
-      promoterCommissionValue: true,
-      promoterCommissionCents: true,
-      discountResponsibility: true,
-      promoterDiscountShareBps: true,
-    },
-  });
+  try {
+    const updated = await prisma.channel.update({
+      where: { id },
+      data: {
+        code: normalizeChannelCode(parsed.data.code),
+        kind: parsed.data.kind,
+        visibleInStore: parsed.data.visibleInStore,
+        visibleInBooth: parsed.data.visibleInBooth,
+        visibleInWeb: parsed.data.visibleInWeb,
+        allowsPromotions: parsed.data.allowsPromotions,
+        isActive: parsed.data.isActive,
+        commissionEnabled: normalizedCommission.commissionEnabled,
+        commissionBps: normalizedCommission.commissionBps,
+        customerDiscountMode: normalizedCommercial.customerDiscountMode,
+        customerDiscountValue: normalizedCommercial.customerDiscountValue,
+        customerDiscountCents: normalizedCommercial.customerDiscountCents,
+        promoterCommissionMode: normalizedCommercial.promoterCommissionMode,
+        promoterCommissionValue: normalizedCommercial.promoterCommissionValue,
+        promoterCommissionCents: normalizedCommercial.promoterCommissionCents,
+        discountResponsibility: parsed.data.discountResponsibility,
+        promoterDiscountShareBps:
+          parsed.data.discountResponsibility === undefined && parsed.data.promoterDiscountShareBps === undefined
+            ? undefined
+            : parsed.data.discountResponsibility === "PROMOTER"
+              ? 10_000
+              : parsed.data.discountResponsibility === "COMPANY"
+                ? 0
+                : Math.max(0, Math.min(10_000, Math.round(parsed.data.promoterDiscountShareBps ?? 0))),
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        kind: true,
+        isActive: true,
+        visibleInStore: true,
+        visibleInBooth: true,
+        visibleInWeb: true,
+        allowsPromotions: true,
+        commissionEnabled: true,
+        commissionBps: true,
+        customerDiscountMode: true,
+        customerDiscountValue: true,
+        customerDiscountCents: true,
+        promoterCommissionMode: true,
+        promoterCommissionValue: true,
+        promoterCommissionCents: true,
+        discountResponsibility: true,
+        promoterDiscountShareBps: true,
+      },
+    });
 
-  return NextResponse.json({ channel: updated });
+    return NextResponse.json({ channel: updated });
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.toLowerCase().includes("unique")) {
+      return new NextResponse("Ya existe un canal con ese codigo", { status: 409 });
+    }
+    return new NextResponse("No se pudo actualizar el canal", { status: 500 });
+  }
 }
 

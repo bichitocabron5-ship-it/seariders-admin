@@ -15,6 +15,7 @@ const CreateBody = z.object({
   isActive: z.boolean().optional(),
   visibleInStore: z.boolean().optional(),
   visibleInBooth: z.boolean().optional(),
+  visibleInWeb: z.boolean().optional(),
   // legacy obligatorio en tu schema (aunque ya no sea fuente de verdad)
   // Pon 0 por defecto y listo.  
   basePriceCents: z.number().int().min(0).max(10_000_000).optional(),
@@ -43,6 +44,7 @@ export async function GET(
       isActive: true,
       visibleInStore: true,
       visibleInBooth: true,
+      visibleInWeb: true,
       basePriceCents: true,
     },
   });
@@ -103,6 +105,7 @@ const created = await prisma.serviceOption.create({
     isActive: parsed.data.isActive ?? true,
     visibleInStore: parsed.data.visibleInStore ?? true,
     visibleInBooth: parsed.data.visibleInBooth ?? true,
+    visibleInWeb: parsed.data.visibleInWeb ?? false,
     basePriceCents: 0,
   },
   select: {
@@ -114,6 +117,7 @@ const created = await prisma.serviceOption.create({
     isActive: true,
     visibleInStore: true,
     visibleInBooth: true,
+    visibleInWeb: true,
   },
 });
 

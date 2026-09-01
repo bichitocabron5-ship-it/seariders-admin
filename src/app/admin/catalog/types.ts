@@ -8,5 +8,7 @@ export type ServiceRow = {
   requiresJetski: boolean;
   requiresMonitor: boolean;
   isLicense: boolean;
+  visibleInStore: boolean;
   visibleInBooth: boolean;
+  visibleInWeb: boolean;
 };

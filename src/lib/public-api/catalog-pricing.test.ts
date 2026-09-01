@@ -5,9 +5,11 @@ import { PricingTier } from "@prisma/client";
 
 import {
   buildActiveCatalogPriceIndex,
+  buildActiveChannelOptionPriceIndex,
   resolveCatalogOptionPriceCents,
   resolvePublicOptionPriceCents,
   resolvePublicServicePriceCents,
+  resolvePublicWebOptionPriceCents,
   type ActiveCatalogPrice,
 } from "./catalog-pricing";
 
@@ -83,4 +85,53 @@ test("public catalog service price uses standalone STANDARD service price", () =
   ]);
 
   assert.equal(resolvePublicServicePriceCents(index, "service-gopro"), 2_500);
+});
+
+test("public web option price uses active WEB channel price before STANDARD", () => {
+  const index = indexFrom([
+    {
+      serviceId: "service-jetski",
+      optionId: "option-30",
+      durationMin: null,
+      pricingTier: PricingTier.STANDARD,
+      basePriceCents: 6_900,
+    },
+  ]);
+  const webPrices = buildActiveChannelOptionPriceIndex([
+    { optionId: "option-30", priceCents: 8_400, isActive: true },
+  ]);
+
+  assert.equal(resolvePublicWebOptionPriceCents(index, webPrices, option), 8_400);
+});
+
+test("public web option price falls back to STANDARD ServicePrice when WEB channel price is missing", () => {
+  const index = indexFrom([
+    {
+      serviceId: "service-jetski",
+      optionId: null,
+      durationMin: 30,
+      pricingTier: PricingTier.STANDARD,
+      basePriceCents: 5_900,
+    },
+  ]);
+  const webPrices = buildActiveChannelOptionPriceIndex([]);
+
+  assert.equal(resolvePublicWebOptionPriceCents(index, webPrices, option), 5_900);
+});
+
+test("public web option price ignores inactive WEB channel prices and RESIDENT prices", () => {
+  const index = indexFrom([
+    {
+      serviceId: "service-jetski",
+      optionId: "option-30",
+      durationMin: null,
+      pricingTier: PricingTier.RESIDENT,
+      basePriceCents: 4_900,
+    },
+  ]);
+  const webPrices = buildActiveChannelOptionPriceIndex([
+    { optionId: "option-30", priceCents: 8_400, isActive: false },
+  ]);
+
+  assert.equal(resolvePublicWebOptionPriceCents(index, webPrices, option), null);
 });

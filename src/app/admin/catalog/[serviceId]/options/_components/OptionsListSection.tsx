@@ -12,6 +12,7 @@ type OptionRow = {
   isActive: boolean;
   visibleInStore: boolean;
   visibleInBooth: boolean;
+  visibleInWeb: boolean;
   basePriceCents?: number;
 };
 
@@ -22,6 +23,7 @@ type OptionDraft = {
   isActive: boolean;
   visibleInStore: boolean;
   visibleInBooth: boolean;
+  visibleInWeb: boolean;
 };
 
 type Props = {
@@ -153,6 +155,7 @@ export default function OptionsListSection({
                           isActive: prev?.isActive ?? option.isActive,
                           visibleInStore: prev?.visibleInStore ?? option.visibleInStore,
                           visibleInBooth: prev?.visibleInBooth ?? option.visibleInBooth,
+                          visibleInWeb: prev?.visibleInWeb ?? option.visibleInWeb,
                         }))
                       }
                       style={inputStyle}
@@ -175,6 +178,7 @@ export default function OptionsListSection({
                           isActive: prev?.isActive ?? option.isActive,
                           visibleInStore: prev?.visibleInStore ?? option.visibleInStore,
                           visibleInBooth: prev?.visibleInBooth ?? option.visibleInBooth,
+                          visibleInWeb: prev?.visibleInWeb ?? option.visibleInWeb,
                         }))
                       }
                       style={inputStyle}
@@ -197,6 +201,7 @@ export default function OptionsListSection({
                           isActive: prev?.isActive ?? option.isActive,
                           visibleInStore: prev?.visibleInStore ?? option.visibleInStore,
                           visibleInBooth: prev?.visibleInBooth ?? option.visibleInBooth,
+                          visibleInWeb: prev?.visibleInWeb ?? option.visibleInWeb,
                         }))
                       }
                       style={inputStyle}
@@ -218,6 +223,7 @@ export default function OptionsListSection({
                             isActive: e.target.checked,
                             visibleInStore: prev?.visibleInStore ?? option.visibleInStore,
                             visibleInBooth: prev?.visibleInBooth ?? option.visibleInBooth,
+                            visibleInWeb: prev?.visibleInWeb ?? option.visibleInWeb,
                           }))
                         }
                       />
@@ -241,6 +247,7 @@ export default function OptionsListSection({
                               isActive: prev?.isActive ?? option.isActive,
                               visibleInStore: e.target.checked,
                               visibleInBooth: prev?.visibleInBooth ?? option.visibleInBooth,
+                              visibleInWeb: prev?.visibleInWeb ?? option.visibleInWeb,
                             }))
                           }
                         />
@@ -259,10 +266,30 @@ export default function OptionsListSection({
                               isActive: prev?.isActive ?? option.isActive,
                               visibleInStore: prev?.visibleInStore ?? option.visibleInStore,
                               visibleInBooth: e.target.checked,
+                              visibleInWeb: prev?.visibleInWeb ?? option.visibleInWeb,
                             }))
                           }
                         />
                         Visible en Booth
+                      </label>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={currentDraft?.visibleInWeb ?? option.visibleInWeb}
+                          disabled={busy}
+                          onChange={(e) =>
+                            setDraft((prev) => ({
+                              durationMinutes: prev?.durationMinutes ?? option.durationMinutes,
+                              paxMax: prev?.paxMax ?? option.paxMax,
+                              contractedMinutes: prev?.contractedMinutes ?? option.contractedMinutes,
+                              isActive: prev?.isActive ?? option.isActive,
+                              visibleInStore: prev?.visibleInStore ?? option.visibleInStore,
+                              visibleInBooth: prev?.visibleInBooth ?? option.visibleInBooth,
+                              visibleInWeb: e.target.checked,
+                            }))
+                          }
+                        />
+                        Visible en WEB
                       </label>
                     </span>
                   </label>
@@ -297,6 +324,10 @@ export default function OptionsListSection({
                   <div style={metaItem}>
                     <div style={metaLabel}>Booth</div>
                     <div style={metaValue}>{option.visibleInBooth ? "Visible" : "Oculta"}</div>
+                  </div>
+                  <div style={metaItem}>
+                    <div style={metaLabel}>WEB</div>
+                    <div style={metaValue}>{option.visibleInWeb ? "Visible" : "Oculta"}</div>
                   </div>
                 </div>
               )}

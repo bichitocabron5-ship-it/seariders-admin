@@ -176,11 +176,31 @@ export default function AdminCatalogServicesSection({
                 <label style={toggleRow}>
                   <input
                     type="checkbox"
+                    checked={service.visibleInStore}
+                    disabled={busy}
+                    onChange={(e) => onPatchService(service.id, { visibleInStore: e.target.checked })}
+                  />
+                  Visible en Store
+                </label>
+
+                <label style={toggleRow}>
+                  <input
+                    type="checkbox"
                     checked={service.visibleInBooth}
                     disabled={busy}
                     onChange={(e) => onPatchService(service.id, { visibleInBooth: e.target.checked })}
                   />
-                  Visible en booth
+                  Visible en Booth
+                </label>
+
+                <label style={toggleRow}>
+                  <input
+                    type="checkbox"
+                    checked={service.visibleInWeb}
+                    disabled={busy}
+                    onChange={(e) => onPatchService(service.id, { visibleInWeb: e.target.checked })}
+                  />
+                  Visible en WEB
                 </label>
               </div>
             </article>

@@ -1,17 +1,20 @@
-import { JetskiLicenseMode, PricingTier } from "@prisma/client";
+import { PricingTier, type JetskiLicenseMode } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { listPromotionOptions, computeAutoDiscountDetail } from "@/lib/discounts";
-import { resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
-import { getStableOptionCode, getStableServiceCode } from "@/lib/public-api/catalog";
-import { PublicApiError } from "@/lib/public-api/http";
-import { findActiveServicePrice } from "@/lib/service-pricing";
+import { computeAutoDiscountDetail, listPromotionOptions } from "@/lib/discounts";
+import {
+  findPublicWebCatalogOptionOrThrow,
+  getStableOptionCode,
+  getStableServiceCode,
+} from "@/lib/public-api/catalog";
+import { PublicApiError } from "@/lib/public-api/errors";
+import { resolveEffectiveServicePriceForChannel } from "@/lib/service-pricing";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
 
 function formatModeLabel(pricingTier: PricingTier) {
   return pricingTier === PricingTier.RESIDENT
     ? "Tarifa residente / llave verde"
-    : "Tarifa estándar / llave amarilla o sin licencia";
+    : "Tarifa estandar / llave amarilla o sin licencia";
 }
 
 function normalizePromoCode(value: string | null | undefined) {
@@ -35,35 +38,10 @@ export async function buildPublicQuote(params: {
   const promoCode = normalizePromoCode(params.promoCode);
   const customerCountry = String(params.customerCountry ?? "").trim().toUpperCase() || null;
 
-  const option = await prisma.serviceOption.findFirst({
-    where: {
-      code: params.optionCode,
-      isActive: true,
-      service: {
-        code: params.serviceCode,
-        isActive: true,
-      },
-    },
-    select: {
-      id: true,
-      code: true,
-      durationMinutes: true,
-      paxMax: true,
-      service: {
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          category: true,
-          isLicense: true,
-        },
-      },
-    },
+  const { option, webChannel } = await findPublicWebCatalogOptionOrThrow(prisma, {
+    serviceCode: params.serviceCode,
+    optionCode: params.optionCode,
   });
-
-  if (!option?.service) {
-    throw new PublicApiError("INVALID_INPUT", 400, "serviceCode u optionCode no válidos.");
-  }
 
   const when =
     params.date && params.time
@@ -72,25 +50,24 @@ export async function buildPublicQuote(params: {
         ? utcDateFromYmdInTz(BUSINESS_TZ, params.date)
         : new Date();
 
-  const category = String(option.service.category ?? "").toUpperCase();
-  const pricingTier =
-    category === "JETSKI"
-      ? resolvePricingTierForJetskiMode(params.jetskiLicenseMode ?? JetskiLicenseMode.NONE)
-      : PricingTier.STANDARD;
+  const pricingTier = PricingTier.STANDARD;
 
-  const price = await findActiveServicePrice(prisma, {
+  const price = await resolveEffectiveServicePriceForChannel(prisma, {
     serviceId: option.service.id,
     optionId: option.id,
     durationMinutes: Number(option.durationMinutes ?? 30),
     now: when,
     pricingTier,
+    channelId: webChannel.id,
+    allowLegacyOptionFallback: false,
+    allowChannelOnlyPrice: true,
   });
 
   if (!price) {
-    throw new PublicApiError("NO_PRICE", 404, "No hay precio vigente para esta opción.");
+    throw new PublicApiError("NO_PRICE", 404, "No hay precio vigente para esta opcion.");
   }
 
-  const baseUnitPriceCents = Number(price.basePriceCents ?? 0);
+  const baseUnitPriceCents = Number(price.effectivePriceCents ?? 0);
   const baseTotalCents = baseUnitPriceCents * quantity;
   const item = {
     serviceId: option.service.id,
@@ -100,19 +77,20 @@ export async function buildPublicQuote(params: {
     lineBaseCents: baseTotalCents,
     quantity,
   };
+  const promotionsEnabled = Boolean(webChannel.allowsPromotions);
 
   const availablePromos = await listPromotionOptions({
     when,
     item,
     customerCountry,
-    promotionsEnabled: true,
+    promotionsEnabled,
   });
   const matchedPromo = promoCode
     ? availablePromos.find((promo) => String(promo.code ?? "").trim().toUpperCase() === promoCode) ?? null
     : null;
 
   if (promoCode && !matchedPromo) {
-    throw new PublicApiError("PROMO_INVALID", 400, "El promoCode no es válido para esta combinación.");
+    throw new PublicApiError("PROMO_INVALID", 400, "El promoCode no es valido para esta combinacion.");
   }
 
   const detail = await computeAutoDiscountDetail({
@@ -120,7 +98,7 @@ export async function buildPublicQuote(params: {
     item,
     promoCode,
     customerCountry,
-    promotionsEnabled: true,
+    promotionsEnabled,
   });
 
   const discountCents = Number(detail.discountCents ?? 0);

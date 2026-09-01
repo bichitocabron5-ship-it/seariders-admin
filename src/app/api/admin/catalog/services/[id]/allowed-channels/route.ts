@@ -47,13 +47,14 @@ export async function GET(
     prisma.channel.findMany({
       where: {
         isActive: true,
-        OR: [{ visibleInStore: true }, { visibleInBooth: true }],
+        OR: [{ visibleInStore: true }, { visibleInBooth: true }, { visibleInWeb: true }],
       },
       select: {
         id: true,
         name: true,
         visibleInStore: true,
         visibleInBooth: true,
+        visibleInWeb: true,
       },
       orderBy: { name: "asc" },
     }),
@@ -94,7 +95,7 @@ export async function PATCH(
   const visibleChannels = await prisma.channel.findMany({
     where: {
       isActive: true,
-      OR: [{ visibleInStore: true }, { visibleInBooth: true }],
+      OR: [{ visibleInStore: true }, { visibleInBooth: true }, { visibleInWeb: true }],
     },
     select: { id: true },
   });
@@ -105,7 +106,7 @@ export async function PATCH(
   } else {
     const rules = parsed.data.rules ?? [];
     if (rules.some((rule) => !visibleChannelIds.has(rule.channelId))) {
-      return new NextResponse("Solo se pueden configurar canales visibles en Store o Booth.", { status: 400 });
+      return new NextResponse("Solo se pueden configurar canales visibles en Store, Booth o WEB.", { status: 400 });
     }
 
     await prisma.$transaction(async (tx) => {

@@ -26,6 +26,7 @@ import {
   syncChannelCommissionLineFromPaymentTx,
   syncChannelCommissionLineFromReservationTx,
 } from "@/lib/channel-commission-lines";
+import { findActiveServicePrice } from "@/lib/service-pricing";
 
 const BodySchema = z.object({
   customerName: z.string().min(1),
@@ -120,7 +121,7 @@ export async function POST(req: Request) {
     optionIds.length > 0
       ? prisma.serviceOption.findMany({
           where: { id: { in: optionIds } },
-          select: { id: true, serviceId: true, basePriceCents: true },
+          select: { id: true, serviceId: true, basePriceCents: true, durationMinutes: true },
         })
       : Promise.resolve([]),
     parsed.data.channelId
@@ -222,19 +223,14 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "La opción no pertenece al servicio." }, { status: 400 });
       }
 
-      const price = await prisma.servicePrice.findFirst({
-        where: {
-          serviceId: service.id,
-          optionId: option.id,
-          isActive: true,
-          validFrom: { lte: now },
-          OR: [{ validTo: null }, { validTo: { gt: now } }],
-        },
-        orderBy: { validFrom: "desc" },
-        select: { id: true, basePriceCents: true },
+      const price = await findActiveServicePrice(prisma, {
+        serviceId: service.id,
+        optionId: option.id,
+        durationMinutes: Number(option.durationMinutes ?? 0),
+        now,
       });
 
-      unitPriceCents = Number(price?.basePriceCents ?? option.basePriceCents ?? 0) || 0;
+      unitPriceCents = Number(price?.basePriceCents ?? 0) || 0;
       servicePriceId = price?.id ?? null;
       if (unitPriceCents <= 0) {
         return NextResponse.json(

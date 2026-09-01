@@ -5,13 +5,13 @@ import {
 } from "@/lib/reservation-capacity";
 import { buildAvailabilitySnapshotFromCapacityUsages } from "@/lib/availability-snapshot";
 import { getSlotConfigOrThrow } from "@/lib/slot-config";
+import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
+import { PublicApiError } from "@/lib/public-api/errors";
 import {
-  BUSINESS_TZ,
-  utcDateFromYmdInTz,
-  utcDateTimeFromYmdHmInTz,
-} from "@/lib/tz-business";
-import { PublicApiError } from "@/lib/public-api/http";
-import { getStableOptionCode, getStableServiceCode } from "@/lib/public-api/catalog";
+  findPublicWebCatalogOptionOrThrow,
+  getStableOptionCode,
+  getStableServiceCode,
+} from "@/lib/public-api/catalog";
 
 function addDaysYmd(ymd: string, days: number) {
   const [y, m, d] = ymd.split("-").map(Number);
@@ -99,32 +99,10 @@ export async function buildPublicAvailability(params: {
 }) {
   const quantity = Math.max(1, Number(params.quantity ?? 1));
 
-  const option = await prisma.serviceOption.findFirst({
-    where: {
-      code: params.optionCode,
-      isActive: true,
-      service: {
-        code: params.serviceCode,
-        isActive: true,
-      },
-    },
-    select: {
-      code: true,
-      durationMinutes: true,
-      paxMax: true,
-      service: {
-        select: {
-          code: true,
-          name: true,
-          category: true,
-        },
-      },
-    },
+  const { option } = await findPublicWebCatalogOptionOrThrow(prisma, {
+    serviceCode: params.serviceCode,
+    optionCode: params.optionCode,
   });
-
-  if (!option?.service) {
-    throw new PublicApiError("INVALID_INPUT", 400, "serviceCode u optionCode no validos.");
-  }
 
   const serviceCode = getStableServiceCode({
     code: option.service.code ?? null,

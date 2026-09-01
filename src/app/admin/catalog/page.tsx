@@ -20,6 +20,9 @@ export default function AdminCatalogPage() {
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
   const [isExternalActivity, setIsExternalActivity] = useState(false);
+  const [visibleInStore, setVisibleInStore] = useState(true);
+  const [visibleInBooth, setVisibleInBooth] = useState(false);
+  const [visibleInWeb, setVisibleInWeb] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -55,7 +58,15 @@ export default function AdminCatalogPage() {
     const response = await fetch("/api/admin/catalog/services", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmedName, category: trimmedCategory, isActive: true, isExternalActivity }),
+      body: JSON.stringify({
+        name: trimmedName,
+        category: trimmedCategory,
+        isActive: true,
+        isExternalActivity,
+        visibleInStore,
+        visibleInBooth,
+        visibleInWeb,
+      }),
     });
 
     if (!response.ok) {
@@ -66,6 +77,9 @@ export default function AdminCatalogPage() {
     setName("");
     setCategory("");
     setIsExternalActivity(false);
+    setVisibleInStore(true);
+    setVisibleInBooth(false);
+    setVisibleInWeb(false);
     await load();
   }
 
@@ -102,6 +116,7 @@ export default function AdminCatalogPage() {
       total: rows.length,
       active: rows.filter((row) => row.isActive).length,
       licenses: rows.filter((row) => row.isLicense).length,
+      web: rows.filter((row) => row.visibleInWeb).length,
     }),
     [rows]
   );
@@ -162,6 +177,10 @@ export default function AdminCatalogPage() {
           <div style={summaryLabel}>Licencias</div>
           <div style={summaryValue}>{stats.licenses}</div>
         </article>
+        <article style={summaryCard}>
+          <div style={summaryLabel}>WEB</div>
+          <div style={summaryValue}>{stats.web}</div>
+        </article>
       </section>
 
       <AdminCatalogFiltersSection
@@ -183,13 +202,20 @@ export default function AdminCatalogPage() {
         name={name}
         category={category}
         isExternalActivity={isExternalActivity}
+        visibleInStore={visibleInStore}
+        visibleInBooth={visibleInBooth}
+        visibleInWeb={visibleInWeb}
         inputStyle={inputStyle}
         fieldLabel={fieldLabel}
+        toggleRow={toggleRow}
         darkBtn={darkBtn}
         panelStyle={panelStyle}
         onNameChange={setName}
         onCategoryChange={setCategory}
         onExternalActivityChange={setIsExternalActivity}
+        onVisibleInStoreChange={setVisibleInStore}
+        onVisibleInBoothChange={setVisibleInBooth}
+        onVisibleInWebChange={setVisibleInWeb}
         onCreate={() => void create()}
       />
 

@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-export type ServiceChannelOrigin = "STORE" | "BOOTH";
+export type ServiceChannelOrigin = "STORE" | "BOOTH" | "WEB";
 
 export type ServiceAllowedChannelRuleLite = {
   serviceId: string;
@@ -103,6 +103,7 @@ export async function assertServiceChannelCompatibilityTx(
         name: true,
         visibleInStore: true,
         visibleInBooth: true,
+        visibleInWeb: true,
       },
     }),
     tx.serviceAllowedChannel.findMany({
@@ -118,7 +119,9 @@ export async function assertServiceChannelCompatibilityTx(
   const isVisible = channel
     ? args.origin === "BOOTH"
       ? channel.visibleInBooth
-      : channel.visibleInStore
+      : args.origin === "WEB"
+        ? channel.visibleInWeb
+        : channel.visibleInStore
     : false;
 
   if (!channel || !isVisible) {

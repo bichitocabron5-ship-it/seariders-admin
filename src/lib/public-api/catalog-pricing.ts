@@ -17,6 +17,12 @@ export type CatalogPriceIndex = {
   residentByService: Map<string, number>;
 };
 
+export type ActiveChannelOptionPrice = {
+  optionId: string;
+  priceCents: number | null;
+  isActive: boolean;
+};
+
 function optionPriceKey(serviceId: string, optionId: string) {
   return `${serviceId}:${optionId}`;
 }
@@ -102,4 +108,27 @@ export function resolveCatalogServicePriceCents(
 
 export function resolvePublicServicePriceCents(index: CatalogPriceIndex, serviceId: string) {
   return resolveCatalogServicePriceCents(index, serviceId, PricingTier.STANDARD);
+}
+
+export function buildActiveChannelOptionPriceIndex(prices: readonly ActiveChannelOptionPrice[]) {
+  const index = new Map<string, number>();
+
+  for (const price of prices) {
+    if (!price.isActive || index.has(price.optionId)) continue;
+    const cents = normalizePriceCents(price.priceCents);
+    if (cents != null) index.set(price.optionId, cents);
+  }
+
+  return index;
+}
+
+export function resolvePublicWebOptionPriceCents(
+  index: CatalogPriceIndex,
+  webOptionPriceByOptionId: ReadonlyMap<string, number>,
+  option: { serviceId: string; id: string; durationMinutes?: number | null }
+) {
+  const webPriceCents = webOptionPriceByOptionId.get(option.id);
+  if (webPriceCents != null) return webPriceCents;
+
+  return resolvePublicOptionPriceCents(index, option);
 }

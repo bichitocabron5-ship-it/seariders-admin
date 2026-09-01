@@ -21,7 +21,9 @@ const CreateBody = z.object({
   requiresJetski: z.boolean().optional(),
   requiresMonitor: z.boolean().optional(),
   isLicense: z.boolean().optional(),
+  visibleInStore: z.boolean().optional(),
   visibleInBooth: z.boolean().optional(),
+  visibleInWeb: z.boolean().optional(),
   maxPax: z.number().int().min(1).max(30).nullable().optional(),
 });
 
@@ -61,7 +63,9 @@ export async function GET() {
       requiresJetski: true,
       requiresMonitor: true,
       isLicense: true,
+      visibleInStore: true,
       visibleInBooth: true,
+      visibleInWeb: true,
     },
   });
 
@@ -101,7 +105,9 @@ for (let i = 2; i < 50; i++) {
     ...(parsed.data.requiresJetski !== undefined ? { requiresJetski: parsed.data.requiresJetski } : {}),
     ...(parsed.data.requiresMonitor !== undefined ? { requiresMonitor: parsed.data.requiresMonitor } : {}),
     ...(parsed.data.isLicense !== undefined ? { isLicense: parsed.data.isLicense } : {}),
+    visibleInStore: parsed.data.visibleInStore ?? true,
     visibleInBooth: parsed.data.visibleInBooth ?? false,
+    visibleInWeb: parsed.data.visibleInWeb ?? false,
   };
 
   const created = await prisma.service.create({

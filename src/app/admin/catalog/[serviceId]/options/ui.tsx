@@ -13,6 +13,7 @@ type OptionRow = {
   isActive: boolean;
   visibleInStore: boolean;
   visibleInBooth: boolean;
+  visibleInWeb: boolean;
   basePriceCents?: number;
 };
 
@@ -23,6 +24,7 @@ type OptionDraft = {
   isActive: boolean;
   visibleInStore: boolean;
   visibleInBooth: boolean;
+  visibleInWeb: boolean;
 };
 
 export default function AdminServiceOptionsClient({ serviceId }: { serviceId: string }) {
@@ -41,6 +43,7 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
   const [contracted, setContracted] = useState(60);
   const [visibleInStore, setVisibleInStore] = useState(true);
   const [visibleInBooth, setVisibleInBooth] = useState(true);
+  const [visibleInWeb, setVisibleInWeb] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,6 +106,7 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
         basePriceCents: 0,
         visibleInStore,
         visibleInBooth,
+        visibleInWeb,
       };
 
       const res = await fetch(`/api/admin/catalog/services/${serviceId}/options`, {
@@ -114,6 +118,9 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
       if (!res.ok) throw new Error(await res.text());
 
       await load();
+      setVisibleInStore(true);
+      setVisibleInBooth(true);
+      setVisibleInWeb(false);
       setEditingId(null);
       setDraft(null);
     } catch (e: unknown) {
@@ -155,6 +162,7 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
       isActive: option.isActive,
       visibleInStore: option.visibleInStore,
       visibleInBooth: option.visibleInBooth,
+      visibleInWeb: option.visibleInWeb,
     });
     setError(null);
   }
@@ -226,12 +234,14 @@ export default function AdminServiceOptionsClient({ serviceId }: { serviceId: st
         contracted={contracted}
         visibleInStore={visibleInStore}
         visibleInBooth={visibleInBooth}
+        visibleInWeb={visibleInWeb}
         creating={creating}
         onDurChange={setDur}
         onPaxChange={setPax}
         onContractedChange={setContracted}
         onVisibleInStoreChange={setVisibleInStore}
         onVisibleInBoothChange={setVisibleInBooth}
+        onVisibleInWebChange={setVisibleInWeb}
         onCreate={createOption}
       />
 
