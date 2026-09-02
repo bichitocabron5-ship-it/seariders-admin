@@ -2,6 +2,8 @@ import { PricingTier, type JetskiLicenseMode } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { computeAutoDiscountDetail, listPromotionOptions } from "@/lib/discounts";
+import { resolveCustomerDiscountSnapshot } from "@/lib/commission";
+import { resolvePricingTierForJetskiMode } from "@/lib/jetski-license";
 import {
   findPublicWebCatalogOptionOrThrow,
   getStableOptionCode,
@@ -10,6 +12,45 @@ import {
 import { PublicApiError } from "@/lib/public-api/errors";
 import { resolveEffectiveServicePriceForChannel } from "@/lib/service-pricing";
 import { BUSINESS_TZ, utcDateFromYmdInTz, utcDateTimeFromYmdHmInTz } from "@/lib/tz-business";
+
+type PublicQuoteInput = {
+  serviceCode: string;
+  optionCode: string;
+  quantity?: number;
+  pax?: number;
+  date?: string | null;
+  time?: string | null;
+  jetskiLicenseMode?: JetskiLicenseMode;
+  customerCountry?: string | null;
+  promoCode?: string | null;
+};
+
+type PublicQuoteDb = Parameters<typeof findPublicWebCatalogOptionOrThrow>[0] &
+  Parameters<typeof resolveEffectiveServicePriceForChannel>[0];
+
+type PublicQuoteCatalogResult = Awaited<ReturnType<typeof findPublicWebCatalogOptionOrThrow>>;
+
+export type PublicQuoteDependencies = {
+  db: PublicQuoteDb;
+  findCatalogOption: (
+    db: PublicQuoteDb,
+    params: { serviceCode: string; optionCode: string }
+  ) => Promise<PublicQuoteCatalogResult>;
+  resolvePrice: (
+    db: PublicQuoteDb,
+    params: Parameters<typeof resolveEffectiveServicePriceForChannel>[1]
+  ) => ReturnType<typeof resolveEffectiveServicePriceForChannel>;
+  computeAutoDiscount: typeof computeAutoDiscountDetail;
+  listPromotions: typeof listPromotionOptions;
+};
+
+const defaultPublicQuoteDependencies: PublicQuoteDependencies = {
+  db: prisma,
+  findCatalogOption: findPublicWebCatalogOptionOrThrow,
+  resolvePrice: resolveEffectiveServicePriceForChannel,
+  computeAutoDiscount: computeAutoDiscountDetail,
+  listPromotions: listPromotionOptions,
+};
 
 function formatModeLabel(pricingTier: PricingTier) {
   return pricingTier === PricingTier.RESIDENT
@@ -22,23 +63,31 @@ function normalizePromoCode(value: string | null | undefined) {
   return normalized || null;
 }
 
-export async function buildPublicQuote(params: {
-  serviceCode: string;
-  optionCode: string;
-  quantity?: number;
-  pax?: number;
-  date?: string | null;
-  time?: string | null;
+function resolvePublicQuotePricingTier(args: {
+  category?: string | null;
   jetskiLicenseMode?: JetskiLicenseMode;
-  customerCountry?: string | null;
-  promoCode?: string | null;
 }) {
+  if (String(args.category ?? "").trim().toUpperCase() !== "JETSKI") {
+    return PricingTier.STANDARD;
+  }
+
+  return resolvePricingTierForJetskiMode(args.jetskiLicenseMode);
+}
+
+export async function buildPublicQuote(params: PublicQuoteInput) {
+  return buildPublicQuoteWithDeps(defaultPublicQuoteDependencies, params);
+}
+
+export async function buildPublicQuoteWithDeps(
+  deps: PublicQuoteDependencies,
+  params: PublicQuoteInput
+) {
   const quantity = Math.max(1, Number(params.quantity ?? 1));
   const pax = Math.max(1, Number(params.pax ?? 1));
   const promoCode = normalizePromoCode(params.promoCode);
   const customerCountry = String(params.customerCountry ?? "").trim().toUpperCase() || null;
 
-  const { option, webChannel } = await findPublicWebCatalogOptionOrThrow(prisma, {
+  const { option, webChannel } = await deps.findCatalogOption(deps.db, {
     serviceCode: params.serviceCode,
     optionCode: params.optionCode,
   });
@@ -50,9 +99,12 @@ export async function buildPublicQuote(params: {
         ? utcDateFromYmdInTz(BUSINESS_TZ, params.date)
         : new Date();
 
-  const pricingTier = PricingTier.STANDARD;
+  const pricingTier = resolvePublicQuotePricingTier({
+    category: option.service.category,
+    jetskiLicenseMode: params.jetskiLicenseMode,
+  });
 
-  const price = await resolveEffectiveServicePriceForChannel(prisma, {
+  const price = await deps.resolvePrice(deps.db, {
     serviceId: option.service.id,
     optionId: option.id,
     durationMinutes: Number(option.durationMinutes ?? 30),
@@ -79,7 +131,7 @@ export async function buildPublicQuote(params: {
   };
   const promotionsEnabled = Boolean(webChannel.allowsPromotions);
 
-  const availablePromos = await listPromotionOptions({
+  const availablePromos = await deps.listPromotions({
     when,
     item,
     customerCountry,
@@ -93,7 +145,7 @@ export async function buildPublicQuote(params: {
     throw new PublicApiError("PROMO_INVALID", 400, "El promoCode no es valido para esta combinacion.");
   }
 
-  const detail = await computeAutoDiscountDetail({
+  const detail = await deps.computeAutoDiscount({
     when,
     item,
     promoCode,
@@ -101,8 +153,16 @@ export async function buildPublicQuote(params: {
     promotionsEnabled,
   });
 
-  const discountCents = Number(detail.discountCents ?? 0);
-  const finalTotalCents = Math.max(0, baseTotalCents - discountCents);
+  const autoDiscountCents = Number(detail.discountCents ?? 0);
+  const customerDiscountSnapshot = resolveCustomerDiscountSnapshot({
+    channel: webChannel,
+    quantity,
+    baseCents: baseTotalCents,
+  });
+  const customerDiscountCents = Number(customerDiscountSnapshot.customerDiscountCents ?? 0);
+  const rawDiscountCents = customerDiscountCents + autoDiscountCents;
+  const finalTotalCents = Math.max(0, baseTotalCents - rawDiscountCents);
+  const discountCents = baseTotalCents - finalTotalCents;
   const serviceCode = getStableServiceCode({
     code: option.service.code ?? null,
     name: option.service.name,
@@ -131,6 +191,8 @@ export async function buildPublicQuote(params: {
     pricingTier,
     baseUnitPriceCents,
     baseTotalCents,
+    customerDiscountCents,
+    autoDiscountCents,
     discountCents,
     finalTotalCents,
     appliedPromotion: detail.rule

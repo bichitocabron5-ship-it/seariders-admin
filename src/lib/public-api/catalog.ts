@@ -12,6 +12,7 @@ import {
   type ActiveChannelOptionPrice,
 } from "@/lib/public-api/catalog-pricing";
 import { PublicApiError } from "@/lib/public-api/errors";
+import type { CommercialValueMode, DiscountResponsibility } from "@/lib/commission";
 import { annotateServiceOptions } from "@/lib/service-option-labels";
 import {
   buildServiceAllowedChannelIndex,
@@ -58,6 +59,11 @@ type WebChannelLite = {
   isActive: boolean;
   visibleInWeb: boolean;
   allowsPromotions?: boolean;
+  customerDiscountMode?: CommercialValueMode | null;
+  customerDiscountValue?: number | null;
+  customerDiscountCents?: number | null;
+  discountResponsibility?: DiscountResponsibility | null;
+  promoterDiscountShareBps?: number | null;
 };
 
 type PublicWebCatalogDb = Pick<Prisma.TransactionClient, "channel" | "serviceOption" | "serviceAllowedChannel">;
@@ -128,6 +134,11 @@ export async function getPublicWebChannelOrThrow(tx: PublicWebCatalogDb = prisma
       isActive: true,
       visibleInWeb: true,
       allowsPromotions: true,
+      customerDiscountMode: true,
+      customerDiscountValue: true,
+      customerDiscountCents: true,
+      discountResponsibility: true,
+      promoterDiscountShareBps: true,
     },
   });
 

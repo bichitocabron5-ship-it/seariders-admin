@@ -147,7 +147,7 @@ Precio público orientativo:
 
 Calcula precio vigente y promociones aplicables sin crear reserva. Rechaza `serviceCode`/`optionCode` que no esten habilitados en WEB.
 
-El precio base del quote usa el PVP WEB efectivo: `ChannelOptionPrice` del canal `WEB` si existe, o `ServicePrice` `STANDARD` vigente si no existe. No usa tarifa residente.
+El precio base del quote usa el PVP WEB efectivo: `ChannelOptionPrice` del canal `WEB` si existe, o `ServicePrice` vigente si no existe. Para JETSKI usa tarifa `RESIDENT` solo cuando `jetskiLicenseMode = GREEN_LIMITED`; el resto usa `STANDARD`. Despues aplica descuentos/promociones permitidos para el canal WEB.
 
 Body ejemplo:
 
@@ -186,6 +186,8 @@ Respuesta ejemplo:
   "pricingTier": "RESIDENT",
   "baseUnitPriceCents": 9000,
   "baseTotalCents": 18000,
+  "customerDiscountCents": 0,
+  "autoDiscountCents": 1800,
   "discountCents": 1800,
   "finalTotalCents": 16200,
   "appliedPromotion": {
