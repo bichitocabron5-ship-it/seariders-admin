@@ -44,6 +44,79 @@ test("catalog origin visibility keeps Store and Booth independent from WEB", () 
   assert.equal(isOptionVisibleForCatalogOrigin("WEB", option), false);
 });
 
+function buildVisibilitySnapshot(args: { serviceVisibleInWeb: boolean; optionVisibleInWeb: boolean }) {
+  return buildPublicCatalogSnapshotFromRows({
+    generatedAt: "2026-09-01T10:00:00.000Z",
+    webChannel: {
+      id: "channel-web",
+      code: "WEB",
+      isActive: true,
+      visibleInWeb: true,
+    },
+    servicesAll: [
+      {
+        ...baseService,
+        id: "service-web-toggle",
+        name: "Web Toggle",
+        code: "WEB_TOGGLE",
+        visibleInStore: true,
+        visibleInBooth: true,
+        visibleInWeb: args.serviceVisibleInWeb,
+      },
+    ],
+    optionsRaw: [
+      {
+        ...baseOption,
+        id: "option-web-toggle",
+        serviceId: "service-web-toggle",
+        code: "WEB_TOGGLE_30_2",
+        visibleInStore: true,
+        visibleInBooth: true,
+        visibleInWeb: args.optionVisibleInWeb,
+      },
+    ],
+    prices: [
+      {
+        serviceId: "service-web-toggle",
+        optionId: "option-web-toggle",
+        durationMin: null,
+        pricingTier: PricingTier.STANDARD,
+        basePriceCents: 10_000,
+      },
+    ],
+    webOptionPrices: [],
+    serviceAllowedChannelRules: [],
+  });
+}
+
+test("public catalog reflects visibleInWeb changes for services and options", () => {
+  const visible = buildVisibilitySnapshot({
+    serviceVisibleInWeb: true,
+    optionVisibleInWeb: true,
+  });
+  assert.deepEqual(
+    visible.services.map((service) => service.serviceCode),
+    ["WEB_TOGGLE"]
+  );
+  assert.deepEqual(
+    visible.services[0]?.options.map((option) => option.optionCode),
+    ["WEB_TOGGLE_30_2"]
+  );
+
+  const hiddenService = buildVisibilitySnapshot({
+    serviceVisibleInWeb: false,
+    optionVisibleInWeb: true,
+  });
+  assert.deepEqual(hiddenService.services, []);
+
+  const hiddenOption = buildVisibilitySnapshot({
+    serviceVisibleInWeb: true,
+    optionVisibleInWeb: false,
+  });
+  assert.deepEqual(hiddenOption.services[0]?.options, []);
+  assert.equal(hiddenOption.services[0]?.startingPriceCents, null);
+});
+
 test("public catalog includes only WEB-enabled services and options with WEB effective prices", () => {
   const snapshot = buildPublicCatalogSnapshotFromRows({
     generatedAt: "2026-09-01T10:00:00.000Z",

@@ -8,6 +8,7 @@ import {
 } from "@/lib/public-api/http";
 
 export const runtime = "nodejs";
+export const revalidate = 0;
 
 export async function GET(req: Request) {
   const requestId = getRequestId(req);
